@@ -1,0 +1,16 @@
+=== RUN   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether
+=== RUN   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/commit
+=== RUN   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/late_failure_rolls_back
+--- PASS: TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether (0.38s)
+    --- PASS: TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/commit (0.17s)
+    --- PASS: TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/late_failure_rolls_back (0.21s)
+=== RUN   TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership
+--- PASS: TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership (0.18s)
+=== RUN   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory
+=== RUN   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/commit_before_preview
+=== RUN   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/late_failure_rolls_back_before_preview
+--- PASS: TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory (0.43s)
+    --- PASS: TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/commit_before_preview (0.22s)
+    --- PASS: TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/late_failure_rolls_back_before_preview (0.21s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp	1.008s

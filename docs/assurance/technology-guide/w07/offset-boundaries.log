@@ -1,0 +1,28 @@
+=== RUN   TestAllowlistSnapshotPaginationContract
+=== RUN   TestAllowlistSnapshotPaginationContract/first
+=== RUN   TestAllowlistSnapshotPaginationContract/middle
+=== RUN   TestAllowlistSnapshotPaginationContract/last
+=== RUN   TestAllowlistSnapshotPaginationContract/empty
+=== RUN   TestAllowlistSnapshotPaginationContract/clamped
+=== RUN   TestAllowlistSnapshotPaginationContract/overflow
+--- PASS: TestAllowlistSnapshotPaginationContract (0.00s)
+    --- PASS: TestAllowlistSnapshotPaginationContract/first (0.00s)
+    --- PASS: TestAllowlistSnapshotPaginationContract/middle (0.00s)
+    --- PASS: TestAllowlistSnapshotPaginationContract/last (0.00s)
+    --- PASS: TestAllowlistSnapshotPaginationContract/empty (0.00s)
+    --- PASS: TestAllowlistSnapshotPaginationContract/clamped (0.00s)
+    --- PASS: TestAllowlistSnapshotPaginationContract/overflow (0.00s)
+=== RUN   TestClusterLegacyOffsetIsBoundedBeforeSQL
+--- PASS: TestClusterLegacyOffsetIsBoundedBeforeSQL (0.00s)
+=== RUN   TestCatalogPaginationCeilingMustProgressOrReject
+--- PASS: TestCatalogPaginationCeilingMustProgressOrReject (0.04s)
+=== RUN   TestCatalogPaginationRejectsUnsupportedOffsetBeforeQuery
+--- PASS: TestCatalogPaginationRejectsUnsupportedOffsetBeforeQuery (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	0.110s
+=== RUN   TestLegacyOffsetProgressBoundary
+--- PASS: TestLegacyOffsetProgressBoundary (0.00s)
+=== RUN   TestLegacyOffsetHTTPProducersValidateBeforeWork
+--- PASS: TestLegacyOffsetHTTPProducersValidateBeforeWork (0.29s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/pagination	0.294s

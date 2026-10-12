@@ -1,12 +1,12 @@
 /**
  * FormErrorSummary adoption ratchet (P023.5): every TanStack Router route
- * file (not a dash-prefixed co-located component — TanStack ignores those
- * for routing) that builds a `useAppForm` must render `FormErrorSummary`
+ * or colocated component that builds a `useAppForm` must render `FormErrorSummary`
  * so validation and server failures are visible inline, not toast-only.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import ts from "typescript";
 
 function walk(dir: string): string[] {
   const files: string[] = [];
@@ -22,9 +22,7 @@ describe("FormErrorSummary adoption on route files", () => {
   const routesRoot = resolve(process.cwd(), "src/routes");
   const routeFiles = walk(routesRoot).filter((file) => {
     const base = file.split("/").pop() ?? "";
-    // Dash-prefixed files are co-located components, not routes themselves
-    // (TanStack Router's own convention for excluding them from routing).
-    return !base.startsWith("-") && !/\.test\.tsx$/.test(base);
+    return !/\.test\.tsx$/.test(base);
   });
 
   const formFiles = routeFiles.filter((file) =>
@@ -40,7 +38,34 @@ describe("FormErrorSummary adoption on route files", () => {
   for (const file of formFiles) {
     it(`${file.slice(resolve(process.cwd(), "src").length)} renders FormErrorSummary`, () => {
       const source = readFileSync(file, "utf8");
-      expect(source).toContain("FormErrorSummary");
+      const tree = ts.createSourceFile(
+        file,
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+      let rendersSummary = false;
+      let clickSubmissions = 0;
+      const visit = (node: ts.Node) => {
+        if (
+          (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+          /(?:^|\.)FormErrorSummary$/.test(node.tagName.getText(tree))
+        )
+          rendersSummary = true;
+        if (
+          ts.isJsxAttribute(node) &&
+          node.name.getText(tree) === "onClick" &&
+          node.initializer?.getText(tree).includes("handleSubmit")
+        )
+          clickSubmissions++;
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+      expect(rendersSummary).toBe(true);
+      // Colocated modal submit controls must use the semantic boundary.
+      if ((file.split("/").pop() ?? "").startsWith("-"))
+        expect(clickSubmissions).toBe(0);
     });
   }
 });

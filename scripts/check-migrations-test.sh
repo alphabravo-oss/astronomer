@@ -61,4 +61,11 @@ expect_fail cleared-search-path "$FIXTURES/cleared-search-path" 'unqualified rel
 sed -i 's/ALTER TABLE widgets/ALTER TABLE public.widgets/' "$FIXTURES/cleared-search-path/002_incremental.up.sql"
 expect_pass qualified-after-cleared-search-path "$FIXTURES/cleared-search-path"
 
+printf '%s\n' 'CREATE TRIGGER widgets_truncate AFTER TRUNCATE ON public.widgets FOR EACH STATEMENT EXECUTE FUNCTION public.reset_widgets();' >"$FIXTURES/cleared-search-path/002_incremental.up.sql"
+expect_pass qualified-truncate-trigger "$FIXTURES/cleared-search-path"
+sed -i 's/ON public.widgets/ON widgets/' "$FIXTURES/cleared-search-path/002_incremental.up.sql"
+expect_fail unqualified-truncate-trigger "$FIXTURES/cleared-search-path" 'unqualified relations'
+printf '%s\n' 'TRUNCATE widgets;' >"$FIXTURES/cleared-search-path/002_incremental.up.sql"
+expect_fail real-unqualified-truncate "$FIXTURES/cleared-search-path" 'unqualified relations'
+
 echo "check-migrations-test: all policy fixtures passed"

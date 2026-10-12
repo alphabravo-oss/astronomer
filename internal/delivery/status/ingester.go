@@ -138,9 +138,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			return fmt.Errorf("fence delivery agent session: %w", err)
 		}
 
-		components, _ := json.Marshal(payload.ControllerInventory.Components)
-		systemComponents, _ := json.Marshal(payload.ControllerInventory.SystemComponents)
-		apiVersions, _ := json.Marshal(payload.ControllerInventory.APIVersions)
+		components, systemComponents, apiVersions := inventoryJSON(payload.ControllerInventory)
 		compatibilityResult := compatibility.Evaluate(payload.ControllerInventory)
 		accepted, err := tx.AcceptDeliveryStatusInventory(ctx, sqlc.AcceptDeliveryStatusInventoryParams{
 			ClusterID: authenticatedCluster, AgentVersion: payload.ControllerInventory.AgentVersion,

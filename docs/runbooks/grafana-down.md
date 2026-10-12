@@ -13,8 +13,9 @@ survives an Astronomer outage.
 - `kubectl -n monitoring get deploy astronomer-grafana` shows `0/1`.
 
 Triage the Grafana process with `GET /api/health` on the ClusterIP Service.
-There is intentionally no public Grafana hostname; browsers reach it only
-through Astronomer's authenticated same-origin proxy.
+Browsers reach Grafana through an authenticated, isolated tool hostname.
+Check wildcard DNS, TLS and the [tool UI gateway](tool-ui-isolation.md) as well
+as the private Grafana process.
 
 ## Triage
 
@@ -58,4 +59,4 @@ through Astronomer's authenticated same-origin proxy.
 - `kubectl -n monitoring get deploy astronomer-grafana` READY matches spec.
 - `GET /api/health` returns database ok.
 - Open shared Grafana from Shared stacks. It should load under
-  `/api/v1/observability/grafana/` on the Astronomer origin.
+  `/api/v1/observability/grafana/` on its dedicated tool origin.

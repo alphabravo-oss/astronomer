@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { FormShell } from "@/components/ui/form-shell";
 import { useMutation } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { Copy, Check } from "lucide-react";
@@ -158,6 +160,7 @@ function VerifyStepForm({
     onError: (err: Error) => toastApiError("", err, "Invalid code"),
   });
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: { code: "" },
     validators: {
@@ -168,17 +171,26 @@ function VerifyStepForm({
     onSubmit: async ({ value }) => {
       try {
         await confirmMut.mutateAsync(value.code);
-      } catch {
-        // Mutation toasts on error.
+        setServerError(undefined);
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
   const code = useStore(form.store, (state) => state.values.code);
 
   return (
-    <div className="space-y-4">
+    <FormShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
+      className="space-y-4"
+    >
       <form.AppForm>
-        <form.FormErrorSummary serverError={confirmMut.error?.message} />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
       <p className="text-sm text-muted-foreground">
         Enter the 6-digit code your authenticator app is showing right now.
@@ -201,7 +213,7 @@ function VerifyStepForm({
             Cancel
           </ActionButton>
           <ActionButton
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={code.length !== 6 || confirmMut.isPending}
             loading={confirmMut.isPending}
             intent="primary"
@@ -210,6 +222,6 @@ function VerifyStepForm({
           </ActionButton>
         </div>
       </div>
-    </div>
+    </FormShell>
   );
 }

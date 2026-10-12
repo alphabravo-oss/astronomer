@@ -24,8 +24,12 @@ import (
 // ListPipelines handles GET /api/v1/logging/pipelines/ (fleet-wide) and the
 // cluster-scoped ?cluster_id= form — same shape as ListOutputs above.
 func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	clusterID, present, ok := parseOptionalClusterID(w, r)
 	if !ok {
@@ -153,7 +157,7 @@ func (h *LoggingHandler) UpdatePipeline(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req CreateLoggingPipelineRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -376,7 +380,7 @@ func (h *LoggingHandler) QueryOutput(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var req loggingQueryRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+	if err := decodeV1JSONBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

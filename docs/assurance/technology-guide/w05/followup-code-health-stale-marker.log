@@ -1,0 +1,8 @@
+npm notice run astronomer-frontend@1.2.1 code-health
+npm notice run npm run openapi:check && node ../scripts/check-frontend-raw-transport.mjs && node ../scripts/check-frontend-query-cancellation.mjs && node ../scripts/check-node-version-alignment.mjs && node ../scripts/code-health-inventory.mjs --check --verify-doc && node ../scripts/operation-task-inventory.mjs --check --verify-doc
+npm notice run astronomer-frontend@1.2.1 openapi:check
+npm notice run node ../scripts/generate-openapi-types.mjs --check && node ../scripts/generate-openapi-client.mjs --check
+Generated OpenAPI frontend client is current.
+Frontend raw transport inventory: 25 intentional Kubernetes adapter call(s); ordinary JSON calls must use generated operations.
+Frontend raw transport gate failed:
+- frontend/src/lib/api/settings-compliance-export.ts: stale pre-signed compliance export download exception (missing marker "fetch(downloadUrl)")

@@ -1,0 +1,56 @@
+{{- if .Values.toolUI.domain }}
+{{- if eq (include "astronomer.tls.source" .) "none" }}
+{{- fail "toolUI.domain requires TLS" }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "astronomer.fullname" . }}-tools
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  tls:
+    - hosts:
+        - {{ printf "*.%s" .Values.toolUI.domain | quote }}
+      secretName: {{ include "astronomer.tls.secretName" . | quote }}
+  rules:
+    - host: {{ printf "*.%s" .Values.toolUI.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "astronomer.fullname" . }}-server
+                port:
+                  number: {{ .Values.server.service.port }}
+---
+{{- end }}
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "astronomer.fullname" . }}-tools
+  labels:
+    {{- include "astronomer.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    {{- include "astronomer.gateway.parentRef" . | nindent 4 }}
+  hostnames:
+    - {{ printf "*.%s" .Values.toolUI.domain | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "astronomer.fullname" . }}-server
+          port: {{ .Values.server.service.port }}
+{{- end }}
+{{- end }}

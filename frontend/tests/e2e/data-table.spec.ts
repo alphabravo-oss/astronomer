@@ -46,6 +46,7 @@ const clusters = Array.from({ length: 55 }, (_, i) => {
     display_name: `Cluster ${n}`,
     description: "",
     status: i % 2 === 0 ? "active" : "inactive",
+    registration_phase: "ready",
     health: {
       status: "active",
       lastCheck: new Date().toISOString(),

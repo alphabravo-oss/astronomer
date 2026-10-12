@@ -1,0 +1,10 @@
+{
+  "original_path": "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json",
+  "original_sha256": "sha256:3ad6bd1840fbddef7e435573f8f7b1e61b7beb1d952f3a2981f59cb596a697d5",
+  "original_size": 246955,
+  "stored_path": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/gosec-original.json.gz",
+  "stored_sha256": "sha256:c7d784941109e5a382aefc4c9af1e77983726cb9768dac1ba7d97389a0264f54",
+  "stored_size": 28868,
+  "compression": "deterministic gzip mtime0",
+  "scope": "complete unchanged raw scanner report all387 findings; no scanner rerun"
+}

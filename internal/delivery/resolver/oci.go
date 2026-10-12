@@ -13,11 +13,12 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/registry"
 	"oras.land/oras-go/v2/registry/remote"
 	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 var ociName = regexp.MustCompile(`^[a-z0-9]+(?:(?:[._-]|/)[a-z0-9]+)*$`)
@@ -157,8 +158,7 @@ func fetchCosignEvidence(ctx context.Context, repositoryName, subjectDigest stri
 		return nil, &Error{Code: CodeDigestMismatch, Message: "OCI signature manifest digest does not match"}
 	}
 	var manifest ocispec.Manifest
-	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
-	if err := decoder.Decode(&manifest); err != nil || len(manifest.Layers) == 0 || len(manifest.Layers) > maxCosignSignatures {
+	if err := jsoncontract.Decode(manifestBytes, &manifest); err != nil || len(manifest.Layers) == 0 || len(manifest.Layers) > maxCosignSignatures {
 		return nil, &Error{Code: CodeVerification, Message: "OCI signature manifest is invalid"}
 	}
 
@@ -234,6 +234,12 @@ func readBoundedAndClose(reader io.ReadCloser, declaredSize, maximum int64) ([]b
 }
 
 func simpleSigningClaimsDigest(payload []byte, expected string) bool {
+	// Cosign optional annotations and original docker-reference remain compatible.
+	// Validate their entire document before interpreting the digest-bearing subset.
+	var document any
+	if len(payload) > int(maxCosignPayloadBytes) || jsoncontract.Decode(payload, &document) != nil {
+		return false
+	}
 	var claims struct {
 		Critical struct {
 			Type  string `json:"type"`

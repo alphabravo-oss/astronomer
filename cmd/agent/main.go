@@ -29,7 +29,7 @@ import (
 const upgradeReportInterval = time.Minute
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
@@ -164,7 +164,7 @@ func runConnect(logger *slog.Logger) error {
 		// Cluster decommission. Receives MsgDecommission from the server,
 		// uninstalls our managed-side resources (Fluent Bit / logging
 		// namespace, labeled Velero CRs) and finally schedules the agent's
-		// own Deployment for deletion AFTER the ACK is queued for writing.
+		// own Deployment for deletion AFTER the ACK frame is written.
 		// When the dynamic client can't be constructed (unlikely — same
 		// rest.Config as the typed clientset above), log and continue:
 		// the operator can still kubectl-delete manually.

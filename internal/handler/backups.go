@@ -86,6 +86,7 @@ type BackupHandler struct {
 	encryptor  *auth.Encryptor
 	requester  K8sRequester
 	httpClient *http.Client
+	s3Policy   *httpclient.DestinationPolicy
 	log        *slog.Logger
 	authz      authorizationSupport
 	bus        *events.Bus

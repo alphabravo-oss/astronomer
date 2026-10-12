@@ -1,0 +1,7 @@
+GOTOOLCHAIN=go1.27.2 go test -list Test ./internal/releasecontract
+TestRuntimeHasNoArgoCD
+TestApplicationImageInventoryByRelease
+TestGeneratedReleaseManifestLoadsInApplication
+TestLoadRejectsUnknownMutableAndMismatchedRelease
+TestApplyMirrorMappingRequiresExactManifestAndDigestPreservation
+ok  	github.com/alphabravocompany/astronomer-go/internal/releasecontract	0.004s

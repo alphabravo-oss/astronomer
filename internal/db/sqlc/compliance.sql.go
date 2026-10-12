@@ -108,7 +108,8 @@ SELECT id, name, display_name, cluster_id,
        resource_quota_cpu_limit, resource_quota_memory_limit,
        resource_quota_pod_count, created_at
 FROM projects
-ORDER BY created_at ASC
+ORDER BY created_at ASC, id ASC
+LIMIT 100001
 `
 
 type ListAllProjectsForComplianceRow struct {
@@ -128,6 +129,7 @@ type ListAllProjectsForComplianceRow struct {
 // needs (pod_security_profile, network_policy_mode, resource_quota_*).
 // Distinct from ListProjects to keep the read cheap when there are
 // thousands of projects.
+// The writer refuses the lookahead row before allocating the JSON document.
 func (q *Queries) ListAllProjectsForCompliance(ctx context.Context) ([]ListAllProjectsForComplianceRow, error) {
 	rows, err := q.db.Query(ctx, listAllProjectsForCompliance)
 	if err != nil {

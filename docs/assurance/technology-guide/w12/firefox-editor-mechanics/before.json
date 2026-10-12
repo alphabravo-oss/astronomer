@@ -1,0 +1,35 @@
+{
+  "source": {
+    "schema_version": 2,
+    "source_file_count": 6175,
+    "source_tree_sha256": "06de7b6d2e6b617d5a643fed7b1b1ba676b39ef23b3a2444dfcaa1f4cf53de9f"
+  },
+  "diagnosticInputs": [
+    {
+      "path": "frontend/.cache/monaco-input-characterization/characterize.mjs",
+      "sha256": "7dd8d10ac539460a074e1e8e02617789ce53aa0d18b1f24b1c2fe77f65195fda"
+    },
+    {
+      "path": "frontend/.cache/monaco-input-characterization/editor.jsx",
+      "sha256": "134ec7b79cb3bf09dd0580fa5fe36ed01e20aba5b0386c68379601eb1535e428"
+    },
+    {
+      "path": "frontend/.cache/monaco-input-characterization/editor.spec.ts",
+      "sha256": "2201daa73ecef8e9e02dfb9fa26418b433990fa32a3fa968584170de747416be"
+    },
+    {
+      "path": "frontend/.cache/monaco-input-characterization/index.html",
+      "sha256": "2add3fbd9cc941e64711ebda49bdb7ca092fad2a132b1ec68905533bacf40801"
+    },
+    {
+      "path": "frontend/.cache/monaco-input-characterization/playwright.config.ts",
+      "sha256": "3168434ca60ca0cc6f12d22bc2115b6f60a6ffd1102c88be002ddc972595206d"
+    },
+    {
+      "path": "frontend/.cache/monaco-input-characterization/vite.config.mjs",
+      "sha256": "f71829bfd7af72a30e8645f014f6b791cd48aacde1f4be89731e535d60661f60"
+    }
+  ],
+  "referenceSha256": "dc9e06bcba14d887da6fd7fbbff8ff409607418665f89796230a358ab5bddfae",
+  "editorSha256": "ec4861d3838679dec3e7502659a97182994810e191f4248b9a140a4df521789d"
+}

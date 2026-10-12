@@ -81,17 +81,20 @@ export function mapPlatformSetting(
   };
 }
 
-export async function listPlatformSettings(): Promise<PlatformSettingView[]> {
-  const envelope = await getAdminSettings();
+export async function listPlatformSettings(
+  signal?: AbortSignal,
+): Promise<PlatformSettingView[]> {
+  const envelope = await getAdminSettings({ signal });
   return requireData(envelope, "listPlatformSettings").map(mapPlatformSetting);
 }
 
 export async function getPlatformSetting(
   key: string,
+  signal?: AbortSignal,
 ): Promise<PlatformSettingView> {
   return mapPlatformSetting(
     requireData(
-      await getAdminSettingsByKey({ path: { key } }),
+      await getAdminSettingsByKey({ signal, path: { key } }),
       "getPlatformSetting",
     ),
   );

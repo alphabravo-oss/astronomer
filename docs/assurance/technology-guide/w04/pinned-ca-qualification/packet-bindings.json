@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "authoritativeQualification": false,
+  "packetFiles": {
+    "index.json": "c32414a62de413ece067b48137d6caf29e0bf94dac5c166282ef7c4962f1db9e",
+    "verify.py": "dc81b759ac79455787f860ac4d09f5dfabc713724fe38fe60569876a5d4a316b",
+    "test_verify.py": "263e47728c80cfed55472a17d621ac7c60491e6349f281c088d8c7f5b573f385",
+    "README.md": "91644d1636d0544cbb11c96f7c780eec856335aa3c48a1f7002659dfe4cbeefe",
+    "validator-controls.log": "fa0b99e4981564e3539f48e7aa287b940fa3034731a3a7fcef847189963a1dc4"
+  }
+}

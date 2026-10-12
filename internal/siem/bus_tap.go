@@ -274,6 +274,7 @@ func (t *BusTap) runInserter(ctx context.Context) {
 
 // insertOne enforces the bounded-queue cap and INSERTs.
 func (t *BusTap) insertOne(ctx context.Context, job enqueueJob) {
+	metric := CaptureMetricLease(ctx, t.q, job.forwarderID)
 	// Cap-check first. CountSIEMQueueByForwarder is cheap thanks to
 	// the forwarder_id partial index.
 	depth, err := t.q.CountSIEMQueueByForwarder(ctx, job.forwarderID)
@@ -290,7 +291,7 @@ func (t *BusTap) insertOne(ctx context.Context, job enqueueJob) {
 		})
 		if lerr == nil && len(ids) > 0 {
 			if derr := t.q.DeleteSIEMQueueByIDs(ctx, ids); derr == nil {
-				RecordDropped(job.forwarder.Name, "queue_full", len(ids))
+				metric.Dropped(ctx, "queue_full", len(ids))
 				t.maybeLogDrop(job.forwarder.Name, "queue_full")
 				// Bump dropped_total on the status row so the admin
 				// status endpoint surfaces it without a metrics

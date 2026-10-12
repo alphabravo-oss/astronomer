@@ -116,6 +116,15 @@ type Outcome struct {
 	Err          error  // non-nil for transport-level failures (DNS, timeout)
 }
 
+// ResponseStatus returns a storage-safe HTTP status. Zero denotes a transport
+// failure; completed responses must use the three-digit HTTP status range.
+func (o Outcome) ResponseStatus() (int32, error) {
+	if o.Status < 0 || o.Status > 999 || (o.Status > 0 && o.Status < 100) {
+		return 0, fmt.Errorf("invalid webhook response status %d", o.Status)
+	}
+	return int32(o.Status), nil
+}
+
 // IsRetryable reports whether the outcome is worth retrying. 4xx is
 // permanent (operator must fix the URL or the receiver's bug); 5xx
 // and transport failures are transient.
@@ -234,6 +243,10 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, event Event) (Outco
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+
+	if resp.StatusCode < 100 || resp.StatusCode > 999 {
+		return Outcome{Err: fmt.Errorf("invalid webhook response status %d", resp.StatusCode)}, len(body), nil
+	}
 
 	// Read up to MaxResponseBodyBytes + 1 so the truncation flag is
 	// honest about whether we dropped content.

@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,23 +28,55 @@ func (h *MonitoringHandler) resolveAutoRollbackPolicy(backend sqlc.MonitoringBac
 	return false
 }
 
-func (h *MonitoringHandler) resolveMaxRetryAttempts(backend sqlc.MonitoringBackend) int32 {
-	policies := mapFromMapValue(decodeJSONMap(backend.AuthConfig)["operationPolicies"])
-	switch value := policies["maxRetryAttempts"].(type) {
+func (h *MonitoringHandler) resolveMaxRetryAttempts(backend sqlc.MonitoringBackend) (int32, error) {
+	return monitoringRetryPolicy(backend.AuthConfig)
+}
+
+func monitoringRetryPolicy(raw json.RawMessage) (int32, error) {
+	if len(raw) == 0 {
+		return 1, nil
+	}
+	var document map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if !json.Valid(raw) || decoder.Decode(&document) != nil {
+		return 0, fmt.Errorf("invalid monitoring policy document")
+	}
+	return monitoringRetryAttempts(mapFromMapValue(document["operationPolicies"])["maxRetryAttempts"])
+}
+
+// Both the top-level setting and the authConfig policy bag reach this boundary.
+func monitoringRetryAttempts(value any) (int32, error) {
+	switch value := value.(type) {
+	case nil:
+		return 1, nil
+	case json.Number:
+		// Bound magnitude before exact parsing so a huge exponent cannot allocate
+		// an arbitrarily large integer. Preserve ordinary forms such as 3.0/3e0.
+		approximate, err := value.Float64()
+		if err == nil && len(value.String()) <= 64 && approximate >= 1 && approximate <= math.MaxInt32 {
+			exact, ok := new(big.Rat).SetString(value.String())
+			if ok && exact.IsInt() && exact.Num().IsInt64() {
+				integer := exact.Num().Int64()
+				if integer >= 1 && integer <= math.MaxInt32 {
+					return int32(integer), nil
+				}
+			}
+		}
 	case float64:
-		if value >= 1 {
-			return int32(value)
+		if value >= 1 && value <= math.MaxInt32 && math.Trunc(value) == value {
+			return int32(value), nil
 		}
 	case int32:
 		if value >= 1 {
-			return value
+			return value, nil
 		}
 	case int:
-		if value >= 1 {
-			return int32(value)
+		if value >= 1 && value <= math.MaxInt32 {
+			return int32(value), nil
 		}
 	}
-	return 1
+	return 0, fmt.Errorf("maxRetryAttempts must be an integer between 1 and %d", math.MaxInt32)
 }
 
 func (h *MonitoringHandler) operationMaxAttempts(payload json.RawMessage) int32 {

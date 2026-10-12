@@ -1,0 +1,13 @@
+# Scoped selective-query source gates
+
+Frozen evidence/source `970b4e8349062228d48d236ad5b1725d0db16869` passes actual Go 1.27.2 vet for `internal/handler` and `internal/db/sqlc`, JSON governance, dependency boundaries, complexity and migration safety through schema 77. The eight source-gate children held their process-group identity until drain. All source fingerprints stayed unchanged and all 34 immediate, maintained and final capacity guards passed.
+
+The original SQL/data governance checks failed on the stale `schema_version.go` owner digest. Correcting only that reviewed 75-to-77 source binding exposed the next stale owner, `alerting_events.go`. Inspection found 18 more previously reviewed typed-pagination/cursor module changes, 32 unchanged URL-query expressions whose enclosing declarations changed, and two new registry-authentication URL-query candidates. Both failure stages remain retained in the receipt; they were not treated as passing checks.
+
+Metadata commit `2792e6d5` updates exactly the reviewed proposal. It binds 19 existing module digests, moves the existing URL-query record from `queryOffset` to its canonical `queryOffset32` implementation, and updates 32 enclosing declaration digests without changing any existing expression, classification or control. The two new `request.URL.Query()` calls inspect a finite registry authentication URL and are explicitly classified as non-SQL candidates. Their new resolver module has its own exact source binding.
+
+All 294 SQL allowance records remain byte-semantically identical, with the same 294 ceiling, four finite builders and two dormant methods. Final SQL governance passes with 892 exact candidates, 178 source-bound owners and nine embedded delete targets. Final data governance passes with 104 destructive tables; its JSON check retains 189 request owners, 205 storage candidates and 1,160 serializer/read sites.
+
+The corrected checks run the unchanged Python wrappers using the exact existing SQL/JSON AST executable digests in the [receipt](receipt.json). Only their expected `go run` invocations are redirected; unexpected Go commands fail closed. No compiler, generator or database mutation runs during the corrected checks. This reuse proves metadata alignment against the unchanged discovery implementation and current source, without claiming a newly compiled checker or a new source-security scan.
+
+The receipt indexes both failed stages, corrected outputs, the original bounded gate runner and all source/proposal proofs. The paired database qualification remains scoped to its separate frozen source and receipts. Whole W07 coverage and current native security policy remain open.

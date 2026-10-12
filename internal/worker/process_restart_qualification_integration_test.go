@@ -70,8 +70,12 @@ func TestProcessRestartQualification(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SHOW server_version`).Scan(&postgresVersion); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(postgresVersion, "16.") {
-		t.Fatalf("PostgreSQL version = %q, want 16.x", postgresVersion)
+	major := os.Getenv("POSTGRES_QUALIFICATION_MAJOR")
+	if major != "17" && major != "18" {
+		t.Fatal("qualification requires an explicit owned PostgreSQL17/18 lane")
+	}
+	if !strings.HasPrefix(postgresVersion, major+".") {
+		t.Fatalf("PostgreSQL version = %q, want %s.x", postgresVersion, major)
 	}
 	redisOptions, err := redis.ParseURL(redisURL)
 	if err != nil {
@@ -83,8 +87,8 @@ func TestProcessRestartQualification(t *testing.T) {
 		t.Fatal(err)
 	}
 	redisInfo, err := redisClient.Info(ctx, "server").Result()
-	if err != nil || !strings.Contains(redisInfo, "redis_version:7.") {
-		t.Fatalf("Redis 7 qualification dependency unavailable: %v", err)
+	if err != nil || !strings.Contains(redisInfo, "\r\nvalkey_version:9.1.2\r\n") {
+		t.Fatalf("Authenticated Valkey9.1.2 qualification dependency unavailable: %v", err)
 	}
 
 	t.Run("server rolling restart preserves tunnel task and CIS progress", func(t *testing.T) {

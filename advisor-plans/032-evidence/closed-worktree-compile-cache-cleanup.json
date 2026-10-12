@@ -1,0 +1,755 @@
+{
+  "observedAt": "2026-10-09T23:16:07.618949+00:00",
+  "scope": "Regenerable first-party Go compile archives from closed Plan032 worktrees only; active worktree paths, unrelated/stdlib cache, source, logs, containers/PVCs and credentials preserved",
+  "before": {
+    "exitCode": 1,
+    "stdout": "{\"path\":\".\",\"mountpoint\":\"/\",\"total_kib\":354066236,\"used_kib\":273481244,\"available_kib\":66135716,\"available_gib\":63,\"free_percent\":19,\"minimum_free_gib\":20,\"minimum_free_percent\":20,\"meets_minimum\":false}\n",
+    "stderr": "check-build-capacity: BLOCK \u2014 insufficient safe filesystem headroom\n"
+  },
+  "removed": [
+    {
+      "path": "/root/.cache/go-build/6c/6cb4792cdbe652ee17373b0b22ada8f4d0202bcbbc897569974810cd760a5323-d",
+      "bytes": 12681008,
+      "mtime": 1791581739.2303734,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "6cb4792cdbe652ee17373b0b22ada8f4d0202bcbbc897569974810cd760a5323"
+    },
+    {
+      "path": "/root/.cache/go-build/6c/6c0bd68a0c959e6334552d655cb3ce3923aa8465c733ffbf74174d07854288c3-d",
+      "bytes": 19195998,
+      "mtime": 1791583132.9017549,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "6c0bd68a0c959e6334552d655cb3ce3923aa8465c733ffbf74174d07854288c3"
+    },
+    {
+      "path": "/root/.cache/go-build/6c/6c9428ce0c7fde1d1c3881301f677342e51d677fc723769044d60d456ff7e520-d",
+      "bytes": 13291062,
+      "mtime": 1791583298.1094549,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "6c9428ce0c7fde1d1c3881301f677342e51d677fc723769044d60d456ff7e520"
+    },
+    {
+      "path": "/root/.cache/go-build/6d/6d8263e4e4ee2b118b543910cef7b78eae04babde214ab870c2091d78148e404-d",
+      "bytes": 12146760,
+      "mtime": 1791584020.9718156,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "6d8263e4e4ee2b118b543910cef7b78eae04babde214ab870c2091d78148e404"
+    },
+    {
+      "path": "/root/.cache/go-build/a1/a1d573863e313b523500b834e918ec83c56f3c65232dfb06df2b19193573cc81-d",
+      "bytes": 19202446,
+      "mtime": 1791582894.642159,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "a1d573863e313b523500b834e918ec83c56f3c65232dfb06df2b19193573cc81"
+    },
+    {
+      "path": "/root/.cache/go-build/9a/9a3ea5a7b98acdab408a95bb50fdc80992480e6ac732b1bad34c772b49b1fb8b-d",
+      "bytes": 19202446,
+      "mtime": 1791581599.0617409,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "9a3ea5a7b98acdab408a95bb50fdc80992480e6ac732b1bad34c772b49b1fb8b"
+    },
+    {
+      "path": "/root/.cache/go-build/ec/ec6e66edd40b351091778b99d6aa59942ab94c09d3419b69eb2e2c66218e0d7a-d",
+      "bytes": 11625096,
+      "mtime": 1791581580.692871,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "ec6e66edd40b351091778b99d6aa59942ab94c09d3419b69eb2e2c66218e0d7a"
+    },
+    {
+      "path": "/root/.cache/go-build/de/de34d3fccde6003a83aa5ed5f8eed096fac8961941f3a483b72f0d7d4537e445-d",
+      "bytes": 13291062,
+      "mtime": 1791583032.8207421,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "de34d3fccde6003a83aa5ed5f8eed096fac8961941f3a483b72f0d7d4537e445"
+    },
+    {
+      "path": "/root/.cache/go-build/f4/f47d0444848ca22b360c53fc11511e4ee5c920e00f6a9087559b0f57d6846540-d",
+      "bytes": 17960690,
+      "mtime": 1791584359.1257763,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "f47d0444848ca22b360c53fc11511e4ee5c920e00f6a9087559b0f57d6846540"
+    },
+    {
+      "path": "/root/.cache/go-build/0a/0afd93105dcee8c026d99f773a66a557c486ae24f5724665c4c3ea2daecfdeb4-d",
+      "bytes": 70230410,
+      "mtime": 1791583150.3721793,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "0afd93105dcee8c026d99f773a66a557c486ae24f5724665c4c3ea2daecfdeb4"
+    },
+    {
+      "path": "/root/.cache/go-build/0a/0a8264ae86b6fbd51a3cedec8a832598c12620eeb63fccb273e0a5494d23f9fc-d",
+      "bytes": 23594332,
+      "mtime": 1791583801.92131,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "0a8264ae86b6fbd51a3cedec8a832598c12620eeb63fccb273e0a5494d23f9fc"
+    },
+    {
+      "path": "/root/.cache/go-build/d6/d614009b6f4e3a33da70ac4ab274a6079ffeb66b53ebe236468a2862408c5b1f-d",
+      "bytes": 11702914,
+      "mtime": 1791582899.048352,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "d614009b6f4e3a33da70ac4ab274a6079ffeb66b53ebe236468a2862408c5b1f"
+    },
+    {
+      "path": "/root/.cache/go-build/37/37480a3de71a263de5c6c02040602d7f72d6379f400c2cc1802552e99d20d97b-d",
+      "bytes": 12192722,
+      "mtime": 1791582895.6653397,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "37480a3de71a263de5c6c02040602d7f72d6379f400c2cc1802552e99d20d97b"
+    },
+    {
+      "path": "/root/.cache/go-build/2a/2ae8ab983e6af4a59e7d78cfc73f8c8b1ad1d92793a984d82b52f685053ae5a9-d",
+      "bytes": 43414916,
+      "mtime": 1791583005.1757617,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "2ae8ab983e6af4a59e7d78cfc73f8c8b1ad1d92793a984d82b52f685053ae5a9"
+    },
+    {
+      "path": "/root/.cache/go-build/2a/2a3856f3001f1eb12e61005a3537489bc6601d43a505759c0dd6555689ee7cad-d",
+      "bytes": 68900744,
+      "mtime": 1791582908.2379131,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "2a3856f3001f1eb12e61005a3537489bc6601d43a505759c0dd6555689ee7cad"
+    },
+    {
+      "path": "/root/.cache/go-build/8a/8a2533f8f893ee3361d7fffb6091f7a47f630f41fa1549996f13183c6d945f5d-d",
+      "bytes": 12680974,
+      "mtime": 1791583360.8811555,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "8a2533f8f893ee3361d7fffb6091f7a47f630f41fa1549996f13183c6d945f5d"
+    },
+    {
+      "path": "/root/.cache/go-build/7a/7a31ae0e7af6b23dc75d37fbd6bb7e1fe4ebf5c50ac66a9c06ab5d39fafe5e4b-d",
+      "bytes": 23339250,
+      "mtime": 1791584392.2716882,
+      "markers": [
+        "astronomer-032-distribution-review"
+      ],
+      "sha256": "7a31ae0e7af6b23dc75d37fbd6bb7e1fe4ebf5c50ac66a9c06ab5d39fafe5e4b"
+    },
+    {
+      "path": "/root/.cache/go-build/c3/c3796d13dd02931f735828cd7e535f7c8553ac3061fd909ca376b9380697d7d4-d",
+      "bytes": 43438652,
+      "mtime": 1791582916.9805171,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "c3796d13dd02931f735828cd7e535f7c8553ac3061fd909ca376b9380697d7d4"
+    },
+    {
+      "path": "/root/.cache/go-build/c3/c33ef70fc53b277070b69fb95666f0ba39b6c28375f4721cd2bda43451919b1c-d",
+      "bytes": 12144872,
+      "mtime": 1791582986.921105,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "c33ef70fc53b277070b69fb95666f0ba39b6c28375f4721cd2bda43451919b1c"
+    },
+    {
+      "path": "/root/.cache/go-build/14/1488e746723e2f0a3799c55702cf5339535a836c2eb690a781710ed602a5b2cc-d",
+      "bytes": 68900740,
+      "mtime": 1791584037.5190947,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "1488e746723e2f0a3799c55702cf5339535a836c2eb690a781710ed602a5b2cc"
+    },
+    {
+      "path": "/root/.cache/go-build/69/6903bcb9df6c8a6e18885486339423d6cebc4d531e7826525700db6c9b7a5f65-d",
+      "bytes": 19195998,
+      "mtime": 1791582988.3594935,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "6903bcb9df6c8a6e18885486339423d6cebc4d531e7826525700db6c9b7a5f65"
+    },
+    {
+      "path": "/root/.cache/go-build/63/63e2826e94852a3f2a818b48fa0ee363b69d2bf547e2ffbb170297cb81900ff7-d",
+      "bytes": 18205690,
+      "mtime": 1791585289.7027984,
+      "markers": [
+        "astronomer-032-audit-review"
+      ],
+      "sha256": "63e2826e94852a3f2a818b48fa0ee363b69d2bf547e2ffbb170297cb81900ff7"
+    },
+    {
+      "path": "/root/.cache/go-build/31/3131149bc8d58db35ac69d0793ac644fe7e1aeea1b79149dad4d74566035c132-d",
+      "bytes": 70256354,
+      "mtime": 1791582961.5935273,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "3131149bc8d58db35ac69d0793ac644fe7e1aeea1b79149dad4d74566035c132"
+    },
+    {
+      "path": "/root/.cache/go-build/c5/c5be8fc17b906a97528f4f2ccf3a7a6e44e5d40683f1e76eff9360501639394b-d",
+      "bytes": 23768088,
+      "mtime": 1791585122.458728,
+      "markers": [
+        "astronomer-032-audit-review"
+      ],
+      "sha256": "c5be8fc17b906a97528f4f2ccf3a7a6e44e5d40683f1e76eff9360501639394b"
+    },
+    {
+      "path": "/root/.cache/go-build/51/516e0872fd779283cb2e2c4cb78bdc330cf7b93f5b1c99961ec397c3fb732970-d",
+      "bytes": 17629028,
+      "mtime": 1791582066.968781,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "516e0872fd779283cb2e2c4cb78bdc330cf7b93f5b1c99961ec397c3fb732970"
+    },
+    {
+      "path": "/root/.cache/go-build/f0/f0794fc88ab55de3b421926edc9d2d29b5c0c1ee5216c742dacbb575939f75f7-d",
+      "bytes": 17809354,
+      "mtime": 1791583364.5129876,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "f0794fc88ab55de3b421926edc9d2d29b5c0c1ee5216c742dacbb575939f75f7"
+    },
+    {
+      "path": "/root/.cache/go-build/51/51384f644308e4cd1b5ba2900d4d7cbd00692d415401277a451dc93e47c9623e-d",
+      "bytes": 43436990,
+      "mtime": 1791581623.6933677,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "51384f644308e4cd1b5ba2900d4d7cbd00692d415401277a451dc93e47c9623e"
+    },
+    {
+      "path": "/root/.cache/go-build/4f/4ff3ca995a24ebd2080e8f21b6f5c1a5b4178603c2374bb80551bbcee24490f3-d",
+      "bytes": 12192722,
+      "mtime": 1791581599.8226962,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "4ff3ca995a24ebd2080e8f21b6f5c1a5b4178603c2374bb80551bbcee24490f3"
+    },
+    {
+      "path": "/root/.cache/go-build/4b/4b974dac67d2958b1f56d04443bb2dfa82a09f2a72eca59839d7c6fb7e590022-d",
+      "bytes": 121926982,
+      "mtime": 1791582970.5286474,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "4b974dac67d2958b1f56d04443bb2dfa82a09f2a72eca59839d7c6fb7e590022"
+    },
+    {
+      "path": "/root/.cache/go-build/c4/c4d78e58ec702fb80ba9b4ce8a5c7df7cf950576a7cf6b798c69fe23196ffd25-d",
+      "bytes": 14076146,
+      "mtime": 1791582977.0232806,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "c4d78e58ec702fb80ba9b4ce8a5c7df7cf950576a7cf6b798c69fe23196ffd25"
+    },
+    {
+      "path": "/root/.cache/go-build/ba/baf42cbd68d4596664edbc8a7b9832d04fd50dd60078a6235d7e3f981fca10a6-d",
+      "bytes": 19461946,
+      "mtime": 1791585471.9197345,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "baf42cbd68d4596664edbc8a7b9832d04fd50dd60078a6235d7e3f981fca10a6"
+    },
+    {
+      "path": "/root/.cache/go-build/2d/2de327fa1fcc7a188c3f9d092602e4b8af20b36a24c99b765fdf552f42511bf8-d",
+      "bytes": 23946890,
+      "mtime": 1791584020.4121943,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "2de327fa1fcc7a188c3f9d092602e4b8af20b36a24c99b765fdf552f42511bf8"
+    },
+    {
+      "path": "/root/.cache/go-build/d7/d7403781d11df6fe54a46aa2eb97c82b837d7b9bfd678030ca15b558d1f1c0d6-d",
+      "bytes": 70189720,
+      "mtime": 1791581677.3755398,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "d7403781d11df6fe54a46aa2eb97c82b837d7b9bfd678030ca15b558d1f1c0d6"
+    },
+    {
+      "path": "/root/.cache/go-build/3f/3fa8ffd8919687f91bcac4ebf2ff2f1fe169a41c6e97642f924edc36e92c04df-d",
+      "bytes": 11624036,
+      "mtime": 1791583124.0741498,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "3fa8ffd8919687f91bcac4ebf2ff2f1fe169a41c6e97642f924edc36e92c04df"
+    },
+    {
+      "path": "/root/.cache/go-build/5d/5d0c99912a30137a9092dc43e66b74240e8e01979a3e273421a29d3b64ee75e0-d",
+      "bytes": 13293034,
+      "mtime": 1791584098.840326,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "5d0c99912a30137a9092dc43e66b74240e8e01979a3e273421a29d3b64ee75e0"
+    },
+    {
+      "path": "/root/.cache/go-build/86/86af26ab576713949d9f4bb4ad7381e06cd9e245c634c2b794330908d230ab5f-d",
+      "bytes": 17962750,
+      "mtime": 1791585118.5362618,
+      "markers": [
+        "astronomer-032-audit-review"
+      ],
+      "sha256": "86af26ab576713949d9f4bb4ad7381e06cd9e245c634c2b794330908d230ab5f"
+    },
+    {
+      "path": "/root/.cache/go-build/3e/3e8e920823a545af587c369466090b7d36d19eadc2a4833a846e77e2b0604d41-d",
+      "bytes": 12681008,
+      "mtime": 1791581751.6353836,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "3e8e920823a545af587c369466090b7d36d19eadc2a4833a846e77e2b0604d41"
+    },
+    {
+      "path": "/root/.cache/go-build/3e/3e4020b203e53af5da286cac06d6cc3d9acc201cf8a3778cd28a1742e070be48-d",
+      "bytes": 11624036,
+      "mtime": 1791582976.463159,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "3e4020b203e53af5da286cac06d6cc3d9acc201cf8a3778cd28a1742e070be48"
+    },
+    {
+      "path": "/root/.cache/go-build/3e/3ebd291cce01070e21d6d2f18fcd532ae545520bdc5b05fc704355cc70c4db84-d",
+      "bytes": 13292906,
+      "mtime": 1791582977.355042,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "3ebd291cce01070e21d6d2f18fcd532ae545520bdc5b05fc704355cc70c4db84"
+    },
+    {
+      "path": "/root/.cache/go-build/07/07284391501ed7c69d759ff71bb6a5ffdf622183033e7fcc1e3ffb5dec1677b2-d",
+      "bytes": 68880832,
+      "mtime": 1791583141.3394125,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "07284391501ed7c69d759ff71bb6a5ffdf622183033e7fcc1e3ffb5dec1677b2"
+    },
+    {
+      "path": "/root/.cache/go-build/0e/0ea017faa1b64df211b2c8a9051065c95822e33e8e937cb65f0e4806bd39432b-d",
+      "bytes": 17632854,
+      "mtime": 1791582873.6021266,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "0ea017faa1b64df211b2c8a9051065c95822e33e8e937cb65f0e4806bd39432b"
+    },
+    {
+      "path": "/root/.cache/go-build/71/714efe2d0b0b2583056636aa452b76dcd0f996bcab7a0145b70b3885ec1b6395-d",
+      "bytes": 70256350,
+      "mtime": 1791584087.3116176,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "714efe2d0b0b2583056636aa452b76dcd0f996bcab7a0145b70b3885ec1b6395"
+    },
+    {
+      "path": "/root/.cache/go-build/bd/bdc202706f0f4634d6d136a046e253d2d12fb015218c473ca2aa4ccf75328d2e-d",
+      "bytes": 66616152,
+      "mtime": 1791581579.1635048,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "bdc202706f0f4634d6d136a046e253d2d12fb015218c473ca2aa4ccf75328d2e"
+    },
+    {
+      "path": "/root/.cache/go-build/6b/6ba99a174d8e739ebe7056157e8f0c22def3f4a950c4b17cda67b8b49ed35027-d",
+      "bytes": 18206566,
+      "mtime": 1791585113.202214,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "6ba99a174d8e739ebe7056157e8f0c22def3f4a950c4b17cda67b8b49ed35027"
+    },
+    {
+      "path": "/root/.cache/go-build/1b/1bd0f738763588c8844d2f522efd05020b786624eaf6ddeab03f13a1fa377a2f-d",
+      "bytes": 43414916,
+      "mtime": 1791583276.7354958,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "1bd0f738763588c8844d2f522efd05020b786624eaf6ddeab03f13a1fa377a2f"
+    },
+    {
+      "path": "/root/.cache/go-build/bd/bd833da585f035d1f07c3251a7e34381f33dc305566ce22e1c7c958898b60ded-d",
+      "bytes": 24090334,
+      "mtime": 1791585293.6069221,
+      "markers": [
+        "astronomer-032-audit-review"
+      ],
+      "sha256": "bd833da585f035d1f07c3251a7e34381f33dc305566ce22e1c7c958898b60ded"
+    },
+    {
+      "path": "/root/.cache/go-build/c1/c1b37866cc8ac1b890b71d88327867c9ebfff7c1ae951ce9df8f7139c7f77d3d-d",
+      "bytes": 12146758,
+      "mtime": 1791582893.0128462,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "c1b37866cc8ac1b890b71d88327867c9ebfff7c1ae951ce9df8f7139c7f77d3d"
+    },
+    {
+      "path": "/root/.cache/go-build/e0/e04c29ec9f0ab86abafeb3216fdd2e403939bf555b9634d998b1355aff386414-d",
+      "bytes": 11625096,
+      "mtime": 1791582876.3233159,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "e04c29ec9f0ab86abafeb3216fdd2e403939bf555b9634d998b1355aff386414"
+    },
+    {
+      "path": "/root/.cache/go-build/26/266218d372a1f9996a4476ed25e4898b6a07683ab2dd7c9fd1ce76a2d599338e-d",
+      "bytes": 66616116,
+      "mtime": 1791582983.8387642,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "266218d372a1f9996a4476ed25e4898b6a07683ab2dd7c9fd1ce76a2d599338e"
+    },
+    {
+      "path": "/root/.cache/go-build/05/05174070d0828a069f24555c80b553474ca0c1fa3e5e0c2f986145762978d01e-d",
+      "bytes": 15431570,
+      "mtime": 1791582977.261196,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "05174070d0828a069f24555c80b553474ca0c1fa3e5e0c2f986145762978d01e"
+    },
+    {
+      "path": "/root/.cache/go-build/d0/d060155c6bd8afe58db27f934f71e3cbe3113b36a115c4982634fe04ddf96f9d-d",
+      "bytes": 12681008,
+      "mtime": 1791584164.776159,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "d060155c6bd8afe58db27f934f71e3cbe3113b36a115c4982634fe04ddf96f9d"
+    },
+    {
+      "path": "/root/.cache/go-build/05/058bd059926b045ba1b3621f8cf00a1554ab33fde83cf10bfefa0acfac8f8a1d-d",
+      "bytes": 24088256,
+      "mtime": 1791585202.8840852,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "058bd059926b045ba1b3621f8cf00a1554ab33fde83cf10bfefa0acfac8f8a1d"
+    },
+    {
+      "path": "/root/.cache/go-build/f1/f1ae2614fd929a3dae8a0207b7706c13ffdd4a8fa5acc12cd3aa14a15b90979d-d",
+      "bytes": 121888168,
+      "mtime": 1791581685.4202523,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "f1ae2614fd929a3dae8a0207b7706c13ffdd4a8fa5acc12cd3aa14a15b90979d"
+    },
+    {
+      "path": "/root/.cache/go-build/52/52eab7031c0c295292eb4ddcf5923807451c8ce2b5b8d37100a766417930732a-d",
+      "bytes": 17589690,
+      "mtime": 1791584841.936526,
+      "markers": [
+        "astronomer-032-distribution-review"
+      ],
+      "sha256": "52eab7031c0c295292eb4ddcf5923807451c8ce2b5b8d37100a766417930732a"
+    },
+    {
+      "path": "/root/.cache/go-build/17/17b73f606b309bac718159714281baad7082766dccf92a7d2566d086aff1fdda-d",
+      "bytes": 70230410,
+      "mtime": 1791583039.3933032,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "17b73f606b309bac718159714281baad7082766dccf92a7d2566d086aff1fdda"
+    },
+    {
+      "path": "/root/.cache/go-build/17/17a702359e473686f9d49889d5f2f1988721065f72cebe5be119e7118d126cd7-d",
+      "bytes": 18203612,
+      "mtime": 1791585145.6217906,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "17a702359e473686f9d49889d5f2f1988721065f72cebe5be119e7118d126cd7"
+    },
+    {
+      "path": "/root/.cache/go-build/9f/9f83287fae1f6f90b2fa19454729c8087eaa83426dedc8fbefc415f92a19642b-d",
+      "bytes": 68861930,
+      "mtime": 1791581614.1884322,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "9f83287fae1f6f90b2fa19454729c8087eaa83426dedc8fbefc415f92a19642b"
+    },
+    {
+      "path": "/root/.cache/go-build/40/4090b139660d5c81951ee987cbd26f7082732f58a1295aba79f83fe5a70851a3-d",
+      "bytes": 23946888,
+      "mtime": 1791582890.235433,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "4090b139660d5c81951ee987cbd26f7082732f58a1295aba79f83fe5a70851a3"
+    },
+    {
+      "path": "/root/.cache/go-build/21/216ac4fbaa7e206ea9bf98eeaec7567d21ceeca60ac65b6bb31688bcdb68d6e0-d",
+      "bytes": 14078170,
+      "mtime": 1791582877.1833627,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "216ac4fbaa7e206ea9bf98eeaec7567d21ceeca60ac65b6bb31688bcdb68d6e0"
+    },
+    {
+      "path": "/root/.cache/go-build/e1/e1e90960d028dce5e00a9f76f83baccb3633ddac8e3ac70cd921f05df2778e4d-d",
+      "bytes": 14078170,
+      "mtime": 1791581571.2640312,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "e1e90960d028dce5e00a9f76f83baccb3633ddac8e3ac70cd921f05df2778e4d"
+    },
+    {
+      "path": "/root/.cache/go-build/72/725c1eab9be3f593f12a0405c93f256ac1e3efe3f20248dbc1a6bc448d42bce7-d",
+      "bytes": 121926976,
+      "mtime": 1791584097.2073312,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "725c1eab9be3f593f12a0405c93f256ac1e3efe3f20248dbc1a6bc448d42bce7"
+    },
+    {
+      "path": "/root/.cache/go-build/72/72125fd64a57c8afeb1eb463af9e7fb675afe7ee0a3c0b20866fa9fa125c307d-d",
+      "bytes": 12191380,
+      "mtime": 1791582988.449874,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "72125fd64a57c8afeb1eb463af9e7fb675afe7ee0a3c0b20866fa9fa125c307d"
+    },
+    {
+      "path": "/root/.cache/go-build/ae/ae6d92306fee95154668e6eed8203a0f20c212f7d5d0fc8b01d7130f054c8ec7-d",
+      "bytes": 13292906,
+      "mtime": 1791581693.1354704,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "ae6d92306fee95154668e6eed8203a0f20c212f7d5d0fc8b01d7130f054c8ec7"
+    },
+    {
+      "path": "/root/.cache/go-build/af/afa4ad98021c7d9b6ee278c88605da0fd179fac6ef72ffe4b2a7dd09bbaed7ad-d",
+      "bytes": 43438648,
+      "mtime": 1791584046.087098,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "afa4ad98021c7d9b6ee278c88605da0fd179fac6ef72ffe4b2a7dd09bbaed7ad"
+    },
+    {
+      "path": "/root/.cache/go-build/af/af7c06a3128c7c05f651143ff55f1191823b0c702440fb1867ec6c61b7fa51ec-d",
+      "bytes": 68880832,
+      "mtime": 1791582998.2589917,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "af7c06a3128c7c05f651143ff55f1191823b0c702440fb1867ec6c61b7fa51ec"
+    },
+    {
+      "path": "/root/.cache/go-build/0c/0c3c6ae2d0a8b01b5f00e11b55e1c622a25bd2764ef6575848f0a8ea4ef7971b-d",
+      "bytes": 23383512,
+      "mtime": 1791582136.1159246,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "0c3c6ae2d0a8b01b5f00e11b55e1c622a25bd2764ef6575848f0a8ea4ef7971b"
+    },
+    {
+      "path": "/root/.cache/go-build/6f/6fdba5f72dbe9c7d0af18a99b62fcb77b3acb88667d95116b9d761002d73688d-d",
+      "bytes": 17589914,
+      "mtime": 1791581567.1988196,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "6fdba5f72dbe9c7d0af18a99b62fcb77b3acb88667d95116b9d761002d73688d"
+    },
+    {
+      "path": "/root/.cache/go-build/fd/fde3b27c674ddcf3190ef2159967809a84f0c89640841bc2cf7427216da53555-d",
+      "bytes": 23945268,
+      "mtime": 1791581594.942261,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "fde3b27c674ddcf3190ef2159967809a84f0c89640841bc2cf7427216da53555"
+    },
+    {
+      "path": "/root/.cache/go-build/fd/fde966498972cb9599a989dc724ee52b9f294c9d448e88585859571982e32ba9-d",
+      "bytes": 11702910,
+      "mtime": 1791584029.8231776,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "fde966498972cb9599a989dc724ee52b9f294c9d448e88585859571982e32ba9"
+    },
+    {
+      "path": "/root/.cache/go-build/94/949b1f1022729e863a719431a6f3969f75c6884ea35d1894044e8f7bc9b8d9f4-d",
+      "bytes": 11702914,
+      "mtime": 1791581603.4384785,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "949b1f1022729e863a719431a6f3969f75c6884ea35d1894044e8f7bc9b8d9f4"
+    },
+    {
+      "path": "/root/.cache/go-build/9b/9b0105d87d8bc9a0b020141db520ad2b18eb11ea8561add669f811f200d5c49c-d",
+      "bytes": 12681008,
+      "mtime": 1791583041.0014884,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "9b0105d87d8bc9a0b020141db520ad2b18eb11ea8561add669f811f200d5c49c"
+    },
+    {
+      "path": "/root/.cache/go-build/7b/7bbde775fb9c2b95245d78ef93932908ca0d9614596ab44807fc051a4d70dcec-d",
+      "bytes": 11625224,
+      "mtime": 1791584006.9002988,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "7bbde775fb9c2b95245d78ef93932908ca0d9614596ab44807fc051a4d70dcec"
+    },
+    {
+      "path": "/root/.cache/go-build/5b/5b89e98fc8c3b102b9fffd05716ba645b3f60076ab65cf7da017bb774dfa1ba2-d",
+      "bytes": 23939408,
+      "mtime": 1791582984.9184616,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "5b89e98fc8c3b102b9fffd05716ba645b3f60076ab65cf7da017bb774dfa1ba2"
+    },
+    {
+      "path": "/root/.cache/go-build/9e/9ed8cfe84c4dd071e572b94f9f2315abad8591e8c81100deeb37e8431f466c9e-d",
+      "bytes": 17629028,
+      "mtime": 1791582694.839103,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "9ed8cfe84c4dd071e572b94f9f2315abad8591e8c81100deeb37e8431f466c9e"
+    },
+    {
+      "path": "/root/.cache/go-build/81/819b256a3faf2014da4c3d42b81b101861d7fa18f95eef2a369a6f09bdf01743-d",
+      "bytes": 12146758,
+      "mtime": 1791581597.1097028,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "819b256a3faf2014da4c3d42b81b101861d7fa18f95eef2a369a6f09bdf01743"
+    },
+    {
+      "path": "/root/.cache/go-build/2c/2c59caf5cc0d18596cf3b8b77e6f220e761984f661b0ff2fdca8770ea443d1f5-d",
+      "bytes": 121895814,
+      "mtime": 1791583175.16266,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "2c59caf5cc0d18596cf3b8b77e6f220e761984f661b0ff2fdca8770ea443d1f5"
+    },
+    {
+      "path": "/root/.cache/go-build/7e/7e73759e544979ece46a01afc88dee657341222b9a87ebf383936aef7f5fadf7-d",
+      "bytes": 19202442,
+      "mtime": 1791584023.741046,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "7e73759e544979ece46a01afc88dee657341222b9a87ebf383936aef7f5fadf7"
+    },
+    {
+      "path": "/root/.cache/go-build/18/18d3581bb7941e78e30143670294f6874d0e93e14a6062960bffecbbf4663e9f-d",
+      "bytes": 11698202,
+      "mtime": 1791582989.661122,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "18d3581bb7941e78e30143670294f6874d0e93e14a6062960bffecbbf4663e9f"
+    },
+    {
+      "path": "/root/.cache/go-build/66/66ca341517dcdaaeec712ecac3e0cab86a205198650521fbeff5a4f7196382cd-d",
+      "bytes": 12680974,
+      "mtime": 1791583117.7018564,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "66ca341517dcdaaeec712ecac3e0cab86a205198650521fbeff5a4f7196382cd"
+    },
+    {
+      "path": "/root/.cache/go-build/08/08095b30405d0f1578fee7adf31692ec489c5886915fa9842a310169adef9f80-d",
+      "bytes": 23766026,
+      "mtime": 1791584579.6504445,
+      "markers": [
+        "astronomer-032-w08"
+      ],
+      "sha256": "08095b30405d0f1578fee7adf31692ec489c5886915fa9842a310169adef9f80"
+    },
+    {
+      "path": "/root/.cache/go-build/3b/3bd2fc47a8ecb9332290b4809c25860ff3e801ccaf26d97b5f5aff380bcd969c-d",
+      "bytes": 15431978,
+      "mtime": 1791581584.6969452,
+      "markers": [
+        "astronomer-032-category-integration"
+      ],
+      "sha256": "3bd2fc47a8ecb9332290b4809c25860ff3e801ccaf26d97b5f5aff380bcd969c"
+    },
+    {
+      "path": "/root/.cache/go-build/3b/3b944d456677906a9b40e8b8c95c7e944a392ed03e30cc18f0c1ac5655258360-d",
+      "bytes": 121895814,
+      "mtime": 1791583047.125784,
+      "markers": [
+        "astronomer-032-w09"
+      ],
+      "sha256": "3b944d456677906a9b40e8b8c95c7e944a392ed03e30cc18f0c1ac5655258360"
+    }
+  ],
+  "removedBytes": 2634922554,
+  "after": {
+    "exitCode": 0,
+    "stdout": "{\"path\":\".\",\"mountpoint\":\"/\",\"total_kib\":354066236,\"used_kib\":270907836,\"available_kib\":68709124,\"available_gib\":65,\"free_percent\":20,\"minimum_free_gib\":20,\"minimum_free_percent\":20,\"meets_minimum\":true}\n",
+    "stderr": ""
+  }
+}

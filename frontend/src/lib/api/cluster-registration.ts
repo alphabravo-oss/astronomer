@@ -6,10 +6,11 @@ import {
   postClustersByIdRegistrationRetryByStepId,
   putClustersByIdRegistrationOptions,
 } from "@/lib/api/generated/client";
-import type {
-  RegistrationStatus as RegistrationStatusWire,
-  RegistrationStep as RegistrationStepWire,
-} from "@/types/openapi.generated";
+import type { OpenAPIReadComponents } from "@/types/categories.generated";
+type RegistrationStatusWire =
+  OpenAPIReadComponents["schemas"]["RegistrationStatus"];
+type RegistrationStepWire =
+  OpenAPIReadComponents["schemas"]["RegistrationStep"];
 
 export type RegistrationPhase = RegistrationStatusWire["phase"];
 

@@ -1,0 +1,2 @@
+npm notice run astronomer-frontend@1.2.1 npx
+npm notice run 'eslint' src/routes/dashboard/catalog/index.tsx src/routes/dashboard/catalog/-chart-empty-state.tsx

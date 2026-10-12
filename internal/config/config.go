@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -53,6 +54,16 @@ type Config struct {
 	TunnelEgressCIDRs      string `mapstructure:"astronomer_tunnel_egress_cidrs"`
 	RCAllowPrivateWebhooks bool   `mapstructure:"astronomer_rc_allow_private_webhooks"`
 
+	// HelmRepositoryDestinationPolicy is operator-owned origin/CIDR authority,
+	// independent of chart URLs and catalog/provider destination policies.
+	HelmRepositoryDestinationPolicy string `mapstructure:"helm_repository_destination_policy"`
+	// HelmRepositoryProxyURL overrides both captured operator proxy routes.
+	// Proxy origin/address authority remains the independent Helm policy.
+	HelmRepositoryProxyURL string `mapstructure:"helm_repository_proxy_url"`
+	HelmRepositoryNoProxy  string `mapstructure:"helm_repository_no_proxy"`
+	// Captured once by Load; neither requests nor consumers read proxy env.
+	HelmRepositoryProxyRouting httpclient.ProxyRouting `mapstructure:"-"`
+
 	BootstrapAdminPassword            string `mapstructure:"astronomer_bootstrap_password"`
 	BootstrapAdminUsername            string `mapstructure:"astronomer_bootstrap_username"`
 	BootstrapAdminEmail               string `mapstructure:"astronomer_bootstrap_email"`
@@ -81,6 +92,10 @@ type Config struct {
 	// signed downstream registration manifests. Operators may set it later when
 	// it is intentionally omitted from a development install.
 	ServerURL string `mapstructure:"server_url"`
+
+	// ToolUIDomain is the dedicated wildcard DNS suffix for isolated downstream UIs.
+	// Requires HTTPS, wildcard DNS/TLS, and a suffix separate from ServerURL.
+	ToolUIDomain string `mapstructure:"tool_ui_domain"`
 
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
 	// InternalPSK authenticates body-bound, short-lived cross-pod tunnel RPC.
@@ -129,18 +144,45 @@ type Config struct {
 	// The old singular field remains accepted for one-key installations.
 	DeliveryFluxDistributionPublicKeys string   `mapstructure:"delivery_flux_distribution_public_keys"`
 	DeliveryFluxDistributionKeyring    [][]byte `mapstructure:"-"`
-	DeliveryBundleRepository           string   `mapstructure:"delivery_bundle_repository"`
-	DeliveryBundleDigest               string   `mapstructure:"delivery_bundle_digest"`
-	DeliveryBundleCertificateIdentity  string   `mapstructure:"delivery_bundle_certificate_identity"`
-	DeliveryBundleOIDCIssuer           string   `mapstructure:"delivery_bundle_oidc_issuer"`
-	DeliverySourceAllowedPrivateHosts  string   `mapstructure:"delivery_source_allowed_private_hosts"`
-	DeliverySourceEgressCIDRs          string   `mapstructure:"delivery_source_egress_cidrs"`
-	DeliverySourceProxyURL             string   `mapstructure:"delivery_source_proxy_url"`
-	DeliverySourceAllowSSH             bool     `mapstructure:"delivery_source_allow_ssh"`
-	DeliverySourceCAFile               string   `mapstructure:"delivery_source_ca_file"`
-	DeliverySourceMaxArtifactBytes     int64    `mapstructure:"delivery_source_max_artifact_bytes"`
-	DeliverySourceMaxHelmChartBytes    int64    `mapstructure:"delivery_source_max_helm_chart_bytes"`
-	DeliverySourceTrustDirectory       string   `mapstructure:"delivery_source_trust_directory"`
+	// DistributionDestinationPolicy is closed operator network authority, independent
+	// of signed artifact content. Restricted mode permits only listed origins.
+	// Optional owned database-update composition uses explicit registry roots and
+	// selected scanner intent. Disabling it does not qualify DB freshness.
+	// Measured Jobs require the additive signed helper profile. False preserves
+	// ordinary Trivy reports with UNKNOWN database-use provenance.
+	DeliveryDatabaseScanEnabled bool `mapstructure:"delivery_database_scan_enabled"`
+	// Independent Kubelet pull role; never inherited from publisher/HTTP pull.
+	DeliveryDatabaseJobPullCredentialRef string `mapstructure:"delivery_database_job_pull_credential_ref"`
+	DeliveryDatabaseUpdatesEnabled       bool   `mapstructure:"delivery_database_updates_enabled"`
+	DeliveryDatabaseRegistryRootsRef     string `mapstructure:"delivery_database_registry_roots_ref"`
+	DeliveryDatabaseReadCredentialRef    string `mapstructure:"delivery_database_read_credential_ref"`
+	DeliveryDatabaseReadRegistry         string `mapstructure:"delivery_database_read_registry"`
+	DeliveryDatabaseReadRealmURL         string `mapstructure:"delivery_database_read_realm_url"`
+	DeliveryDatabaseReadService          string `mapstructure:"delivery_database_read_service"`
+	DeliveryDatabaseReadRepositories     string `mapstructure:"delivery_database_read_repositories"`
+	DeliveryDatabaseScannerDigest        string `mapstructure:"delivery_database_scanner_digest"`
+	DeliveryDatabaseScannerVersion       string `mapstructure:"delivery_database_scanner_version"`
+	DeliveryDatabaseUpdateRepository     string `mapstructure:"delivery_database_update_repository"`
+	DeliveryDatabaseCacheDirectory       string `mapstructure:"delivery_database_cache_directory"`
+	DistributionMirrorPlanPath           string `mapstructure:"distribution_mirror_plan_path"`
+	DistributionMirrorSignaturePath      string `mapstructure:"distribution_mirror_signature_path"`
+	DistributionMirrorKeyRef             string `mapstructure:"distribution_mirror_key_ref"`
+	DistributionDestinationPolicy        string `mapstructure:"distribution_destination_policy"`
+	BackupS3DestinationPolicy            string `mapstructure:"backup_s3_destination_policy"`
+	BackupS3CAFile                       string `mapstructure:"backup_s3_ca_file"`
+	DeliveryBundleRepository             string `mapstructure:"delivery_bundle_repository"`
+	DeliveryBundleCatalogDigest          string `mapstructure:"delivery_bundle_catalog_digest"`
+	DeliveryBundleDigest                 string `mapstructure:"delivery_bundle_digest"`
+	DeliveryBundleCertificateIdentity    string `mapstructure:"delivery_bundle_certificate_identity"`
+	DeliveryBundleOIDCIssuer             string `mapstructure:"delivery_bundle_oidc_issuer"`
+	DeliverySourceAllowedPrivateHosts    string `mapstructure:"delivery_source_allowed_private_hosts"`
+	DeliverySourceEgressCIDRs            string `mapstructure:"delivery_source_egress_cidrs"`
+	DeliverySourceProxyURL               string `mapstructure:"delivery_source_proxy_url"`
+	DeliverySourceAllowSSH               bool   `mapstructure:"delivery_source_allow_ssh"`
+	DeliverySourceCAFile                 string `mapstructure:"delivery_source_ca_file"`
+	DeliverySourceMaxArtifactBytes       int64  `mapstructure:"delivery_source_max_artifact_bytes"`
+	DeliverySourceMaxHelmChartBytes      int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
+	DeliverySourceTrustDirectory         string `mapstructure:"delivery_source_trust_directory"`
 
 	LogLevel string `mapstructure:"log_level"`
 
@@ -397,6 +439,7 @@ func applyReleaseManifest(cfg *Config) error {
 	}
 	cfg.DeliveryBundleRepository = release.BundleRepository
 	cfg.DeliveryBundleDigest = release.BundleDigest
+	cfg.DeliveryBundleCatalogDigest = release.BundleCatalogDigest
 	cfg.DeliveryBundleOIDCIssuer = release.CertificateOIDCIssuer
 	cfg.DeliveryBundleCertificateIdentity = release.CertificateIdentity
 	return nil
@@ -406,156 +449,7 @@ func applyReleaseManifest(cfg *Config) error {
 func Load() (*Config, error) {
 	v := envconfig.NewViper("")
 
-	// Bind env vars for secret/optional fields without defaults so AutomaticEnv resolves them.
-	if err := envconfig.BindEnv(v,
-		"astronomer_encryption_key",
-		"astronomer_internal_psk",
-		"astronomer_internal_psk_previous",
-		"github_client_id",
-		"github_client_secret",
-		"google_client_id",
-		"google_client_secret",
-		"oidc_issuer",
-		"oidc_client_id",
-		"oidc_client_secret",
-		"agent_image_repository",
-		"agent_image_tag",
-		"release_manifest_path",
-		"release_mirror_mapping_path",
-		"delivery_enabled",
-		"delivery_local_flux_bootstrap",
-		"delivery_kubernetes_min_minor",
-		"delivery_kubernetes_max_minor",
-		"delivery_flux_version",
-		"delivery_flux_distribution_repository",
-		"delivery_flux_distribution_digest",
-		"delivery_flux_distribution_asset_path",
-		"delivery_flux_distribution_certificate_identity",
-		"delivery_flux_distribution_oidc_issuer",
-		"delivery_flux_distribution_public_key",
-		"delivery_flux_distribution_public_keys",
-		"delivery_bundle_repository",
-		"delivery_bundle_digest",
-		"delivery_bundle_certificate_identity",
-		"delivery_bundle_oidc_issuer",
-		"delivery_source_allowed_private_hosts",
-		"delivery_source_egress_cidrs",
-		"delivery_source_proxy_url",
-		"delivery_source_allow_ssh",
-		"delivery_source_ca_file",
-		"delivery_source_max_artifact_bytes",
-		"delivery_source_max_helm_chart_bytes",
-		"delivery_source_trust_directory",
-		"database_url",
-		"redis_url",
-		"event_relay_queue_capacity",
-		"secret_key",
-		"jwt_issuer",
-		"jwt_audience",
-		"hostname",
-		"astronomer_pod_ip",
-		"pod_namespace",
-		"release_name",
-		"chart_version",
-		"astronomer_server_image",
-		"helm_driver",
-		"helm_registry_config",
-		"helm_repository_config",
-		"helm_repository_cache",
-		"helm_plugins",
-		"astronomer_tunnel_egress_cidrs",
-		"astronomer_rc_allow_private_webhooks",
-		"astronomer_bootstrap_password",
-		"astronomer_bootstrap_username",
-		"astronomer_bootstrap_email",
-		"astronomer_bootstrap_force_password_change",
-		"trusted_proxy_cidrs",
-		"server_url",
-		"audit_log_retention_months",
-		"cluster_tombstone_retention_days",
-		"server_metrics_addr",
-		"worker_metrics_addr",
-		"otel_exporter_otlp_endpoint",
-		"otel_exporter_otlp_insecure",
-		"otel_exporter_otlp_headers",
-		"otel_service_name",
-		"otel_service_version",
-		"otel_traces_sampler_arg",
-		"agent_otel_exporter_otlp_endpoint",
-		"agent_otel_exporter_otlp_insecure",
-		"agent_otel_traces_sampler_arg",
-		"charlie_mcp_listen_address",
-		"charlie_mcp_tls_cert_file",
-		"charlie_mcp_tls_key_file",
-		"charlie_mcp_client_ca_file",
-		"charlie_mcp_action_signing_key_file",
-		"charlie_bridge_tls_cert_file",
-		"charlie_bridge_tls_key_file",
-		"charlie_bridge_ca_file",
-		"charlie_agent_namespace",
-		"login_failure_threshold",
-		"lockout_duration_minutes",
-		"totp_issuer",
-		"totp_require",
-		"db_max_conns",
-		"db_min_conns",
-		"db_max_conn_lifetime_minutes",
-		"db_max_conn_idle_minutes",
-		"db_health_check_period_seconds",
-		"kubectl_shell_enabled",
-		"kubectl_shell_image",
-		"kubectl_shell_idle_timeout_minutes",
-		"kubectl_shell_session_hard_cap_hours",
-		"control_plane_snapshots_enabled",
-		"management_backup_enabled",
-		"crd_enabled",
-		"native_rbac_enabled",
-		"namespace_scoped_rbac_enabled",
-		"manifest_signing_secret",
-		"dex_bundled_enabled",
-		"dex_bundled_namespace",
-		"dex_bundled_release_name",
-		"dex_bundled_deployment_name",
-		"dex_bundled_service_name",
-		"dex_bundled_runtime_secret_name",
-		"dex_bundled_migration_phase",
-		"dex_bundled_issuer_url",
-		"auth_local_password_only",
-		"crd_watch_namespace",
-		"management_backup_image",
-		"management_backup_service_account",
-		"management_logs_max_lines",
-		"management_logs_max_bytes",
-		"extension_bundle_trusted_key",
-		"astronomer_gateway_class",
-		"astronomer_ingress_class",
-		"astronomer_gateway_name", "astronomer_gateway_namespace",
-		"astronomer_tls_issuer",
-		"astronomer_tls_issuer_kind",
-		"astronomer_catalog_url",
-		"chart_rating_bayesian_avg",
-		"chart_rating_bayesian_weight",
-		"astronomer_catalog_digest",
-		"astronomer_catalog_mirrors",
-		"astronomer_catalog_proxy_url",
-		"astronomer_catalog_ca_file",
-		"astronomer_catalog_allow_private_mirrors",
-		"astronomer_catalog_signature_required",
-		"astronomer_catalog_signature_provider",
-		"astronomer_catalog_signature_identity",
-		"astronomer_catalog_signature_issuer",
-		"astronomer_catalog_signature_key_ref",
-		"astronomer_catalog_trust_directory",
-		"tunnel_connect_auth_failure_limit",
-		"tunnel_connect_auth_failure_window_minutes",
-		"tunnel_connect_clock_skew_minutes",
-		"tunnel_register_rate_limit_per_minute",
-		"api_k8s_proxy_rate_limit_rps",
-		"api_k8s_proxy_rate_limit_burst",
-		"server_replicas",
-		"tunnel_worker_concurrency",
-		"worker_concurrency",
-	); err != nil {
+	if err := bindOptionalEnvironment(v); err != nil {
 		return nil, err
 	}
 
@@ -642,7 +536,8 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
-	if err := normalizeDeliveryFluxTrust(cfg); err != nil {
+	captureHelmOperatorProxy(cfg, v.IsSet("helm_repository_no_proxy"))
+	if err := validateRuntimeBounds(cfg); err != nil {
 		return nil, err
 	}
 	if err := applyReleaseManifest(cfg); err != nil {

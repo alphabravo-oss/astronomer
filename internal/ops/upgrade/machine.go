@@ -1,0 +1,280 @@
+package upgrade
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+)
+
+// Checkpoint is private durable state, separate from the retained v1 sanitized
+// upgrade report. It contains identities and a plan binding, never credentials
+// or private backup contents. A started mutation must be reconciled on resume.
+type Checkpoint struct {
+	SchemaVersion     int      `json:"schema_version"`
+	Target            string   `json:"target"`
+	PlanDigest        string   `json:"plan_digest"`
+	Identity          Identity `json:"identity"`
+	Completed         []Stage  `json:"completed"`
+	Pending           Stage    `json:"pending,omitempty"`
+	Applied           bool     `json:"applied"`
+	Replaced          bool     `json:"replaced"`
+	RollbackAttempted bool     `json:"rollback_attempted"`
+}
+
+type Store interface {
+	Save(context.Context, Checkpoint) error
+}
+
+type Outcome struct {
+	// Known explicitly acknowledges both positive and negative mutation state.
+	// An error or cancellation with false booleans does not prove rollback.
+	Known    bool
+	Applied  bool
+	Replaced bool
+}
+
+// Driver is a typed adapter, not an arbitrary shell string. Verify retains the
+// signer/chart/seven-image contract; Backup must establish a readable verified
+// restore and exact schema range; DryRun retains server-side/PDB checks. Every
+// mutating stage must fresh-check the identity and any disposable lease.
+// Cleanup may touch only handles allocated by this run. Child-process ownership
+// and finite deadlines must be enforced by the concrete adapter, including a
+// driver that does not promptly return when its context is cancelled.
+type Driver interface {
+	Fence(context.Context, Identity, *DisposableLease) error
+	Step(context.Context, Stage, Plan) (Outcome, error)
+	// Reconcile observes a started apply/replacement after interruption; it must
+	// not replay a potentially committed mutation or assume cancellation rolled it back.
+	Reconcile(context.Context, Checkpoint) (Outcome, error)
+	// Cleanup retires owned ephemeral handles only. Recovery material remains
+	// private and retained on success, failure, unknown outcome and failed rollback.
+	Cleanup(context.Context, Plan, CleanupPolicy) error
+}
+
+type CleanupPolicy struct {
+	OwnedEphemeralOnly bool
+	PreserveBackup     bool
+	PreserveCheckpoint bool
+}
+
+type Result struct {
+	ExitCode          int
+	Result            string
+	Mode              Mode
+	FailedStage       Stage
+	RollbackAttempted bool
+	RollbackFailed    bool
+	CleanupFailed     bool
+}
+
+type Machine struct {
+	Driver Driver
+	Store  Store
+}
+
+func (m Machine) Run(ctx context.Context, plan Plan, previous *Checkpoint) Result {
+	result := Result{ExitCode: 1, Result: "failed", Mode: plan.Mode}
+	if plan.Validate() != nil || m.Driver == nil || m.Store == nil {
+		result.FailedStage = Verify
+		return result
+	}
+	state := Checkpoint{SchemaVersion: 1, Target: plan.Target, PlanDigest: planDigest(plan), Identity: plan.Identity}
+	if previous != nil {
+		if validateCheckpoint(*previous, plan) != nil {
+			result.FailedStage = Verify
+			return result
+		}
+		state = *previous
+		state.Completed = append([]Stage(nil), previous.Completed...)
+		bounded, stop := context.WithTimeout(ctx, plan.Timeout)
+		defer stop()
+		if err := m.Driver.Fence(bounded, plan.Identity, plan.Replace); err != nil {
+			result.FailedStage = Verify
+			return result
+		}
+		outcome, err := m.Driver.Reconcile(bounded, state)
+		if err == nil {
+			err = bounded.Err()
+		}
+		if err != nil || !outcome.Known {
+			result.Result = "outcome_unknown"
+			result.FailedStage = state.Pending
+			return result
+		}
+		// A checkpoint is an observation record, not fresh signer/backup proof.
+		// Until an adapter can rebind those bytes, every resumed run stops for
+		// assessment; no completed stage or potentially committed mutation replays.
+		result.Result = "resume_assessment_required"
+		result.FailedStage = state.Pending
+		return result
+	}
+	steps := []Stage{Verify, Backup, DryRun}
+	if plan.Mode == Execute {
+		if plan.Replace != nil {
+			steps = append(steps, ReplaceDatabase)
+		}
+		steps = append(steps, Apply, Observe)
+	}
+	for _, step := range steps {
+		if completed(state, step) {
+			continue
+		}
+		outcome, err := m.perform(ctx, plan, step, &state)
+		if err != nil {
+			result.FailedStage = step
+			var child interface{ ExitCode() int }
+			if errors.As(err, &child) && child.ExitCode() > 0 && child.ExitCode() < 256 {
+				result.ExitCode = child.ExitCode()
+			}
+			if errors.Is(err, context.Canceled) {
+				result.ExitCode = 130
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				result.ExitCode = 124
+			}
+			if (step == Apply || step == ReplaceDatabase) && !outcome.Known {
+				return m.assessUnknown(ctx, plan, &state, result)
+			}
+			return m.finish(ctx, plan, &state, result)
+		}
+	}
+	result.ExitCode, result.Result = 0, "passed"
+	return m.finish(ctx, plan, &state, result)
+}
+
+func (m Machine) perform(ctx context.Context, plan Plan, stage Stage, state *Checkpoint) (Outcome, error) {
+	bounded, stop := context.WithTimeout(ctx, plan.Timeout)
+	defer stop()
+	if err := bounded.Err(); err != nil {
+		return Outcome{Known: true}, err
+	}
+	if err := m.Driver.Fence(bounded, plan.Identity, plan.Replace); err != nil {
+		return Outcome{Known: true}, err
+	}
+	state.Pending = stage
+	if err := m.Store.Save(bounded, *state); err != nil {
+		return Outcome{Known: true}, err
+	}
+	outcome, err := m.Driver.Step(bounded, stage, plan)
+	if outcome.Known {
+		state.Applied, state.Replaced = state.Applied || outcome.Applied, state.Replaced || outcome.Replaced
+	}
+	if err == nil {
+		err = bounded.Err()
+	}
+	if err != nil {
+		return outcome, err
+	}
+	if (stage == Apply && (!outcome.Known || !outcome.Applied)) || (stage == ReplaceDatabase && (!outcome.Known || !outcome.Replaced)) {
+		return outcome, errors.New("mutation postcondition was not acknowledged")
+	}
+	state.Completed = append(state.Completed, stage)
+	state.Pending = ""
+	return outcome, m.Store.Save(bounded, *state)
+}
+
+func (m Machine) assessUnknown(ctx context.Context, plan Plan, state *Checkpoint, result Result) Result {
+	bounded, stop := context.WithTimeout(context.WithoutCancel(ctx), plan.CleanupTimeout)
+	defer stop()
+	result.Result = "outcome_unknown"
+	if m.Driver.Fence(bounded, plan.Identity, plan.Replace) != nil {
+		return result
+	}
+	outcome, err := m.Driver.Reconcile(bounded, *state)
+	if err != nil || bounded.Err() != nil || !outcome.Known {
+		// Preserve durable mutation intent and private recovery handles. Ordinary
+		// cleanup must not discard the only backup after an uncertain commit.
+		return result
+	}
+	state.Applied, state.Replaced = state.Applied || outcome.Applied, state.Replaced || outcome.Replaced
+	if m.Store.Save(bounded, *state) != nil {
+		return result
+	}
+	result.Result = "failed"
+	return m.finish(ctx, plan, state, result)
+}
+
+func (m Machine) finish(ctx context.Context, plan Plan, state *Checkpoint, result Result) Result {
+	// The caller may already be cancelled. Cleanup/rollback use fresh finite
+	// contexts; neither inherits an expired timeout nor gets Background forever.
+	cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), plan.CleanupTimeout)
+	defer stop()
+	if result.ExitCode != 0 && state.Applied && !state.RollbackAttempted {
+		state.RollbackAttempted = true
+		result.RollbackAttempted = true
+		if m.Store.Save(cleanup, *state) != nil || m.Driver.Fence(cleanup, plan.Identity, plan.Replace) != nil {
+			result.RollbackFailed = true
+		} else {
+			_, err := m.Driver.Step(cleanup, Rollback, plan)
+			result.RollbackFailed = err != nil || cleanup.Err() != nil
+		}
+	}
+	if m.Driver.Fence(cleanup, plan.Identity, plan.Replace) != nil {
+		result.CleanupFailed = true
+	} else {
+		err := m.Driver.Cleanup(cleanup, plan, CleanupPolicy{OwnedEphemeralOnly: true, PreserveBackup: true, PreserveCheckpoint: true})
+		result.CleanupFailed = err != nil || cleanup.Err() != nil
+	}
+	result.RollbackAttempted = result.RollbackAttempted || state.RollbackAttempted
+	if result.CleanupFailed && result.ExitCode == 0 {
+		result.ExitCode, result.Result = 1, "cleanup_failed"
+	}
+	return result
+}
+
+func completed(state Checkpoint, stage Stage) bool {
+	for _, done := range state.Completed {
+		if done == stage {
+			return true
+		}
+	}
+	return false
+}
+
+func validateCheckpoint(state Checkpoint, plan Plan) error {
+	if state.SchemaVersion != 1 || state.Target != plan.Target || state.PlanDigest != planDigest(plan) || state.Identity != plan.Identity {
+		return errors.New("checkpoint identity differs")
+	}
+	allowed := []Stage{Verify, Backup, DryRun}
+	if plan.Mode == Execute {
+		if plan.Replace != nil {
+			allowed = append(allowed, ReplaceDatabase)
+		}
+		allowed = append(allowed, Apply, Observe)
+	}
+	if len(state.Completed) > len(allowed) {
+		return errors.New("checkpoint stages exceed plan")
+	}
+	for i, stage := range state.Completed {
+		if stage != allowed[i] {
+			return errors.New("checkpoint stage order differs")
+		}
+	}
+	if state.Pending != "" && (len(state.Completed) == len(allowed) || state.Pending != allowed[len(state.Completed)]) {
+		return errors.New("checkpoint intent differs")
+	}
+	if state.Applied && !completed(state, Apply) && state.Pending != Apply {
+		return errors.New("checkpoint applied state differs")
+	}
+	if completed(state, Apply) && !state.Applied {
+		return errors.New("checkpoint completed apply lacks acknowledgement")
+	}
+	if state.Replaced && (plan.Replace == nil || (!completed(state, ReplaceDatabase) && state.Pending != ReplaceDatabase)) {
+		return errors.New("checkpoint replacement lacks lease")
+	}
+	if completed(state, ReplaceDatabase) && !state.Replaced {
+		return errors.New("checkpoint completed replacement lacks acknowledgement")
+	}
+	if state.RollbackAttempted && !state.Applied && state.Pending != Apply {
+		return errors.New("checkpoint rollback precedes possible apply")
+	}
+	return nil
+}
+
+func planDigest(plan Plan) string {
+	payload, _ := json.Marshal(plan)
+	hash := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(hash[:])
+}

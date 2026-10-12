@@ -1,0 +1,3492 @@
+{
+  "schema_version": 1,
+  "source": "2aded732c65e1b9f285d038410f344d778ad842e",
+  "fixture_rows": 100000,
+  "scope": "transaction-local synthetic budget BEFORE; budget250 summed across all scan nodes; no fleet-capacity claim",
+  "results": [
+    {
+      "major": 17,
+      "raw_sha256": "36eb66310c1916c1bd9531dfa067382bd9f01d8937b868c22b4bb8b3e559048c",
+      "named_test_terminal_counts": {
+        "pass": 17,
+        "fail": 11
+      },
+      "plan_count": 54,
+      "counter_count": 54,
+      "measurements": [
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.077,
+          "planning_ms": 0.148,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.071,
+          "planning_ms": 0.18,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.096,
+          "planning_ms": 0.02,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.11,
+          "planning_ms": 0.03,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.076,
+          "planning_ms": 0.074,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.068,
+          "planning_ms": 0.12,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.093,
+          "planning_ms": 0.099,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.103,
+          "planning_ms": 0.218,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.092,
+          "planning_ms": 0.02,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.1,
+          "planning_ms": 0.028,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.098,
+          "planning_ms": 0.104,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.125,
+          "planning_ms": 0.17,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.364,
+          "planning_ms": 0.207,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 202,
+              "shared_hit_blocks": 205,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 202,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.388,
+          "planning_ms": 0.152,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 1,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 207,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 3.878,
+          "planning_ms": 0.02,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 20010,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20211,
+              "shared_hit_blocks": 891,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20211,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 4.128,
+          "planning_ms": 0.029,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 20098,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20299,
+              "shared_hit_blocks": 872,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20299,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.285,
+          "planning_ms": 0.088,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 202,
+              "shared_hit_blocks": 205,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 202,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.321,
+          "planning_ms": 0.139,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 1,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 207,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.082,
+          "planning_ms": 0.119,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 3,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 204,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 204,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.097,
+          "planning_ms": 0.184,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.136,
+          "planning_ms": 0.023,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 3,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 204,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 204,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.151,
+          "planning_ms": 0.037,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.116,
+          "planning_ms": 0.09,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 3,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 204,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 204,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.097,
+          "planning_ms": 0.147,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 3.012,
+          "planning_ms": 0.114,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19799,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20000,
+              "shared_hit_blocks": 881,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 3.36,
+          "planning_ms": 0.146,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19899,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20100,
+              "shared_hit_blocks": 865,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20100,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 4.612,
+          "planning_ms": 0.021,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19799,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20000,
+              "shared_hit_blocks": 881,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 5.708,
+          "planning_ms": 0.072,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19899,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20100,
+              "shared_hit_blocks": 865,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20100,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 3.514,
+          "planning_ms": 0.074,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19799,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20000,
+              "shared_hit_blocks": 881,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 3.325,
+          "planning_ms": 0.096,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19899,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20100,
+              "shared_hit_blocks": 865,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20100,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.108,
+          "planning_ms": 0.212,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 5,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 206,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 206,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.106,
+          "planning_ms": 0.21,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 4,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 205,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 205,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.154,
+          "planning_ms": 0.023,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 5,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 206,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 206,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.108,
+          "planning_ms": 0.029,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 4,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 205,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 205,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.135,
+          "planning_ms": 0.091,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 5,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 206,
+              "shared_hit_blocks": 14,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 206,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.141,
+          "planning_ms": 0.197,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 4,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 205,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 205,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.041,
+          "planning_ms": 0.138,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 0.051,
+          "planning_ms": 0.288,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 21.353,
+          "planning_ms": 0.026,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 9,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 99991,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 18.569,
+          "planning_ms": 0.028,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 9,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 99991,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.032,
+          "planning_ms": 0.116,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 0.026,
+          "planning_ms": 0.127,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 9.476,
+          "planning_ms": 0.082,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 17.303,
+          "planning_ms": 0.187,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 24.647,
+          "planning_ms": 0.029,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 31.704,
+          "planning_ms": 0.035,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 10.165,
+          "planning_ms": 0.099,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 11.491,
+          "planning_ms": 0.175,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.017,
+          "planning_ms": 0.078,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 0,
+              "shared_hit_blocks": 2,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 20.699,
+          "planning_ms": 0.033,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 16.752,
+          "planning_ms": 0.019,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 17.901,
+          "planning_ms": 0.031,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000,
+              "shared_hit_blocks": 4370,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.032,
+          "planning_ms": 0.118,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 0,
+              "shared_hit_blocks": 2,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 0.014,
+          "planning_ms": 0.113,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 0,
+              "shared_hit_blocks": 2,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 0,
+          "synthetic_budget250_met": true
+        }
+      ],
+      "counters": [
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "mode": "auto",
+          "before_generic": 0,
+          "before_custom": 0,
+          "after_generic": 0,
+          "after_custom": 8,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "mode": "auto",
+          "before_generic": 0,
+          "before_custom": 0,
+          "after_generic": 0,
+          "after_custom": 8,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 0,
+          "before_custom": 9,
+          "after_generic": 8,
+          "after_custom": 9,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 0,
+          "before_custom": 9,
+          "after_generic": 8,
+          "after_custom": 9,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 9,
+          "before_custom": 9,
+          "after_generic": 9,
+          "after_custom": 17,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 9,
+          "before_custom": 9,
+          "after_generic": 9,
+          "after_custom": 17,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "mode": "auto",
+          "before_generic": 9,
+          "before_custom": 18,
+          "after_generic": 9,
+          "after_custom": 26,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "mode": "auto",
+          "before_generic": 9,
+          "before_custom": 18,
+          "after_generic": 9,
+          "after_custom": 26,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 9,
+          "before_custom": 27,
+          "after_generic": 17,
+          "after_custom": 27,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 9,
+          "before_custom": 27,
+          "after_generic": 17,
+          "after_custom": 27,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 18,
+          "before_custom": 27,
+          "after_generic": 18,
+          "after_custom": 35,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 18,
+          "before_custom": 27,
+          "after_generic": 18,
+          "after_custom": 35,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "mode": "auto",
+          "before_generic": 18,
+          "before_custom": 36,
+          "after_generic": 18,
+          "after_custom": 44,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "mode": "auto",
+          "before_generic": 18,
+          "before_custom": 36,
+          "after_generic": 18,
+          "after_custom": 44,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 18,
+          "before_custom": 45,
+          "after_generic": 26,
+          "after_custom": 45,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 18,
+          "before_custom": 45,
+          "after_generic": 26,
+          "after_custom": 45,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 27,
+          "before_custom": 45,
+          "after_generic": 27,
+          "after_custom": 53,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 27,
+          "before_custom": 45,
+          "after_generic": 27,
+          "after_custom": 53,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "mode": "auto",
+          "before_generic": 27,
+          "before_custom": 54,
+          "after_generic": 27,
+          "after_custom": 62,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "mode": "auto",
+          "before_generic": 27,
+          "before_custom": 54,
+          "after_generic": 27,
+          "after_custom": 62,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 27,
+          "before_custom": 63,
+          "after_generic": 35,
+          "after_custom": 63,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 27,
+          "before_custom": 63,
+          "after_generic": 35,
+          "after_custom": 63,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 36,
+          "before_custom": 63,
+          "after_generic": 36,
+          "after_custom": 71,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 36,
+          "before_custom": 63,
+          "after_generic": 36,
+          "after_custom": 71,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "mode": "auto",
+          "before_generic": 36,
+          "before_custom": 72,
+          "after_generic": 36,
+          "after_custom": 80,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "mode": "auto",
+          "before_generic": 36,
+          "before_custom": 72,
+          "after_generic": 36,
+          "after_custom": 80,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 36,
+          "before_custom": 81,
+          "after_generic": 44,
+          "after_custom": 81,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 36,
+          "before_custom": 81,
+          "after_generic": 44,
+          "after_custom": 81,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 45,
+          "before_custom": 81,
+          "after_generic": 45,
+          "after_custom": 89,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 45,
+          "before_custom": 81,
+          "after_generic": 45,
+          "after_custom": 89,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 45,
+          "before_custom": 90,
+          "after_generic": 45,
+          "after_custom": 98,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 45,
+          "before_custom": 90,
+          "after_generic": 45,
+          "after_custom": 98,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 45,
+          "before_custom": 99,
+          "after_generic": 53,
+          "after_custom": 99,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 45,
+          "before_custom": 99,
+          "after_generic": 53,
+          "after_custom": 99,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 54,
+          "before_custom": 99,
+          "after_generic": 54,
+          "after_custom": 107,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 54,
+          "before_custom": 99,
+          "after_generic": 54,
+          "after_custom": 107,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 54,
+          "before_custom": 108,
+          "after_generic": 54,
+          "after_custom": 116,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 54,
+          "before_custom": 108,
+          "after_generic": 54,
+          "after_custom": 116,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 54,
+          "before_custom": 117,
+          "after_generic": 62,
+          "after_custom": 117,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 54,
+          "before_custom": 117,
+          "after_generic": 62,
+          "after_custom": 117,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 63,
+          "before_custom": 117,
+          "after_generic": 63,
+          "after_custom": 125,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 63,
+          "before_custom": 117,
+          "after_generic": 63,
+          "after_custom": 125,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "mode": "auto",
+          "before_generic": 63,
+          "before_custom": 126,
+          "after_generic": 63,
+          "after_custom": 134,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "mode": "auto",
+          "before_generic": 63,
+          "before_custom": 126,
+          "after_generic": 63,
+          "after_custom": 134,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 63,
+          "before_custom": 135,
+          "after_generic": 71,
+          "after_custom": 135,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 63,
+          "before_custom": 135,
+          "after_generic": 71,
+          "after_custom": 135,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 72,
+          "before_custom": 135,
+          "after_generic": 72,
+          "after_custom": 143,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 72,
+          "before_custom": 135,
+          "after_generic": 72,
+          "after_custom": 143,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "mode": "auto",
+          "before_generic": 72,
+          "before_custom": 144,
+          "after_generic": 72,
+          "after_custom": 152,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "mode": "auto",
+          "before_generic": 72,
+          "before_custom": 144,
+          "after_generic": 80,
+          "after_custom": 144,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 72,
+          "before_custom": 153,
+          "after_generic": 80,
+          "after_custom": 153,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 81,
+          "before_custom": 144,
+          "after_generic": 89,
+          "after_custom": 144,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 81,
+          "before_custom": 153,
+          "after_generic": 81,
+          "after_custom": 161,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 90,
+          "before_custom": 144,
+          "after_generic": 90,
+          "after_custom": 152,
+          "delta_generic": 0,
+          "delta_custom": 8
+        }
+      ]
+    },
+    {
+      "major": 18,
+      "raw_sha256": "0d50894805a744517e93cde8c09043ce1e06c83ad2edcce6e01f388e8eea2601",
+      "named_test_terminal_counts": {
+        "pass": 17,
+        "fail": 11
+      },
+      "plan_count": 54,
+      "counter_count": 54,
+      "measurements": [
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.078,
+          "planning_ms": 0.106,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.091,
+          "planning_ms": 0.184,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.103,
+          "planning_ms": 0.019,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.12,
+          "planning_ms": 0.03,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.082,
+          "planning_ms": 0.076,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.09,
+          "planning_ms": 0.146,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 201.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 201.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.13,
+          "planning_ms": 0.13,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.102,
+          "planning_ms": 0.189,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.088,
+          "planning_ms": 0.022,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.102,
+          "planning_ms": 0.036,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.084,
+          "planning_ms": 0.087,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.082,
+          "planning_ms": 0.144,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.329,
+          "planning_ms": 0.157,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 202.0,
+              "shared_hit_blocks": 205,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 202.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.32,
+          "planning_ms": 0.181,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 1,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 207,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 4.059,
+          "planning_ms": 0.021,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 20009,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20210.0,
+              "shared_hit_blocks": 905,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20210.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 3.558,
+          "planning_ms": 0.033,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 20099,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20300.0,
+              "shared_hit_blocks": 886,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20300.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.295,
+          "planning_ms": 0.097,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 202.0,
+              "shared_hit_blocks": 205,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 202.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.431,
+          "planning_ms": 0.169,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_status",
+              "actual_rows": 202.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 1,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 207,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.095,
+          "planning_ms": 0.177,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 3,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 204.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 204.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.1,
+          "planning_ms": 0.176,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.131,
+          "planning_ms": 0.024,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 3,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 204.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 204.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.101,
+          "planning_ms": 0.03,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.101,
+          "planning_ms": 0.087,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 3,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 204.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 204.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.101,
+          "planning_ms": 0.21,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 2,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 203.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 203.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 4.67,
+          "planning_ms": 0.136,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19799,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20000.0,
+              "shared_hit_blocks": 897,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 3.592,
+          "planning_ms": 0.143,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19898,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20099.0,
+              "shared_hit_blocks": 876,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20099.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 5.387,
+          "planning_ms": 0.024,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19799,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20000.0,
+              "shared_hit_blocks": 897,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 4.511,
+          "planning_ms": 0.035,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19898,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20099.0,
+              "shared_hit_blocks": 876,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20099.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 3.486,
+          "planning_ms": 0.076,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19799,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20000.0,
+              "shared_hit_blocks": 897,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 3.974,
+          "planning_ms": 0.137,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 19898,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 20099.0,
+              "shared_hit_blocks": 876,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 20099.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.101,
+          "planning_ms": 0.152,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 5,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 206.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 206.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.114,
+          "planning_ms": 0.221,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 4,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 205.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 205.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.091,
+          "planning_ms": 0.021,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 5,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 206.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 206.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.172,
+          "planning_ms": 0.033,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 4,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 205.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 205.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.095,
+          "planning_ms": 0.095,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 5,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 206.0,
+              "shared_hit_blocks": 12,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 206.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": null,
+          "execution_ms": 0.177,
+          "planning_ms": 0.241,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 201.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 4,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 205.0,
+              "shared_hit_blocks": 13,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 205.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.063,
+          "planning_ms": 0.165,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9.0,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 0.035,
+          "planning_ms": 0.145,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9.0,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 16.507,
+          "planning_ms": 0.018,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 9.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 99991,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 16.947,
+          "planning_ms": 0.027,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 9.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 99991,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.035,
+          "planning_ms": 0.114,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9.0,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 0.061,
+          "planning_ms": 0.25,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 9.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 9.0,
+              "shared_hit_blocks": 11,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 9.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 8.77,
+          "planning_ms": 0.123,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 12.523,
+          "planning_ms": 0.186,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 18.451,
+          "planning_ms": 0.02,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 20.094,
+          "planning_ms": 0.029,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 13.228,
+          "planning_ms": 0.173,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 9.206,
+          "planning_ms": 0.151,
+          "scan_nodes": [
+            {
+              "node_type": "Seq Scan",
+              "index_name": null,
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 1725,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.018,
+          "planning_ms": 0.08,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 0.0,
+              "shared_hit_blocks": 2,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 0.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 21.764,
+          "planning_ms": 0.029,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 16.617,
+          "planning_ms": 0.022,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 16.922,
+          "planning_ms": 0.03,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_keyset",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 100000,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 100000.0,
+              "shared_hit_blocks": 4344,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 100000.0,
+          "synthetic_budget250_met": false
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "query": "First",
+          "advertised_continuation": null,
+          "execution_ms": 0.018,
+          "planning_ms": 0.078,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 0.0,
+              "shared_hit_blocks": 2,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 0.0,
+          "synthetic_budget250_met": true
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "query": "After",
+          "advertised_continuation": false,
+          "execution_ms": 0.015,
+          "planning_ms": 0.145,
+          "scan_nodes": [
+            {
+              "node_type": "Index Scan",
+              "index_name": "idx_control_plane_alerts_active_unique",
+              "actual_rows": 0.0,
+              "actual_loops": 1,
+              "rows_removed_by_filter": 0,
+              "rows_removed_by_index_recheck": 0,
+              "examined_returned_plus_removed_times_loops": 0.0,
+              "shared_hit_blocks": 2,
+              "shared_read_blocks": 0
+            }
+          ],
+          "total_scan_rows_examined": 0.0,
+          "synthetic_budget250_met": true
+        }
+      ],
+      "counters": [
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "mode": "auto",
+          "before_generic": 0,
+          "before_custom": 0,
+          "after_generic": 0,
+          "after_custom": 8,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/auto",
+          "mode": "auto",
+          "before_generic": 0,
+          "before_custom": 0,
+          "after_generic": 0,
+          "after_custom": 8,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 0,
+          "before_custom": 9,
+          "after_generic": 8,
+          "after_custom": 9,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 0,
+          "before_custom": 9,
+          "after_generic": 8,
+          "after_custom": 9,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 9,
+          "before_custom": 9,
+          "after_generic": 9,
+          "after_custom": 17,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/unfiltered/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 9,
+          "before_custom": 9,
+          "after_generic": 9,
+          "after_custom": 17,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "mode": "auto",
+          "before_generic": 9,
+          "before_custom": 18,
+          "after_generic": 9,
+          "after_custom": 26,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/auto",
+          "mode": "auto",
+          "before_generic": 9,
+          "before_custom": 18,
+          "after_generic": 9,
+          "after_custom": 26,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 9,
+          "before_custom": 27,
+          "after_generic": 17,
+          "after_custom": 27,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 9,
+          "before_custom": 27,
+          "after_generic": 17,
+          "after_custom": 27,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 18,
+          "before_custom": 27,
+          "after_generic": 18,
+          "after_custom": 35,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 18,
+          "before_custom": 27,
+          "after_generic": 18,
+          "after_custom": 35,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "mode": "auto",
+          "before_generic": 18,
+          "before_custom": 36,
+          "after_generic": 18,
+          "after_custom": 44,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/auto",
+          "mode": "auto",
+          "before_generic": 18,
+          "before_custom": 36,
+          "after_generic": 18,
+          "after_custom": 44,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 18,
+          "before_custom": 45,
+          "after_generic": 26,
+          "after_custom": 45,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 18,
+          "before_custom": 45,
+          "after_generic": 26,
+          "after_custom": 45,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 27,
+          "before_custom": 45,
+          "after_generic": 27,
+          "after_custom": 53,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 27,
+          "before_custom": 45,
+          "after_generic": 27,
+          "after_custom": 53,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "mode": "auto",
+          "before_generic": 27,
+          "before_custom": 54,
+          "after_generic": 27,
+          "after_custom": 62,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/auto",
+          "mode": "auto",
+          "before_generic": 27,
+          "before_custom": 54,
+          "after_generic": 27,
+          "after_custom": 62,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 27,
+          "before_custom": 63,
+          "after_generic": 35,
+          "after_custom": 63,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 27,
+          "before_custom": 63,
+          "after_generic": 35,
+          "after_custom": 63,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 36,
+          "before_custom": 63,
+          "after_generic": 36,
+          "after_custom": 71,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 36,
+          "before_custom": 63,
+          "after_generic": 36,
+          "after_custom": 71,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "mode": "auto",
+          "before_generic": 36,
+          "before_custom": 72,
+          "after_generic": 36,
+          "after_custom": 80,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/auto",
+          "mode": "auto",
+          "before_generic": 36,
+          "before_custom": 72,
+          "after_generic": 36,
+          "after_custom": 80,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 36,
+          "before_custom": 81,
+          "after_generic": 44,
+          "after_custom": 81,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 36,
+          "before_custom": 81,
+          "after_generic": 44,
+          "after_custom": 81,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 45,
+          "before_custom": 81,
+          "after_generic": 45,
+          "after_custom": 89,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 45,
+          "before_custom": 81,
+          "after_generic": 45,
+          "after_custom": 89,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 45,
+          "before_custom": 90,
+          "after_generic": 45,
+          "after_custom": 98,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 45,
+          "before_custom": 90,
+          "after_generic": 45,
+          "after_custom": 98,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 45,
+          "before_custom": 99,
+          "after_generic": 53,
+          "after_custom": 99,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 45,
+          "before_custom": 99,
+          "after_generic": 53,
+          "after_custom": 99,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 54,
+          "before_custom": 99,
+          "after_generic": 54,
+          "after_custom": 107,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/common_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 54,
+          "before_custom": 99,
+          "after_generic": 54,
+          "after_custom": 107,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 54,
+          "before_custom": 108,
+          "after_generic": 54,
+          "after_custom": 116,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/auto",
+          "mode": "auto",
+          "before_generic": 54,
+          "before_custom": 108,
+          "after_generic": 54,
+          "after_custom": 116,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 54,
+          "before_custom": 117,
+          "after_generic": 62,
+          "after_custom": 117,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 54,
+          "before_custom": 117,
+          "after_generic": 62,
+          "after_custom": 117,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 63,
+          "before_custom": 117,
+          "after_generic": 63,
+          "after_custom": 125,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/sparse_status_and_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 63,
+          "before_custom": 117,
+          "after_generic": 63,
+          "after_custom": 125,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "mode": "auto",
+          "before_generic": 63,
+          "before_custom": 126,
+          "after_generic": 63,
+          "after_custom": 134,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/auto",
+          "mode": "auto",
+          "before_generic": 63,
+          "before_custom": 126,
+          "after_generic": 63,
+          "after_custom": 134,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 63,
+          "before_custom": 135,
+          "after_generic": 71,
+          "after_custom": 135,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 63,
+          "before_custom": 135,
+          "after_generic": 71,
+          "after_custom": 135,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 72,
+          "before_custom": 135,
+          "after_generic": 72,
+          "after_custom": 143,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_controller/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 72,
+          "before_custom": 135,
+          "after_generic": 72,
+          "after_custom": 143,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "mode": "auto",
+          "before_generic": 72,
+          "before_custom": 144,
+          "after_generic": 72,
+          "after_custom": 152,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/auto",
+          "mode": "auto",
+          "before_generic": 72,
+          "before_custom": 144,
+          "after_generic": 80,
+          "after_custom": 144,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 72,
+          "before_custom": 153,
+          "after_generic": 80,
+          "after_custom": 153,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_generic_plan",
+          "mode": "force_generic_plan",
+          "before_generic": 81,
+          "before_custom": 144,
+          "after_generic": 89,
+          "after_custom": 144,
+          "delta_generic": 8,
+          "delta_custom": 0
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 81,
+          "before_custom": 153,
+          "after_generic": 81,
+          "after_custom": 161,
+          "delta_generic": 0,
+          "delta_custom": 8
+        },
+        {
+          "test": "TestControlPlaneCursorPostgresRepresentativeSelectiveCost/no_matching_combination/force_custom_plan",
+          "mode": "force_custom_plan",
+          "before_generic": 90,
+          "before_custom": 144,
+          "after_generic": 90,
+          "after_custom": 152,
+          "delta_generic": 0,
+          "delta_custom": 8
+        }
+      ]
+    }
+  ]
+}

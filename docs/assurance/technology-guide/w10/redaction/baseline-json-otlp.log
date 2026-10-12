@@ -1,0 +1,23 @@
+--- FAIL: TestProductionJSONHandlerRedactsSensitiveDiagnostics (0.00s)
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-group-secret
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-bearer
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-cookie
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-manifest
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-private-key
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-payload
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-db-secret
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-error-secret
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-pem
+    redaction_test.go:29: sensitive diagnostic escaped: synthetic-object
+--- FAIL: TestOTLPActualWireRedactsSecretsAcrossSpanFields (0.00s)
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-authorization
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-sql-literal
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-trace-password
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-array-secret
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-event-secret
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-event-manifest
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-status-secret
+    redaction_test.go:64: secret escaped actual OTLP serialization: synthetic-raw-error-payload
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/observability	0.009s
+FAIL

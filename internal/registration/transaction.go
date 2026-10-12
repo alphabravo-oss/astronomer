@@ -25,6 +25,7 @@ type bufferedPhaseMetric struct {
 	clusterID string
 	from      string
 	to        string
+	publish   func()
 }
 
 type bufferedDurationMetric struct {
@@ -51,7 +52,13 @@ func (b *bufferedSideEffects) Publish(eventType string, data any) {
 }
 
 func (b *bufferedSideEffects) RecordPhaseTransition(clusterID, from, to string) {
-	b.phases = append(b.phases, bufferedPhaseMetric{clusterID: clusterID, from: from, to: to})
+	phase := bufferedPhaseMetric{clusterID: clusterID, from: from, to: to}
+	if capture, ok := b.metrics.(interface {
+		CapturePhaseTransition(string, string, string) func()
+	}); ok {
+		phase.publish = capture.CapturePhaseTransition(clusterID, from, to)
+	}
+	b.phases = append(b.phases, phase)
 }
 
 func (b *bufferedSideEffects) RecordDuration(clusterID, outcome string, baseline bool, seconds float64) {
@@ -66,7 +73,11 @@ func (b *bufferedSideEffects) flush() {
 	}
 	if b.metrics != nil {
 		for _, phase := range b.phases {
-			b.metrics.RecordPhaseTransition(phase.clusterID, phase.from, phase.to)
+			if phase.publish != nil {
+				phase.publish()
+			} else {
+				b.metrics.RecordPhaseTransition(phase.clusterID, phase.from, phase.to)
+			}
 		}
 		for _, duration := range b.durations {
 			b.metrics.RecordDuration(duration.clusterID, duration.outcome, duration.baseline, duration.seconds)

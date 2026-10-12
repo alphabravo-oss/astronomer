@@ -1,3 +1,5 @@
+import { classifyCategory } from "@/lib/api/categorical-values";
+
 import {
   deleteBackupsSchedulesById,
   deleteBackupsStorageById,
@@ -137,7 +139,7 @@ export function mapBackupRun(wire: BackupWire): BackupRun {
     name: requiredString(wire.name, "backup.name"),
     storageId: requiredString(wire.storage_id, "backup.storage_id"),
     backupType: (wire.backup_type ?? "full") as BackupType,
-    status: (wire.status ?? "pending") as BackupStatus,
+    status: knownBackupStatus(wire.status),
     filePath: wire.file_path,
     fileSizeBytes: wire.file_size_bytes,
     startedAt: wire.started_at ?? undefined,
@@ -160,7 +162,7 @@ export function mapBackupRestore(wire: RestoreWire): BackupRestore {
   return {
     id: requiredString(wire.id, "restore.id"),
     backupId: requiredString(wire.backup_id, "restore.backup_id"),
-    status: (wire.status ?? "pending") as BackupStatus,
+    status: knownBackupStatus(wire.status),
     startedAt: wire.started_at ?? undefined,
     completedAt: wire.completed_at ?? undefined,
     errorMessage: wire.error_message,
@@ -178,8 +180,12 @@ export function mapBackupRestore(wire: RestoreWire): BackupRestore {
 
 export async function b2ListStorageLocations(
   params?: PageInput & { cluster_id?: string },
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<BackupStorageLocation>> {
-  const response = await getBackupsStorage({ query: pageQuery(params) });
+  const response = await getBackupsStorage({
+    signal,
+    query: pageQuery(params),
+  });
   return mapPage(
     { data: response.data ?? [], pagination: response.pagination },
     mapBackupStorage,
@@ -238,8 +244,12 @@ export async function b2TestStorageLocation(
 
 export async function b2ListSchedules(
   params?: PageInput & { cluster_id?: string },
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<BackupScheduleRow>> {
-  const response = await getBackupsSchedules({ query: pageQuery(params) });
+  const response = await getBackupsSchedules({
+    signal,
+    query: pageQuery(params),
+  });
   return mapPage(
     { data: response.data ?? [], pagination: response.pagination },
     mapBackupSchedule,
@@ -316,17 +326,21 @@ export async function b2ListRuns(
     schedule_id?: string;
     status?: string;
   },
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<BackupRun>> {
-  const response = await getBackups({ query: pageQuery(params) });
+  const response = await getBackups({ signal, query: pageQuery(params) });
   return mapPage(
     { data: response.data ?? [], pagination: response.pagination },
     mapBackupRun,
   );
 }
 
-export async function b2GetRun(id: string): Promise<BackupRun> {
+export async function b2GetRun(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BackupRun> {
   return mapBackupRun(
-    requireData(await getBackupsById({ path: { id } }), "get backup"),
+    requireData(await getBackupsById({ signal, path: { id } }), "get backup"),
   );
 }
 
@@ -340,9 +354,15 @@ export async function b2ListRestores(
   );
 }
 
-export async function b2GetRestore(id: string): Promise<BackupRestore> {
+export async function b2GetRestore(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BackupRestore> {
   return mapBackupRestore(
-    requireData(await getBackupsRestoresById({ path: { id } }), "get restore"),
+    requireData(
+      await getBackupsRestoresById({ signal, path: { id } }),
+      "get restore",
+    ),
   );
 }
 
@@ -356,4 +376,9 @@ export async function b2CreateRestore(
       "create restore",
     ),
   );
+}
+
+function knownBackupStatus(value: unknown): BackupStatus {
+  const result = classifyCategory("BackupKnownStatus", value);
+  return result.kind === "known" ? result.value : "unknown";
 }

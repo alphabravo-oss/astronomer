@@ -277,7 +277,7 @@ export function stackFamilyKey(target: MonitoringStackTarget): string {
 export function useSharedThanosStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.monitoringStack.status("thanos"),
-    queryFn: () => api.getSharedThanosStatus(),
+    queryFn: ({ signal }) => api.getSharedThanosStatus(signal),
     enabled,
   });
 }
@@ -285,7 +285,7 @@ export function useSharedThanosStatus(enabled = true) {
 export function useSharedAlertmanagerStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.monitoringStack.status("alertmanager"),
-    queryFn: () => api.getSharedAlertmanagerStatus(),
+    queryFn: ({ signal }) => api.getSharedAlertmanagerStatus(signal),
     enabled,
   });
 }
@@ -293,7 +293,7 @@ export function useSharedAlertmanagerStatus(enabled = true) {
 export function useSharedGrafanaStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.monitoringStack.status("grafana"),
-    queryFn: () => api.getSharedGrafanaStatus(),
+    queryFn: ({ signal }) => api.getSharedGrafanaStatus(signal),
     enabled,
   });
 }
@@ -302,14 +302,11 @@ export function useSharedGrafanaStatus(enabled = true) {
 export function useStackStatus(target: MonitoringStackTarget, enabled = true) {
   const family = stackFamilyKey(target);
   const disabled = target.kind === "cluster" && !target.clusterId;
-  // `family` IS the identity of `target` (stackFamilyKey is total over the
-  // union), so the key below is complete. Putting the target object in the key
-  // instead would give this hook a different key from useClusterStackStatus /
-  // useSharedThanosStatus, which must share the same cache entry.
+  // stackFamilyKey is total over target; these hooks must share the status cache.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   return useQuery<MonitoringStackStatusBase>({
     queryKey: queryKeys.monitoringStack.status(family),
-    queryFn: () => api.getStackStatus(target),
+    queryFn: ({ signal }) => api.getStackStatus(target, signal),
     enabled: enabled && !disabled,
   });
 }
@@ -325,7 +322,7 @@ export function useMonitoringOperations(
     queryKey: queryKeys.monitoringStack.operations(
       params as Record<string, unknown>,
     ),
-    queryFn: () => api.listMonitoringOperations(params),
+    queryFn: ({ signal }) => api.listMonitoringOperations(params, signal),
   });
 }
 
@@ -442,7 +439,7 @@ export function useMonitoringOperationTracker(
   // ── Adopt: newest rows for this target ──
   const listQuery = useQuery({
     queryKey: listKey,
-    queryFn: () => api.listMonitoringOperations(listParams),
+    queryFn: ({ signal }) => api.listMonitoringOperations(listParams, signal),
     enabled: enabled && !!targetKey,
     // Keep a slow target-level poll even while the detail query is active.
     // Adoption is derived from this result, so disabling it would leave a
@@ -463,7 +460,8 @@ export function useMonitoringOperationTracker(
   const detailKey = queryKeys.monitoringStack.operation(operationId ?? "");
   const detailQuery = useQuery({
     queryKey: detailKey,
-    queryFn: () => api.getMonitoringOperation(operationId as string),
+    queryFn: ({ signal }) =>
+      api.getMonitoringOperation(operationId as string, signal),
     enabled: enabled && !!operationId,
     refetchInterval: (query) =>
       monitoringOperationPollInterval(query.state.data, Date.now()),

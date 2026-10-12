@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -29,9 +26,9 @@ import (
 
 const maxCatalogBytes int64 = 4 << 20
 
-// SourceClients keeps public-source and explicitly configured private-mirror
-// dial policy separate. Private networking is never enabled for the original
-// operator source merely because an internal mirror is configured.
+// SourceClients retains the historical source/mirror interface. Both clients
+// enforce the same fixed operator authority; a mirror URL cannot grant private
+// access or enable public fallback in a restricted composition.
 type SourceClients struct {
 	Public *http.Client
 	Mirror *http.Client
@@ -41,6 +38,7 @@ type SourceClientOptions struct {
 	Timeout             time.Duration
 	ProxyURL            string
 	CAFile              string
+	DestinationPolicy   *httpclient.DestinationPolicy
 	AllowPrivateMirrors bool
 }
 
@@ -59,65 +57,22 @@ type SourceOptions struct {
 // NewSourceClients creates bounded, DNS-rebinding-safe clients with an
 // optional Secret-sourced proxy and private CA bundle.
 func NewSourceClients(options SourceClientOptions) (SourceClients, error) {
-	tlsConfig, err := catalogTLSConfig(options.CAFile)
+	tlsConfig, err := httpclient.TLSForCA(options.CAFile)
 	if err != nil {
 		return SourceClients{}, err
 	}
-	proxyConfigured := strings.TrimSpace(options.ProxyURL) != ""
-	var publicTransport *http.Transport
-	if proxyConfigured {
-		// The proxy is an explicit Secret-backed operator endpoint and is often
-		// hosted on a private management network. Every catalog request uses the
-		// fixed proxy below, while the dial guard still blocks loopback,
-		// link-local, metadata, unspecified, and multicast addresses.
-		publicTransport = httpclient.SafeTransportAllowPrivate(tlsConfig)
-	} else {
-		publicTransport = httpclient.SafeTransport(tlsConfig)
+	policy := httpclient.DestinationPolicy{}
+	if options.DestinationPolicy != nil {
+		policy = *options.DestinationPolicy
 	}
-	var mirrorTransport *http.Transport
-	if options.AllowPrivateMirrors {
-		mirrorTransport = httpclient.SafeTransportAllowPrivate(tlsConfig)
-	} else {
-		mirrorTransport = httpclient.SafeTransport(tlsConfig)
+	if options.AllowPrivateMirrors && len(policy.Origins) == 0 {
+		return SourceClients{}, errors.New("private catalog mirrors require exact operator origins and CIDRs")
 	}
-	if proxyConfigured {
-		proxy, err := url.Parse(options.ProxyURL)
-		if err != nil || (proxy.Scheme != "http" && proxy.Scheme != "https") || proxy.Host == "" {
-			return SourceClients{}, errors.New("catalog proxy URL must be an absolute HTTP(S) URL")
-		}
-		publicTransport.Proxy = http.ProxyURL(proxy)
-		mirrorTransport.Proxy = http.ProxyURL(proxy)
-	}
-	timeout := options.Timeout
-	if timeout <= 0 {
-		timeout = 15 * time.Second
-	}
-	return SourceClients{
-		Public: &http.Client{Timeout: timeout, Transport: publicTransport},
-		Mirror: &http.Client{Timeout: timeout, Transport: mirrorTransport},
-	}, nil
-}
-
-func catalogTLSConfig(caFile string) (*tls.Config, error) {
-	if strings.TrimSpace(caFile) == "" {
-		return nil, nil
-	}
-	bundle, err := os.ReadFile(caFile)
+	client, err := httpclient.NewDestinationClient(policy, httpclient.DestinationOptions{AllowPublicCrossOriginRedirects: !policy.Restricted, SensitiveHeaders: []string{"Private-Token", "X-Gitlab-Token", "X-Auth-Token", "X-Api-Key"}, TLSConfig: tlsConfig, Timeout: options.Timeout, MaxResponseBytes: maxCatalogBytes, ProxyURL: options.ProxyURL})
 	if err != nil {
-		return nil, fmt.Errorf("read catalog CA bundle: %w", err)
+		return SourceClients{}, err
 	}
-	defer clear(bundle)
-	if len(bundle) == 0 || len(bundle) > 1<<20 {
-		return nil, errors.New("catalog CA bundle must be between 1 byte and 1 MiB")
-	}
-	roots, err := x509.SystemCertPool()
-	if err != nil || roots == nil {
-		roots = x509.NewCertPool()
-	}
-	if !roots.AppendCertsFromPEM(bundle) {
-		return nil, errors.New("catalog CA bundle contains no valid PEM certificates")
-	}
-	return &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}, nil
+	return SourceClients{Public: client, Mirror: client}, nil
 }
 
 type mirrorRule struct {
@@ -235,11 +190,7 @@ func fetchHTTPSCatalog(ctx context.Context, client *http.Client, source string, 
 	if !strings.HasPrefix(source, "https://") {
 		return nil, errors.New("catalog source must use HTTPS or digest-pinned OCI")
 	}
-	if !mirrored {
-		if err := httpclient.GuardPublicHost(source); err != nil {
-			return nil, errors.New("catalog host is not a permitted public address")
-		}
-	}
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 	if err != nil {
 		return nil, err

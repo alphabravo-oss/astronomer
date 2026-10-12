@@ -98,6 +98,201 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}
   schemas:
+    CatalogControllerOperationWindow:
+      type: object
+      description: |
+        Recent operations selected within the caller's authorized cluster scope.
+        The list and total are independent observations. A total is not a queue
+        depth, and an equal total does not prove a consistent complete snapshot.
+      required: [scope, windowLimit, returned, total, complete, notice]
+      properties:
+        scope:
+          type: string
+          enum: [global, authorized-clusters]
+          x-go-type: string
+        windowLimit:
+          type: integer
+          enum: [1000]
+        returned:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Independently observed authorized operation count, or null when unavailable. It may differ from the earlier list after concurrent changes.
+        complete:
+          type: boolean
+          description: True only if the operation window is known to be a complete consistent snapshot. Separate list/count reads report false.
+        notice:
+          type: string
+          maxLength: 512
+    CharlieAdminAgentReplicaStateValue:
+      type: string
+      x-go-type: string
+      enum: ["ready", "degraded", "unavailable", "unknown"]
+    CharlieAdminAlertDeliveryProofStatusValue:
+      type: string
+      x-go-type: string
+      enum: ["queued", "delivering", "retry", "delivered", "suppressed", "dead"]
+    CharlieAdminDiagnosticCheckStateValue:
+      type: string
+      x-go-type: string
+      enum: ["healthy", "degraded", "unavailable", "inactive", "ready", "unknown"]
+    CharlieKubernetesVisibilityStateValue:
+      type: string
+      x-go-type: string
+      enum: ["not_configured", "disabled", "enabled"]
+    CharlieOnboardingStatusStateValue:
+      type: string
+      x-go-type: string
+      enum: ["validated", "consumed"]
+    CharlieThreadMetadataStateValue:
+      type: string
+      x-go-type: string
+      enum: ["active", "archived"]
+    DeliveryRolloutState:
+      type: string
+      x-go-type: string
+      enum: ["draft", "resolving", "awaiting_approval", "queued", "progressing", "paused", "rejected", "aborted", "succeeded", "failed", "rolling_back", "rolled_back", "rollback_failed"]
+    DeliveryRolloutClusterState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "released", "acknowledged", "reconciling", "ready", "blocked", "timed_out", "failed", "skipped", "rolling_back", "ready_previous", "rollback_failed", "aborted"]
+    DeliveryDeploymentPhase:
+      type: string
+      x-go-type: string
+      enum: ["pending", "blocked", "applying", "ready", "degraded", "failed", "suspended", "deleting", "removed", "unknown"]
+    DeliverySourceKind:
+      type: string
+      x-go-type: string
+      enum: ["git", "oci_artifact", "helm_http", "helm_oci"]
+    DeliveryRendererKind:
+      type: string
+      x-go-type: string
+      enum: ["kustomize", "helm"]
+    DeliveryApprovalDecision:
+      type: string
+      x-go-type: string
+      enum: ["approved", "rejected"]
+    DeliverySourceAuthModeValue:
+      type: string
+      x-go-type: string
+      enum: ["none", "basic", "bearer", "ssh", "workload_identity"]
+    DeliverySourceStatusValue:
+      type: string
+      x-go-type: string
+      enum: ["pending", "ready", "degraded", "revoked"]
+    DeliveryBundleState:
+      type: string
+      x-go-type: string
+      enum: ["resolving", "ready", "failed", "revoked"]
+    DeliveryVerificationStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "verified", "failed", "unsigned"]
+    DeliveryStrategyKind:
+      type: string
+      x-go-type: string
+      enum: ["all_at_once", "rolling", "canary", "partitioned"]
+    DeliveryFailureAction:
+      type: string
+      x-go-type: string
+      enum: ["pause", "abort", "rollback"]
+    DeliverySystemReleaseState:
+      type: string
+      x-go-type: string
+      enum: ["draft", "released", "retired", "revoked"]
+    DeliverySystemRolloutState:
+      type: string
+      x-go-type: string
+      enum: ["draft", "awaiting_approval", "queued", "progressing", "paused", "aborted", "succeeded", "failed", "rolling_back", "rolled_back", "rollback_failed"]
+    DeliverySystemAssignmentPhase:
+      type: string
+      x-go-type: string
+      enum: ["pending", "released", "applying", "ready", "failed", "rolling_back", "rolled_back", "rollback_failed", "aborted"]
+    AgentCredentialState:
+      type: string
+      x-go-type: string
+      enum: ["unknown", "valid", "expiring", "expired", "revoked"]
+    AgentRegistrationState:
+      type: string
+      x-go-type: string
+      enum: ["unknown", "registered", "failed", "rejected"]
+    ClusterRegistrationPhaseValue:
+      type: string
+      x-go-type: string
+      enum: ["created", "awaiting_agent", "connected", "provisioning", "ready", "failed"]
+    DurableOperationStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "retrying", "failed", "succeeded"]
+    AgentLifecycleOperationState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "succeeded", "failed", "cancelled"]
+    NodeOperationState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "retrying", "blocked", "failed", "succeeded"]
+    PollingOperationStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "completed", "failed", "superseded"]
+    ClusterConnectionStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "active", "disconnected", "error"]
+    SecurityScannerState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "completed", "failed", "cancelled"]
+    ClusterSecurityPolicySyncStatusValue:
+      type: string
+      x-go-type: string
+      enum: ["synced", "pending", "failed", "unknown"]
+    CharlieSessionMetadataStateValue:
+      type: string
+      x-go-type: string
+      enum: ["creating", "active", "waiting_approval", "completed", "aborted", "failed"]
+    CharlieFindingSummaryStateValue:
+      type: string
+      x-go-type: string
+      enum: ["open", "acknowledged", "dismissed", "resolved", "expired"]
+    CharlieFindingSummaryWorkflowStateValue:
+      type: string
+      x-go-type: string
+      enum: ["approval_pending", "manual_remediation_required", "remediation_in_progress", "verification_pending", "resolved", "rejected", "dismissed", "expired"]
+    CharlieAdminTriggerEventStateValue:
+      type: string
+      x-go-type: string
+      enum: ["pending", "dispatching", "dispatched", "retry", "dead", "completed", "suppressed"]
+    CharlieApprovalSummaryStateValue:
+      type: string
+      x-go-type: string
+      enum: ["pending", "approved", "denied", "expired"]
+    CharlieApprovalState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "approved", "rejected", "expired", "dispatched"]
+    CharlieReceiptState:
+      type: string
+      x-go-type: string
+      enum: ["claimed", "blocked", "waiting_approval", "deferred", "dispatched", "ambiguous", "verifying", "succeeded", "failed", "fenced"]
+    CharlieConnectionOnboardingState:
+      type: string
+      x-go-type: string
+      enum: ["validated", "secrets_pending", "secrets_written", "consumed", "active", "failed"]
+    BackupKnownStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "in_progress", "completed", "failed"]
+    RestoreKnownStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "completed", "failed"]
     CharlieOnboardingRequest:
       type: object
       additionalProperties: false
@@ -187,9 +382,7 @@ components:
         replica_count: {type: integer, minimum: 2, maximum: 20}
         issued_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
-        state:
-          type: string
-          enum: [validated, consumed]
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieOnboardingStatusStateValue"}
         idempotent:
           type: boolean
     CharlieSessionResource:
@@ -293,7 +486,7 @@ components:
       properties:
         id: {type: string, format: uuid}
         title: {type: string, maxLength: 120}
-        state: {type: string, enum: [active, archived]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieThreadMetadataStateValue"}
         current_session_id: {type: string, format: uuid, nullable: true}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -313,9 +506,7 @@ components:
         client_session_id: {type: string, format: uuid}
         intent: {type: string}
         resource_scope_summary: {type: string}
-        state:
-          type: string
-          enum: [creating, active, waiting_approval, completed, aborted, failed]
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieSessionMetadataStateValue"}
         visibility: {type: string, enum: [private, incident]}
         central_revision: {type: integer, format: int64, minimum: 0}
         source: {type: string, enum: [user, event]}
@@ -337,16 +528,13 @@ components:
         id: {type: string, format: uuid}
         title: {type: string, maxLength: 256}
         severity: {type: string, enum: [info, low, medium, high, critical]}
-        state: {type: string, enum: [open, acknowledged, dismissed, resolved, expired]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieFindingSummaryStateValue"}
         summary: {type: string, maxLength: 2048}
         reason_no_action: {type: string, maxLength: 64}
         repeat_count: {type: integer, minimum: 1}
         updated_at: {type: string, format: date-time}
         affected_resource: {$ref: '#/components/schemas/CharlieFindingResource'}
-        workflow_state:
-          type: string
-          enum: [approval_pending, manual_remediation_required, remediation_in_progress, verification_pending, resolved, rejected, dismissed, expired]
-          description: Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+        workflow_state: {"type": "string", "description": "Product-authorized operator workflow derived from durable finding state; it is not execution authority.", "$ref": "#/components/schemas/CharlieFindingSummaryWorkflowStateValue"}
         available_decisions:
           type: array
           uniqueItems: true
@@ -474,7 +662,7 @@ components:
         ordinal: {type: integer, minimum: 0, maximum: 19}
         instance_id: {type: string, description: Opaque product-agent instance identifier; never a credential.}
         role: {type: string, enum: [leader, standby, unknown]}
-        state: {type: string, enum: [ready, degraded, unavailable, unknown]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieAdminAgentReplicaStateValue"}
         last_heartbeat_at: {type: string, format: date-time}
         version: {type: string}
     CharlieAdminMode:
@@ -501,7 +689,7 @@ components:
         schema: {type: string, enum: [charlie.kubernetes-visibility/v1]}
         profile: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}
         revision: {type: integer, format: int64, minimum: 0}
-        state: {type: string, enum: [not_configured, disabled, enabled]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieKubernetesVisibilityStateValue"}
         instance_id: {type: string, maxLength: 128}
         namespaces: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, maxLength: 63}}
         product_owned_only: {type: boolean, enum: [true]}
@@ -681,7 +869,7 @@ components:
         delivery_id: {type: string, format: uuid}
         finding_id: {type: string, format: uuid}
         delivery_kind: {type: string, enum: [initial, escalation]}
-        status: {type: string, enum: [queued, delivering, retry, delivered, suppressed, dead]}
+        status: {"type": "string", "$ref": "#/components/schemas/CharlieAdminAlertDeliveryProofStatusValue"}
         template_identity: {type: string, enum: [charlie.finding.initial/v1, charlie.finding.escalation/v1, unrecognized]}
         deep_link_valid: {type: boolean}
         content_free: {type: boolean, description: True only when the persisted subject/body exactly match Astronomer's fixed content-free template and finding-bound deep link.}
@@ -732,7 +920,7 @@ components:
         event_type: {type: string, maxLength: 64}
         resource_type: {type: string, maxLength: 64}
         resource_id: {type: string, maxLength: 255}
-        state: {type: string, enum: [pending, dispatching, dispatched, retry, dead, completed, suppressed]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieAdminTriggerEventStateValue"}
         repeat_count: {type: integer, format: int32, minimum: 1}
         attempt_count: {type: integer, format: int32, minimum: 0}
         last_error_code: {type: string, maxLength: 64}
@@ -752,7 +940,7 @@ components:
       properties:
         operation_id: {type: string, format: uuid}
         event_id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, dispatching, dispatched, retry, dead, completed, suppressed]}
+        status: {"type": "string", "$ref": "#/components/schemas/CharlieAdminTriggerEventStateValue"}
         status_url: {type: string}
     CharlieAdminPermission:
       type: object
@@ -782,7 +970,7 @@ components:
       properties:
         id: {type: string}
         label: {type: string}
-        state: {type: string, enum: [healthy, degraded, unavailable, inactive, ready, unknown]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieAdminDiagnosticCheckStateValue"}
         summary: {type: string}
         next_action: {type: string}
         checked_at: {type: string, format: date-time}
@@ -827,7 +1015,7 @@ components:
       properties:
         id: {type: string, minLength: 1, maxLength: 128}
         title: {type: string, maxLength: 256}
-        state: {type: string, enum: [pending, approved, denied, expired]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieApprovalSummaryStateValue"}
         eligible: {type: boolean}
         capability: {type: string}
         target: {type: string}
@@ -1048,7 +1236,7 @@ components:
         targetType: {type: string, enum: [output, pipeline]}
         targetKey: {type: string}
         operationType: {type: string}
-        status: {type: string, enum: [pending, running, completed, failed, superseded]}
+        status: {"type": "string", "$ref": "#/components/schemas/PollingOperationStatus"}
         attemptCount: {type: integer, format: int32, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
@@ -1286,7 +1474,7 @@ components:
         cluster_id: {type: string, format: uuid}
         template_id: {type: string, format: uuid}
         applied_at: {type: string, format: date-time, nullable: true}
-        sync_status: {type: string, enum: [synced, pending, failed, unknown]}
+        sync_status: {"type": "string", "$ref": "#/components/schemas/ClusterSecurityPolicySyncStatusValue"}
         error_message: {type: string}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -1339,7 +1527,7 @@ components:
         id: {type: string, format: uuid}
         cluster_id: {type: string, format: uuid}
         scan_type: {type: string}
-        status: {type: string, enum: [pending, running, completed, failed, cancelled]}
+        status: {"type": "string", "$ref": "#/components/schemas/SecurityScannerState"}
         passed: {type: integer, minimum: 0}
         failed: {type: integer, minimum: 0}
         warned: {type: integer, minimum: 0}
@@ -1518,7 +1706,7 @@ components:
         targetType: {type: string, enum: [cluster_stack, shared_thanos, shared_alertmanager, shared_grafana, shared_loki]}
         targetKey: {type: string}
         operationType: {type: string, enum: [install, upgrade, replace, uninstall]}
-        status: {type: string, enum: [pending, running, completed, failed, superseded]}
+        status: {"type": "string", "$ref": "#/components/schemas/PollingOperationStatus"}
         attemptCount: {type: integer, format: int32, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
@@ -2657,7 +2845,7 @@ components:
       required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ControlPlaneAlert'}}
-        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     ControlPlaneSilence:
       type: object
       additionalProperties: false
@@ -2683,7 +2871,7 @@ components:
       required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ControlPlaneSilence'}}
-        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     ControlPlaneSummary:
       type: object
       additionalProperties: false
@@ -3092,6 +3280,46 @@ components:
               $ref: '#/components/schemas/PaginationMetadata'
         severity_filter:
           type: string
+    ImageDatabaseScanState:
+      type: string
+      x-go-type: string
+      enum: [pending, failed, complete, unavailable]
+    ImageDatabasePostureState:
+      type: string
+      x-go-type: string
+      enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]
+    ImageDatabaseJavaApplicability:
+      type: string
+      x-go-type: string
+      enum: [needed, not_needed, unknown]
+    ImageDatabaseStatusV1:
+      type: object
+      additionalProperties: false
+      required: [report_id, scan_state, main_state, java_state, java_applicability, reason, finding_count, observation_revision, witness_revision, cycle, accepted_generation, report_expired, rescan_required, eligible_for_clean_posture, current_workload_checked, resource_capacity_exhausted]
+      properties:
+        report_id: {type: string, format: uuid}
+        scan_state: {type: string, $ref: '#/components/schemas/ImageDatabaseScanState'}
+        main_state: {type: string, $ref: '#/components/schemas/ImageDatabasePostureState'}
+        java_state: {type: string, $ref: '#/components/schemas/ImageDatabasePostureState'}
+        java_applicability: {type: string, $ref: '#/components/schemas/ImageDatabaseJavaApplicability'}
+        reason: {type: string}
+        finding_count: {type: integer, format: int64, minimum: 0}
+        observation_revision: {type: integer, format: int64, minimum: 0}
+        witness_revision: {type: integer, format: int64, minimum: 0}
+        cycle: {type: integer, format: int64, minimum: 0}
+        accepted_generation: {type: integer, format: int64, minimum: 0}
+        accepted_feed_digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        report_expired: {type: boolean}
+        rescan_required: {type: boolean}
+        eligible_for_clean_posture: {type: boolean}
+        current_workload_checked: {type: boolean}
+        resource_capacity_exhausted: {type: boolean}
+    ImageDatabaseStatusV1Envelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ImageDatabaseStatusV1'}
     ImageVulnerabilityReportDetailEnvelope:
       type: object
       additionalProperties: false
@@ -3708,7 +3936,7 @@ components:
         action: {type: string, enum: [retry, discard]}
         queue: {type: string, minLength: 1}
         task_id: {type: string, minLength: 1}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         attempt_count: {type: integer, format: int32, minimum: 0}
         last_error:
           type: string
@@ -3733,7 +3961,7 @@ components:
         namespace: {type: string}
         resource_name: {type: string, minLength: 1}
         action: {type: string, enum: [apply, delete]}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         generation: {type: integer, format: int64, minimum: 1}
         observed_generation: {type: integer, format: int64, minimum: 0}
         attempt_count: {type: integer, format: int32, minimum: 0}
@@ -4367,7 +4595,7 @@ components:
       required: [id, status, attempt_count, size, expires_at, created_at, updated_at, status_url]
       properties:
         id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         attempt_count: {type: integer, format: int32, minimum: 0}
         error_code: {type: string}
         filename: {type: string}
@@ -4517,13 +4745,7 @@ components:
           description: Canonical digest included in generated manifests and agent upgrade plans.
         description:
           type: string
-        status:
-          type: string
-          enum:
-            - pending
-            - active
-            - disconnected
-            - error
+        status: {"type": "string", "$ref": "#/components/schemas/ClusterConnectionStatus"}
         api_server_url: {type: string, format: uri}
         ca_certificate: {type: string, description: Public CA bundle used to verify the Kubernetes API endpoint; never an authentication credential.}
         environment:
@@ -4549,15 +4771,7 @@ components:
           type: object
           additionalProperties:
             type: string
-        registration_phase:
-          type: string
-          enum:
-            - created
-            - awaiting_agent
-            - connected
-            - provisioning
-            - ready
-            - failed
+        registration_phase: {"type": "string", "$ref": "#/components/schemas/ClusterRegistrationPhaseValue"}
         install_baseline:
           type: boolean
           nullable: true
@@ -4677,15 +4891,7 @@ components:
         cluster_id:
           type: string
           format: uuid
-        phase:
-          type: string
-          enum:
-            - created
-            - awaiting_agent
-            - connected
-            - provisioning
-            - ready
-            - failed
+        phase: {"type": "string", "$ref": "#/components/schemas/ClusterRegistrationPhaseValue"}
         install_baseline:
           type: boolean
           nullable: true
@@ -5645,14 +5851,7 @@ components:
           type: string
           enum:
             - agent_upgrade
-        status:
-          type: string
-          enum:
-            - pending
-            - running
-            - succeeded
-            - failed
-            - cancelled
+        status: {"type": "string", "$ref": "#/components/schemas/AgentLifecycleOperationState"}
         target_version:
           type: string
         target_image:
@@ -5779,7 +5978,7 @@ components:
         action:
           type: string
           enum: [cordon, uncordon, set_label, remove_label, set_annotation, remove_annotation, add_taint, remove_taint, drain]
-        status: {type: string, enum: [pending, running, retrying, blocked, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/NodeOperationState"}
         generation: {type: integer, format: int64, minimum: 1}
         observed_generation: {type: integer, format: int64, minimum: 0}
         attempt_count: {type: integer, format: int32, minimum: 0}
@@ -7034,7 +7233,7 @@ components:
         targetType: {type: string}
         targetKey: {type: string}
         operationType: {type: string, enum: [install, upgrade, uninstall, adopt, rollback]}
-        status: {type: string, enum: [pending, running, completed, failed, superseded]}
+        status: {"type": "string", "$ref": "#/components/schemas/PollingOperationStatus"}
         attemptCount: {type: integer, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
@@ -8413,7 +8612,7 @@ components:
         action: { type: string, enum: [apply, register_sso] }
         target_id: { type: string, format: uuid }
         runtime_generation: { type: integer, format: int64, minimum: 0 }
-        status: { type: string, enum: [pending, running, retrying, failed, succeeded] }
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         phase: { type: string, enum: [queued, reconciling, finalizing, completed] }
         attempt_count: { type: integer, minimum: 0 }
         error_code: { type: string }
@@ -8943,7 +9142,7 @@ components:
       required: [id, status, attempt_count, size, expires_at, created_at, updated_at, status_url]
       properties:
         id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         attempt_count: {type: integer, format: int32, minimum: 0}
         error_code: {type: string}
         filename: {type: string}
@@ -9647,13 +9846,18 @@ components:
           items: {type: string, format: uuid}
     InhibitionMatcher:
       type: object
+      additionalProperties: false
+      description: Label/value keys are required; an empty value matches an empty label value. Omitted is_regex means false.
       properties:
         label:
           type: string
+          minLength: 1
+          pattern: '\S'
         value:
           type: string
         is_regex:
           type: boolean
+          default: false
       required:
         - label
         - value
@@ -9667,26 +9871,37 @@ components:
         is_regex: {type: boolean}
     InhibitionRequest:
       type: object
-      description: Alert inhibition rule create/update body (P-03).
+      additionalProperties: false
+      description: Full create/update body. Source and target require at least one matcher. Omitted or null equal_labels normalizes to an empty array; omitted or null enabled defaults to true.
       properties:
         name:
           type: string
+          minLength: 1
         source_matchers:
           type: array
+          minItems: 1
           items:
             $ref: '#/components/schemas/InhibitionMatcher'
         target_matchers:
           type: array
+          minItems: 1
           items:
             $ref: '#/components/schemas/InhibitionMatcher'
         equal_labels:
           type: array
+          nullable: true
           items:
             type: string
+            minLength: 1
+            pattern: '\S'
         enabled:
           type: boolean
+          nullable: true
+          default: true
       required:
         - name
+        - source_matchers
+        - target_matchers
     PaginationMetadata:
       type: object
       additionalProperties: false
@@ -9698,6 +9913,24 @@ components:
         has_more: {type: boolean}
         next_offset: {type: integer, minimum: 0, nullable: true}
         next_cursor: {type: string, maxLength: 1024, nullable: true}
+    SignedCursorPaginationMetadata:
+      type: object
+      additionalProperties: false
+      required: [limit, offset, has_more, next_offset]
+      properties:
+        total: {type: integer, format: int64, minimum: 0}
+        limit: {type: integer, minimum: 1}
+        offset: {type: integer, minimum: 0}
+        has_more: {type: boolean}
+        next_offset: {type: integer, minimum: 0, nullable: true}
+        next_cursor: {type: string, maxLength: 4096, nullable: true}
+    SignedCursorPageEnvelope:
+      type: object
+      description: Explicit signed-cursor collection page; only requests with cursor present opt into the larger token contract. Exact total is omitted when unknown.
+      required: [data, pagination]
+      properties:
+        data: {type: array, items: {}}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     DeliverySourceVerification:
       type: object
       additionalProperties: false
@@ -9740,6 +9973,28 @@ components:
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/NotificationChannel'}}
         pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+    InhibitionValidationErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, fields]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            fields:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [field, rule, message]
+                properties:
+                  field: {type: string}
+                  rule: {type: string}
+                  message: {type: string}
     InhibitionResponse:
       type: object
       additionalProperties: false
@@ -10147,7 +10402,7 @@ components:
       additionalProperties: false
       required: [kind]
       properties:
-        kind: {type: string, enum: [kustomize, helm]}
+        kind: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         kustomize: {$ref: '#/components/schemas/DeliveryKustomizeRenderer'}
         helm: {$ref: '#/components/schemas/DeliveryHelmRenderer'}
     DeliveryBundleVersionDraft:
@@ -10190,13 +10445,13 @@ components:
       additionalProperties: false
       required: [type, max_concurrent, max_unavailable, min_ready, progress_deadline, failure_threshold, on_failure, respect_maintenance_windows]
       properties:
-        type: {type: string, enum: [all_at_once, rolling, canary, partitioned]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliveryStrategyKind"}
         max_concurrent: {type: integer, minimum: 1}
         max_unavailable: {$ref: '#/components/schemas/DeliveryAmount'}
         min_ready: {type: string}
         progress_deadline: {type: string}
         failure_threshold: {$ref: '#/components/schemas/DeliveryAmount'}
-        on_failure: {type: string, enum: [pause, abort, rollback]}
+        on_failure: {"type": "string", "$ref": "#/components/schemas/DeliveryFailureAction"}
         respect_maintenance_windows: {type: boolean}
         shuffle_seed: {type: string, maxLength: 128}
         canary: {$ref: '#/components/schemas/DeliveryCanaryStrategy'}
@@ -10205,13 +10460,13 @@ components:
       type: object
       additionalProperties: false
       properties:
-        type: {type: string, enum: [all_at_once, rolling, canary, partitioned]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliveryStrategyKind"}
         max_concurrent: {type: integer, minimum: 1}
         max_unavailable: {$ref: '#/components/schemas/DeliveryAmount'}
         min_ready: {type: string}
         progress_deadline: {type: string}
         failure_threshold: {$ref: '#/components/schemas/DeliveryAmount'}
-        on_failure: {type: string, enum: [pause, abort, rollback]}
+        on_failure: {"type": "string", "$ref": "#/components/schemas/DeliveryFailureAction"}
         respect_maintenance_windows: {type: boolean}
         shuffle_seed: {type: string, maxLength: 128}
         canary: {$ref: '#/components/schemas/DeliveryCanaryStrategy'}
@@ -10230,9 +10485,9 @@ components:
       required: [source_id, type, url, auth_mode, trust_policy, revision]
       properties:
         source_id: {type: string, format: uuid}
-        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliverySourceKind"}
         url: {type: string, format: uri}
-        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        auth_mode: {"type": "string", "$ref": "#/components/schemas/DeliverySourceAuthModeValue"}
         trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
         revision: {$ref: '#/components/schemas/DeliveryImmutableRevision'}
     DeliveryVersionIdentity:
@@ -10383,7 +10638,7 @@ components:
         project_id: {type: string, format: uuid}
         cohort: {type: integer, minimum: -1}
         binding_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-        decision: {type: string, enum: [approved, rejected]}
+        decision: {"type": "string", "$ref": "#/components/schemas/DeliveryApprovalDecision"}
         expires_at: {type: string, format: date-time}
     DeliveryConfigurationSecretRef:
       type: object
@@ -10401,7 +10656,7 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128}
         description: {type: string, maxLength: 4096}
-        renderer: {type: string, enum: [helm, kustomize]}
+        renderer: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         values: {type: object, additionalProperties: true, maxProperties: 1024}
         patches: {type: array, maxItems: 64, items: {type: string, maxLength: 65536}}
         secret_refs: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/DeliveryConfigurationSecretRef'}}
@@ -10415,7 +10670,7 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string}
         description: {type: string}
-        renderer: {type: string, enum: [helm, kustomize]}
+        renderer: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         values: {type: object, additionalProperties: true}
         patches: {type: array, items: {type: string}}
         secret_refs: {type: array, items: {$ref: '#/components/schemas/DeliveryConfigurationSecretRef'}}
@@ -10527,9 +10782,9 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128}
         description: {type: string, maxLength: 4096}
-        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliverySourceKind"}
         url: {type: string, format: uri, maxLength: 2048}
-        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        auth_mode: {"type": "string", "$ref": "#/components/schemas/DeliverySourceAuthModeValue"}
         credential: {$ref: '#/components/schemas/DeliverySourceCredentialInput'}
         ca_bundle: {type: string, writeOnly: true, maxLength: 262144}
         proxy_ref: {type: string, maxLength: 128}
@@ -10561,9 +10816,9 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string}
         description: {type: string}
-        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliverySourceKind"}
         url: {type: string, format: uri}
-        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        auth_mode: {"type": "string", "$ref": "#/components/schemas/DeliverySourceAuthModeValue"}
         credential:
           type: object
           additionalProperties: false
@@ -10574,7 +10829,7 @@ components:
             epoch: {type: integer, format: int64, minimum: 0}
         proxy_ref: {type: string}
         trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
-        status: {type: string, enum: [pending, ready, degraded, revoked]}
+        status: {"type": "string", "$ref": "#/components/schemas/DeliverySourceStatusValue"}
         last_resolved_at: {type: string, format: date-time, nullable: true}
         last_error_code: {type: string}
         created_at: {type: string, format: date-time}
@@ -10634,7 +10889,7 @@ components:
         bundle_id: {type: string, format: uuid}
         source_id: {type: string, format: uuid}
         version: {type: string}
-        renderer: {type: string, enum: [kustomize, helm]}
+        renderer: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         scope: {type: string, enum: [namespace, platform]}
         requested_revision: {type: string}
         resolved_revision: {type: string}
@@ -10644,9 +10899,9 @@ components:
         required_capabilities: {type: array, items: {$ref: '#/components/schemas/DeliveryCapabilityRequirement'}}
         dependency_bundle_ids: {type: array, items: {type: string, format: uuid}}
         spec_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-        verification_status: {type: string, enum: [pending, verified, failed, unsigned]}
+        verification_status: {"type": "string", "$ref": "#/components/schemas/DeliveryVerificationStatus"}
         verification_identity: {type: string}
-        state: {type: string, enum: [resolving, ready, failed, revoked]}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliveryBundleState"}
         last_error_code: {type: string}
         created_at: {type: string, format: date-time}
     DeliveryBundleEnvelope:
@@ -10811,7 +11066,7 @@ components:
         request_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         plan_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         frozen_plan: {type: object, additionalProperties: true}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliveryRolloutState"}
         fencing_generation: {type: integer, format: int64, minimum: 1}
         total_clusters: {type: integer, format: int32, minimum: 0}
         ready_clusters: {type: integer, format: int32, minimum: 0}
@@ -10877,7 +11132,7 @@ components:
         rollout_id: {type: string, format: uuid}
         cohort: {type: integer, format: int32}
         binding_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-        decision: {type: string, enum: [approved, rejected]}
+        decision: {"type": "string", "$ref": "#/components/schemas/DeliveryApprovalDecision"}
         decided_by: {type: string, format: uuid, nullable: true}
         decided_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
@@ -10895,7 +11150,7 @@ components:
         previous_bundle_version_id: {type: string, format: uuid, nullable: true}
         desired_bundle_version_id: {type: string, format: uuid}
         desired_spec_digest: {type: string}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliveryRolloutClusterState"}
         assignment_action: {type: string, enum: [apply, rollback]}
         attempt: {type: integer, format: int32, minimum: 0}
         fence: {type: integer, format: int64, minimum: 0}
@@ -11012,7 +11267,7 @@ components:
         desired_revision: {type: string}
         observed_revision: {type: string}
         action: {type: string, enum: [apply, delete, suspend]}
-        phase: {type: string, enum: [pending, blocked, applying, ready, degraded, failed, suspended, deleting, removed, unknown]}
+        phase: {"type": "string", "$ref": "#/components/schemas/DeliveryDeploymentPhase"}
         conditions: {type: array, items: {$ref: '#/components/schemas/DeliveryCondition'}}
         source_kind: {type: string}
         source_name: {type: string}
@@ -11259,7 +11514,7 @@ components:
         credential_key_version: {type: integer, format: int32}
         credential_epoch: {type: integer, format: int64}
         spec_digest: {type: string}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliverySystemReleaseState"}
         released_at: {type: string, format: date-time, nullable: true}
         retired_at: {type: string, format: date-time, nullable: true}
         created_by: {type: string, format: uuid, nullable: true}
@@ -11272,7 +11527,7 @@ components:
         previous_release_id: {type: string, format: uuid, nullable: true}
         strategy: {type: object, additionalProperties: true}
         strategy_digest: {type: string}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliverySystemRolloutState"}
         fencing_generation: {type: integer, format: int64}
         total_clusters: {type: integer, format: int32, minimum: 0}
         ready_clusters: {type: integer, format: int32, minimum: 0}
@@ -11579,15 +11834,15 @@ paths:
       operationId: deleteClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Delete clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11597,7 +11852,7 @@ paths:
       operationId: getClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Read clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11605,10 +11860,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11618,7 +11873,7 @@ paths:
       operationId: headClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "HEAD clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11626,10 +11881,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11639,18 +11894,15 @@ paths:
       operationId: optionsClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "OPTIONS clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11660,7 +11912,7 @@ paths:
       operationId: patchClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Update clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11673,11 +11925,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11687,7 +11936,7 @@ paths:
       operationId: postClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Create or execute clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11700,11 +11949,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11714,7 +11960,7 @@ paths:
       operationId: putClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Replace clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11727,11 +11973,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11742,15 +11985,15 @@ paths:
       operationId: deleteClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Delete clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11760,7 +12003,7 @@ paths:
       operationId: getClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Read clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11768,10 +12011,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11781,7 +12024,7 @@ paths:
       operationId: headClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "HEAD clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11789,10 +12032,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11802,18 +12045,15 @@ paths:
       operationId: optionsClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "OPTIONS clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11823,7 +12063,7 @@ paths:
       operationId: patchClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Update clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11836,11 +12076,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11850,7 +12087,7 @@ paths:
       operationId: postClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Create or execute clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11863,11 +12100,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11877,7 +12111,7 @@ paths:
       operationId: putClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Replace clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11890,11 +12124,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11905,13 +12136,13 @@ paths:
       operationId: deleteObservabilityGrafana
       tags: [Observability]
       summary: "Delete observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11921,16 +12152,16 @@ paths:
       operationId: getObservabilityGrafana
       tags: [Observability]
       summary: "Read observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11940,16 +12171,16 @@ paths:
       operationId: headObservabilityGrafana
       tags: [Observability]
       summary: "HEAD observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11959,16 +12190,13 @@ paths:
       operationId: optionsObservabilityGrafana
       tags: [Observability]
       summary: "OPTIONS observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11979,7 +12207,7 @@ paths:
       operationId: patchObservabilityGrafana
       tags: [Observability]
       summary: "Update observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11990,11 +12218,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12005,7 +12230,7 @@ paths:
       operationId: postObservabilityGrafana
       tags: [Observability]
       summary: "Create or execute observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12016,11 +12241,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12031,7 +12253,7 @@ paths:
       operationId: putObservabilityGrafana
       tags: [Observability]
       summary: "Replace observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12042,11 +12264,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12057,13 +12276,13 @@ paths:
       operationId: deleteObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Delete observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12073,16 +12292,16 @@ paths:
       operationId: getObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Read observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12092,16 +12311,16 @@ paths:
       operationId: headObservabilityGrafanaProxy
       tags: [Observability]
       summary: "HEAD observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12111,16 +12330,13 @@ paths:
       operationId: optionsObservabilityGrafanaProxy
       tags: [Observability]
       summary: "OPTIONS observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12131,7 +12347,7 @@ paths:
       operationId: patchObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Update observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12142,11 +12358,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12157,7 +12370,7 @@ paths:
       operationId: postObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Create or execute observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12168,11 +12381,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12183,7 +12393,7 @@ paths:
       operationId: putObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Replace observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12194,11 +12404,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12863,12 +13070,13 @@ paths:
       operationId: getAdminQueuesByQueueDlq
       tags: [Queues]
       summary: "Read admin/queues/{queue}/dlq"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Absent page preserves the released first-page data envelope. Explicit page selects a fixed-size 100-item native Redis page and adds uncounted pagination; a full page offers another read until a short or empty page. Redis task ordering is mutable, not a stable snapshot. count is this page's length, never an exact total.
       x-astronomer-route-class: public-api
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: queue, in: path, required: true, schema: {type: string, minLength: 1}}
+        - {name: page, in: query, required: false, description: "Opt in to native paging; one integer in 1..10000, fixed page size 100. No offset, cursor or limit is accepted.", schema: {type: integer, minimum: 1, maximum: 10000}}
       responses:
         '200':
           description: Successful operation
@@ -12880,6 +13088,7 @@ paths:
                   - type: object
                     properties:
                       data: {$ref: '#/components/schemas/AdminQueueDLQWire'}
+                      pagination: {$ref: '#/components/schemas/PaginationMetadata'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15062,15 +15271,15 @@ paths:
       operationId: deleteClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Delete clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: namespace, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15082,7 +15291,7 @@ paths:
       operationId: getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Read clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15090,10 +15299,10 @@ paths:
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15105,7 +15314,7 @@ paths:
       operationId: headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "HEAD clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15113,10 +15322,10 @@ paths:
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15128,18 +15337,15 @@ paths:
       operationId: optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "OPTIONS clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: namespace, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15151,7 +15357,7 @@ paths:
       operationId: patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Update clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15164,11 +15370,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15180,7 +15383,7 @@ paths:
       operationId: postClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Create or execute clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15193,11 +15396,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15209,7 +15409,7 @@ paths:
       operationId: putClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Replace clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15222,11 +15422,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15512,6 +15709,29 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ImageVulnerabilityReportDetailEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-route-class: public-api
+      operationId: getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus
+      tags: [Clusters]
+      summary: Read verified database provenance separately from findings
+      description: Prior findings remain visible. Unknown Java applicability, missing current-workload observation, stale or changed report/feed revision cannot produce a qualified clean posture. Completion is not a database freshness timestamp.
+      parameters:
+        - {name: cluster_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Current database status and retained findings
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageDatabaseStatusV1Envelope'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15921,10 +16141,16 @@ paths:
       description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
       x-astronomer-route-class: public-api
       parameters:
+        - name: cursor
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: Empty value selects the signed initial page; nonempty value is the exact opaque next_cursor. Cannot be combined with offset. Actor, current scope, filters and ordering are checked on every continuation; cursor pages may omit total.
+          schema: {type: string, maxLength: 4096}
         - {name: status, in: query, schema: {type: string}}
         - {name: controller, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
-        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
       responses:
         '200':
           description: Page of control-plane alerts
@@ -16012,8 +16238,14 @@ paths:
       description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
       x-astronomer-route-class: public-api
       parameters:
+        - name: cursor
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: Empty value selects the signed initial page; nonempty value is the exact opaque next_cursor. Cannot be combined with offset. Actor, current scope, filters and ordering are checked on every continuation; cursor pages may omit total.
+          schema: {type: string, maxLength: 4096}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
-        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
       responses:
         '200':
           description: Page of control-plane silences
@@ -22818,7 +23050,12 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/InhibitionEnvelope'}
         '400':
-          description: Invalid matchers or missing source/target.
+          description: Invalid JSON body, unsupported request property, or empty matcher set.
+        '422':
+          description: Typed validation error with safe field names and rule categories.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InhibitionValidationErrorEnvelope'}
   /api/v1/admin/alerting/inhibitions/{id}/:
     parameters:
       - name: id
@@ -22870,7 +23107,12 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/InhibitionEnvelope'}
         '400':
-          description: Invalid matchers or missing source/target.
+          description: Invalid JSON body, unsupported request property, or empty matcher set.
+        '422':
+          description: Typed validation error with safe field names and rule categories.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InhibitionValidationErrorEnvelope'}
         '404':
           description: Inhibition not found.
     delete:
@@ -26686,11 +26928,23 @@ paths:
         paginated envelope. Cluster Apps pages use `?cluster_id=` to obtain the
         caller-visible union of global sources plus authorized private project
         sources. `?project_id=` remains available to project administration.
+        Signed global-only cursor requests inspect a bounded authorized candidate
+        window before applying substring/tag filters. A page may contain zero
+        matches with has_more=true and an advancing next_cursor. Follow that
+        token until has_more=false; short or empty data does not prove exhaustion.
+        Limit is the maximum returned matches, not a promise to fill every page.
+        Offset/count and project/cluster repository-union semantics are unchanged.
       tags:
         - catalog
       security:
         - bearerJWT: []
       parameters:
+        - name: cursor
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: Empty value selects the signed initial page; nonempty value is the exact opaque next_cursor. Cannot be combined with offset. Actor, current scope, filters and ordering are checked on every continuation; cursor pages may omit total.
+          schema: {type: string, maxLength: 4096}
         - name: search
           in: query
           description: Case-insensitive literal substring of chart name, display name or description; filters authorized repositories before pagination and count.
@@ -26704,6 +26958,7 @@ paths:
           in: query
           schema:
             type: integer
+            maximum: 10000
             default: 0
         - name: tag
           in: query
@@ -26730,14 +26985,14 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PageEnvelope'
+                  - $ref: '#/components/schemas/SignedCursorPageEnvelope'
                   - properties:
                       data:
                         type: array
                         items:
                           $ref: '#/components/schemas/HelmChart'
         '400':
-          description: Invalid project_id.
+          description: Invalid scope/cursor, mixed cursor and offset, or legacy offset outside 0..10000.
           content:
             application/json:
               schema:
@@ -27124,7 +27379,10 @@ paths:
       description: |
         Summary document for the catalog operations reconciler: operation
         counts by status, recent operations/failures, chart and installed
-        counts. Counts are RBAC-filtered to the caller's visible clusters.
+        counts. Operation counts describe at most 1000 recent operations selected
+        after authorization. They are not fleet or queue totals. operationSummary
+        states the scope, independent count and snapshot incompleteness explicitly.
+        Installed counts are unavailable for restricted callers.
       tags:
         - catalog
       security:
@@ -27136,32 +27394,38 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  reconciler:
-                    type: object
-                  catalog:
+                  data:
                     type: object
                     properties:
-                      chartCount:
+                      operationSummary:
+                        $ref: '#/components/schemas/CatalogControllerOperationWindow'
+                      reconciler:
+                        type: object
+                      catalog:
+                        type: object
+                        properties:
+                          chartCount:
+                            type: integer
+                            format: int64
+                          installedCount:
+                            type: integer
+                            format: int64
+                            nullable: true
+                      operations:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                      recentFailureCount:
                         type: integer
-                        format: int64
-                      installedCount:
-                        type: integer
-                        format: int64
+                      recentOperations:
+                        type: array
+                        items:
+                          type: object
+                      latestFailure:
+                        type: object
                         nullable: true
-                  operations:
-                    type: object
-                    additionalProperties:
-                      type: integer
-                  recentFailureCount:
-                    type: integer
-                  recentOperations:
-                    type: array
-                    items:
-                      type: object
-                  latestFailure:
-                    type: object
-                    nullable: true
         '500':
           description: Failed to load catalog operations.
           content:
@@ -32455,7 +32719,7 @@ paths:
       operationId: postAuthRefresh
       summary: Rotate the HttpOnly browser session
       description: |
-        PUBLIC. Requires the HttpOnly `astronomer_refresh` cookie plus the
+        PUBLIC. Requires the HTTPS HttpOnly `__Host-astronomer_refresh` cookie (unprefixed for HTTP-only local development) plus the
         double-submit CSRF header/cookie. JSON bearer refresh tokens are not
         accepted. Rotated access and refresh values are returned only through
         Set-Cookie headers.
@@ -40578,14 +40842,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40629,14 +40889,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40679,15 +40935,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40730,15 +40979,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40781,15 +41023,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40832,15 +41067,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40883,15 +41111,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41016,14 +41237,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41067,14 +41284,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41117,15 +41330,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41168,15 +41374,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41219,15 +41418,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41270,15 +41462,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41321,15 +41506,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:

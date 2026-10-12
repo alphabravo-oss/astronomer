@@ -35,8 +35,12 @@ type CreateTemplateRequest struct {
 
 // ListTemplates handles GET /api/v1/security/templates/.
 func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	templates, err := h.queries.ListPodSecurityTemplates(r.Context(), sqlc.ListPodSecurityTemplatesParams{
 		Limit:  limit,
@@ -188,7 +192,7 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var req CreateTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

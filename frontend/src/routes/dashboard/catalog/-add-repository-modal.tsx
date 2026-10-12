@@ -10,6 +10,7 @@ import { ChevronDown } from "lucide-react";
 
 export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
   const createRepo = useCreateHelmRepository();
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       name: "",
@@ -29,9 +30,12 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
           username: value.username || undefined,
           password: value.password || undefined,
         });
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -48,7 +52,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         intent="primary"
         loading={createRepo.isPending}
         disabled={!repoName || !repoUrl}
-        onClick={() => void form.handleSubmit()}
+        type="submit"
       >
         Add Catalog Source
       </ActionButton>
@@ -57,12 +61,19 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title="Add Catalog Source"
       onClose={onClose}
       size="md"
       footer={footer}
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <p className="text-xs text-table-secondary">
         Add a Helm or OCI source. Its charts appear under a separately named,
         consistently colored Custom source in the catalog browser.
@@ -77,6 +88,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         <form.Field name="name">
           {(field) => (
             <Input
+              name={field.name}
               id="field-1b397e60-67"
               type="text"
               value={field.state.value}
@@ -98,6 +110,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         <form.Field name="url">
           {(field) => (
             <Input
+              name={field.name}
               id="field-1b397e60-82"
               type="text"
               value={field.state.value}
@@ -151,6 +164,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         <form.Field name="description">
           {(field) => (
             <Input
+              name={field.name}
               id="field-1b397e60-118"
               type="text"
               value={field.state.value}
@@ -189,6 +203,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             <form.Field name="username">
               {(field) => (
                 <Input
+                  name={field.name}
                   id="field-1b397e60-143"
                   type="text"
                   value={field.state.value}
@@ -209,6 +224,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
             <form.Field name="password">
               {(field) => (
                 <Input
+                  name={field.name}
                   id="field-1b397e60-157"
                   type="password"
                   value={field.state.value}

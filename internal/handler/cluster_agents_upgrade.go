@@ -171,6 +171,10 @@ func createAgentLifecycleOperation(ctx context.Context, q ClusterAgentQuerier, p
 }
 
 func (h *ClusterAgentHandler) Operations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
@@ -183,8 +187,8 @@ func (h *ClusterAgentHandler) Operations(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	if limit <= 0 {
 		limit = 20
 	}

@@ -1,3 +1,4 @@
+import { invalidateSessionRefresh } from "./authentication-refresh";
 /**
  * Account-security API client — TOTP enrollment / verification, password
  * reset, logout-with-redirect, and admin user actions (unlock, force-logout,
@@ -272,6 +273,7 @@ export interface LogoutResult {
 export async function logoutCurrentSession(
   options?: AccountSecurityRequestOptions,
 ): Promise<LogoutResult> {
+  invalidateSessionRefresh();
   const res = await postAuthLogout({ signal: options?.signal });
   // Backend wraps in APIResponse for SSO sessions but may return the bare
   // body for local users; tolerate both.

@@ -1,4 +1,3 @@
-
 // §HostMounts — DeclarativeWidget: the Tier-1 entry point ExtensionSlot mounts.
 //
 // switch(kind){ table->ExtTable, chart->ExtChart, stat->ExtStat, form->ExtForm }.
@@ -73,8 +72,13 @@ function FetchingWidget({
       spec.dataSource,
       context as Record<string, unknown> | undefined,
     ),
-    queryFn: () =>
-      fetchExtensionData(extensionName, spec.dataSource, { context }),
+    queryFn: ({ signal }) =>
+      fetchExtensionData(
+        extensionName,
+        spec.dataSource,
+        { context },
+        { signal },
+      ),
     staleTime: 30_000,
   });
 

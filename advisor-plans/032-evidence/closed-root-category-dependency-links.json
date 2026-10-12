@@ -1,0 +1,9 @@
+{
+  "observedAt": "2026-10-10T00:53:09.766542+00:00",
+  "scope": "Three ignored dependency symlinks from closed root review worktrees only. No package bytes/source/evidence removed. Category target retained until executor releases remaining three leases.",
+  "paths": [
+    "/root/astronomer-all/astronomer-032-ca-review/frontend/node_modules",
+    "/root/astronomer-all/astronomer-032-support-review/frontend/node_modules",
+    "/root/astronomer-all/astronomer-032-integrated-review/frontend/node_modules"
+  ]
+}

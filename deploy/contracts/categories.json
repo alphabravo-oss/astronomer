@@ -1,0 +1,861 @@
+{
+  "authority": "docs/openapi.yaml#/components/schemas",
+  "categories": [
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "state",
+          "schema": "DeliveryRollout"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "delivery_rollout_state_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "domain": {
+        "all": "AllRolloutStates",
+        "path": "internal/delivery/model/enums.gen.go",
+        "prefix": "Rollout",
+        "symbols": {
+          "aborted": "RolloutAborted",
+          "awaiting_approval": "RolloutAwaitingApproval",
+          "draft": "RolloutDraft",
+          "failed": "RolloutFailed",
+          "paused": "RolloutPaused",
+          "progressing": "RolloutProgressing",
+          "queued": "RolloutQueued",
+          "rejected": "RolloutRejected",
+          "resolving": "RolloutResolving",
+          "rollback_failed": "RolloutRollbackFailed",
+          "rolled_back": "RolloutRolledBack",
+          "rolling_back": "RolloutRollingBack",
+          "succeeded": "RolloutSucceeded"
+        },
+        "type": "RolloutState"
+      },
+      "owner": "delivery maintainers",
+      "schema": "DeliveryRolloutState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "state",
+          "schema": "DeliveryRolloutCluster"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "delivery_rollout_cluster_state_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "domain": {
+        "all": "AllRolloutClusterStates",
+        "path": "internal/delivery/model/enums.gen.go",
+        "prefix": "RolloutCluster",
+        "symbols": {
+          "aborted": "RolloutClusterAborted",
+          "acknowledged": "RolloutClusterAcknowledged",
+          "blocked": "RolloutClusterBlocked",
+          "failed": "RolloutClusterFailed",
+          "pending": "RolloutClusterPending",
+          "ready": "RolloutClusterReady",
+          "ready_previous": "RolloutClusterReadyPrevious",
+          "reconciling": "RolloutClusterReconciling",
+          "released": "RolloutClusterReleased",
+          "rollback_failed": "RolloutClusterRollbackFailed",
+          "rolling_back": "RolloutClusterRollingBack",
+          "skipped": "RolloutClusterSkipped",
+          "timed_out": "RolloutClusterTimedOut"
+        },
+        "type": "RolloutClusterState"
+      },
+      "owner": "delivery maintainers",
+      "schema": "DeliveryRolloutClusterState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "phase",
+          "schema": "ClusterDeployment"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "cluster_deployment_phase_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "domain": {
+        "all": "AllDeploymentPhases",
+        "path": "internal/delivery/model/enums.gen.go",
+        "prefix": "Deployment",
+        "symbols": {
+          "applying": "DeploymentApplying",
+          "blocked": "DeploymentBlocked",
+          "degraded": "DeploymentDegraded",
+          "deleting": "DeploymentDeleting",
+          "failed": "DeploymentFailed",
+          "pending": "DeploymentPending",
+          "ready": "DeploymentReady",
+          "removed": "DeploymentRemoved",
+          "suspended": "DeploymentSuspended",
+          "unknown": "DeploymentUnknown"
+        },
+        "type": "DeploymentPhase"
+      },
+      "owner": "delivery maintainers",
+      "schema": "DeliveryDeploymentPhase",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "type",
+          "schema": "DeliverySource"
+        },
+        {
+          "goSDK": "inline",
+          "property": "type",
+          "schema": "DeliverySourceWrite"
+        },
+        {
+          "goSDK": "inline",
+          "property": "type",
+          "schema": "DeliveryResolvedSource"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "delivery_source_type_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "domainCheck": {
+        "path": "internal/delivery/model/types.go",
+        "type": "SourceType"
+      },
+      "owner": "delivery maintainers",
+      "schema": "DeliverySourceKind",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "kind",
+          "schema": "DeliveryRendererSpec"
+        },
+        {
+          "goSDK": "inline",
+          "property": "renderer",
+          "schema": "DeliveryBundleVersion"
+        },
+        {
+          "goSDK": "inline",
+          "property": "renderer",
+          "schema": "DeliveryConfigurationTemplate"
+        },
+        {
+          "goSDK": "inline",
+          "property": "renderer",
+          "schema": "DeliveryConfigurationTemplateWrite"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/delivery/model/types.go",
+        "type": "RendererKind"
+      },
+      "owner": "delivery maintainers",
+      "schema": "DeliveryRendererKind",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "decision",
+          "schema": "DeliveryRolloutApproval"
+        },
+        {
+          "goSDK": "inline",
+          "property": "decision",
+          "schema": "DeliveryRolloutApprovalRecord"
+        }
+      ],
+      "database": [],
+      "owner": "delivery maintainers",
+      "schema": "DeliveryApprovalDecision",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "auth_mode",
+          "schema": "DeliverySource"
+        },
+        {
+          "goSDK": "inline",
+          "property": "auth_mode",
+          "schema": "DeliverySourceWrite"
+        },
+        {
+          "goSDK": "inline",
+          "property": "auth_mode",
+          "schema": "DeliveryResolvedSource"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/delivery/model/types.go",
+        "type": "AuthMode"
+      },
+      "owner": "delivery maintainers",
+      "schema": "DeliverySourceAuthModeValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "DeliverySource"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "delivery_source_status_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "delivery maintainers",
+      "schema": "DeliverySourceStatusValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "DeliveryBundleVersion"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "component_bundle_state_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "delivery maintainers",
+      "schema": "DeliveryBundleState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "verification_status",
+          "schema": "DeliveryBundleVersion"
+        }
+      ],
+      "database": [],
+      "owner": "delivery maintainers",
+      "schema": "DeliveryVerificationStatus",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "type",
+          "schema": "DeliveryRolloutStrategy"
+        },
+        {
+          "goSDK": "inline",
+          "property": "type",
+          "schema": "DeliveryRolloutStrategyInput"
+        }
+      ],
+      "database": [],
+      "owner": "delivery maintainers",
+      "schema": "DeliveryStrategyKind",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "on_failure",
+          "schema": "DeliveryRolloutStrategy"
+        },
+        {
+          "goSDK": "inline",
+          "property": "on_failure",
+          "schema": "DeliveryRolloutStrategyInput"
+        }
+      ],
+      "database": [],
+      "owner": "delivery maintainers",
+      "schema": "DeliveryFailureAction",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "state",
+          "schema": "DeliverySystemRelease"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "delivery_system_release_state_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "delivery maintainers",
+      "schema": "DeliverySystemReleaseState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "state",
+          "schema": "DeliverySystemRollout"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "delivery_system_rollout_state_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "delivery maintainers",
+      "schema": "DeliverySystemRolloutState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [
+        {
+          "constraint": "delivery_system_assignment_phase_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "delivery maintainers",
+      "schema": "DeliverySystemAssignmentPhase",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [
+        {
+          "constraint": "agent_ops_credential_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "API and operator-console maintainers",
+      "schema": "AgentCredentialState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [
+        {
+          "constraint": "agent_ops_registration_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "API and operator-console maintainers",
+      "schema": "AgentRegistrationState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "registration_phase",
+          "schema": "Cluster"
+        },
+        {
+          "goSDK": "inline",
+          "property": "phase",
+          "schema": "RegistrationStatus"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "registration_phase_valid",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "API and operator-console maintainers",
+      "schema": "ClusterRegistrationPhaseValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "AdminQueueOperation"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "AuditExportOperation"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "DexOperation"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "ResourceOperation"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "SupportBundleOperation"
+        }
+      ],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "DurableOperationStatus",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "AgentLifecycleOperation"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "agent_lifecycle_operations_status_check",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "API and operator-console maintainers",
+      "schema": "AgentLifecycleOperationState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "NodeOperation"
+        }
+      ],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "NodeOperationState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "LoggingOperation"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "MonitoringOperation"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "ToolOperation"
+        }
+      ],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "PollingOperationStatus",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "Cluster"
+        }
+      ],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "ClusterConnectionStatus",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "CISScan"
+        }
+      ],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "SecurityScannerState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "sync_status",
+          "schema": "ClusterSecurityPolicy"
+        }
+      ],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "ClusterSecurityPolicySyncStatusValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieSessionMetadata"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "charlie_session_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieSessionMetadataStateValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieFindingSummary"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "charlie_finding_status",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        },
+        {
+          "constraint": "charlie_finding_decision_status",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieFindingSummaryStateValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "workflow_state",
+          "schema": "CharlieFindingSummary"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "charlie_finding_workflow_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        },
+        {
+          "constraint": "charlie_finding_decision_workflow",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieFindingSummaryWorkflowStateValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieAdminTriggerEvent"
+        },
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "CharlieTriggerRetryReceipt"
+        }
+      ],
+      "database": [
+        {
+          "constraint": "charlie_trigger_event_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieAdminTriggerEventStateValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieApprovalSummary"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieApprovalSummaryStateValue",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [
+        {
+          "constraint": "charlie_approval_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieApprovalState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [
+        {
+          "constraint": "charlie_receipt_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieReceiptState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [
+        {
+          "constraint": "charlie_connection_onboarding_state",
+          "path": "internal/db/migrations/001_initial.up.sql"
+        }
+      ],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieConnectionOnboardingState",
+      "unknownBehavior": "Browser read: explicit neutral unsupported value; no successful or actionable interpretation. Malformed shapes reject. Canonical writes remain strict; persisted CHECK values are preserved where bound.",
+      "wireCompatibility": "Existing inline Go SDK types retained by generator overlay; previously string fields use aliases to string."
+    },
+    {
+      "bindings": [],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "BackupKnownStatus",
+      "unknownBehavior": "Historical wire status remains open; checked browser adapter emits neutral unknown for unrecognized or missing values. Only recognized completed status enables restore.",
+      "wireCompatibility": "Existing arbitrary-string v1 wire remains open; generated known-state classifiers distinguish unknown."
+    },
+    {
+      "bindings": [],
+      "database": [],
+      "owner": "API and operator-console maintainers",
+      "schema": "RestoreKnownStatus",
+      "unknownBehavior": "Historical wire status remains open; checked browser adapter emits neutral unknown for unrecognized or missing values. Only recognized completed status enables restore.",
+      "wireCompatibility": "Existing arbitrary-string v1 wire remains open; generated known-state classifiers distinguish unknown."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieAdminAgentReplica"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieAdminAgentReplicaStateValue",
+      "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
+      "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "status",
+          "schema": "CharlieAdminAlertDeliveryProof"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieAdminAlertDeliveryProofStatusValue",
+      "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
+      "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieAdminDiagnosticCheck"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieAdminDiagnosticCheckStateValue",
+      "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
+      "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieKubernetesVisibility"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieKubernetesVisibilityStateValue",
+      "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
+      "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieOnboardingStatus"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieOnboardingStatusStateValue",
+      "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
+      "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "inline",
+          "property": "state",
+          "schema": "CharlieThreadMetadata"
+        }
+      ],
+      "database": [],
+      "owner": "Charlie maintainers",
+      "schema": "CharlieThreadMetadataStateValue",
+      "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
+      "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "scan_state",
+          "schema": "ImageDatabaseStatusV1"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/scanner/database_freshness.go",
+        "type": "WorkloadScanState"
+      },
+      "owner": "delivery/owned-database-scan",
+      "schema": "ImageDatabaseScanState",
+      "unknownBehavior": "Browser read uses explicit neutral unsupported; unknown category never qualifies current clean posture or a successful scan. Malformed shapes reject; known positive findings remain visible.",
+      "wireCompatibility": "Additive status endpoint only. Existing report structs and released SDK type layouts unchanged; new categorical aliases retain string storage/wire shape."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "main_state",
+          "schema": "ImageDatabaseStatusV1"
+        },
+        {
+          "goSDK": "string",
+          "property": "java_state",
+          "schema": "ImageDatabaseStatusV1"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/scanner/database_freshness.go",
+        "type": "DatabasePostureState"
+      },
+      "owner": "delivery/owned-database-scan",
+      "schema": "ImageDatabasePostureState",
+      "unknownBehavior": "Browser read uses explicit neutral unsupported; unknown category never qualifies current clean posture or a successful scan. Malformed shapes reject; known positive findings remain visible.",
+      "wireCompatibility": "Additive status endpoint only. Existing report structs and released SDK type layouts unchanged; new categorical aliases retain string storage/wire shape."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "java_applicability",
+          "schema": "ImageDatabaseStatusV1"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/scanner/database_freshness.go",
+        "type": "JavaDatabaseApplicability"
+      },
+      "owner": "delivery/owned-database-scan",
+      "schema": "ImageDatabaseJavaApplicability",
+      "unknownBehavior": "Browser read uses explicit neutral unsupported; unknown category never qualifies current clean posture or a successful scan. Malformed shapes reject; known positive findings remain visible.",
+      "wireCompatibility": "Additive status endpoint only. Existing report structs and released SDK type layouts unchanged; new categorical aliases retain string storage/wire shape."
+    }
+  ],
+  "schemaVersion": 1
+}

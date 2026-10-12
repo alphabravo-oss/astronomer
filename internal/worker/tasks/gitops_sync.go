@@ -29,7 +29,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,7 +36,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -202,8 +200,7 @@ type GitOpsDeps struct {
 	Enqueuer   GitOpsEnqueuer
 	TaskOutbox TaskOutboxWriter
 	// Decryptor unwraps the source's auth_encrypted blob before it's
-	// handed to go-git. nil in dev / when no Fernet key is configured, in
-	// which case the stored value is used verbatim (plaintext fallback).
+	// handed to go-git. Without it, only legacy plaintext is accepted.
 	Decryptor GitOpsDecryptor
 	Log       *slog.Logger
 	CloneRoot string // overrides GitOpsCloneRoot when non-empty
@@ -284,6 +281,11 @@ func (runtime GitOpsRuntime) SyncSource(ctx context.Context, sourceID uuid.UUID)
 	if runtime.Deps.Queries == nil {
 		return fmt.Errorf("gitops runtime not configured")
 	}
+	releaseCheckout, err := acquireGitOpsCheckout(ctx, runtime.cloneDir(sourceID))
+	if err != nil {
+		return err
+	}
+	defer releaseCheckout()
 	src, err := runtime.Deps.Queries.GetGitOpsSource(ctx, sourceID)
 	if err != nil {
 		return fmt.Errorf("load source: %w", err)
@@ -567,8 +569,8 @@ type ParsedDoc struct {
 // file. Returns the HEAD sha + parsed docs.
 func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegistrationSource) (string, []ParsedDoc, error) {
 	dir := runtime.cloneDir(src.ID)
-	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
-		return "", nil, fmt.Errorf("mkdir clone parent: %w", err)
+	if err := protectCloneParent(filepath.Dir(dir)); err != nil {
+		return "", nil, err
 	}
 	repo, err := runtime.openOrClone(ctx, src, dir)
 	if err != nil {
@@ -583,50 +585,8 @@ func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegi
 	}
 	headSHA := head.Hash().String()
 
-	walkRoot, err := gitops.ResolvePathPrefix(dir, src.PathPrefix)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", nil, fmt.Errorf("walk root unreadable (check path_prefix %q): %w", src.PathPrefix, err)
-		}
-		return "", nil, fmt.Errorf("invalid path_prefix %q: %w", src.PathPrefix, err)
-	}
-	// A non-existent / unreadable / non-directory walkRoot must be a hard
-	// sync error — NOT silently interpreted as "all docs deleted" (H10).
-	// A typo'd path_prefix or renamed dir would otherwise yield zero docs
-	// and mass-decommission every cluster owned by this source.
-	if fi, statErr := os.Stat(walkRoot); statErr != nil {
-		return "", nil, fmt.Errorf("walk root %q unreadable (check path_prefix %q): %w", walkRoot, src.PathPrefix, statErr)
-	} else if !fi.IsDir() {
-		return "", nil, fmt.Errorf("walk root %q is not a directory (check path_prefix %q)", walkRoot, src.PathPrefix)
-	}
 	var docs []ParsedDoc
-	walkErr := filepath.WalkDir(walkRoot, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("walk %s: %w", p, err)
-		}
-		// Never follow repository-controlled symlinks. A YAML symlink can read
-		// arbitrary worker-pod files even when path_prefix itself is contained.
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		if d.IsDir() {
-			// Skip .git always
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !isYAMLFile(p) {
-			return nil
-		}
-		rel, relErr := filepath.Rel(dir, p)
-		if relErr != nil {
-			rel = p
-		}
-		content, readErr := os.ReadFile(p)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", rel, readErr)
-		}
+	walkErr := gitops.WalkCheckout(ctx, dir, src.PathPrefix, func(rel string, content []byte) error {
 		doc, parseErr := gitops.Parse(content, rel)
 		if parseErr != nil {
 			if gitops.IsSkippable(parseErr) {
@@ -643,11 +603,6 @@ func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegi
 		return "", nil, walkErr
 	}
 	return headSHA, docs, nil
-}
-
-func isYAMLFile(p string) bool {
-	ext := strings.ToLower(filepath.Ext(p))
-	return ext == ".yaml" || ext == ".yml"
 }
 
 func (runtime GitOpsRuntime) cloneDir(sourceID uuid.UUID) string {
@@ -799,27 +754,6 @@ func (runtime GitOpsRuntime) buildGitAuth(src sqlc.GitopsRegistrationSource) (tr
 	}
 }
 
-// decryptGitAuth retains the legacy-plaintext compatibility window while
-// failing loudly for a token-shaped Fernet value that no configured key can
-// decrypt. Returning ciphertext as an HTTPS password hides key loss as an
-// upstream Git authentication failure and defeats actionable operations.
-func (runtime GitOpsRuntime) decryptGitAuth(blob string) (string, error) {
-	if runtime.Deps.Decryptor == nil || blob == "" {
-		return blob, nil
-	}
-	if plaintext, err := runtime.Deps.Decryptor.Decrypt(blob); err == nil {
-		return plaintext, nil
-	} else if looksLikeFernetToken(blob) {
-		return "", err
-	}
-	return blob, nil
-}
-
-func looksLikeFernetToken(value string) bool {
-	decoded, err := base64.URLEncoding.DecodeString(value)
-	return err == nil && len(decoded) >= 57 && decoded[0] == 0x80
-}
-
 func (runtime GitOpsRuntime) updateSourceGauges(ctx context.Context, src sqlc.GitopsRegistrationSource) {
 	total, err := runtime.Deps.Queries.CountGitOpsRegisteredClustersBySource(ctx, src.ID)
 	if err == nil {
@@ -874,6 +808,11 @@ func (runtime GitOpsRuntime) PreviewSource(ctx context.Context, sourceID uuid.UU
 	if runtime.Deps.Queries == nil {
 		return PreviewResult{}, fmt.Errorf("gitops runtime not configured")
 	}
+	releaseCheckout, err := acquireGitOpsCheckout(ctx, runtime.cloneDir(sourceID))
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	defer releaseCheckout()
 	src, err := runtime.Deps.Queries.GetGitOpsSource(ctx, sourceID)
 	if err != nil {
 		return PreviewResult{}, fmt.Errorf("load source: %w", err)

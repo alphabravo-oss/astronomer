@@ -1,0 +1,40 @@
+{
+  "source": "4cf6d97cbe16e1ba8460f98cfc05dcc644678721",
+  "scope": "handler source frozen; unrelated API/SDK drafts pending; not whole-tree qualification",
+  "schema": 75,
+  "steps": [
+    {
+      "major": 17,
+      "argv": [
+        "go",
+        "test",
+        "-p",
+        "1",
+        "./internal/handler",
+        "-run",
+        "^Test(Catalog.*Cursor.*|CatalogLegacyRequestPreservesReleasedCursorBoundAndCount|CursorRequestEmptyInitialAndInvalidContinuation|ControlPlaneCursorPostgres.*)$",
+        "-count=1",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log_sha256": "edd3c71eebc0ee87e9465495446672f6c9fb7fc7b6a4e955ff8bc61f273c3e93"
+    },
+    {
+      "major": 18,
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "-p",
+        "1",
+        "./internal/handler",
+        "-run",
+        "^Test(Catalog.*Cursor.*|CatalogLegacyRequestPreservesReleasedCursorBoundAndCount|CursorRequestEmptyInitialAndInvalidContinuation|ControlPlaneCursorPostgres.*)$",
+        "-count=1",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log_sha256": "75df63894b4af1cb2f94e451475f50502f61f50954817031bf7d5e61c8f5c198"
+    }
+  ]
+}

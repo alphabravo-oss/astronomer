@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
+import { usesGeneratedSchemaReference } from './lib/generated-schema-binding.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const args = new Set(process.argv.slice(2));
@@ -293,7 +293,7 @@ function generatedSchemaShadowTypes(files) {
     )) {
       const schemas = byWordKey.get(identifierWordKey(match[1]));
       if (!schemas) continue;
-      if (/\bOpenAPIComponents\b/.test(declarationText(source, match.index))) continue;
+      if (usesGeneratedSchemaReference(declarationText(source, match.index), read(file))) continue;
       const key = `${r}:${match[1]}`;
       live.add(key);
       if (SHADOWED_GENERATED_SCHEMAS.has(key)) continue;

@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W03",
+  "status": "SCOPED_REVIEW_ACCEPTED",
+  "packageStatus": "IN_PROGRESS",
+  "sourceCommit": "30cc76bc529182a75ad7df7a89396dba5d9e28f2",
+  "integratedCommit": "f89c33ea0b8b1d1cba0feb55580e7fb58605cdb6",
+  "observedAt": "2026-10-09T23:42:54.044140+00:00",
+  "fullSourceAndTestsReviewed": true,
+  "rootIndependentChecks": [
+    {
+      "argv": [
+        "bash",
+        "scripts/check-build-capacity.sh",
+        "--json"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/0.log"
+    },
+    {
+      "argv": [
+        "go",
+        "build",
+        "-o",
+        "/tmp/plan032-root-30cc76bc-gates/distribution",
+        "./deploy/bundles/cmd/distribution"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/1.log"
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./internal/delivery/provider",
+        "./internal/delivery/builtin",
+        "./internal/delivery/resolver",
+        "./internal/delivery/distribution",
+        "./internal/server",
+        "./internal/agent/delivery",
+        "./internal/releasecontract",
+        "./deploy/bundles",
+        "./deploy/bundles/cmd/distribution",
+        "-count=1"
+      ],
+      "exitCode": 1,
+      "log": "/tmp/plan032-root-30cc76bc-gates/2.log"
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./internal/delivery/provider",
+        "./internal/delivery/builtin",
+        "./internal/delivery/resolver",
+        "./internal/delivery/distribution",
+        "./internal/server",
+        "./internal/agent/delivery",
+        "./internal/releasecontract",
+        "./deploy/bundles",
+        "./deploy/bundles/cmd/distribution",
+        "-count=1"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/3.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/tests/mirror_release_test.py"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/4.log"
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/tests/airgap_kit_test.py"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/5.log"
+    },
+    {
+      "argv": [
+        "make",
+        "release-contract-check"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/6.log"
+    },
+    {
+      "argv": [
+        "make",
+        "docs-check"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/7.log"
+    },
+    {
+      "argv": [
+        "make",
+        "verify-enterprise",
+        "VERIFY_SCOPE=helm"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-30cc76bc-gates/8.log"
+    }
+  ],
+  "retainedArtifacts": [
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/0.log",
+      "sha256": "a90082bc563fb4af1d39e5d27c6eac40889b207fd9571e5d134af0e9ad79df18",
+      "bytes": 204
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/1.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/2.log",
+      "sha256": "1bc8e3cc55b8ce963df57b4d40a1566cd4850c8dcd0a83a62693d6ec0709bb15",
+      "bytes": 1331
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/3.log",
+      "sha256": "139204f554916f4284a7f3a51f891e717d61f7cc0184544f6e0b9a2c5e9a2a27",
+      "bytes": 722
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/4.log",
+      "sha256": "5092a9cd13f7f03d0b04ea7f16d4c3292c17e1ad44abf1759ca2cbcc2da940bc",
+      "bytes": 104
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/5.log",
+      "sha256": "881b6b441f566a9cb7e0308651fe36411b3c9e80d8961ad10887aa68ceabc962",
+      "bytes": 275
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/6.log",
+      "sha256": "801ff39c9c9a3a225d3e91ed23daa200d500d0ea5ff84d2eedae31e90aafcbe3",
+      "bytes": 2082
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/7.log",
+      "sha256": "4b045e07de6857cd54b5d5c56ae5af96c725d772f36c63f2e8336acd96644635",
+      "bytes": 562
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/8.log",
+      "sha256": "1ed1b5ad1dccee056a813a1a2e5e18acc655610dfc498fed5ec883d698873a27",
+      "bytes": 1733
+    }
+  ],
+  "scopeAndLimits": "Canonical vendor signatures preserved; signed complete operator endorsement and zero registry writes on both invalid plans. QA fixtures only; real supplier payload/freshness, productionOIDC and disconnectedruntime remain open. Root2 wrong COSIGN_BIN path fails; corrected3 all9packages passes.",
+  "executorArtifactsIndependentlyHashVerified": [
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-nine-race.log",
+      "sha256": "26109c90189dd3804b47d59bc48bcd5fff27bf77bf9953456ceb8638b5b8bc08",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-frozen-producer-race.log",
+      "sha256": "d793ab755056bb3f7ea49d495b9d5d164bd66ac63efef885cdd1b82df40d6498",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-plan-go.log",
+      "sha256": "134d549157b7ada52e142014b7445dafdf159fecd38cb01068c8722789c31f75",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-python-final.log",
+      "sha256": "8b2745df495a39904adbe7bfaa343e52577a337092da7e57145e0531e71cce60",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-airgap.log",
+      "sha256": "377cde981345315e7661e4e9f44010211281baa38a14470a95b2424115fb1520",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-frozen-helm.log",
+      "sha256": "880521554baaa079e0f0894992fc845332622ff216945bffd39a626e1357c829",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-docs-final.log",
+      "sha256": "4b045e07de6857cd54b5d5c56ae5af96c725d772f36c63f2e8336acd96644635",
+      "sourceCommit": "d43c8cf7958717b1d361547bcdfc0e36c42c7052"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-review-race.log",
+      "sha256": "556071d521b2a5ec0c8a918760b89f2309fe80a5899b526a8f4809e3eb72d5e1",
+      "sourceCommit": "30cc76bc529182a75ad7df7a89396dba5d9e28f2"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-release-contract-final.log",
+      "sha256": "76e620a659d4e1f7dde13985a43cf74be217854b4551815077f143a535f32768",
+      "sourceCommit": "30cc76bc529182a75ad7df7a89396dba5d9e28f2"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-frozen-cli-build.log",
+      "sha256": "e6c874e16e1e3313a1ec5cff827e4dd6320293ee3ec203156ede7a6604e03285"
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w03-reviewed/executor-plan032-w03-mirror-review-cli-build.log",
+      "sha256": "a71259b3393c506cce3b8a454c6d6bde846e2a1da547f3bba247fca3d86789f2"
+    }
+  ],
+  "binaryRetention": "Originald43 c3a855 binary replaced by reviewf30fec binary; both buildmetadata logs retained/hashverified. Currentf30 binary matches reviewpacket. Root separately compiles source30cc and executes it."
+}

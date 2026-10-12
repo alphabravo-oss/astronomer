@@ -1,0 +1,40 @@
+=== RUN   TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration
+--- PASS: TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration (0.26s)
+=== RUN   TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger
+--- PASS: TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger (0.23s)
+=== RUN   TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites
+--- PASS: TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites (0.21s)
+=== RUN   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether
+=== RUN   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/commit
+=== RUN   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/late_failure_rolls_back
+--- PASS: TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether (0.46s)
+    --- PASS: TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/commit (0.24s)
+    --- PASS: TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether/late_failure_rolls_back (0.22s)
+=== RUN   TestCatalogRolloutIntentPreservesActorScopeAndRetryIdentity
+--- PASS: TestCatalogRolloutIntentPreservesActorScopeAndRetryIdentity (0.00s)
+=== RUN   TestCatalogRollbackIntentPreservesActorScopeAndRetryIdentity
+--- PASS: TestCatalogRollbackIntentPreservesActorScopeAndRetryIdentity (0.00s)
+=== RUN   TestCatalogOperationStatusReadsExactRolloutAndDeletion
+--- PASS: TestCatalogOperationStatusReadsExactRolloutAndDeletion (0.20s)
+=== RUN   TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership
+--- PASS: TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership (0.28s)
+=== RUN   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory
+=== RUN   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/commit_before_preview
+=== RUN   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/late_failure_rolls_back_before_preview
+--- PASS: TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory (0.49s)
+    --- PASS: TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/commit_before_preview (0.23s)
+    --- PASS: TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory/late_failure_rolls_back_before_preview (0.25s)
+=== RUN   TestProjectStatusPrefersDeletionLifecycle
+=== RUN   TestProjectStatusPrefersDeletionLifecycle/active_without_observation
+=== RUN   TestProjectStatusPrefersDeletionLifecycle/active_deployment
+=== RUN   TestProjectStatusPrefersDeletionLifecycle/deleting_overrides_stale_install
+=== RUN   TestProjectStatusPrefersDeletionLifecycle/deleted_overrides_stale_failure
+--- PASS: TestProjectStatusPrefersDeletionLifecycle (0.00s)
+    --- PASS: TestProjectStatusPrefersDeletionLifecycle/active_without_observation (0.00s)
+    --- PASS: TestProjectStatusPrefersDeletionLifecycle/active_deployment (0.00s)
+    --- PASS: TestProjectStatusPrefersDeletionLifecycle/deleting_overrides_stale_install (0.00s)
+    --- PASS: TestProjectStatusPrefersDeletionLifecycle/deleted_overrides_stale_failure (0.00s)
+=== RUN   TestOnlyUpgradeAdvancesInstallationRevision
+--- PASS: TestOnlyUpgradeAdvancesInstallationRevision (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp	3.158s

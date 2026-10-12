@@ -104,7 +104,7 @@ def main() -> int:
     if base != expected: die("management API identity does not match ASTRO_EXPECTED_BASE_URL")
     if not token or any(ch.isspace() for ch in token): die("ASTRO_AUTH_TOKEN is required and malformed")
     if timeout < 30 or timeout > 900: die("timeout must be between 30 and 900 seconds")
-    if not re.fullmatch(r"v1\.[0-9]+\.[0-9]+", target_version): die("CLOUD_ACCEPTANCE_TARGET_VERSION must be an exact v1 tag")
+    if not re.fullmatch(r"v[1-9][0-9]*\.[0-9]+\.[0-9]+", target_version): die("CLOUD_ACCEPTANCE_TARGET_VERSION must be an exact release tag")
     if not re.fullmatch(r"[a-f0-9]{40}", source_commit): die("CLOUD_ACCEPTANCE_SOURCE_COMMIT must be an exact commit")
     if not re.fullmatch(r"[1-9][0-9]*", source_run_id): die("CLOUD_ACCEPTANCE_SOURCE_RUN_ID must be an exact run ID")
     network = ipaddress.ip_network(cidr_text, strict=True)

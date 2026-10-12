@@ -2,11 +2,10 @@ package tasks
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 )
 
@@ -104,25 +102,6 @@ type cachedSIEMHTTPClient struct {
 	client *http.Client
 }
 
-// httpClientForForwarder returns a pooled *http.Client for the forwarder,
-// building it once and reusing it across drains. The HEC/NDJSON transports
-// previously allocated a fresh *http.Transport on every 2s tick (Close() is a
-// no-op, so nothing was ever reused) — thousands of redundant TLS handshakes an
-// hour under sustained load. Caching keyed by (tls_skip_verify, ca_cert_pem,
-// timeout) keeps a single keep-alive pool per forwarder while still rebuilding
-// when the operator changes TLS settings.
-func (runtime DispatchRuntime) httpClientForSIEMForwarder(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client {
-	key := fmt.Sprintf("%t|%d|%s", sub.TlsSkipVerify, int64(timeout), sub.CaCertPem)
-	runtime.siemState.httpClientMu.Lock()
-	defer runtime.siemState.httpClientMu.Unlock()
-	if c, ok := runtime.siemState.httpClients[sub.ID]; ok && c.key == key {
-		return c.client
-	}
-	client := buildHTTPClient(sub, timeout)
-	runtime.siemState.httpClients[sub.ID] = cachedSIEMHTTPClient{key: key, client: client}
-	return client
-}
-
 // authBlob is the decrypted shape stored in siem_forwarders.auth_encrypted.
 // The handler accepts free-form JSON on input so future auth styles
 // (mTLS cert, OAuth client_credentials, AWS sigv4) can be added without
@@ -175,6 +154,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		return
 	}
 	defer l.Unlock()
+	metric := siem.CaptureMetricLease(ctx, runtime.SIEM.Queries, sub.ID)
 
 	batchSize := int32(100)
 	if sub.BatchSize > 0 {
@@ -191,7 +171,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		ids := rowIDs(exhausted)
 		_ = runtime.SIEM.Queries.MarkSIEMTestOperationsFailedByQueueIDs(ctx, ids, "retries_exhausted")
 		_ = runtime.SIEM.Queries.DeleteSIEMQueueByIDs(ctx, ids)
-		siem.RecordDropped(sub.Name, "retries_exhausted", len(ids))
+		metric.Dropped(ctx, "retries_exhausted", len(ids))
 		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID:  sub.ID,
 			LastError:    fmt.Sprintf("dropped %d rows past retry cap (%d)", len(ids), SIEMRetryCap),
@@ -216,7 +196,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 			ForwarderID: sub.ID,
 			QueueDepth:  0,
 		})
-		siem.RecordQueueDepth(sub.Name, 0)
+		metric.QueueDepth(ctx, 0)
 		return
 	}
 
@@ -261,7 +241,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		}
 		bytes := siem.FormatForID(formatID, ev)
 		if len(bytes) == 0 {
-			siem.RecordDropped(sub.Name, "format_error", 1)
+			metric.Dropped(ctx, "format_error", 1)
 			continue
 		}
 		formatted = append(formatted, bytes)
@@ -291,8 +271,12 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		// record the error on the status row.
 		_ = runtime.SIEM.Queries.IncrementSIEMQueueAttempts(ctx, ids)
 		depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
-		siem.RecordDispatched(sub.Name, formatID, "failed", len(rows))
-		siem.RecordQueueDepth(sub.Name, int(depth))
+		if depth < 0 || depth > math.MaxInt32 {
+			runtimeLogger(ctx).WarnContext(ctx, "siem: queue depth exceeds database status range", "forwarder", sub.Name)
+			return
+		}
+		metric.Dispatched(ctx, formatID, "failed", len(rows))
+		metric.QueueDepth(ctx, int(depth))
 		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
 			LastError:   truncateDispatchLastError(sendErr.Error(), 1024),
@@ -320,8 +304,12 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		return
 	}
 	depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
-	siem.RecordDispatched(sub.Name, formatID, "delivered", len(rows))
-	siem.RecordQueueDepth(sub.Name, int(depth))
+	if depth < 0 || depth > math.MaxInt32 {
+		runtimeLogger(ctx).WarnContext(ctx, "siem: queue depth exceeds database status range", "forwarder", sub.Name)
+		return
+	}
+	metric.Dispatched(ctx, formatID, "delivered", len(rows))
+	metric.QueueDepth(ctx, int(depth))
 	_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 		ForwarderID:     sub.ID,
 		LastSentAt:      pgtype.Timestamptz{Time: now, Valid: true},
@@ -454,10 +442,16 @@ func (runtime DispatchRuntime) defaultSIEMTransportFactory(sub sqlc.SiemForwarde
 		}
 		return siem.NewSyslogTLS(sub.Endpoint, cfg, dialTimeout), nil
 	case siem.TransportSplunkHEC:
-		client := runtime.httpClientForSIEMForwarder(sub, dialTimeout)
+		client, err := runtime.httpClientForSIEMForwarder(sub, dialTimeout)
+		if err != nil {
+			return nil, err
+		}
 		return siem.NewSplunkHEC(sub.Endpoint, secret.Token, client), nil
 	case siem.TransportNDJSONHTTPS:
-		client := runtime.httpClientForSIEMForwarder(sub, dialTimeout)
+		client, err := runtime.httpClientForSIEMForwarder(sub, dialTimeout)
+		if err != nil {
+			return nil, err
+		}
 		hdr := http.Header{}
 		for k, v := range secret.Headers {
 			hdr.Set(k, v)
@@ -469,35 +463,6 @@ func (runtime DispatchRuntime) defaultSIEMTransportFactory(sub sqlc.SiemForwarde
 	default:
 		return nil, fmt.Errorf("%w: %q", siem.ErrUnsupportedTransport, sub.Transport)
 	}
-}
-
-// buildHTTPClient applies the per-forwarder TLS toggles to an *http.Client
-// that still enforces dial-time public-IP checks (SEC-03 SafeClient).
-// When tls_skip_verify is on, we log a warn at startup elsewhere; the
-// client itself just honors the operator's choice.
-func buildHTTPClient(sub sqlc.SiemForwarder, timeout time.Duration) *http.Client {
-	cfg, err := buildTLSConfig(sub)
-	if err != nil {
-		// Fall back to default TLS if the CA bundle is malformed; the
-		// dispatcher logs the error elsewhere via the status row.
-		cfg = &tls.Config{InsecureSkipVerify: sub.TlsSkipVerify} //nolint:gosec // operator-controlled toggle
-	}
-	return httpclient.SafeClientWithTLS(timeout, cfg)
-}
-
-// buildTLSConfig assembles the tls.Config from the forwarder's
-// tls_skip_verify + ca_cert_pem columns. When both are empty we return
-// nil (the std-lib TLS dialer falls back to the system roots).
-func buildTLSConfig(sub sqlc.SiemForwarder) (*tls.Config, error) {
-	cfg := &tls.Config{InsecureSkipVerify: sub.TlsSkipVerify} //nolint:gosec // operator-controlled toggle
-	if strings.TrimSpace(sub.CaCertPem) != "" {
-		pool := x509.NewCertPool()
-		if ok := pool.AppendCertsFromPEM([]byte(sub.CaCertPem)); !ok {
-			return nil, errors.New("ca_cert_pem could not be parsed")
-		}
-		cfg.RootCAs = pool
-	}
-	return cfg, nil
 }
 
 func rowIDs(rows []sqlc.SiemForwardQueue) []int64 {

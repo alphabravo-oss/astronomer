@@ -31,5 +31,15 @@ export default defineConfig({
       },
     },
     { name: "mobile", use: { ...devices["Pixel 7"] } },
+    { name: "firefox-desktop", use: { ...devices["Desktop Firefox"] } },
+    {
+      name: "firefox-responsive",
+      use: {
+        ...devices["Desktop Firefox"],
+        viewport: { width: 390, height: 844 },
+      },
+    },
+    { name: "webkit-desktop", use: { ...devices["Desktop Safari"] } },
+    { name: "webkit-mobile", use: { ...devices["iPhone 13"] } },
   ],
 });

@@ -50,7 +50,7 @@ function ClusterRegistriesPage() {
   const clusterQuery = useCluster(clusterId);
   const registriesQuery = useQuery({
     queryKey: queryKeys.clusterPages.registries(clusterId),
-    queryFn: () => listClusterRegistries(clusterId),
+    queryFn: ({ signal }) => listClusterRegistries(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: liveFallback(30000),
     refetchIntervalInBackground: false,

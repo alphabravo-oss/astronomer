@@ -99,6 +99,21 @@ spec:
                 secretKeyRef:
                   name: {{ include "astronomer.secretsSecretName" . }}
                   key: {{ .Values.secrets.encryptionKeyKey | quote }}
+            {{- if .Values.catalog.proxy.enabled }}
+            - name: ASTRONOMER_CATALOG_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.catalog.proxy.urlSecretRef.name | quote }}
+                  key: {{ .Values.catalog.proxy.urlSecretRef.key | quote }}
+            {{- end }}
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: ASTRONOMER_CATALOG_CA_FILE
+              value: /var/run/secrets/astronomer/catalog-ca/ca.pem
+            {{- end }}
+            {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+            - name: ASTRONOMER_CATALOG_TRUST_DIRECTORY
+              value: /etc/astronomer/catalog-trust
+            {{- end }}
             {{- if .Values.delivery.sourceResolution.proxy.enabled }}
             - name: DELIVERY_SOURCE_PROXY_URL
               valueFrom:
@@ -150,8 +165,18 @@ spec:
               value: /etc/astronomer/release/mirror-mapping.json
             {{- end }}
             {{- end }}
-          {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.release.manifest }}
+          {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.catalog.ca.existingSecret .Values.catalog.signature.trustKeys.existingSecret .Values.release.manifest }}
           volumeMounts:
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: catalog-ca
+              mountPath: /var/run/secrets/astronomer/catalog-ca
+              readOnly: true
+            {{- end }}
+            {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+            - name: catalog-trust
+              mountPath: /etc/astronomer/catalog-trust
+              readOnly: true
+            {{- end }}
             {{- if .Values.release.manifest }}
             - name: release-manifest
               mountPath: /etc/astronomer/release
@@ -191,8 +216,21 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
-      {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.release.manifest }}
+      {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.catalog.ca.existingSecret .Values.catalog.signature.trustKeys.existingSecret .Values.release.manifest }}
       volumes:
+        {{- if .Values.catalog.ca.existingSecret }}
+        - name: catalog-ca
+          secret:
+            secretName: {{ .Values.catalog.ca.existingSecret | quote }}
+            items:
+              - key: {{ .Values.catalog.ca.key | quote }}
+                path: ca.pem
+        {{- end }}
+        {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+        - name: catalog-trust
+          secret:
+            secretName: {{ .Values.catalog.signature.trustKeys.existingSecret | quote }}
+        {{- end }}
         {{- if .Values.release.manifest }}
         - name: release-manifest
           configMap:

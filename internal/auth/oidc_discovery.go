@@ -141,7 +141,7 @@ func (c *OIDCDiscoveryClient) FetchDiscovery(ctx context.Context, issuer string)
 		return nil, fmt.Errorf("oidc discovery: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oidc discovery: %s returned %d: %s", url, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("oidc discovery returned HTTP status %d", resp.StatusCode)
 	}
 
 	var doc OIDCDiscovery
@@ -212,7 +212,7 @@ func (c *OIDCDiscoveryClient) fetchJWKS(ctx context.Context, jwksURI string) (ma
 		return nil, fmt.Errorf("jwks: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("jwks: %s returned %d: %s", jwksURI, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("JWKS endpoint returned HTTP status %d", resp.StatusCode)
 	}
 
 	keys, err := parseJWKS(body)
@@ -324,11 +324,19 @@ func jwkToPublicKey(k jwk) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("ec y: %w", err)
 		}
-		return &ecdsa.PublicKey{
-			Curve: curve,
-			X:     new(big.Int).SetBytes(xBytes),
-			Y:     new(big.Int).SetBytes(yBytes),
-		}, nil
+		coordinateSize := (curve.Params().BitSize + 7) / 8
+		if len(xBytes) != coordinateSize || len(yBytes) != coordinateSize {
+			return nil, errors.New("ec coordinate length does not match curve")
+		}
+		point := make([]byte, 1, 1+2*coordinateSize)
+		point[0] = 4 // SEC 1 uncompressed point encoding used by JWK x/y.
+		point = append(point, xBytes...)
+		point = append(point, yBytes...)
+		key, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+		if err != nil {
+			return nil, fmt.Errorf("ec public key: %w", err)
+		}
+		return key, nil
 	default:
 		return nil, fmt.Errorf("unsupported kty %q", k.Kty)
 	}

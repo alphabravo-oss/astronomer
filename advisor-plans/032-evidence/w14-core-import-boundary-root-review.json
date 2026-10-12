@@ -1,0 +1,22 @@
+{
+  "utc": "2026-10-10T05:15:40Z",
+  "review": "APPROVE_SCOPED_SOURCE_BOUNDARY",
+  "source": "992d3b68ce3590b2dbf0b06995c03c9ad90a9290",
+  "integrated": "407b831d",
+  "scope": "Two named import-direction rules for the already qualified owned process and typed upgrade cores",
+  "full_diff_reviewed": true,
+  "prior_fourteen_rules_preserved": true,
+  "root_verification": {
+    "isolated": "dependency boundaries passed: 16 rules, 1548 files, 9857 imports",
+    "integrated": "dependency boundaries passed: 16 rules, 1544 files, 9843 imports"
+  },
+  "policy": {
+    "process": "No internal application domain or composition imports",
+    "upgrade": "Only owned process, release contract and JSON contract internal leaf dependencies"
+  },
+  "limits": [
+    "Source import-direction evidence only; no new runtime execution",
+    "Prior core qualification remains scoped to its frozen source",
+    "Production adapters, wrappers, Helm4 binding and actual upgrade recovery remain open"
+  ]
+}

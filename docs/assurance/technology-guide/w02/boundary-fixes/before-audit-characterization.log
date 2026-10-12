@@ -1,0 +1,8 @@
+{"Time":"2026-10-10T01:24:28.542087509Z","Action":"start","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware"}
+{"Time":"2026-10-10T01:24:28.571783281Z","Action":"run","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Test":"TestReadAuditLegacySeedReplaysSamplingDecisions"}
+{"Time":"2026-10-10T01:24:28.57190494Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Test":"TestReadAuditLegacySeedReplaysSamplingDecisions","Output":"=== RUN   TestReadAuditLegacySeedReplaysSamplingDecisions\n","OutputType":"frame"}
+{"Time":"2026-10-10T01:24:28.572009526Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Test":"TestReadAuditLegacySeedReplaysSamplingDecisions","Output":"--- PASS: TestReadAuditLegacySeedReplaysSamplingDecisions (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-10T01:24:28.572022641Z","Action":"pass","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Test":"TestReadAuditLegacySeedReplaysSamplingDecisions","Elapsed":0}
+{"Time":"2026-10-10T01:24:28.57204861Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-10T01:24:28.57505974Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Output":"ok  \tgithub.com/alphabravocompany/astronomer-go/internal/server/middleware\t0.032s\n"}
+{"Time":"2026-10-10T01:24:28.575107491Z","Action":"pass","Package":"github.com/alphabravocompany/astronomer-go/internal/server/middleware","Elapsed":0.033}

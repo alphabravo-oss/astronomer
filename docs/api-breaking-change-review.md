@@ -576,3 +576,407 @@ triples apply only to the published-tag transition; unrelated changes still fail
 
 On 2026-10-08 the release owner approved v1.2.1 as the replacement for the
 unpublished v1.2.0 candidate. The API migration guidance above still applies.
+
+Reviewed 2026-10-09 by the API/backend/frontend maintainers for W06 response
+vocabulary refinement. Review deadline: **2026-10-16**. These exact five field
+sets were unconstrained strings in the released v1.2.1 specification. Their
+values already exist in writer/domain and database CHECK sets; this change
+documents those values and introduces no writer transition. The two previously
+DB-allowed rollout-cluster terminal states now have explicit terminal readers.
+Public SDK fields preserve their released string-compatible types. The full
+v1.2.1 external client compile fixture and pointer/marshal tests pass.
+
+The complete per-field/value disposition, released specification digest,
+canonical source digest and original raw 76-warning report are retained in
+`docs/assurance/technology-guide/w06/response-compatibility-disposition.json`
+and `v1.2.1-openapi-breaking.md`. This technical contract review is not human
+release approval. The separate 22 inhibition request warnings and their
+intentional malformed-JSON hardening belong to W09; this review does not cover
+request validation changes or future enum values. These exact triples ensure
+CI continues to reject unrelated field, value, path and operation changes.
+
+- GET /api/v1/delivery/rollouts/ added the new `aborted` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `awaiting_approval` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `draft` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `paused` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `progressing` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `queued` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rejected` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `resolving` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rollback_failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rolled_back` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rolling_back` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `succeeded` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `aborted` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `awaiting_approval` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `draft` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `failed` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `paused` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `progressing` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `queued` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rejected` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `resolving` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rollback_failed` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rolled_back` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rolling_back` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `succeeded` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `aborted` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `acknowledged` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `blocked` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `pending` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `ready` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `ready_previous` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `reconciling` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `released` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `rollback_failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `rolling_back` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `skipped` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `timed_out` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `aborted` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `awaiting_approval` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `draft` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `draft` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `failed` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `paused` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `progressing` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `queued` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `released` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `retired` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `revoked` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `rollback_failed` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `rolled_back` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `rolling_back` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `succeeded` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+
+Reviewed 2026-10-09 for Plan032 W09/W06 inhibition validation, expiring
+2026-11-08. These 22 exact POST/PUT differences apply only to the paths below;
+unrelated operation, field, warning or future change remains outside this
+review. Re-review against the released baseline before expiry; remove obsolete
+entries when that baseline advances. The released v1.2.1 handlers already
+rejected missing/empty source and target arrays, empty names and blank matcher
+labels. Their required/minimum/pattern schema corrections record that behavior.
+Blank equality labels are intentional validation hardening: released handlers
+accepted them, while the new handler returns a safe field-specific 422 before
+mutation. The same bounded change rejects missing/null matcher values and
+explicit null regex flags formerly normalized by Go zero values. Empty string
+values and omitted regex=false remain accepted, as do supported optional null
+collections/enabled values and additive properties. These malformed-input
+changes are disclosed in the [released-handler receipt](assurance/technology-guide/w09/inhibition-contract-review.md);
+they are not represented as unchanged runtime behavior. No historical released
+specification is edited, and this review does not waive generated SDK layout
+compatibility checks.
+
+- POST /api/v1/admin/alerting/inhibitions/ the request property `source_matchers` became required
+- POST /api/v1/admin/alerting/inhibitions/ the request property `target_matchers` became required
+- POST /api/v1/admin/alerting/inhibitions/ the `source_matchers` request property's minItems was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `target_matchers` request property's minItems was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `equal_labels/items/` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `name` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `source_matchers/items/label` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `target_matchers/items/label` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `equal_labels/items/`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `source_matchers/items/label`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `target_matchers/items/label`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the request property `source_matchers` became required
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the request property `target_matchers` became required
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `source_matchers` request property's minItems was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `target_matchers` request property's minItems was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `equal_labels/items/` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `name` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `source_matchers/items/label` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `target_matchers/items/label` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `equal_labels/items/`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `source_matchers/items/label`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `target_matchers/items/label`
+
+Reviewed 2026-10-10 by the Plan032 W07 executor for release integration review; exact findings expire 2026-11-09. The three legacy offset ceilings reject expensive or repeating traversal with `offset_not_supported`; explicit `cursor=` selects the compatible signed continuation extension. Absent-cursor requests preserve released counted mode and the old cursor bound. The larger response bound applies only to three cursor-capable collections, and the chart envelope reference preserves its fields while selecting that bound. The [bounded compatibility review](assurance/technology-guide/w07/api-cursor-compatibility-review.md) retains the before-fix legacy failure and scoped actual database/SDK evidence. This review does not approve other collections or whole W07 completion.
+
+- GET /api/v1/catalog/charts/ for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/controllers/alerts for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/controllers/alerts the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`
+- GET /api/v1/controllers/silences for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/controllers/silences the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`
+- GET /api/v1/catalog/charts/ removed `#/components/schemas/PageEnvelope` from the response body `allOf` list for the response status `200`
+
+Reviewed 2026-10-11 for v2.0.0 browser-origin isolation. See [the exact compatibility review](assurance/technology-guide/tool-ui-isolation-review.md).
+
+- DELETE /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/json` for the response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/octet-stream` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/octet-stream` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- DELETE /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `204`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the media type `*/*` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the media type `*/*` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- DELETE /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/json` for the response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/octet-stream` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/octet-stream` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- DELETE /api/v1/clusters/{id}/observability/grafana removed the success response with the status `204`
+- GET /api/v1/clusters/{id}/observability/grafana removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{id}/observability/grafana removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- PATCH /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- POST /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- PUT /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- DELETE /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `204`
+- GET /api/v1/clusters/{id}/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{id}/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- PATCH /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- POST /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- PUT /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- DELETE /api/v1/observability/grafana removed the success response with the status `204`
+- GET /api/v1/observability/grafana removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/observability/grafana removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/observability/grafana removed the success response with the status `200`
+- PATCH /api/v1/observability/grafana removed the success response with the status `200`
+- POST /api/v1/observability/grafana removed the success response with the status `200`
+- PUT /api/v1/observability/grafana removed the success response with the status `200`
+- DELETE /api/v1/observability/grafana/* removed the success response with the status `204`
+- GET /api/v1/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/observability/grafana/* removed the success response with the status `200`
+- PATCH /api/v1/observability/grafana/* removed the success response with the status `200`
+- POST /api/v1/observability/grafana/* removed the success response with the status `200`
+- PUT /api/v1/observability/grafana/* removed the success response with the status `200`
+
+Reviewed 2026-10-12 for v2 Charlie envelope integration: the 40 exact response
+schemas add only a `data` envelope, producing these 218 top-level property moves.
+Payload schemas remain identical; existing server wire responses already use
+the envelope. See the source-bound [integration review](assurance/technology-guide/tool-ui-isolation-review.md)
+and [client migration](runbooks/upgrade-2.0.md).
+
+- GET /api/v1/admin/charlie/access/ removed the required property `automation_grants` from the response with the `200` status
+- GET /api/v1/admin/charlie/access/ removed the required property `effective_permissions` from the response with the `200` status
+- PUT /api/v1/admin/charlie/access/ removed the required property `automation_grants` from the response with the `200` status
+- PUT /api/v1/admin/charlie/access/ removed the required property `effective_permissions` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `auto_eligible` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `budget_window_seconds` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `capability` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `central_allowlisted` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `central_state` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `circuit_state` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `cooldown_seconds` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `effect` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `enabled` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `max_actions_per_incident` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `max_actions_per_window` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `preconditions` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `revision` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `risk` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `scope_summary` from the response with the `200` status
+- PUT /api/v1/admin/charlie/action-policies/{capability}/ removed the required property `verification` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-deliveries/ removed the required property `dedupe_valid` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-deliveries/ removed the required property `deliveries` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-deliveries/ removed the required property `delivery_count` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-deliveries/ removed the required property `finding_block_code` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-deliveries/ removed the required property `finding_id` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-deliveries/ removed the required property `finding_workflow_state` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `available_channels` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `channel_ids` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `channels` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `dedupe_window_seconds` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `enabled` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `escalation_after_seconds` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `in_app_enabled` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `minimum_severity` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_enabled` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_end` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_start` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_timezone` from the response with the `200` status
+- GET /api/v1/admin/charlie/alert-policy/ removed the required property `revision` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `available_channels` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `channel_ids` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `channels` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `dedupe_window_seconds` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `enabled` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `escalation_after_seconds` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `in_app_enabled` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `minimum_severity` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_enabled` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_end` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_start` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `quiet_hours_timezone` from the response with the `200` status
+- PUT /api/v1/admin/charlie/alert-policy/ removed the required property `revision` from the response with the `200` status
+- POST /api/v1/admin/charlie/diagnostics/run/ removed the required property `checks` from the response with the `200` status
+- POST /api/v1/admin/charlie/diagnostics/run/ removed the required property `overall` from the response with the `200` status
+- POST /api/v1/admin/charlie/disconnect/ removed the required property `agent` from the response with the `200` status
+- POST /api/v1/admin/charlie/disconnect/ removed the required property `connection` from the response with the `200` status
+- POST /api/v1/admin/charlie/disconnect/ removed the required property `mode` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `api_proxy` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `attach` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `available_profiles` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `cluster_scoped` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `downstream_targets` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `exec` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `instance_id` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `namespaces` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `pod_logs` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `port_forward` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `product_owned_only` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `profile` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `requires_central_review` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `requires_product_acknowledgement` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `requires_rediscovery` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `revision` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `schema` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `scope_summary` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `secret_values` from the response with the `200` status
+- GET /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `state` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `api_proxy` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `attach` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `available_profiles` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `cluster_scoped` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `downstream_targets` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `exec` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `instance_id` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `namespaces` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `pod_logs` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `port_forward` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `product_owned_only` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `profile` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `requires_central_review` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `requires_product_acknowledgement` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `requires_rediscovery` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `revision` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `schema` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `scope_summary` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `secret_values` from the response with the `200` status
+- PUT /api/v1/admin/charlie/kubernetes-visibility/ removed the required property `state` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `authoritative` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `auto_readiness` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `effects` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `emergency_disabled` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `requested` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `revision` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `workload_ceiling` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/mode/ removed the required property `workload_ceiling_ready` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `allowed_route_ids` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `artifact` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `central_api_version` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `central_trust_fingerprint` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `deployment_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `expires_at` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `idempotent` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `integration_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `issued_at` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `logical_agent_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `mcp_url` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `package_digest` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `package_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `product_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `product_slug` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `replica_count` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `route_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `schema` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `signing_fingerprint` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `signing_key_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/consume/ removed the required property `state` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `allowed_route_ids` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `artifact` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `central_api_version` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `central_trust_fingerprint` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `deployment_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `expires_at` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `idempotent` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `integration_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `issued_at` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `logical_agent_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `mcp_url` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `package_digest` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `package_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `product_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `product_slug` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `replica_count` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `route_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `schema` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `signing_fingerprint` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `signing_key_id` from the response with the `200` status
+- POST /api/v1/admin/charlie/onboarding/validate/ removed the required property `state` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `accepted_count` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `accepted_names` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `candidate_enabled` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `catalog_bound` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `malformed_rejected` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `rejected_count` from the response with the `200` status
+- POST /api/v1/admin/charlie/qualification/discovery/ removed the required property `scenario` from the response with the `200` status
+- GET /api/v1/admin/charlie/status/ removed the required property `agent` from the response with the `200` status
+- GET /api/v1/admin/charlie/status/ removed the required property `connection` from the response with the `200` status
+- GET /api/v1/admin/charlie/status/ removed the required property `mode` from the response with the `200` status
+- GET /api/v1/admin/charlie/trigger-events/ removed the required property `items` from the response with the `200` status
+- GET /api/v1/admin/charlie/trigger-rules/ removed the required property `action_policies` from the response with the `200` status
+- GET /api/v1/admin/charlie/trigger-rules/ removed the required property `defaults_revision` from the response with the `200` status
+- GET /api/v1/admin/charlie/trigger-rules/ removed the required property `rules` from the response with the `200` status
+- GET /api/v1/admin/charlie/trigger-rules/ removed the required property `service_identity_enabled` from the response with the `200` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `cooldown_seconds` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `dead_letter_enabled` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `enabled` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `estate_threshold_percent` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `flap_count` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `flap_window_seconds` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `grace_period_seconds` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `maximum_attempts` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `mode_ceiling` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `name` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `scopes` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `severities` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `source_type` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `suppressed` from the response with the `201` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `cooldown_seconds` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `dead_letter_enabled` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `enabled` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `estate_threshold_percent` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `flap_count` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `flap_window_seconds` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `grace_period_seconds` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `maximum_attempts` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `mode_ceiling` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `name` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `scopes` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `severities` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `source_type` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `suppressed` from the response with the `200` status
+- GET /api/v1/charlie/activation/ removed the required property `activated` from the response with the `200` status
+- GET /api/v1/charlie/approvals/ removed the required property `items` from the response with the `200` status
+- POST /api/v1/charlie/approvals/{approval_id}/decision/ removed the required property `approval` from the response with the `200` status
+- GET /api/v1/charlie/commands/ removed the required property `commands` from the response with the `200` status
+- GET /api/v1/charlie/commands/ removed the required property `schema` from the response with the `200` status
+- GET /api/v1/charlie/commands/ removed the required property `version` from the response with the `200` status
+- GET /api/v1/charlie/context/search/ removed the required property `items` from the response with the `200` status
+- GET /api/v1/charlie/findings/ removed the required property `items` from the response with the `200` status
+- GET /api/v1/charlie/findings/{finding_id}/ removed the required property `finding` from the response with the `200` status
+- POST /api/v1/charlie/findings/{finding_id}/acknowledge/ removed the required property `finding` from the response with the `200` status
+- POST /api/v1/charlie/findings/{finding_id}/dismiss/ removed the required property `finding` from the response with the `200` status
+- POST /api/v1/charlie/findings/{finding_id}/request-verification/ removed the required property `finding` from the response with the `200` status
+- POST /api/v1/charlie/findings/{finding_id}/resolve/ removed the required property `finding` from the response with the `200` status
+- POST /api/v1/charlie/findings/{finding_id}/start-remediation/ removed the required property `finding` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `capability` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `created_at` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `effect` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `operation_id` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `result_status` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `state` from the response with the `200` status
+- GET /api/v1/charlie/operations/{operation_id} removed the required property `updated_at` from the response with the `200` status
+- GET /api/v1/charlie/sessions/ removed the required property `mode` from the response with the `200` status
+- GET /api/v1/charlie/sessions/ removed the required property `sessions` from the response with the `200` status
+- POST /api/v1/charlie/sessions/ removed the required property `replayed` from the response with the `201` status
+- POST /api/v1/charlie/sessions/ removed the required property `session` from the response with the `201` status
+- GET /api/v1/charlie/sessions/{session_id}/ removed the required property `remote` from the response with the `200` status
+- GET /api/v1/charlie/sessions/{session_id}/ removed the required property `session` from the response with the `200` status
+- GET /api/v1/charlie/threads/ removed the required property `threads` from the response with the `200` status

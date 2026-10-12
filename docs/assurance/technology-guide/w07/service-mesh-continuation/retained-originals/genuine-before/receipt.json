@@ -1,0 +1,118 @@
+{
+  "source": "1f4b07fc87943e09f7c79991ef99c0bfed894889",
+  "steps": [
+    {
+      "name": "go-version",
+      "argv": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "version"
+      ],
+      "source_before": {
+        "schema_version": 2,
+        "source_file_count": 9087,
+        "source_tree_sha256": "405b6c920e93122bbef5d3fb2657111382c8a338607963b38208fd1a7cdf25ba"
+      },
+      "source_after": {
+        "schema_version": 2,
+        "source_file_count": 9087,
+        "source_tree_sha256": "405b6c920e93122bbef5d3fb2657111382c8a338607963b38208fd1a7cdf25ba"
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.134
+      },
+      "source_stable": true,
+      "elapsed_seconds": 1.3773102462291718,
+      "log_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376"
+    },
+    {
+      "name": "before",
+      "argv": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "test",
+        "-race",
+        "-json",
+        "-count=1",
+        "-run",
+        "^(TestServiceMeshInventoryConsumesOpaqueContinuation|TestServiceMeshMTLSConsumesOpaqueContinuation|TestServiceMeshIncompleteContinuationNeverClaimsComplete)$",
+        "./internal/handler"
+      ],
+      "source_before": {
+        "schema_version": 2,
+        "source_file_count": 9087,
+        "source_tree_sha256": "405b6c920e93122bbef5d3fb2657111382c8a338607963b38208fd1a7cdf25ba"
+      },
+      "source_after": {
+        "schema_version": 2,
+        "source_file_count": 9087,
+        "source_tree_sha256": "405b6c920e93122bbef5d3fb2657111382c8a338607963b38208fd1a7cdf25ba"
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 1,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 83.467
+      },
+      "source_stable": true,
+      "elapsed_seconds": 85.51121192378923,
+      "log_sha256": "b13d59d48d01e877c5f96117fff3798d112a73ed4b9628cb31d2a6a71fe69471"
+    }
+  ],
+  "scope": "three service mesh characterization parents and five leaf cases: six unique expected FAIL terminals; unchanged production and deterministic scoped tunnel peer; no full handler, real Kubernetes, database, install or production mutation",
+  "go_before": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+    "sha256": "548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+    "device": 2049,
+    "inode": 2360704,
+    "size": 17164055,
+    "mtime_ns": 1791570925918518586
+  },
+  "source_before": {
+    "schema_version": 2,
+    "source_file_count": 9087,
+    "source_tree_sha256": "405b6c920e93122bbef5d3fb2657111382c8a338607963b38208fd1a7cdf25ba"
+  },
+  "selected_environment": {
+    "GOTOOLCHAIN": "go1.27.2",
+    "GOWORK": "off",
+    "GOMAXPROCS": "4",
+    "GOFLAGS": "-p=2 -mod=readonly",
+    "GOFIPS140": "off"
+  },
+  "events": {
+    "named_failures": 6,
+    "parent_failures": 3,
+    "leaf_failures": 5,
+    "skips": 0,
+    "package_failures": 1
+  },
+  "go_after": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+    "sha256": "548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+    "device": 2049,
+    "inode": 2360704,
+    "size": 17164055,
+    "mtime_ns": 1791570925918518586
+  },
+  "source_after": {
+    "schema_version": 2,
+    "source_file_count": 9087,
+    "source_tree_sha256": "405b6c920e93122bbef5d3fb2657111382c8a338607963b38208fd1a7cdf25ba"
+  },
+  "source_stable": true,
+  "runner_final_guard_pass": true
+}

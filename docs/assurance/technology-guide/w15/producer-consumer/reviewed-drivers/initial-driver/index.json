@@ -1,0 +1,35 @@
+{
+  "scope": "source-only finite producer/consumer qualifier; no execution credit",
+  "artifacts": [
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-runner-afd3af6/README.md",
+      "sha256": "f39420929b21158093cab85fd1016333ad8a9356be75c077940a47e2eb1dd1bf",
+      "bytes": 1559
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-runner-afd3af6/current-fingerprints.json",
+      "sha256": "df4a833b7acfc225ab2a039919d23e9d58fa0980ad27c2254a4edfe0f30c12cd",
+      "bytes": 340
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-runner-afd3af6/produce.py",
+      "sha256": "bd846e6cf1366137adce551e20fb3a3f0ab546c291d84f04e556c67a9bf73298",
+      "bytes": 3004
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-runner-afd3af6/run_interop.py",
+      "sha256": "662f7eac6db9c0a34a32ae3db6c8ded58504d6237079b245c6d639632c3e7cd8",
+      "bytes": 11883
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-runner-afd3af6/source-bindings.json",
+      "sha256": "e2dd482ce617483bc8db01afb66bae0d8afb79b11ef11ef539b6572b5b1e54ba",
+      "bytes": 85489
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-runner-afd3af6/test_controls.py",
+      "sha256": "5b4e91cfe3e31a71c746b0d5bf6abc5ed1957065d2a20c0331fae7450174ee69",
+      "bytes": 3799
+    }
+  ]
+}

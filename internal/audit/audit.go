@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -128,8 +129,7 @@ func sanitizeValue(v any) any {
 func Record(ctx context.Context, q Querier, event Event) {
 	row, ok := buildRow(event)
 	if !ok {
-		// buildRow always succeeds today; the bool is for future
-		// validation extensions.
+		recordInvalidEnvelope(ctx)
 		return
 	}
 
@@ -162,6 +162,7 @@ func Record(ctx context.Context, q Querier, event Event) {
 func RecordMandatory(ctx context.Context, q Querier, event Event) error {
 	row, ok := buildRow(event)
 	if !ok {
+		recordInvalidEnvelope(ctx)
 		return ErrMandatoryPersistenceUnavailable
 	}
 	if err := recordMandatoryRow(ctx, q, event, row); err != nil {
@@ -169,6 +170,11 @@ func RecordMandatory(ctx context.Context, q Querier, event Event) error {
 		return err
 	}
 	return nil
+}
+
+func recordInvalidEnvelope(ctx context.Context) {
+	recordWriteFailure("sync")
+	slog.Default().WarnContext(ctx, "audit v1 envelope validation failed", "category", "invalid_json")
 }
 
 func recordMandatoryRow(ctx context.Context, q Querier, event Event, row sqlc.CreateAuditLogV1Params) error {
@@ -289,9 +295,14 @@ func buildRow(event Event) (sqlc.CreateAuditLogV1Params, bool) {
 	}
 	if len(payload) > 0 {
 		buf, err := json.Marshal(payload)
-		if err == nil {
-			raw = buf
+		if err != nil {
+			return sqlc.CreateAuditLogV1Params{}, false
 		}
+		raw = buf
+	}
+	// Refuse an intent that the bounded durable reader cannot later deliver.
+	if len(raw) > jsoncontract.MaxDocumentBytes {
+		return sqlc.CreateAuditLogV1Params{}, false
 	}
 
 	if event.Source == "" {

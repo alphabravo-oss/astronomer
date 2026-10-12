@@ -46,7 +46,7 @@ jobs:
       metadata-run-id: ${{ steps.identity.outputs.metadata_run_id }}
     steps:
       - name: Checkout immutable tag
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.tag }}
           fetch-depth: 0
@@ -101,6 +101,10 @@ jobs:
             grep -Fxq "$expected" <<<"$artifacts"
           done
 
+          if [[ "$TAG" != v1.2.0 && "$TAG" != v1.2.1 ]]; then
+            grep -Fxq "upgrade-toolkit-${TAG}" <<<"$artifacts"
+          fi
+
           metadata_required=false
           metadata_run_id="$SOURCE_RUN_ID"
           if ! grep -Fxq "chart-${TAG}" <<<"$artifacts"; then
@@ -122,10 +126,12 @@ jobs:
         run: ./scripts/check-build-capacity.sh --path .
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.0
 
       - name: Download original release artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -134,7 +140,7 @@ jobs:
           merge-multiple: true
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: "v2.4.1"
 
@@ -178,7 +184,7 @@ jobs:
           done
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.16.2
 
@@ -269,20 +275,20 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
 
       - name: Checkout runtime qualification tools
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           path: qualification-tools
           persist-credentials: false
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.16.2
 
@@ -290,20 +296,22 @@ jobs:
         run: ./scripts/check-build-capacity.sh --path .
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.0
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: "v2.5.3"
 
       - name: Install syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           syft-version: "v1.16.0"
 
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
 
@@ -311,14 +319,14 @@ jobs:
         run: go install oras.land/oras/cmd/oras@v1.2.2
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download exact image identities
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -327,7 +335,7 @@ jobs:
           merge-multiple: true
 
       - name: Download delivery artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -524,7 +532,7 @@ jobs:
           subject-path: astronomer-${{ needs.preflight.outputs.chart-version }}.tgz
 
       - name: Upload complete signed release unit
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chart-${{ needs.preflight.outputs.image-tag }}
           path: |
@@ -562,13 +570,13 @@ jobs:
             k3s_image: rancher/k3s:v1.35.0-k3s1
     steps:
       - name: Checkout tagged configuration
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
 
       - name: Checkout recovery verifier
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           path: recovery-tools
@@ -576,7 +584,7 @@ jobs:
 
       - name: Install checksum-verified k3d
         env:
-          K3D_VERSION: v5.8.3
+          K3D_VERSION: v5.9.0
         run: |
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
@@ -585,17 +593,17 @@ jobs:
           sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.16.2
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: "v2.4.1"
 
       - name: Download original image identities
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -604,7 +612,7 @@ jobs:
           merge-multiple: true
 
       - name: Download signed release manifest
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ needs.preflight.outputs.metadata-run-id }}
           github-token: ${{ github.token }}
@@ -737,11 +745,11 @@ jobs:
             -l app.kubernetes.io/instance=astronomer || true
 
   rc-rehearsal:
-    name: qualify v1.2.0/v1.2.1 upgrade, backup and clean restore
+    name: qualify approved release upgrade, backup and clean restore
     # Metadata completion is intentionally skipped when the original chart exists.
     # Override the implicit success() across that skipped ancestor, while requiring
     # both direct prerequisite jobs to have succeeded.
-    if: always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' && contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
+    if: always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' && contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)
     needs: [preflight, qualify]
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -750,16 +758,16 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with: {version: v3.16.2}
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with: {cosign-release: v2.5.3}
       - name: Install checksum-verified k3d
-        env: {K3D_VERSION: v5.8.3}
+        env: {K3D_VERSION: v5.9.0}
         run: |
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
@@ -778,7 +786,7 @@ jobs:
       - name: Sign sanitized RC evidence
         run: cosign sign-blob --yes --bundle rc-rehearsal-evidence.sigstore.json rc-rehearsal-evidence.json
       - name: Retain sanitized RC evidence only
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rc-rehearsal-${{ github.run_id }}
           path: |
@@ -792,8 +800,8 @@ jobs:
     needs: [preflight, qualify, rc-rehearsal]
     if: >-
       always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' &&
-      ((contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'success') ||
-       (!contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'skipped'))
+      ((contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'success') ||
+       (!contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: release-production
     permissions:
@@ -802,13 +810,13 @@ jobs:
       packages: read
     steps:
       - name: Checkout tagged configuration
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Download original release artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           run-id: ${{ inputs.source_run_id }}
           github-token: ${{ github.token }}
@@ -817,22 +825,22 @@ jobs:
 
       - name: Download completed metadata
         if: needs.preflight.outputs.metadata-required == 'true'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: chart-${{ needs.preflight.outputs.image-tag }}
 
       - name: Install cosign verifier for protected qualifications
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with: {cosign-release: v2.5.3}
 
       - name: Download current-run v1.2.0/v1.2.1 rehearsal evidence
-        if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rc-rehearsal-${{ github.run_id }}
 
       - name: Verify automated v1.2.0/v1.2.1 publication evidence
-        if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
+        if: contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)
         env:
           TAG: ${{ needs.preflight.outputs.image-tag }}
           SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
@@ -846,7 +854,7 @@ jobs:
             --repository "$REPOSITORY" --rc-identity "$RC_IDENTITY"
 
       - name: Verify protected release approval and external accessibility evidence
-        if: ${{ !contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) }}
+        if: ${{ !contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag) }}
         env:
           RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
@@ -933,22 +941,39 @@ jobs:
               -name 'release-recovery*.json' -o -name 'RELEASE_NOTES.md' -o \
               -name 'rc-rehearsal-evidence*.json' -o -name 'release-qualification.json' -o \
               -name 'values-production.yaml' -o \
+              -name 'astronomer-upgrade-toolkit-*' -o \
               -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
             \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           qualification_assets=()
-          if [[ "$TAG" == v1.2.0 || "$TAG" == v1.2.1 ]]; then
+          if [[ "$TAG" == v1.2.0 || "$TAG" == v1.2.1 || "$TAG" == v2.0.0 ]]; then
             qualification_assets=(rc-rehearsal-evidence.json rc-rehearsal-evidence.sigstore.json release-qualification.json)
           fi
           if [[ -f release-recovery.json ]]; then
             qualification_assets+=(release-recovery.json release-recovery.sigstore.json)
           fi
-          gh release create "$TAG" "${qualification_assets[@]}" \
+          upgrade_toolkit_assets=()
+          if [[ "$TAG" != v1.2.0 && "$TAG" != v1.2.1 ]]; then
+            for architecture in amd64 arm64; do
+              stem="astronomer-upgrade-toolkit-${TAG}-linux-${architecture}"
+              archive="astronomer-upgrade-${TAG}-linux-${architecture}.tar.gz"
+              test -s "$archive" && test -s "$stem" && test -s "${stem}.json" && test -s "${stem}.sigstore.json" && test -s "${stem}.installer.sigstore.json"
+              upgrade_toolkit_assets+=("$archive" "$stem" "${stem}.json" "${stem}.sigstore.json" "${stem}.installer.sigstore.json")
+            done
+          fi
+          release_tarballs=()
+          for archive in *.tar.gz; do
+            case "$archive" in
+              "astronomer-upgrade-${TAG}-linux-amd64.tar.gz"|"astronomer-upgrade-${TAG}-linux-arm64.tar.gz") ;;
+              *) release_tarballs+=("$archive") ;;
+            esac
+          done
+          gh release create "$TAG" "${qualification_assets[@]}" "${upgrade_toolkit_assets[@]}" \
             --repo "$REPOSITORY" \
             --verify-tag \
             --notes-file RELEASE_NOTES.md \
             --title "Astronomer ${TAG}" \
-            astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
+            astronomer-*.tgz "${release_tarballs[@]}" sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
             runtime-image-evidence.json runtime-image-evidence.sigstore.json \
             values-production.yaml astronomer-images.txt RELEASE_NOTES.md \

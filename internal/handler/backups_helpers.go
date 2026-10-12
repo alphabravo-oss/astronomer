@@ -291,8 +291,8 @@ func (h *BackupHandler) probeS3Bucket(ctx context.Context, cfg sqlc.BackupStorag
 		endpoint = fmt.Sprintf("https://s3.%s.amazonaws.com", region)
 	}
 	host, err := url.Parse(endpoint)
-	if err != nil {
-		return fmt.Errorf("invalid endpoint url: %w", err)
+	if err != nil || host.Hostname() == "" || host.User != nil || host.RawQuery != "" || host.Fragment != "" || host.Opaque != "" {
+		return fmt.Errorf("invalid S3 endpoint URL")
 	}
 	// Path-style addressing (endpoint/bucket/?list-type=2) is what Velero/MinIO
 	// use; virtual-host-style works against canonical AWS but breaks against
@@ -306,7 +306,11 @@ func (h *BackupHandler) probeS3Bucket(ctx context.Context, cfg sqlc.BackupStorag
 	// SSRF guard: the endpoint URL is operator-supplied (BackupStorageConfig),
 	// so refuse to dial a loopback/internal/metadata address. Do not echo the
 	// endpoint in the error.
-	if err := httpclient.GuardPublicHost(host.String()); err != nil {
+	if h.s3Policy != nil {
+		if err := h.s3Policy.ValidateURL(ctx, host.String()); err != nil {
+			return fmt.Errorf("S3 endpoint is outside operator network policy")
+		}
+	} else if err := httpclient.GuardPublicHost(host.String()); err != nil {
 		return fmt.Errorf("endpoint is not a permitted public address")
 	}
 
@@ -329,22 +333,22 @@ func (h *BackupHandler) probeS3Bucket(ctx context.Context, cfg sqlc.BackupStorag
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("connectivity failed: %w", err)
+		return fmt.Errorf("S3 connectivity failed")
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusNoContent, http.StatusPartialContent:
 		return nil
 	case http.StatusForbidden:
-		return fmt.Errorf("forbidden (likely invalid credentials): %s", strings.TrimSpace(string(body)))
+		return fmt.Errorf("S3 request forbidden; check credentials and bucket policy")
 	case http.StatusNotFound:
-		return fmt.Errorf("bucket not found: %s", cfg.Bucket)
+		return fmt.Errorf("S3 bucket not found")
 	default:
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("S3 probe returned status %d", resp.StatusCode)
 	}
 }
 

@@ -1,0 +1,1733 @@
+{
+  "schema_version": "triage-finding/v0",
+  "repository": {
+    "path": "/root/astronomer-all/astronomer",
+    "revision": "5c4d273ff564aab0ede8bb9265c789380f6f640d"
+  },
+  "scope": {
+    "kind": "bounded supplied-finding static triage",
+    "selected_input_indices": [
+      0,
+      1,
+      103,
+      104,
+      105,
+      106,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      172,
+      173,
+      174,
+      175,
+      176,
+      183,
+      184,
+      269,
+      290,
+      291,
+      292,
+      293,
+      294
+    ],
+    "total_gosec_findings": 387,
+    "selected": 25,
+    "not_actionable": 21,
+    "needs_review": 4,
+    "confirmed": 0,
+    "source_modified": false,
+    "native_executed": false,
+    "policy_modified": false,
+    "limits": [
+      "This is not a waiver, exception, fresh scan, runtime validation, or whole-387 classification.",
+      "All selected rows remain canonically unaccepted until the exact owned review/approval process authorizes a policy disposition.",
+      "The scanner completed exact first-party analysis; collection completeness does not establish policy acceptance."
+    ]
+  },
+  "findings": [
+    {
+      "triage_item_id": "current-gosec-000",
+      "input_id": "sha256:a2f5568cd4001784c92d69c2a5dd7b1a5765832ab783c9b667e5e6958c6e3ca7",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion uint64 -> int64",
+      "source_input_index": 0,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/ops/upgradecli/artifact_capture_linux.go",
+        "claimed_source": "kernel filesystem counters",
+        "claimed_sink": "conversion of multiplied block counts to int64",
+        "claimed_control": "alleged absent overflow guard",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/ops/upgradecli/artifact_capture_linux.go:76",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion uint64 -> int64",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+          "lines": "76",
+          "detail": "integer overflow conversion uint64 -> int64"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+          "lines": "64-77",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "artifactCapacity reads Statfs counts",
+        "positive Bsize/Blocks and Bavail<=Blocks are checked",
+        "both counts must be <=MaxInt64/block before multiply and cast"
+      ],
+      "boundary_assessment": {
+        "product_surface": "CLI",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "artifact_capture_linux.go:64-77 validates each multiplication against MaxInt64 before either reported cast."
+      ],
+      "counterevidence": [
+        "Both casts are dominated by the explicit supported-range rejection; neither unsigned product can exceed MaxInt64."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-001",
+      "input_id": "sha256:edae6e73bfed015827f417d3e735a85be1072078971f777158f84211854be127",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion uint64 -> int64",
+      "source_input_index": 1,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/ops/upgradecli/artifact_capture_linux.go",
+        "claimed_source": "kernel filesystem counters",
+        "claimed_sink": "conversion of multiplied block counts to int64",
+        "claimed_control": "alleged absent overflow guard",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/ops/upgradecli/artifact_capture_linux.go:76",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion uint64 -> int64",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+          "lines": "76",
+          "detail": "integer overflow conversion uint64 -> int64"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+          "lines": "64-77",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "artifactCapacity reads Statfs counts",
+        "positive Bsize/Blocks and Bavail<=Blocks are checked",
+        "both counts must be <=MaxInt64/block before multiply and cast"
+      ],
+      "boundary_assessment": {
+        "product_surface": "CLI",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "artifact_capture_linux.go:64-77 validates each multiplication against MaxInt64 before either reported cast."
+      ],
+      "counterevidence": [
+        "Both casts are dominated by the explicit supported-range rejection; neither unsigned product can exceed MaxInt64."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-103",
+      "input_id": "sha256:cf3df49fbfcdcd6c56667672f9d08ca8a11efc3e527d9831679aa9ff48d93084",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 103,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/webhooks_endpoints.go",
+        "claimed_source": "superuser JSON max_retries/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/webhooks_endpoints.go:205",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/webhooks_endpoints.go",
+          "lines": "205",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/webhooks_response.go",
+          "lines": "28-133",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-104",
+      "input_id": "sha256:9ff13ab9f1171f5919564e7f89f41d238beadf4dcea081b40d83c23ba1a33825",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 104,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/webhooks_endpoints.go",
+        "claimed_source": "superuser JSON max_retries/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/webhooks_endpoints.go:204",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/webhooks_endpoints.go",
+          "lines": "204",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/webhooks_response.go",
+          "lines": "28-133",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-105",
+      "input_id": "sha256:282b7779b666cf9c03dde9c3282dba2b068860544d09bf05cf0a9cf6b4ceb002",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 105,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/webhooks_endpoints.go",
+        "claimed_source": "superuser JSON max_retries/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/webhooks_endpoints.go:96",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/webhooks_endpoints.go",
+          "lines": "96",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/webhooks_response.go",
+          "lines": "28-133",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-106",
+      "input_id": "sha256:33b30fa97432b0aeb7729396441ab5c8952768f9aa17336a02add6cf110db53c",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 106,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/webhooks_endpoints.go",
+        "claimed_source": "superuser JSON max_retries/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/webhooks_endpoints.go:95",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/webhooks_endpoints.go",
+          "lines": "95",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/webhooks_response.go",
+          "lines": "28-133",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-113",
+      "input_id": "sha256:d33d09adc9c23cdda758c1754dbf1ab4975f542690123ff4bc1e416c8387082b",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 113,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/siem.go",
+        "claimed_source": "superuser JSON batch_size/flush_interval_ms/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/siem.go:385",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/siem.go",
+          "lines": "385",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "655-776",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-114",
+      "input_id": "sha256:53f75271d63b7418c42ff6a60c561c2aeef9b67f6e991193554d071194910b40",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 114,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/siem.go",
+        "claimed_source": "superuser JSON batch_size/flush_interval_ms/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/siem.go:384",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/siem.go",
+          "lines": "384",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "655-776",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-115",
+      "input_id": "sha256:4e918a0a7d414b9b1895c546fe8907e831045e06a070c824e117cd6030a13d0a",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 115,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/siem.go",
+        "claimed_source": "superuser JSON batch_size/flush_interval_ms/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/siem.go:383",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/siem.go",
+          "lines": "383",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "655-776",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-116",
+      "input_id": "sha256:b3d40b0e1180652eef9333da4e4e745f967b90a3e0bf6d409dc85b842b011e85",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 116,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/siem.go",
+        "claimed_source": "superuser JSON batch_size/flush_interval_ms/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/siem.go:270",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/siem.go",
+          "lines": "270",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "655-776",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-117",
+      "input_id": "sha256:1207307154cac59e4fe934a9542c7b4d08898cca280fc04135a8c0573b9bc2b3",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 117,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/siem.go",
+        "claimed_source": "superuser JSON batch_size/flush_interval_ms/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/siem.go:269",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/siem.go",
+          "lines": "269",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "655-776",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-118",
+      "input_id": "sha256:187857344a553ccced117fc3f68b3f860737cd2cd2fcf274592c079bd2dfcf12",
+      "source_type": "scanner_ticket",
+      "title": "G115: integer overflow conversion int -> int32",
+      "source_input_index": 118,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G115",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/siem.go",
+        "claimed_source": "superuser JSON batch_size/flush_interval_ms/timeout_seconds",
+        "claimed_sink": "int32 database request parameters",
+        "claimed_control": "alleged absent narrowing bound",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/siem.go:268",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "integer overflow conversion int -> int32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/siem.go",
+          "lines": "268",
+          "detail": "integer overflow conversion int -> int32"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "655-776",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-172",
+      "input_id": "sha256:2230af0652180afc15dd854e8860d77d2db094cdbbb5f74cf677d669f84eacd8",
+      "source_type": "scanner_ticket",
+      "title": "G407: Use of hardcoded IV/nonce for encryption by passing hardcoded constant",
+      "source_input_index": 172,
+      "canonical_policy_accepted": true,
+      "source_rule_id": "G407",
+      "normalized_input": {
+        "vulnerable_component": "scripts/fips-mode-probe/main.go",
+        "claimed_source": "fixed synthetic FIPS probe plaintext",
+        "claimed_sink": "AEAD.Seal nil nonce",
+        "claimed_control": "alleged hardcoded IV",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:scripts/fips-mode-probe/main.go:80",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Use of hardcoded IV/nonce for encryption by passing hardcoded constant",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "scripts/fips-mode-probe/main.go",
+          "lines": "80",
+          "detail": "Use of hardcoded IV/nonce for encryption by passing hardcoded constant"
+        }
+      ],
+      "reachable_path": [
+        "generate random key",
+        "construct NewGCMWithRandomNonce",
+        "Seal requires empty caller nonce and internally generates random nonce"
+      ],
+      "boundary_assessment": {
+        "product_surface": "CLI",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "scripts/fips-mode-probe/main.go:67-85 constructs NewGCMWithRandomNonce, not ordinary NewGCM.",
+        "Selected Go 1.27.2 crypto/cipher/gcm.go:79-128 specifies random 96-bit nonce; Seal panics on non-empty supplied nonce."
+      ],
+      "counterevidence": [
+        "The nil argument selects the documented random-nonce API; no caller-provided fixed nonce is used."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-173",
+      "input_id": "sha256:71cff4a542aa06be6a7bc9aad5868cffd2c03e5c9448fd66b6f4cf97f4d20552",
+      "source_type": "scanner_ticket",
+      "title": "G709: Unsafe deserialization of untrusted data via taint analysis",
+      "source_input_index": 173,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G709",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/cloud_credentials_test_endpoint.go",
+        "claimed_source": "AWS STS XML response",
+        "claimed_sink": "encoding/xml.Unmarshal into closed string structs",
+        "claimed_control": "alleged unsafe deserialization",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/cloud_credentials_test_endpoint.go:372",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Unsafe deserialization of untrusted data via taint analysis",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/cloud_credentials_test_endpoint.go",
+          "lines": "372",
+          "detail": "Unsafe deserialization of untrusted data via taint analysis"
+        }
+      ],
+      "reachable_path": [
+        "fixed https://sts.amazonaws.com/ GetCallerIdentity through SafeClient",
+        "parse into string fields (Arn/Account/UserId or Code/Message)",
+        "no arbitrary object type or XML callback supplied"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "cloud_credentials_test_endpoint.go:135-155 fixes STS origin and defines a closed string-only response type.",
+        "cloud_credentials_test_endpoint.go:365-373 defines a closed string-only error type.",
+        "Selected Go encoding/xml handles declarations as Directive tokens; only built-in/numeric or explicitly supplied Entity mappings expand entities. These calls supply no external resolver/custom unmarshaler."
+      ],
+      "counterevidence": [
+        "The supplied claim does not demonstrate arbitrary code, object construction, or XXE through these Unmarshal calls."
+      ],
+      "proof_gaps": [
+        "signedGet:479 performs unbounded io.ReadAll before XML parsing. That separate response-size/resource boundary remains open and is not approved by this deserialization disposition."
+      ],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-174",
+      "input_id": "sha256:1fd0020a180a3c397ced90d948678282cdc30020668a7a3a7fe0dd705a904e99",
+      "source_type": "scanner_ticket",
+      "title": "G709: Unsafe deserialization of untrusted data via taint analysis",
+      "source_input_index": 174,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G709",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/cloud_credentials_test_endpoint.go",
+        "claimed_source": "AWS STS XML response",
+        "claimed_sink": "encoding/xml.Unmarshal into closed string structs",
+        "claimed_control": "alleged unsafe deserialization",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/cloud_credentials_test_endpoint.go:155",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Unsafe deserialization of untrusted data via taint analysis",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/cloud_credentials_test_endpoint.go",
+          "lines": "155",
+          "detail": "Unsafe deserialization of untrusted data via taint analysis"
+        }
+      ],
+      "reachable_path": [
+        "fixed https://sts.amazonaws.com/ GetCallerIdentity through SafeClient",
+        "parse into string fields (Arn/Account/UserId or Code/Message)",
+        "no arbitrary object type or XML callback supplied"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "cloud_credentials_test_endpoint.go:135-155 fixes STS origin and defines a closed string-only response type.",
+        "cloud_credentials_test_endpoint.go:365-373 defines a closed string-only error type.",
+        "Selected Go encoding/xml handles declarations as Directive tokens; only built-in/numeric or explicitly supplied Entity mappings expand entities. These calls supply no external resolver/custom unmarshaler."
+      ],
+      "counterevidence": [
+        "The supplied claim does not demonstrate arbitrary code, object construction, or XXE through these Unmarshal calls."
+      ],
+      "proof_gaps": [
+        "signedGet:479 performs unbounded io.ReadAll before XML parsing. That separate response-size/resource boundary remains open and is not approved by this deserialization disposition."
+      ],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-175",
+      "input_id": "sha256:dbacc09e815831bb783a0bac0b6f807be76d225c4fd544aa3b109a2b1fc43a4e",
+      "source_type": "scanner_ticket",
+      "title": "G402: TLS InsecureSkipVerify may be set to true.",
+      "source_input_index": 175,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G402",
+      "normalized_input": {
+        "vulnerable_component": "internal/worker/tasks/siem_tls.go",
+        "claimed_source": "authenticated superuser configured tls_skip_verify",
+        "claimed_sink": "TLS verification disabled while transmitting SIEM data or Vault auth",
+        "claimed_control": "explicit opt-in lacks verified current risk acceptance",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/worker/tasks/siem_tls.go:54",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "TLS InsecureSkipVerify may be set to true.",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "needs_review",
+      "confidence": "medium",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/worker/tasks/siem_tls.go",
+          "lines": "54",
+          "detail": "TLS InsecureSkipVerify may be set to true."
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "191-212,290-300,404-407,821-824",
+          "detail": "Source evidence summarized below."
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/vault.go",
+          "lines": "241-247,288-323,378-416",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "superuser admin create/update persists TLS option",
+        "worker/Vault factory maps stored option to InsecureSkipVerify",
+        "on-path actor could impersonate selected endpoint if operator enables it"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "trusted_operator",
+        "boundary_crossed": true,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": "needs_review",
+        "rank": 4,
+        "rationale": "Privileged mutation or data boundary needs exact ownership/risk review.",
+        "drivers": [
+          "attacker preconditions",
+          "source ownership",
+          "guard strength",
+          "impact boundary"
+        ]
+      },
+      "evidence": [
+        "The reported config can be true in production, not just a test.",
+        "SIEM/Vault handler ownership checks and explicit field/default do not themselves restore certificate authentication."
+      ],
+      "counterevidence": [
+        "Default is false; field is operator-controlled, with custom CA supported and malformed CA rejected.",
+        "Dial-time destination guards remain in the maintained clients, but do not authenticate the remote TLS identity."
+      ],
+      "proof_gaps": [
+        "Need exact deployed setting inventory and supported opt-in/migration policy; no SECURITY.md guidance was found.",
+        "Do not remove v1 operator functionality without explicit compatible migration."
+      ],
+      "recommended_next_step": "Review exact operator opt-in policy and warning/audit controls. Prefer valid custom CA; prepare a compatible authenticated-mode migration and current negative network test before declaring a source defect fixed.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-176",
+      "input_id": "sha256:555d1f13003f312e66b07c14b66e33c8337c006f9f1a226f75776895dec9d747",
+      "source_type": "scanner_ticket",
+      "title": "G402: TLS InsecureSkipVerify may be set to true.",
+      "source_input_index": 176,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G402",
+      "normalized_input": {
+        "vulnerable_component": "internal/vault/client.go",
+        "claimed_source": "authenticated superuser configured tls_skip_verify",
+        "claimed_sink": "TLS verification disabled while transmitting SIEM data or Vault auth",
+        "claimed_control": "explicit opt-in lacks verified current risk acceptance",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/vault/client.go:53",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "TLS InsecureSkipVerify may be set to true.",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "needs_review",
+      "confidence": "medium",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/vault/client.go",
+          "lines": "53",
+          "detail": "TLS InsecureSkipVerify may be set to true."
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/siem.go",
+          "lines": "191-212,290-300,404-407,821-824",
+          "detail": "Source evidence summarized below."
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/handler/vault.go",
+          "lines": "241-247,288-323,378-416",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "superuser admin create/update persists TLS option",
+        "worker/Vault factory maps stored option to InsecureSkipVerify",
+        "on-path actor could impersonate selected endpoint if operator enables it"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "trusted_operator",
+        "boundary_crossed": true,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": "needs_review",
+        "rank": 3,
+        "rationale": "Privileged mutation or data boundary needs exact ownership/risk review.",
+        "drivers": [
+          "attacker preconditions",
+          "source ownership",
+          "guard strength",
+          "impact boundary"
+        ]
+      },
+      "evidence": [
+        "The reported config can be true in production, not just a test.",
+        "SIEM/Vault handler ownership checks and explicit field/default do not themselves restore certificate authentication."
+      ],
+      "counterevidence": [
+        "Default is false; field is operator-controlled, with custom CA supported and malformed CA rejected.",
+        "Dial-time destination guards remain in the maintained clients, but do not authenticate the remote TLS identity."
+      ],
+      "proof_gaps": [
+        "Need exact deployed setting inventory and supported opt-in/migration policy; no SECURITY.md guidance was found.",
+        "Do not remove v1 operator functionality without explicit compatible migration."
+      ],
+      "recommended_next_step": "Review exact operator opt-in policy and warning/audit controls. Prefer valid custom CA; prepare a compatible authenticated-mode migration and current negative network test before declaring a source defect fixed.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-183",
+      "input_id": "sha256:f8f7091bd977de2074709f8d4831fe0b3b30b94af2c5e6cc71b107944edd0f57",
+      "source_type": "scanner_ticket",
+      "title": "G704: SSRF via taint analysis",
+      "source_input_index": 183,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G704",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/cloud_credentials_test_endpoint.go",
+        "claimed_source": "fixed DigitalOcean account endpoint in actual server composition",
+        "claimed_sink": "HTTPClient.Do",
+        "claimed_control": "alleged untrusted destination",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/cloud_credentials_test_endpoint.go:73",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "SSRF via taint analysis",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/cloud_credentials_test_endpoint.go",
+          "lines": "73",
+          "detail": "SSRF via taint analysis"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/server/app_tenant_handlers.go",
+          "lines": "123",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "app_tenant_handlers.go creates NewDefaultCloudTester",
+        "constructor selects canonical SafeClient(10s)",
+        "production DigitalOceanEndpoint is empty so endpoint becomes fixed api.digitalocean.com/v2/account"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "server/app_tenant_handlers.go:123 installs the canonical constructor, not a request-selected tester.",
+        "DefaultCloudTester.DigitalOceanEndpoint and HTTPClient are dependency-injection fields; current non-test composition never populates an arbitrary endpoint/client."
+      ],
+      "counterevidence": [
+        "A credential payload cannot set this destination. SafeClient additionally rejects forbidden public-network destinations at dial."
+      ],
+      "proof_gaps": [
+        "This is limited to the two DigitalOcean findings and verified current composition; it does not classify the remaining tunnel/Helm SSRF findings."
+      ],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-184",
+      "input_id": "sha256:57c4afdd4852b213b4055e16cc12ccdd94c86b484b95d9e7fa85d52a7aaf72db",
+      "source_type": "scanner_ticket",
+      "title": "G704: SSRF via taint analysis",
+      "source_input_index": 184,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G704",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/cloud_credentials_test_endpoint.go",
+        "claimed_source": "fixed DigitalOcean account endpoint in actual server composition",
+        "claimed_sink": "HTTPClient.Do",
+        "claimed_control": "alleged untrusted destination",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/cloud_credentials_test_endpoint.go:68",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "SSRF via taint analysis",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/cloud_credentials_test_endpoint.go",
+          "lines": "68",
+          "detail": "SSRF via taint analysis"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/server/app_tenant_handlers.go",
+          "lines": "123",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "app_tenant_handlers.go creates NewDefaultCloudTester",
+        "constructor selects canonical SafeClient(10s)",
+        "production DigitalOceanEndpoint is empty so endpoint becomes fixed api.digitalocean.com/v2/account"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "server/app_tenant_handlers.go:123 installs the canonical constructor, not a request-selected tester.",
+        "DefaultCloudTester.DigitalOceanEndpoint and HTTPClient are dependency-injection fields; current non-test composition never populates an arbitrary endpoint/client."
+      ],
+      "counterevidence": [
+        "A credential payload cannot set this destination. SafeClient additionally rejects forbidden public-network destinations at dial."
+      ],
+      "proof_gaps": [
+        "This is limited to the two DigitalOcean findings and verified current composition; it does not classify the remaining tunnel/Helm SSRF findings."
+      ],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-269",
+      "input_id": "sha256:4751dbc4e4cdec8e7c043d508b12339dac29bce1b41a2ae77948b13310600085",
+      "source_type": "scanner_ticket",
+      "title": "G109: Potential Integer overflow made by strconv.Atoi result conversion to int16/32",
+      "source_input_index": 269,
+      "canonical_policy_accepted": true,
+      "source_rule_id": "G109",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/audit.go",
+        "claimed_source": "status_code URL query",
+        "claimed_sink": "Atoi result converted to int32",
+        "claimed_control": "alleged unchecked narrowing",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/handler/audit.go:686",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Potential Integer overflow made by strconv.Atoi result conversion to int16/32",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/handler/audit.go",
+          "lines": "686",
+          "detail": "Potential Integer overflow made by strconv.Atoi result conversion to int16/32"
+        }
+      ],
+      "reachable_path": [
+        "Atoi rejects parse overflow",
+        "statusCode<0 or >599 rejected",
+        "only supported HTTP code cast to int32"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "audit.go:681-687 rejects Atoi errors and values outside 0..599 before the cast."
+      ],
+      "counterevidence": [
+        "All admitted values fit int32."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-290",
+      "input_id": "sha256:c10148ba70514f4ec38ac5126df6d64e6e2ee7fdd21585a51002d117826b4f04",
+      "source_type": "scanner_ticket",
+      "title": "G118: Goroutine uses context.Background/TODO while request-scoped context is available",
+      "source_input_index": 290,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G118",
+      "normalized_input": {
+        "vulnerable_component": "internal/httpserver/serve.go",
+        "claimed_source": "server lifecycle cancellation",
+        "claimed_sink": "bounded Shutdown context",
+        "claimed_control": "alleged detached request work",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/httpserver/serve.go:19",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Goroutine uses context.Background/TODO while request-scoped context is available",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/httpserver/serve.go",
+          "lines": "19",
+          "detail": "Goroutine uses context.Background/TODO while request-scoped context is available"
+        }
+      ],
+      "reachable_path": [
+        "shutdown owner selects original context or serving completion",
+        "after cancellation derives fresh bounded context to permit graceful drain",
+        "Serve waits shutdownDone before returning"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "httpserver/serve.go:16-39 joins shutdownDone and closes remaining connections if graceful shutdown fails."
+      ],
+      "counterevidence": [
+        "Background is the root of a finite shutdown grace period; it does not launch unjoined application mutation after request cancellation."
+      ],
+      "proof_gaps": [],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-291",
+      "input_id": "sha256:f9e06549c3ef563bd27294e3b7bfb2363808d060409e0bd3ef63c9d5eeb37381",
+      "source_type": "scanner_ticket",
+      "title": "G118: Goroutine uses context.Background/TODO while request-scoped context is available",
+      "source_input_index": 291,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G118",
+      "normalized_input": {
+        "vulnerable_component": "internal/charlie/mcp_runtime.go",
+        "claimed_source": "listener Serve error",
+        "claimed_sink": "LogRuntimeEvent background context",
+        "claimed_control": "alleged detached request work",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/charlie/mcp_runtime.go:246",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Goroutine uses context.Background/TODO while request-scoped context is available",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/charlie/mcp_runtime.go",
+          "lines": "246",
+          "detail": "Goroutine uses context.Background/TODO while request-scoped context is available"
+        }
+      ],
+      "reachable_path": [
+        "owned listener Serve returns",
+        "runtime removes only matching current listener identity",
+        "fixed listener_stopped log emitted"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "mcp_runtime.go:244-267 uses Background only as the log context after listener Serve returns."
+      ],
+      "counterevidence": [
+        "The reported call does not issue HTTP/database/cluster work and does not reset listener identity unless the same listener remains current."
+      ],
+      "proof_gaps": [
+        "This exact verdict does not certify every MCP listener shutdown/worker-drain lifecycle."
+      ],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-292",
+      "input_id": "sha256:d11feee5dad76dd07891966b51b3e348c3047b166f56ab3057e14b38bb67e9aa",
+      "source_type": "scanner_ticket",
+      "title": "G118: Goroutine uses context.Background/TODO while request-scoped context is available",
+      "source_input_index": 292,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G118",
+      "normalized_input": {
+        "vulnerable_component": "internal/agent/decommission.go",
+        "claimed_source": "authenticated server decommission request",
+        "claimed_sink": "delayed Deployment/Namespace deletion",
+        "claimed_control": "unjoined delayed callback has no captured UID precondition",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/agent/decommission.go:278",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Goroutine uses context.Background/TODO while request-scoped context is available",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "needs_review",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/agent/decommission.go",
+          "lines": "278",
+          "detail": "Goroutine uses context.Background/TODO while request-scoped context is available"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/kubeutil/delete.go",
+          "lines": "5-7",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "handler ACK marks pending self-delete successful",
+        "unjoined goroutine sleeps fixed 2s then starts fresh 30s Background context",
+        "deletes Deployment by name with empty DeleteOptions",
+        "reads namespace labels then deletes by name without UID precondition"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "trusted_operator",
+        "boundary_crossed": true,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": "needs_review",
+        "rank": 1,
+        "rationale": "Privileged mutation or data boundary needs exact ownership/risk review.",
+        "drivers": [
+          "attacker preconditions",
+          "source ownership",
+          "guard strength",
+          "impact boundary"
+        ]
+      },
+      "evidence": [
+        "decommission.go:273-329 captures names/selectors only, not Deployment/Namespace UID or owned lifecycle cancellation.",
+        "kubeutil/delete.go:5-7 returns empty DeleteOptions without preconditions."
+      ],
+      "counterevidence": [
+        "The source is a privileged control-plane operation, not a public arbitrary-delete endpoint.",
+        "Fresh deletion is bounded to 30s and the namespace is label-gated; pause guard stops this agent delivery runtime."
+      ],
+      "proof_gaps": [
+        "A real recreation/late-callback regression has not run; need complete server request authorization/operation identity proof before security severity is finalized.",
+        "The design intentionally outlives the request to flush ACK/self-delete, so a direct caller-context replacement would break compatibility."
+      ],
+      "recommended_next_step": "Prepare owner-scoped delayed teardown retaining ACK semantics: capture exact Deployment/Namespace UID, use UID delete preconditions, deduplicate the operation, and join/cancel the callback via agent lifecycle. Add delayed same-name recreation and termination races before changing production.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-293",
+      "input_id": "sha256:03bdbbfbb0a00372dd2b788eb7153f0a21f0569b9246f2cb5386973f62130b15",
+      "source_type": "scanner_ticket",
+      "title": "G122: Filesystem operation in filepath.Walk/WalkDir callback uses race-prone path; consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal",
+      "source_input_index": 293,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G122",
+      "normalized_input": {
+        "vulnerable_component": "internal/worker/tasks/gitops_sync.go",
+        "claimed_source": "configured Git repository checkout",
+        "claimed_sink": "path-based os.ReadFile in WalkDir",
+        "claimed_control": "symlink check can race a concurrent checkout",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/worker/tasks/gitops_sync.go:624",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Filesystem operation in filepath.Walk/WalkDir callback uses race-prone path; consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "needs_review",
+      "confidence": "medium",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/worker/tasks/gitops_sync.go",
+          "lines": "624",
+          "detail": "Filesystem operation in filepath.Walk/WalkDir callback uses race-prone path; consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/gitops/path.go",
+          "lines": "1-160",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "source-specific cached clone fetch/checkout",
+        "WalkDir checks DirEntry Type is not symlink",
+        "absolute path ReadFile re-resolves later"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": true,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": "needs_review",
+        "rank": 2,
+        "rationale": "Privileged mutation or data boundary needs exact ownership/risk review.",
+        "drivers": [
+          "attacker preconditions",
+          "source ownership",
+          "guard strength",
+          "impact boundary"
+        ]
+      },
+      "evidence": [
+        "gitops_sync.go:601-624 checks directory entry type but uses path-based ReadFile.",
+        "SyncSource is reused by manual and periodic calls; no per-source filesystem lock is visible in the full source."
+      ],
+      "counterevidence": [
+        "Repository symlinks present during enumeration are rejected. PathPrefix has separate containment validation.",
+        "Configured repository needs operator admission; an attacker still needs a concurrent checkout/local writer during the narrow race."
+      ],
+      "proof_gaps": [
+        "Need actual worker source lease and manual-sync authorization/concurrency trace to establish remote exploitability; no runtime race was executed."
+      ],
+      "recommended_next_step": "Trace both sync entrypoints and isolate the per-source checkout lifecycle; use canonical os.Root file access plus opened-file regular/no-follow identity checks if concurrent writes are supported. Preserve unreadable-walk failure semantics.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "current-gosec-294",
+      "input_id": "sha256:7baf4569ce3a71dea070157efacd4e8bd22c5cdd0ae91bcd6d8653b08d01393f",
+      "source_type": "scanner_ticket",
+      "title": "G122: Filesystem operation in filepath.Walk/WalkDir callback uses race-prone path; consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal",
+      "source_input_index": 294,
+      "canonical_policy_accepted": false,
+      "source_rule_id": "G122",
+      "normalized_input": {
+        "vulnerable_component": "internal/charlie/contract/verify.go",
+        "claimed_source": "local pinned contract files",
+        "claimed_sink": "verifyChecksums path ReadFile",
+        "claimed_control": "alleged runtime symlink traversal",
+        "affected_version_or_path": "5c4d273ff564aab0ede8bb9265c789380f6f640d:internal/charlie/contract/verify.go:51",
+        "preconditions": [
+          "Reported current source and production composition remain unchanged."
+        ],
+        "impact": "Filesystem operation in filepath.Walk/WalkDir callback uses race-prone path; consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal",
+        "references": [
+          "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "reported sink",
+          "path": "internal/charlie/contract/verify.go",
+          "lines": "51",
+          "detail": "Filesystem operation in filepath.Walk/WalkDir callback uses race-prone path; consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal"
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/charlie/contract/contract_test.go",
+          "lines": "15-60",
+          "detail": "Source evidence summarized below."
+        },
+        {
+          "label": "control or caller",
+          "path": "internal/charlie/contract/onboarding.go",
+          "lines": "14",
+          "detail": "Source evidence summarized below."
+        }
+      ],
+      "reachable_path": [
+        "unexported verifyChecksums is referenced only by contract_test.go",
+        "test enumerates local checked-in pinned contract files",
+        "each file must match local manifest SHA"
+      ],
+      "boundary_assessment": {
+        "product_surface": "test/fixture",
+        "source_trust": "trusted_developer_config",
+        "boundary_crossed": false,
+        "policy_basis": "AGENTS.md product invariants and deploy/security/source-policy.json; scoped source evidence. No SECURITY.md located; the resolver launcher was not run under the ROOT-owned native lane."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Exact control defeats the reported claim on the verified current path.",
+        "drivers": []
+      },
+      "evidence": [
+        "Repository-wide exact-reference search found verifyChecksums definition plus only two contract_test.go call sites.",
+        "Production schemas are embedded; this checksum-walk helper is not invoked by shipped runtime request/CLI paths."
+      ],
+      "counterevidence": [
+        "No supported attacker-to-runtime file-read boundary was found for this exact helper."
+      ],
+      "proof_gaps": [
+        "Local test filesystem confinement can be hardened independently; this verdict does not accept an exposed runtime archive reader."
+      ],
+      "recommended_next_step": "Retain this exact finding and submit the source-bound guard rationale for owned review; do not change canonical policy acceptance automatically.",
+      "fix_finding_handoff": null
+    }
+  ]
+}

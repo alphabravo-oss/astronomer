@@ -97,14 +97,17 @@ export function useAppInstallPreview({
       valuesYaml,
       isUpgrade ? "upgrade" : "install",
     ),
-    queryFn: () =>
-      previewCatalogApplication({
-        clusterId,
-        chartVersionId: selectedVersionId,
-        namespace: namespace.trim(),
-        valuesOverride: valuesYaml,
-        operation: isUpgrade ? "upgrade" : "install",
-      }),
+    queryFn: ({ signal }) =>
+      previewCatalogApplication(
+        {
+          clusterId,
+          chartVersionId: selectedVersionId,
+          namespace: namespace.trim(),
+          valuesOverride: valuesYaml,
+          operation: isUpgrade ? "upgrade" : "install",
+        },
+        signal,
+      ),
     enabled:
       editorMode === "review" &&
       !!selectedVersionId &&

@@ -31,6 +31,10 @@ type installedChartScopedPager interface {
 
 // ListInstallations handles GET /api/v1/clusters/{cluster_id}/installations/.
 func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -42,8 +46,8 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	installations, err := h.queries.ListInstalledChartsByCluster(r.Context(), sqlc.ListInstalledChartsByClusterParams{
 		ClusterID: clusterID,
@@ -304,7 +308,7 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req catalogUninstallRequest
-	if r.Body != nil && r.ContentLength != 0 && !decodeAndValidate(w, r, &req) {
+	if !decodeOptionalJSON(w, r, &req) {
 		return
 	}
 	_, chart, _, resolveErr := h.resolveInstalledChartRelease(r.Context(), installation)
@@ -351,6 +355,10 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 
 // ListInstalledCharts handles GET /api/v1/catalog/installed/.
 func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterIDStr := r.URL.Query().Get("cluster_id")
 	if clusterIDStr != "" {
 		ctx := chi.NewRouteContext()
@@ -372,7 +380,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	var rows []sqlc.InstalledChart
 	var total int64
 	if all {
-		rows, err = h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{Limit: int32(limit), Offset: int32(offset)})
+		rows, err = h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{Limit: queryLimit32(r, 20), Offset: queryOffset32(r)})
 		if err == nil {
 			total, err = h.queries.CountInstalledCharts(r.Context())
 		}
@@ -383,7 +391,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		rows, err = pager.ListInstalledChartsForScopes(r.Context(), sqlc.ListInstalledChartsForScopesParams{
-			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterIds: clusterIDs, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 		})
 		if err == nil {
 			total, err = pager.CountInstalledChartsForScopes(r.Context(), clusterIDs)
@@ -460,7 +468,7 @@ func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Req
 		ClusterID string `json:"cluster_id"`
 		CreateInstallationRequest
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

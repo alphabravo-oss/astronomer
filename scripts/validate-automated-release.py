@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the explicitly scoped v1.2.0/v1.2.1 automated publication qualification."""
+"""Verify the explicitly scoped approved exact-tag automated publication qualification."""
 
 import argparse
 import datetime as dt
@@ -18,6 +18,10 @@ spec.loader.exec_module(runtime_policy)
 spec = importlib.util.spec_from_file_location("metadata", Path(__file__).with_name("verify-release-metadata.py"))
 metadata = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(metadata)
+
+spec = importlib.util.spec_from_file_location("publication", Path(__file__).with_name("release-publication-policy.py"))
+publication_policy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(publication_policy)
 
 
 def validate_waivers(runtime, directory, tag, now):
@@ -46,8 +50,7 @@ def validate_waivers(runtime, directory, tag, now):
 
 
 def validate(args, directory=Path("."), now=None):
-    if args.tag not in {"v1.2.0", "v1.2.1"}:
-        raise ValueError("automated publication exception applies only to v1.2.0 and v1.2.1")
+    publication_policy.require_automated(args.tag)
     if not approval.COMMIT.fullmatch(args.source_commit) or any(
         not approval.RUN_ID.fullmatch(run) for run in (args.source_run_id, args.producer_run_id)
     ):

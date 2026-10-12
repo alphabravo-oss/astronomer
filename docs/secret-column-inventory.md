@@ -2,8 +2,9 @@
 
 Date: 2026-09-17
 
-The greenfield database is defined only by `001_initial.up.sql`. Every
-secret-looking text, JSON, UUID, or byte column in that file is classified by
+The greenfield database starts with `001_initial.up.sql` and applies the
+canonical subsequent migrations. Every secret-looking text, JSON, UUID, or byte
+column in those migrations is classified by
 `internal/db/migrations/migration_secret_columns_test.go`; adding an
 unclassified column fails CI.
 
@@ -20,7 +21,7 @@ unclassified column fails CI.
 | `backup_storage_configs.encrypted_credentials` | Versioned authenticated ciphertext | Complete object-store credential envelope. |
 | `management_backup_destinations.encrypted_credentials` | Versioned authenticated ciphertext | Complete management-plane dump object-store credential envelope. |
 | `cluster_registry_configs.registry_password_encrypted` | Versioned authenticated ciphertext | Complete cluster registry password. |
-| `project_registry_credentials.registry_credential_encrypted` | Versioned authenticated ciphertext | Complete project registry credential. |
+| `delivery_system_releases.registry_credential_encrypted` | Versioned authenticated ciphertext | Complete system-release registry credential. |
 | `delivery_sources.credential_encrypted` | Versioned authenticated ciphertext | Complete write-only delivery-source credential map. |
 | `gitops_registration_sources.webhook_secret_encrypted` | Versioned authenticated ciphertext | Per-source GitHub webhook HMAC secret; write-only and never logged. |
 | `dex_operations.payload_encrypted` | Versioned authenticated ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
@@ -47,7 +48,10 @@ Every new encrypted write uses
 payload through Fernet and identifies the exact read key without trial
 decryption. Raw Fernet tokens remain a measured, read-only compatibility path
 during migration (`astronomer_ciphertext_decryptions_total{format="legacy"}`);
-`keyrotate` rewrites them to the primary-key envelope before fallback removal.
+`keyrotate` rewrites them to the primary-key envelope. A successful live sweep
+does not prove that retained backups or delayed ciphertext no longer need the
+old key; retirement requires the separate retention review in the rotation
+runbook.
 
 `logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member copy lives in Secret `astronomer-loki-ingest-token` (mounted via fluent-bit Helm `extraVolumes` / `extraVolumeMounts`); the ConfigMap references `bearer_token_file` only. Plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
 
@@ -65,6 +69,9 @@ API authority and are cleared when the claimed work completes or is released.
 | `credential_state` | Bounded lifecycle enum. |
 | `delivery_sources.credential_key_version`, `delivery_sources.credential_epoch` | Encryption-key and rotation generation metadata. |
 | `delivery_assignment_receipts.credential_content_digest` | SHA-256 over deployment IDs and credential epochs; no secret or ciphertext input. |
+| `vulnerability_database_cluster_state.assignment_credential_digest`, `vulnerability_database_scan_claims.assignment_credential_digest` | Copy of the delivery receipt credential epoch digest; no credential material. |
+| `vulnerability_database_scan_claims.lease_token` | Short-lived scan-claim fencing nonce; requires existing authenticated claim ownership and grants no standalone API authority. |
+| `vulnerability_database_scan_claims.authority_secret_uid`, `vulnerability_database_scan_claims.image_pull_secret_uid` | Kubernetes Secret object UIDs used to bind observed resources; no Secret contents. |
 | `delivery_configuration_templates.secret_refs` | Kubernetes Secret names, keys, and Helm target paths only; secret values are never stored. |
 
 The migration classifier also sees the function-local variable `token` in

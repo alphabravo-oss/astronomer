@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Qualify every transitive release image by exact digest."""
 from __future__ import annotations
+import importlib.util
 import argparse, datetime as dt, hashlib, json, re, subprocess
 from pathlib import Path
 
 REF = re.compile(r"^[^\s@]+@sha256:[a-f0-9]{64}$")
 SPDX_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]*")
 OPERATORS = {"AND", "OR", "WITH"}
+
+spec = importlib.util.spec_from_file_location("publication", Path(__file__).with_name("release-publication-policy.py"))
+publication = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(publication)
 
 def canonical(v): return (json.dumps(v, sort_keys=True, separators=(",", ":")) + "\n").encode()
 def sha(path): return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
@@ -33,9 +38,20 @@ def waiver_map(document, now, release_version=None):
     if document["schema_version"] != 1 or not isinstance(document["waivers"],list): raise ValueError("invalid waiver document")
     result={}
     exact={"reference","category","ids","reason","approved_by","expires_at"}
+    future_fields={"owner","verification_evidence","availability_checked_at","upstream_fix_status"}
     for waiver in document["waivers"]:
-        if not isinstance(waiver,dict) or set(waiver) not in (exact, exact | {"release_version"}) or not REF.fullmatch(waiver["reference"]): raise ValueError("waiver violates closed exact-reference schema")
+        if not isinstance(waiver,dict) or set(waiver) not in (exact, exact | {"release_version"}, exact | {"release_version"} | future_fields) or not REF.fullmatch(waiver["reference"]): raise ValueError("waiver violates closed exact-reference schema")
         if "release_version" in waiver and (not isinstance(waiver["release_version"],str) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+",waiver["release_version"]) or waiver["release_version"] != release_version): raise ValueError("waiver release version does not match the manifest")
+        if release_version and release_version not in publication.automated_tags():
+            if not future_fields.issubset(waiver) or waiver.get("release_version") != release_version:
+                raise ValueError("future waiver requires exact tag, owner, evidence and upstream availability")
+            if any(not isinstance(waiver[k], str) or not waiver[k].strip() for k in future_fields):
+                raise ValueError("future waiver metadata missing")
+            checked=dt.datetime.fromisoformat(waiver["availability_checked_at"].replace("Z","+00:00"))
+            if checked.tzinfo is None or checked > now or now-checked > dt.timedelta(days=7):
+                raise ValueError("upstream availability check is stale or invalid")
+            if waiver["upstream_fix_status"] not in {"no_fixed_upstream_available", "fixed_upstream_incompatible_with_retained_evidence"}:
+                raise ValueError("adopt available compatible upstream fixes instead of waiving")
         if waiver["category"] not in {"vulnerability","license"} or not waiver["ids"] or not all(isinstance(x,str) and x for x in waiver["ids"]): raise ValueError("waiver category/ids invalid")
         if not waiver["reason"].strip() or not waiver["approved_by"].strip(): raise ValueError("waiver requires reason and approver")
         expiry=dt.datetime.fromisoformat(waiver["expires_at"].replace("Z","+00:00"))
@@ -48,9 +64,9 @@ def waiver_map(document, now, release_version=None):
 def digest_waiver(w,item): return "sha256:"+hashlib.sha256(canonical({**w,"id":item})).hexdigest()
 
 def qualify_findings(version, reference, vulnerabilities, licenses):
-    # The v1.2.0/v1.2.1 publication decision defers license qualification, not scanning
-    # or retention. Never apply this exception to vulnerabilities or later tags.
-    if vulnerabilities or (licenses and version not in {"v1.2.0", "v1.2.1"}):
+    # Exact-tag owner decisions defer license qualification, not scanning or
+    # retention. Vulnerabilities and unapproved tags still fail closed.
+    if vulnerabilities or (licenses and version not in publication.automated_tags()):
         raise ValueError(f"unwaived policy findings for {reference}: vulnerabilities={vulnerabilities}, licenses={licenses}")
     return {
         "high_critical_unwaived": 0,
@@ -130,6 +146,6 @@ def main():
     used={item for entry in entries for item in entry["applied_waivers"]}
     unused=set(indexed.values())-used
     if unused: raise ValueError("unused or stale exact-digest waiver is forbidden")
-    report={"schema_version":1,"release_version":manifest["release"]["version"],"release_manifest_sha256":sha(a.manifest),"result":"passed","vulnerability_qualification":"passed","license_qualification":"deferred" if manifest["release"]["version"] in {"v1.2.0", "v1.2.1"} else "passed","generated_at":now.replace(microsecond=0).isoformat().replace("+00:00","Z"),"entries":entries,"waivers_sha256":sha(a.waivers),"license_policy_sha256":sha(a.license_policy)}
+    report={"schema_version":1,"release_version":manifest["release"]["version"],"release_manifest_sha256":sha(a.manifest),"result":"passed","vulnerability_qualification":"passed","license_qualification":"deferred" if manifest["release"]["version"] in publication.automated_tags() else "passed","generated_at":now.replace(microsecond=0).isoformat().replace("+00:00","Z"),"entries":entries,"waivers_sha256":sha(a.waivers),"license_policy_sha256":sha(a.license_policy)}
     a.output.parent.mkdir(parents=True,exist_ok=True); a.output.write_bytes(canonical(report))
 if __name__=="__main__": main()

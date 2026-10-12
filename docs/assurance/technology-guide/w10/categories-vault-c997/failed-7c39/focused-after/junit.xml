@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="18" failures="1" errors="1" time="37.008542">
+	<testsuite tests="0" failures="0" time="0.000000" name="" timestamp="0001-01-01T00:00:00Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+	</testsuite>
+	<testsuite tests="2" failures="0" time="1.204000" name="github.com/alphabravocompany/astronomer-go/internal/agent" timestamp="2026-10-10T03:36:40Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/agent" name="TestStateMetricProjectionIncludesMaintainedInformers" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/agent" name="TestStateMetricProjectionPreservesUnknownWireKinds" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="14" failures="0" time="1.637000" name="github.com/alphabravocompany/astronomer-go/internal/observability" timestamp="2026-10-10T03:36:24Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricsPhaseHasOneCurrentSeries" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricsDurationBoundsOutcome" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestVaultResolveMetricsBoundsOutcome" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestOwnerMetricHealthDistinguishesIncompleteWithoutRefreshingTimestamp" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricOwnerDeferredAndLatePublication" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricOwnerSnapshotFreshnessAndBounds" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricOwnerAdmissionBudget" time="0.040000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricSnapshotResyncsCommittedReadyAfterDroppedFlush" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricSnapshotFencesStaleRowsAndRecreatedOwner" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricSnapshotAtomicCapAndInvalidObservations" time="0.300000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestVaultMetricLeaseDeletedAndRecreatedConnection" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestVaultMetricLookupAndSnapshotFreshness" time="0.020000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestVaultMetricOwnerAdmissionBudgetAndUnknownNames" time="0.140000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricProjectionKeepsDomainPhases" time="0.020000"></testcase>
+	</testsuite>
+	<testsuite tests="1" failures="0" time="1.018000" name="github.com/alphabravocompany/astronomer-go/internal/registration" timestamp="2026-10-10T03:36:25Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/registration" name="TestBufferedPhaseMetricsCaptureBeforeFlush" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="0" failures="0" time="0.000000" name="github.com/alphabravocompany/astronomer-go/internal/server" timestamp="2026-10-10T03:36:54Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="" name="TestMain" time="0.000000">
+			<failure message="Failed" type="">FAIL&#x9;github.com/alphabravocompany/astronomer-go/internal/server [build failed]&#xA;</failure>
+		</testcase>
+	</testsuite>
+	<testsuite tests="1" failures="0" time="1.039000" name="github.com/alphabravocompany/astronomer-go/internal/tunnel" timestamp="2026-10-10T03:37:00Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestTunnelStateMetricsBoundsKindWithoutChangingEvents" time="0.000000"></testcase>
+	</testsuite>
+</testsuites>

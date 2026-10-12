@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+  "productClaim": "Ordinary hardened v1 cryptography; no FIPS or FedRAMP certification",
+  "denominator": {
+    "trackedGoFilesParsed": 2537,
+    "literalCryptoImportFiles": 254,
+    "limits": "Go AST literal import inventory and resolved module graph, not whole-program or transitive cryptographic call-path proof"
+  },
+  "boundaries": [
+    {
+      "boundary": "management_agent_and_upstream_tls",
+      "sources": [
+        {
+          "path": "internal/agent/tls.go",
+          "sha256": "a19a2dc21453dbf16e719cccbecfc1556a430ede82dd56caa21d6b444c68ac5f"
+        },
+        {
+          "path": "internal/httpclient/trust.go",
+          "sha256": "06449eff7ebc4eea07507d8d87ae290605337b2d16e77f789d2d679358debbc9"
+        },
+        {
+          "path": "internal/server/app_distribution.go",
+          "sha256": "2e47d126d0edf6f3ca102ef82162a2ba173643330bd73029029b24f48b79954a"
+        }
+      ],
+      "scope": "Go crypto/tls and x509, TLS>=1.2, trust/CA pinning; external peers and operating environments separately unqualified",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "access_and_refresh_tokens",
+      "sources": [
+        {
+          "path": "internal/auth/jwt.go",
+          "sha256": "f96e46ad567a1742717ef5724c3ca5bda88ec834faf36eb73812b071ad11ce2b"
+        },
+        {
+          "path": "internal/auth/jwt_session.go",
+          "sha256": "d8844f781b40ddd9abec2211a2cf88cd95f39c57ffa7af2934f9ccb3b593f961"
+        }
+      ],
+      "scope": "HS256 golang-jwt; purpose-specific claims and durable refresh-family revocation; ordinary auth suite only",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "external_oidc",
+      "sources": [
+        {
+          "path": "internal/auth/oidc_discovery.go",
+          "sha256": "8e014e5c81e49840315303cf95978bd513f0816ab6402c494caf7d524ecb9480"
+        },
+        {
+          "path": "internal/auth/oauth.go",
+          "sha256": "f59c833ade5dfaf1152771807db75861f060c2e3ced7470c0abf316dcdf60cd7"
+        }
+      ],
+      "scope": "External OIDC/JWK/JOSE and provider secrets; provider algorithms/module claims not established",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "versioned_and_legacy_secret_envelopes",
+      "sources": [
+        {
+          "path": "internal/auth/crypto.go",
+          "sha256": "fe1feb60fa897e54bd2471758f2fff3c54c1d0cc45fba1f90edecdbf774439ab"
+        },
+        {
+          "path": "internal/credential/envelope.go",
+          "sha256": "ac7d0e8d1f962071a446d9a29afa0c3e197b73c7bd6f431fcd3eb1f210ef3aeb"
+        },
+        {
+          "path": "cmd/keyrotate/main.go",
+          "sha256": "7e1afdf4c7f43be29ed4265a0b325b12991432b39028ac34056f8085fe5885a9"
+        }
+      ],
+      "scope": "Fernet AES-CBC/HMAC-SHA256, authenticated version/algorithm/key IDs, legacy and multi-key readers; actual27-column catalog, two-row SMTP rotation and typed Dex unit cases",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "gitops_credential_adapter",
+      "sources": [
+        {
+          "path": "internal/worker/tasks/gitops_sync.go",
+          "sha256": "93bfcbe4e30dc719e52d74c549ae802d56f091f5926653ac844bd231a7863541"
+        },
+        {
+          "path": "internal/worker/tasks/gitops_credential_recovery_test.go",
+          "sha256": "579a546245e4d077e745bc3f0976553ce0e1e5b7e5e2aac76044284f9983e283"
+        }
+      ],
+      "scope": "Accepted bounded missing/wrong key failure for recognized envelopes; valid legacy plaintext remains distinct",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "password_and_legacy_hashes",
+      "sources": [
+        {
+          "path": "internal/auth/password.go",
+          "sha256": "e98eab32fd06a1e8f4f8a6df2358f4bb227db6da11a1e0a7d5c2d62c0147ca06"
+        },
+        {
+          "path": "internal/auth/ensure_admin.go",
+          "sha256": "2e374e4b5b327e046f8062ba537d5000d66a5632f1e9e94a965f7c0353ef7b8b"
+        }
+      ],
+      "scope": "New bcrypt; existing Django PBKDF2-SHA256/SHA1 and Argon2 readers/rehash compatibility; bcrypt/Argon2 spike runs outside native module even in only mode",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "totp_and_recovery_codes",
+      "sources": [
+        {
+          "path": "internal/auth/totp.go",
+          "sha256": "8468c0499b2a2565c51e53a0fb50776d4752a2d3d4255a65d2424d43d30194cd"
+        }
+      ],
+      "scope": "Authenticator-compatible SHA1 TOTP, recovery-code SHA256/crypto-rand and encrypted enrollment secrets; no FIPS protocol claim",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "management_dr_envelopes",
+      "sources": [
+        {
+          "path": "deploy/dr/dr_crypto.py",
+          "sha256": "1b1e928feb7bfc27891c8788e20e263c78a7c54d10a436427665c5e66a245ef8"
+        },
+        {
+          "path": "deploy/dr/test_dr_crypto.py",
+          "sha256": "c3b84869bb5a964fe270ee805520beb8d7555a6b089ef51eef85fc9227687bd4"
+        }
+      ],
+      "scope": "External Python cryptography/OpenSSL, streaming AES256-GCM, PBKDF2-HMAC-SHA256 authenticated manifest and explicit legacy backup reader; Go flags do not qualify this process",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "artifact_and_catalog_signatures",
+      "sources": [
+        {
+          "path": "internal/delivery/resolver/verifier.go",
+          "sha256": "8c1c20121e1617f5616b715a3b27766b24d0aeddeb582d1da38f99c1a4950067"
+        },
+        {
+          "path": "internal/delivery/resolver/oci.go",
+          "sha256": "42adc50e7cb083528d99c19b3dc4f1bea95a6185229bc082bcff4d6e8cdeb11c"
+        },
+        {
+          "path": "scripts/airgap-kit.py",
+          "sha256": "9d0075c19077fd7ec617a936630a6cae52ed98d1e3d025b66b9df9cecebe521c"
+        },
+        {
+          "path": "scripts/verify-release-metadata.py",
+          "sha256": "48a79acb3330f932f0f5bf0dad859c8ec9772941ebb7d0d3d617501915932861"
+        }
+      ],
+      "scope": "Sigstore/JOSE and separately selected Cosign process/provider boundaries; authenticity qualification is distinct from validated-module qualification",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "database_physical_backup_and_historical_keys",
+      "sources": [
+        {
+          "path": "deploy/chart/templates/postgres-cnpg.yaml",
+          "sha256": "640d77a48869a554d33b499d491ab25beaec8681a656aafc14151785dae91a57"
+        },
+        {
+          "path": "scripts/cnpg-recovery-fixture/keys.go",
+          "sha256": "e5ff81028e3aad5d41e9ebfa7de8ac8712986b3f84d6b9653d9f9a3691583a19"
+        },
+        {
+          "path": "scripts/cnpg-recovery-fixture/verify.go",
+          "sha256": "dcb6ef0ffc1558b85004bf1c2a7bbe355fb0934bd5dd5fb77cf0ff01188c9775"
+        }
+      ],
+      "scope": "External PostgreSQL/CNPG/Barman/RustFS; separate prior frozen schema72 physical restore/production readers and independently recovered historical keys; not relabelled current schema75 rotation",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "browser_and_nginx",
+      "sources": [
+        {
+          "path": "frontend/Dockerfile",
+          "sha256": "3724735e614116d420622de6653552a949db699fca7f7c488c98e68976c0b585"
+        },
+        {
+          "path": "frontend/src/lib/api/transport.ts",
+          "sha256": "e3f902f3c2410158de40df63563efaaa27c3ab05ca83f841c9bfb273f1358b1f"
+        },
+        {
+          "path": "frontend/src/lib/api/authentication-refresh.ts",
+          "sha256": "a6c0576dbd26e8f4178ab9831a6301834b64cb2ba46dcf079b9e4878efbb7a30"
+        }
+      ],
+      "scope": "Cookie/CSRF versus explicit bearer transport retained; browser/NGINX provider and OS/device cryptographic boundaries unqualified",
+      "fipsQualified": false
+    },
+    {
+      "boundary": "non_security_and_transitive_initialization",
+      "sources": [
+        {
+          "path": "internal/kubeutil/metadata.go",
+          "sha256": "7f91aa7f9d10af41e339b4a89053fe21fb33a8afa37f4c09212ab35446d1ce23"
+        }
+      ],
+      "scope": "SHA1 compatibility identity hashing and external Redis Lua SHA1 initialization; historical only-mode auth attempt fails before tests, and direct library spike bypasses that startup boundary",
+      "fipsQualified": false
+    }
+  ]
+}

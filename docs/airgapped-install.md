@@ -39,6 +39,140 @@ Required tools are Helm 3.16+, Skopeo, ORAS 1.2.2+, Cosign 2.4.1+, `jq`, and
 `sha256sum`. The exact versions used by release CI are visible in
 `.github/workflows/release.yaml`.
 
+For the new verified distribution contract, use the exact qualified toolchain
+and vendor trust assets supplied with that distribution. Historical v1 kits
+retain their tagged verification procedures; their availability does not
+qualify the new signed parent and chart-child OCI contract. The source contains
+local QA evidence, and publication/supplier qualification remains separate.
+
+## Operator-provided registry and prerequisite boundaries
+
+Use an existing operator-provided OCI registry when available. Astronomer does
+not take over its deployment or a database operator. The registry must retain
+the original digest bytes, all supported image platforms, parent distribution,
+every chart child, and signing/attestation objects. Recursive referrer copy
+alone is insufficient for legacy Cosign signatures: retain each digest-derived
+`.sig` subject as well. An operator endorsement changes approved locations; it
+cannot replace the original distribution publisher's signature or change a
+content digest.
+
+Record the registry's storage backend and recovery ownership. A PVC backend
+needs durable storage and a tested restore; an S3 backend needs an explicit
+internal endpoint, CA, bucket/prefix and credentials supplied outside public
+values. Measure all unique blobs for the selected profiles and supported
+architectures, retained current/rollback releases, concurrent uploads and
+temporary transfer copies before allocating capacity. Set repository/storage
+quotas and an alert threshold; keep garbage collection separate from imports,
+and retain signed release references, rollback subjects and signature objects.
+Recover storage plus registry configuration/CA/authentication policy, then
+verify the same immutable subjects before enabling delivery. These are
+acceptance requirements, not an unqualified bundled registry deployment.
+
+The selected platform profile must identify the exact operator-owned CNPG
+operator/CRDs, PostgreSQL server, Barman plugin/tools, object store and DR shell
+assets. Valkey, Dex, Fluent Bit, Charlie and supported integrations must likewise
+close under their enabled capabilities. A generic operator category or an
+upstream image digest alone does not qualify this profile. Trivy DB and Java DB
+payloads are separate OCI artifacts; retain manifest, config and layer bytes.
+W04 verifies freshness and real scanning, and W12 verifies database/object-store
+write, read, list, delete and retention behavior. An HTTP health result is not
+that qualification.
+
+Network authority is supplied independently of the signed content. Configure
+`delivery.distribution.destinationPolicy` with `restricted: true`, exact HTTPS
+origin/port entries and narrow destination CIDRs. For example an origin can be
+`https://registry.internal.example.com:443` with only the operator-approved
+registry subnet in `cidrs`. DNS must resolve entirely inside that policy; each
+connection pins checked addresses. Loopback, link-local and cloud metadata are
+never authorized. Mount the registry CA through `delivery.sourceResolution.ca`
+and vendor trusted roots through `delivery.sourceResolution.trustKeys` in both
+server and worker. Registry credentials remain in separately managed Secrets;
+do not print them during diagnostics. Source policy exceptions grant transport
+access only, and do not make an unsigned artifact trusted.
+
+For a verified builtin anonymous-read OCI source, the server passes the captured
+registry CA through the agent's Opaque Secret and Flux `certSecretRef`, retaining
+the exact child digest and publisher signature policy. Restart the server after
+rotating this CA; the credential receipt invalidates an older acknowledged
+assignment. The source must match the verified builtin catalog and independent
+origin/CIDR policy. This does not configure registry authentication for builtins;
+qualify an anonymous-read registry profile explicitly, or retain authenticated
+registry delivery as an unavailable prerequisite. Existing user source
+credentials and per-source CA configuration remain separate. See the
+[source contract and qualification limits](assurance/technology-guide/w03/builtin-private-ca.md).
+
+Until a signed local application catalog and its immutable child subjects have
+been qualified, set `catalog.enabled: false`, `catalog.sourceURL: ""` and
+`catalog.digest: ""` in the disconnected profile. This gives an explicit
+unavailable catalog, preserves existing installed workloads and makes no first
+boot public request. Do not enable a rewritten mutable HTTP index as a fallback.
+
+The S3 `managementBackup.s3.endpoint` is the internal data endpoint; approve that exact
+origin/CIDR through `managementBackup.s3.destinationPolicy` and mount its CA through
+`managementBackup.s3.ca`. Arbitrary stored URLs keep the public SSRF guard. Compliance
+async presigning is currently disabled and audit/support downloads use the
+authenticated API, so there is no implemented external browser presigning
+endpoint to configure. Real backup/restore/retention qualification remains
+required for the selected object store.
+
+After provisioning, inspect only structured distribution status:
+
+```bash
+kubectl -n astronomer logs deployment/astronomer-server --since=10m \\
+  | jq -c 'select(.msg == "distribution status") | {mode,release,source_digest,location,verification,inventory_complete,last_successful_sync,blocked_category}'
+```
+
+The actual provisioner emits these fields after loader attempts. Locations
+contain only the registry host/path; status excludes credentials, tokens,
+query parameters and trust material. `inventory_complete` describes the
+selected reviewed profile; it does not assert whole-site qualification. A
+failed local subject or signature yields its blocked category before mutation,
+with no public fallback. Preserve accepted workload history while repairing
+the owned artifact/policy and retry the durable delivery operation.
+
+## Signed v2 distribution graph transfer
+
+Future v2 distributions carry immutable parent and chart OCI subjects. Their
+offline graph transfer includes every original manifest, configuration, layer
+and legacy Cosign signature manifest. A recursive registry copy alone may omit
+legacy signature tags. The qualified precompiled distribution verifier captures
+them explicitly with `--export-published-layout` and `--transfer-output`, using
+the exact prepared `subjects.json` and independent release/root/catalog pins.
+It verifies the captured graph before emitting an archive. Registry CA and
+credentials use the approved CA file and normal protected Docker credential
+store; no credential is an archive field or command argument.
+
+After the release manifest has passed the canonical authenticated validator,
+an offline import can derive its pins from that authenticated manifest:
+
+```bash
+bundle_subject=$(jq -er '.built_in_bundles.artifact.reference' release-manifest.json)
+bundle_subject=${bundle_subject#oci://}
+catalog_digest=$(jq -er '.built_in_bundles.catalog_digest' release-manifest.json)
+"${DISTRIBUTION_VERIFIER:?qualified precompiled verifier required}" \
+  --verify-offline-transfer distribution-transfer.tar.gz \
+  --offline-import-directory verified-distribution-store \
+  --repository "${bundle_subject%@*}" \
+  --expected-distribution-digest "${bundle_subject##*@}" \
+  --expected-catalog-digest "$catalog_digest" \
+  --expected-release "${RELEASE_TAG:?authenticated release identity required}" \
+  --trust-directory /etc/astronomer/delivery-trust \
+  --signature-provider cosign_keyless \
+  --certificate-identity "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${RELEASE_TAG}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Offline verification has no HTTP or DNS transport and refuses network options.
+It authenticates the parent and every consumed child with the same mounted
+Sigstore trust before creating the new private OCI store. The index grants no
+trust by itself. Missing, changed, orphan, extra or unsafe members fail before
+filesystem mutation; original vendor signature bytes remain unchanged. This
+source interface is qualified with an owned QA registry and a distinct local
+QA key. Production OIDC publisher execution, signed verifier asset availability,
+the complete current supplier profile and live disconnected operation remain
+separate prerequisites. Stop if the selected release lacks these artifacts;
+historical v1 tags do not become v2 qualified through this interface.
+
 ## Air-gap kit (USB / sneakernet)
 
 Each GitHub Release includes `astronomer-airgap-vX.Y.Z.tar.gz` and
@@ -107,7 +241,8 @@ are rejected.
 Continue at [step 5](#5-prepare-the-cluster) with the kit chart,
 `airgap-values.json`, and `--set-file release.manifest=release-manifest.json`.
 `--all-platforms` saves the multi-arch index; `--first-party` saves only the
-six Astronomer images (smaller smoke USB).
+seven Astronomer images: server, worker, migrate, frontend, agent, shell and DR
+(smaller smoke USB). Historical tags use their own image-role contract.
 
 Registry-to-registry copy without a USB stick is the rest of this document
 (`mirror-release.py`).
@@ -124,26 +259,47 @@ gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer
 sha256sum --check SHA256SUMS
 ```
 
-Verify the signed manifest before trusting any digest in it:
+Authenticate and validate the signed manifest before trusting any digest in it.
+Use the precompiled distribution verifier from the approved signed tool assets;
+this source implementation does not imply that a historical release ships that
+new tool. If the matching qualified verifier/trust assets are unavailable, stop
+the affected install qualification. Do not build or fetch trust during offline
+verification. Mount the approved Sigstore trusted root and set the exact vendor
+publisher policy:
 
 ```bash
-cosign verify-blob \
-  --bundle release-manifest.sigstore.json \
-  --certificate-identity \
-    "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${ASTRONOMER_RELEASE}" \
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  release-manifest.json
-
-jq -e --arg version "$ASTRONOMER_RELEASE" '
-  .schema_version == 1 and
-  .release.version == $version and
-  .release.install_mode == "fresh_only" and
-  (.astronomer.images | length) == 6 and
-  (.flux.controllers | length) == 3 and
-  (.built_in_bundles.components | length) > 0 and
-  (.charlie.qualified_version | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
-' release-manifest.json >/dev/null
+export RELEASE_SIGNATURE_PROVIDER=cosign_keyless
+export RELEASE_CERTIFICATE_IDENTITY="https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${ASTRONOMER_RELEASE}"
+export RELEASE_CERTIFICATE_OIDC_ISSUER=https://token.actions.githubusercontent.com
+export SIGSTORE_TRUST_DIRECTORY=/secure/mounted-sigstore-trust
+export DISTRIBUTION_VERIFIER=/secure/qualified-tools/distribution-verifier
+export RELEASE_MANIFEST=release-manifest.json
+export RELEASE_SIGNATURE=release-manifest.sigstore.json
 ```
+
+<!-- verified-release-contract:start -->
+```bash
+"$DISTRIBUTION_VERIFIER" \
+  --validate-release-manifest "$RELEASE_MANIFEST" \
+  --signature "$RELEASE_SIGNATURE" \
+  --trust-directory "$SIGSTORE_TRUST_DIRECTORY" \
+  --signature-provider "$RELEASE_SIGNATURE_PROVIDER" \
+  --key-ref "${RELEASE_KEY_REF:-}" \
+  --certificate-identity "${RELEASE_CERTIFICATE_IDENTITY:-}" \
+  --certificate-oidc-issuer "${RELEASE_CERTIFICATE_OIDC_ISSUER:-}" \
+  --expected-release "$ASTRONOMER_RELEASE"
+```
+<!-- verified-release-contract:end -->
+
+The command authenticates the same owned bytes that it validates, using the
+canonical application release validator. It accepts the current
+`fresh_and_upgrade` contract and exact seven image roles for 1.2.x, and rejects
+missing DR, duplicate roles, stale install modes, unknown fields and wrong
+release identities. It does not replace this with a partial `jq` assertion.
+For an approved offline handoff, an installation-owned key policy can validate
+the exact already vendor-verified manifest; keep the original vendor evidence
+and the enclave approval record. A local QA key used by runbook fixtures is
+never Astronomer's release identity.
 
 Review `release-manifest.json` as the authoritative bill of materials. The
 human-readable `RELEASE_SUBJECTS`, SPDX documents, and SLSA provenance files are
@@ -413,7 +569,8 @@ Verify management and member workloads:
 kubectl -n astronomer get pods,jobs
 kubectl -n astronomer get pods -o jsonpath='{.items[*].spec.containers[*].image}' \
   | tr ' ' '\n' | sort -u
-helm get values astronomer -n astronomer -o yaml
+kubectl -n astronomer logs deployment/astronomer-server --since=10m \
+  | jq -c 'select(.msg == "distribution status") | {release,source_digest,verification,inventory_complete,blocked_category}'
 ```
 
 Use firewall, DNS, or flow logs during acceptance to prove there are no public
@@ -422,39 +579,61 @@ an air-gapped installation.
 
 ## 8. Export and import the application catalog
 
-The release kit contains Astronomer's runtime and built-in platform artifacts.
-The optional Apps catalog has its own bundle because it contains pinned
-third-party charts and a separate image inventory.
+The optional application archive carries reviewed third-party chart bytes and
+exact supported values profiles. Export never guesses images from only default
+values or downloads mutable same-version charts. Each catalog application needs
+reviewed profiles, exact TGZ hashes, recursively vendored dependencies and
+captured OCI platform evidence for every runtime image. Unrenderable charts,
+conditional images outside the reviewed inventory, mutable inputs or missing
+architectures block export. Operator overrides need their own requalification.
 
-On a connected workstation, check out the catalog revision pinned by
-`catalog.sourceURL`, verify `catalog.digest`, and export it:
+On the authorized connected publisher lane, prepare the signed transfer unit:
 
 ```bash
 ./scripts/application-catalog-airgap.sh export \
-  ../astronomer-catalog/catalog.json application-catalog.tar.gz
+  --catalog reviewed-application-catalog.json \
+  --profile-index reviewed-application-profiles.json \
+  --platform-evidence captured-platforms \
+  --output application-catalog.tar.gz \
+  --bom application-catalog.transfer.json \
+  --signature application-catalog.transfer.sigstore.json \
+  --verifier-bin "$DISTRIBUTION_VERIFIER" \
+  --cosign-bin "$COSIGN_BIN" \
+  --release "$ASTRONOMER_RELEASE" \
+  --publisher-mode production
 ```
 
-The exporter downloads every exact chart version, creates static Helm indexes,
-records checksums, and derives an `images.txt` inventory from default rendered
-values. Mirror those images with the same digest-preserving process used for
-the product release. Charts with conditional images may require additional
-references for the values you enable; the final rendered-manifest image check
-remains authoritative.
+Production mode must execute under the approved publisher OIDC identity. Local
+QA key mode is a separate fixture identity and does not qualify this artifact
+as an Astronomer distribution. Transfer the archive, external document and
+signature together; obtain the exact publisher policy and mounted trust through
+an independently approved channel.
 
-Transfer the bundle and import it into a document root served by your internal
-HTTPS service:
+Import into a new owned directory with no archive extraction before canonical
+publisher verification:
 
 ```bash
-./scripts/application-catalog-airgap.sh import application-catalog.tar.gz \
-  /srv/www/astronomer-catalog https://catalog.internal.example/astronomer
+./scripts/application-catalog-airgap.sh import \
+  --archive application-catalog.tar.gz \
+  --bom application-catalog.transfer.json \
+  --signature application-catalog.transfer.sigstore.json \
+  --destination ./verified-application-catalog \
+  --verifier-bin "$DISTRIBUTION_VERIFIER" \
+  --trust-directory "$SIGSTORE_TRUST_DIRECTORY" \
+  --signature-provider cosign_keyless \
+  --certificate-identity "$APPLICATION_CATALOG_CERTIFICATE_IDENTITY" \
+  --certificate-oidc-issuer "$APPLICATION_CATALOG_CERTIFICATE_OIDC_ISSUER"
 ```
 
-The importer verifies the original bundle, rewrites all catalog and Helm index
-URLs, regenerates checksums, and prints the exact `catalog.sourceURL` and
-`catalog.digest` Helm values. Set `catalog.allowPrivateMirrors=true` for a
-private address and configure `catalog.ca.existingSecret` when the HTTPS
-service uses a private CA. If the catalog host is unavailable, Astronomer keeps
-the last verified catalog and installed-app operations remain available.
+Import checks the signed closed member set, hashes, sizes, path/types, values,
+image inventory and actual offline chart rerenders before using the release-kit
+safe extractor. Missing, extra, duplicate, link or traversal members fail.
+Original catalog URLs and publisher bytes are preserved; no `sed` rewrite or
+regenerated checksum can substitute for a publisher signature. The command
+prints verification/inventory status and an explicit unavailable runtime
+qualification category. Keep disconnected catalog synchronization disabled
+until a signed local OCI catalog and immutable child subjects are qualified;
+an imported chart archive alone does not authorize a mutable HTTP index.
 
 ## Clean upgrades and rollback
 

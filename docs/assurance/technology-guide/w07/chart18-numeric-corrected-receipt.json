@@ -1,0 +1,20 @@
+{
+  "source_commit": "72c2fb75a86db7a687e70db97a6d2220cf9f1add",
+  "source_dirty": false,
+  "expected_major": 18,
+  "migration_version": 73,
+  "argv": [
+    "go",
+    "test",
+    "-p",
+    "2",
+    "./internal/handler",
+    "-run",
+    "^TestCatalogCursor(Postgres|RejectsAuthenticated)",
+    "-count=1",
+    "-v"
+  ],
+  "exit_code": 0,
+  "private_reference": "/tmp/w07-cnpg/database18.json",
+  "artifact": "chart18-numeric-corrected.log"
+}

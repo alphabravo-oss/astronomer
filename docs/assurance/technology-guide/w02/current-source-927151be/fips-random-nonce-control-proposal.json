@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "review_status": "exact_current_static_proposal; parent review pending; no exception applied",
+  "finding": {
+    "tool": "gosec",
+    "rule_id": "G407",
+    "path": "scripts/fips-mode-probe/main.go",
+    "line": 80,
+    "column": 22,
+    "source_digest": "sha256:91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b",
+    "level": "HIGH",
+    "fingerprint": "sha256:2230af0652180afc15dd854e8860d77d2db094cdbbb5f74cf677d669f84eacd8"
+  },
+  "probe_source_sha256": "91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b",
+  "selected_stdlib_path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/crypto/cipher/gcm.go",
+  "selected_stdlib_sha256": "1c438306f268e692037dbb2e98a34ba91b2ee23d0c452954d6ab415591f6f459",
+  "control": "cipher.NewGCMWithRandomNonce returns an AEAD with zero external nonce size; Seal rejects nonempty external nonce and generates/prepends random 96-bit nonce internally. The flagged nil external nonce is required API use, not reused cryptographic nonce. Probe only uses synthetic plaintext and ephemeral crypto/rand-generated AES key.",
+  "owner_evidence": "W16 df5803bc source and off/on/only native AES-GCM probe receipts; parent retained source review",
+  "no_generic_waiver": true,
+  "inspection_correction": "Initial /usr/local/go/src inspection was not selected GOROOT; preserved separately and corrected to actual go env GOROOT selected toolchain. Semantics confirmed in selected source."
+}

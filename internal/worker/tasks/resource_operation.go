@@ -122,6 +122,9 @@ func HandleResourceOperation(ctx context.Context, task *asynq.Task) error {
 		return failResourceOperation(ctx, queries, operation, "empty_response", 0, false)
 	}
 	status := response.StatusCode
+	if status < 100 || status > 999 {
+		return failResourceOperation(ctx, queries, operation, "invalid_http_status", 0, true)
+	}
 	if operation.Action == "delete" && status == http.StatusNotFound {
 		status = http.StatusNoContent
 	} else if status < http.StatusOK || status >= http.StatusMultipleChoices {

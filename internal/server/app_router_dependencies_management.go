@@ -54,7 +54,11 @@ func (c *productionComposition) composeManagementRouterDependencies(cfg *config.
 		h.SetRunTx(sqlcMutationTxRunner[handler.SupportBundleMutationTx](database))
 		return h
 	}()
-	deps.AdminPlatform.Compliance = handler.NewComplianceHandler(queries, c.queue)
+	deps.AdminPlatform.Compliance = func() *handler.ComplianceHandler {
+		h := handler.NewComplianceHandler(queries, c.queue)
+		h.SetReadSnapshot(complianceReadSnapshotRunner(database.Pool().BeginTx))
+		return h
+	}()
 	deps.AdminPlatform.CompliancePosture = handler.NewCompliancePostureHandler(queries, cfg.AuditLogRetentionMonths)
 	deps.AdminPlatform.License = handler.NewLicenseHandler()
 	deps.AdminPlatform.PlatformSettings = func() *handler.PlatformSettingsHandler {

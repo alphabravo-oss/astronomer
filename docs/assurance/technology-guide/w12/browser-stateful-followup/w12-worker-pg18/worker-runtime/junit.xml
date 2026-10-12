@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="0" errors="0" time="106.824313">
+	<testsuite tests="1" failures="0" time="106.824000" name="github.com/alphabravocompany/astronomer-go/internal/worker" timestamp="2026-10-09T22:40:10Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/worker" name="TestWorkerPostgresRedisIntegration" time="106.770000"></testcase>
+	</testsuite>
+</testsuites>

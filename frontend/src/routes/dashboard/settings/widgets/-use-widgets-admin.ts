@@ -28,7 +28,7 @@ export function useWidgetsAdmin() {
 
   const widgetsQuery = useQuery({
     queryKey: WIDGETS_KEY,
-    queryFn: listWidgets,
+    queryFn: ({ signal }) => listWidgets(signal),
   });
   const widgets = widgetsQuery.data ?? [];
   const loading = widgetsQuery.isLoading;

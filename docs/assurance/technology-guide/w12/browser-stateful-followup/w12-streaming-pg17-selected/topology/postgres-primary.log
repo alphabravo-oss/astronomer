@@ -1,0 +1,13 @@
+2026-10-09 22:42:03.529 UTC [60] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-09 22:42:03.530 UTC [60] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-09 22:42:03.530 UTC [60] LOG:  listening on IPv6 address "::", port 5432
+2026-10-09 22:42:03.532 UTC [60] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-09 22:42:03.535 UTC [63] LOG:  database system was shut down at 2026-10-09 22:42:03 UTC
+2026-10-09 22:42:03.536 UTC [64] FATAL:  the database system is starting up
+2026-10-09 22:42:03.542 UTC [60] LOG:  database system is ready to accept connections
+2026-10-09 22:42:06.757 UTC [61] LOG:  checkpoint starting: immediate force wait
+2026-10-09 22:42:06.913 UTC [61] LOG:  checkpoint complete: wrote 992 buffers (6.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.011 s, sync=0.130 s, total=0.157 s; sync files=1580, longest=0.001 s, average=0.001 s; distance=23069 kB, estimate=23069 kB; lsn=0/3000080, redo lsn=0/3000028
+2026-10-09 22:42:08.836 UTC [60] LOG:  received SIGHUP, reloading configuration files
+2026-10-09 22:42:08.836 UTC [60] LOG:  parameter "synchronous_standby_names" changed to "*"
+2026-10-09 22:42:09.060 UTC [85] LOG:  standby "walreceiver" is now a synchronous standby with priority 1
+2026-10-09 22:42:09.060 UTC [85] STATEMENT:  START_REPLICATION 0/4000000 TIMELINE 1

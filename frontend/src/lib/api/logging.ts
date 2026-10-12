@@ -30,7 +30,7 @@ import type {
   PaginatedResponse,
 } from "@/types";
 import { mapPage } from "./pagination";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
 type LoggingContracts = OpenAPIComponents["schemas"];
@@ -221,8 +221,10 @@ export function mapLoggingSavedSearch(
 
 export async function getLoggingSavedSearches(
   outputId: string,
+  signal?: AbortSignal,
 ): Promise<LoggingSavedSearch[]> {
   const response = await listLoggingSavedSearchesOperation({
+    signal,
     query: { output_id: outputId },
   });
   return response.data.map(mapLoggingSavedSearch);
@@ -285,9 +287,10 @@ export type LoggingAttachResult = Pick<
 
 export async function getLoggingAttachStatus(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<LoggingAttachStatus> {
   return requireData(
-    await getLoggingAttachStatusOperation({ path: { id: clusterId } }),
+    await getLoggingAttachStatusOperation({ signal, path: { id: clusterId } }),
     "getLoggingAttachStatus",
   );
 }
@@ -450,7 +453,8 @@ export async function getLoggingOperations(
   const response = await listLoggingOperationsOperation({
     signal,
     query: {
-      status: params?.status as LoggingOperationWire["status"] | undefined,
+      status: params?.status as
+        Exclude<LoggingOperationWire["status"], "unsupported"> | undefined,
       targetType: params?.target_type as
         LoggingOperationWire["targetType"] | undefined,
       targetKey: params?.target_key,
@@ -463,10 +467,11 @@ export async function getLoggingOperations(
 
 export async function getLoggingOperation(
   id: string,
+  signal?: AbortSignal,
 ): Promise<LoggingOperation> {
   return mapLoggingOperation(
     requireData(
-      await getLoggingOperationOperation({ path: { id } }),
+      await getLoggingOperationOperation({ signal, path: { id } }),
       "getLoggingOperation",
     ),
   );

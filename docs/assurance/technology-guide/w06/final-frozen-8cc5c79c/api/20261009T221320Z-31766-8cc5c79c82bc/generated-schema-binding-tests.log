@@ -1,0 +1,10 @@
+✔ canonical and read schema namespaces are bound to actual generated imports (1.291471ms)
+✔ copied DTO shapes, invented identifiers and unrelated imports cannot evade shadow detection (0.215675ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 69.68631

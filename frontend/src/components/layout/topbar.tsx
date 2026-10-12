@@ -123,7 +123,7 @@ function TopbarNotifications() {
   const { activated: charlieActivated } = useCharlieActivated();
   const { data: charlieFindings } = useQuery({
     queryKey: queryKeys.charlie.findings,
-    queryFn: listCharlieFindings,
+    queryFn: ({ signal }) => listCharlieFindings({ signal }),
     enabled: featureFlags?.["feature.charlie"] === true && charlieActivated,
     retry: false,
     refetchInterval: liveFallback(30_000),

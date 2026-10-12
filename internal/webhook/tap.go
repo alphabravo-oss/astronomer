@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -126,6 +127,10 @@ func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
 	if err != nil {
 		t.log.WarnContext(ctx, "webhook tap: marshal event failed",
 			"event", eventName, "error", err)
+		return
+	}
+	if len(payload) > math.MaxInt32 {
+		t.log.WarnContext(ctx, "webhook tap: event payload exceeds database size range", "event", eventName)
 		return
 	}
 	for _, sub := range subs {

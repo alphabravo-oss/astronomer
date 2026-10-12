@@ -87,7 +87,7 @@ func alertNotificationTxRunner(database *db.DB) tasks.AlertNotificationRunTx {
 }
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	log := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	observability.WithEvent(log, "worker_starting").Info("starting astronomer worker binary",
@@ -102,12 +102,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// C-01: enforce the same production fail-fast the server runs. Without this
-	// the worker stays Running with a typo'd ASTRONOMER_ENCRYPTION_KEY / bad
-	// secret / plaintext DSN — silently no-op'ing its credential-migration
-	// and email tasks — hiding exactly the misconfiguration
-	// the check exists to surface. warn-only in dev (ValidateProductionSecurity
-	// is a no-op outside production).
+	// Apply the server production security contract before starting any task.
 	encryptorReady := false
 	// Retained (not just probed) because the catalog:sync sweep needs it to
 	// unwrap helm_repositories.auth_config_encrypted — migration 145. The
@@ -141,17 +136,7 @@ func main() {
 	// incoming task payloads (planned follow-up in this same sprint),
 	// so when both processes point at the same OTLP endpoint a single
 	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
-	tracingCfg := observability.TracingConfig{
-		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
-		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
-		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
-		SamplerRatio: cfg.OTELSamplerRatio,
-	}
-	tracingCfg.ServiceName = "astronomer-worker"
-	tracingCfg.ServiceVersion = version.Version
-	tracingCfg.Environment = cfg.Env
-	tracingCfg.ServiceNamespace = "astronomer"
-	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
+	tracingCfg := workerTracingConfig(cfg)
 	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
 	if err != nil {
 		log.Error("failed to init otel tracing", "error", err)
@@ -262,6 +247,10 @@ func main() {
 		ManagementBackup:              backupExecutor,
 		AlertNotificationRunTx:        alertNotificationTxRunner(database),
 	}}
+	if err := tasks.ConfigureCatalogNetwork(&coreRuntime.Deps, cfg); err != nil {
+		log.Error("catalog network policy is invalid", "error", err)
+		os.Exit(1)
+	}
 	allowlistQueries := sqlc.New(database.Pool())
 	var allowlistMaterializer allowlistproviders.CloudCredentialMaterializer
 	if platformEncryptor != nil {
@@ -481,6 +470,8 @@ func main() {
 	defer stop()
 	db.StartMetricsReporter(ctx, database.Pool(), log)
 	worker.StartQueueMetricsReporter(ctx, queueInspector, log)
+	stopGenerationReporter := startMetricGenerationReporter(ctx, database.Pool().BeginTx)
+	defer stopGenerationReporter()
 
 	// Start worker and scheduler in background goroutines.
 	errCh := make(chan error, 3)
@@ -522,6 +513,7 @@ func main() {
 		observability.WithEvent(log, "worker_runtime_error").Error("fatal error", "error", err)
 	}
 
+	stopGenerationReporter()
 	w.Shutdown()
 	s.Shutdown()
 
@@ -551,9 +543,8 @@ func workerDBMaxConns(configured int32, concurrency int) int32 {
 		minimum  = int32(25)
 		headroom = int32(8)
 	)
-	derived := int32(concurrency) + headroom
-	if derived < minimum {
+	if concurrency <= int(minimum-headroom) {
 		return minimum
 	}
-	return derived
+	return int32(concurrency) + headroom
 }

@@ -43,8 +43,8 @@ func (h *BackupHandler) CreateRestoreByBackup(w http.ResponseWriter, r *http.Req
 	}
 
 	var req CreateRestoreRequest
-	if r.Body != nil && r.ContentLength != 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+	if r.Body != nil {
+		if err := decodeV1JSONBody(r, &req); err != nil && err != io.EOF {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}
@@ -132,12 +132,16 @@ func createRestoreOperationWith(ctx context.Context, q any, params sqlc.CreateRe
 
 // ListRestores handles GET /api/v1/backups/restores/.
 func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	restores, err := h.queries.ListRestoreOperations(r.Context(), sqlc.ListRestoreOperationsParams{
 		Limit:  limit,

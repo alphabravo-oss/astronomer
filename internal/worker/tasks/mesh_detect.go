@@ -168,20 +168,12 @@ func (runtime MeshRuntime) DetectAndUpsert(ctx context.Context, clusterID uuid.U
 		det.Mesh = mesh.MeshUnknown
 		det.Errors = append(det.Errors, err.Error())
 	}
-	row, err := runtime.Deps.Queries.UpsertClusterServiceMesh(ctx, sqlc.UpsertClusterServiceMeshParams{
-		ClusterID:               clusterID,
-		DetectedMesh:            det.Mesh,
-		DetectedVersion:         det.Version,
-		ControlPlaneNamespace:   det.ControlPlaneNamespace,
-		GatewayCount:            int32(det.GatewayCount),
-		VirtualServiceCount:     int32(det.VirtualServiceCount),
-		DestinationRuleCount:    int32(det.DestinationRuleCount),
-		PeerAuthenticationCount: int32(det.PeerAuthCount),
-		ServiceProfileCount:     int32(det.ServiceProfileCount),
-		ServerAuthCount:         int32(det.ServerAuthCount),
-		MtlsCoveragePct:         int32(det.MTLSCoveragePct),
-		LastError:               joinErrors(det.Errors),
-	})
+	params, err := meshDetectionParams(clusterID, det)
+	if err != nil {
+		meshDetectAttempts.WithLabelValues(observability.MetricValues("failure")...).Inc()
+		return err
+	}
+	row, err := runtime.Deps.Queries.UpsertClusterServiceMesh(ctx, params)
 	if err != nil {
 		meshDetectAttempts.WithLabelValues(observability.MetricValues("failure")...).Inc()
 		return fmt.Errorf("upsert mesh: %w", err)

@@ -1,0 +1,1355 @@
+{
+  "schemaVersion": 1,
+  "kind": "PinnedDatabaseCALocalEvidence",
+  "frozenSourceCommit": "24d9904de4599aa22ec342ae5a2d0bebccdfdb97",
+  "scopedStatus": "PASS",
+  "authoritativeQualification": false,
+  "wholeW04Status": "IN_PROGRESS",
+  "supplierWholeTransfer": false,
+  "productionOIDCPublication": false,
+  "durableProjection": false,
+  "scanUsedWitness": false,
+  "artifacts": [
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "baseline-originals/internal/delivery/provider/builtin_ca.go",
+      "path": "raw/sparse-build-failure/baseline-originals/internal/delivery/provider/builtin_ca.go.gz",
+      "originalBytes": 2439,
+      "originalSHA256": "d310c2217f7c0773867a4cc37adcd8c0d6c6266e5d0f1a206b5b9fd9f96005be",
+      "storedBytes": 1028,
+      "storedSHA256": "bd8abc6326d05a52ea6b16f4ab5b3bc7f1e7008ef9f8f193a281873666242027"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "final-capacity.log",
+      "path": "raw/sparse-build-failure/final-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "receipt.json",
+      "path": "raw/sparse-build-failure/receipt.json.gz",
+      "originalBytes": 339927,
+      "originalSHA256": "ca4a6952f0ecb8a82a703d08ed915932221f5973b448e17d723f39b28f833dd3",
+      "storedBytes": 69739,
+      "storedSHA256": "afd5a4b1143830722eba86f9e4c124b2171727c1bff769f137a6bb48e351070c"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-go-version-after-capacity.log",
+      "path": "raw/sparse-build-failure/selected-go-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-go-version-before-capacity.log",
+      "path": "raw/sparse-build-failure/selected-go-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-go-version-maintained-2-capacity.log",
+      "path": "raw/sparse-build-failure/selected-go-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-go-version-prelaunch-1-capacity.log",
+      "path": "raw/sparse-build-failure/selected-go-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-go-version.log",
+      "path": "raw/sparse-build-failure/selected-go-version.log.gz",
+      "originalBytes": 32,
+      "originalSHA256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "storedBytes": 52,
+      "storedSHA256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-node-version-after-capacity.log",
+      "path": "raw/sparse-build-failure/selected-node-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-node-version-before-capacity.log",
+      "path": "raw/sparse-build-failure/selected-node-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-node-version-maintained-2-capacity.log",
+      "path": "raw/sparse-build-failure/selected-node-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-node-version-prelaunch-1-capacity.log",
+      "path": "raw/sparse-build-failure/selected-node-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "selected-node-version.log",
+      "path": "raw/sparse-build-failure/selected-node-version.log.gz",
+      "originalBytes": 9,
+      "originalSHA256": "ff9f714664f5d87ac6548bb3700b0c18bd57add52ac986b01d4aec21543ccfda",
+      "storedBytes": 29,
+      "storedSHA256": "4fa190a929cd6a07ed736eb3a969f673140737da9bc7e3c5d8569365144cce7d"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "source-selection.json",
+      "path": "raw/sparse-build-failure/source-selection.json.gz",
+      "originalBytes": 2183511,
+      "originalSHA256": "2469482831d63796e04d26738ab11e0572adb1a16dadb25ebe0e922e5f27cb8b",
+      "storedBytes": 480170,
+      "storedSHA256": "e45cf5a0c2ab1180acc3e8a9561ef0173256dcbdfd8d0a1f8ceeb1cae1eb1343"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "unchanged-provider-ca-baseline-before-capacity.log",
+      "path": "raw/sparse-build-failure/unchanged-provider-ca-baseline-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "unchanged-provider-ca-baseline-maintained-2-capacity.log",
+      "path": "raw/sparse-build-failure/unchanged-provider-ca-baseline-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "unchanged-provider-ca-baseline-prelaunch-1-capacity.log",
+      "path": "raw/sparse-build-failure/unchanged-provider-ca-baseline-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "storedBytes": 97,
+      "storedSHA256": "dcfc78ebd6eb4968d8dac0cba0154a1acfaca8c7662a930011b769dd81931862"
+    },
+    {
+      "stage": "sparse-build-failure",
+      "originalName": "unchanged-provider-ca-baseline.log",
+      "path": "raw/sparse-build-failure/unchanged-provider-ca-baseline.log.gz",
+      "originalBytes": 1328,
+      "originalSHA256": "9767d6e864e68ca099c37640626f27a1deadb165ec58f42b88fac2e8ad4af78f",
+      "storedBytes": 351,
+      "storedSHA256": "66a50eeec911ac07a981aea8c69788c130cb0ff69c56f826b1e43ddce08780a3"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "baseline-originals/internal/delivery/provider/builtin_ca.go",
+      "path": "raw/unsigned-mirror-failure/baseline-originals/internal/delivery/provider/builtin_ca.go.gz",
+      "originalBytes": 2439,
+      "originalSHA256": "d310c2217f7c0773867a4cc37adcd8c0d6c6266e5d0f1a206b5b9fd9f96005be",
+      "storedBytes": 1028,
+      "storedSHA256": "bd8abc6326d05a52ea6b16f4ab5b3bc7f1e7008ef9f8f193a281873666242027"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "final-capacity.log",
+      "path": "raw/unsigned-mirror-failure/final-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "focused-physical-ca-race-after-capacity.log",
+      "path": "raw/unsigned-mirror-failure/focused-physical-ca-race-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "focused-physical-ca-race-before-capacity.log",
+      "path": "raw/unsigned-mirror-failure/focused-physical-ca-race-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "focused-physical-ca-race-maintained-2-capacity.log",
+      "path": "raw/unsigned-mirror-failure/focused-physical-ca-race-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "focused-physical-ca-race-maintained-3-capacity.log",
+      "path": "raw/unsigned-mirror-failure/focused-physical-ca-race-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "focused-physical-ca-race-prelaunch-1-capacity.log",
+      "path": "raw/unsigned-mirror-failure/focused-physical-ca-race-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "focused-physical-ca-race.log",
+      "path": "raw/unsigned-mirror-failure/focused-physical-ca-race.log.gz",
+      "originalBytes": 44605,
+      "originalSHA256": "fbb4527dad628731fc680facd71095098ff0a64fbff7d02dca89a5cfc0e31734",
+      "storedBytes": 3205,
+      "storedSHA256": "fa01bcc30f9d50852aa3dbc3324b65949bf839e5c30217cceee3d59cdabd0431"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "receipt.json",
+      "path": "raw/unsigned-mirror-failure/receipt.json.gz",
+      "originalBytes": 438912,
+      "originalSHA256": "027111001614f098e8fd806045c36ea8e1b33d28b656b1e5db640126a38de9b4",
+      "storedBytes": 88258,
+      "storedSHA256": "330b454bdb1acd685a556f6187c1475751fe706c9f3d48d0b663053056a46ca9"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-go-version-after-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-go-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-go-version-before-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-go-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-go-version-maintained-2-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-go-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-go-version-prelaunch-1-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-go-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-go-version.log",
+      "path": "raw/unsigned-mirror-failure/selected-go-version.log.gz",
+      "originalBytes": 32,
+      "originalSHA256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "storedBytes": 52,
+      "storedSHA256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-node-version-after-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-node-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-node-version-before-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-node-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-node-version-maintained-2-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-node-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-node-version-prelaunch-1-capacity.log",
+      "path": "raw/unsigned-mirror-failure/selected-node-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "selected-node-version.log",
+      "path": "raw/unsigned-mirror-failure/selected-node-version.log.gz",
+      "originalBytes": 9,
+      "originalSHA256": "ff9f714664f5d87ac6548bb3700b0c18bd57add52ac986b01d4aec21543ccfda",
+      "storedBytes": 29,
+      "storedSHA256": "4fa190a929cd6a07ed736eb3a969f673140737da9bc7e3c5d8569365144cce7d"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "source-selection.json",
+      "path": "raw/unsigned-mirror-failure/source-selection.json.gz",
+      "originalBytes": 2464322,
+      "originalSHA256": "9570ce8830402f7a4ce830bdd3917fff5bde39199026f163db788c91b1b647ce",
+      "storedBytes": 534358,
+      "storedSHA256": "e3a9876fe5118bc5396b063f64efe4876202ae4cdb20c9396cd6c64d0ff96003"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "unchanged-provider-ca-baseline-after-capacity.log",
+      "path": "raw/unsigned-mirror-failure/unchanged-provider-ca-baseline-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "unchanged-provider-ca-baseline-before-capacity.log",
+      "path": "raw/unsigned-mirror-failure/unchanged-provider-ca-baseline-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "unchanged-provider-ca-baseline-maintained-2-capacity.log",
+      "path": "raw/unsigned-mirror-failure/unchanged-provider-ca-baseline-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "unchanged-provider-ca-baseline-maintained-3-capacity.log",
+      "path": "raw/unsigned-mirror-failure/unchanged-provider-ca-baseline-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "unchanged-provider-ca-baseline-prelaunch-1-capacity.log",
+      "path": "raw/unsigned-mirror-failure/unchanged-provider-ca-baseline-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "storedBytes": 97,
+      "storedSHA256": "9f45ad1caea6560ed484cffb5a98562230ca4433f404a94ee2c268408ea8fb05"
+    },
+    {
+      "stage": "unsigned-mirror-failure",
+      "originalName": "unchanged-provider-ca-baseline.log",
+      "path": "raw/unsigned-mirror-failure/unchanged-provider-ca-baseline.log.gz",
+      "originalBytes": 3593,
+      "originalSHA256": "15395187c08d95c995eb7de79cfd8c399d23dd0d2e185e07bc13e8d322092d1e",
+      "storedBytes": 529,
+      "storedSHA256": "18f2362b22e8d1b4a99c901e96c9c1a9d39ef2c31519e0d7ddfd99261576443d"
+    },
+    {
+      "stage": "capacity-before-go-failure",
+      "originalName": "baseline-originals/internal/delivery/provider/builtin_ca.go",
+      "path": "raw/capacity-before-go-failure/baseline-originals/internal/delivery/provider/builtin_ca.go.gz",
+      "originalBytes": 2439,
+      "originalSHA256": "d310c2217f7c0773867a4cc37adcd8c0d6c6266e5d0f1a206b5b9fd9f96005be",
+      "storedBytes": 1028,
+      "storedSHA256": "bd8abc6326d05a52ea6b16f4ab5b3bc7f1e7008ef9f8f193a281873666242027"
+    },
+    {
+      "stage": "capacity-before-go-failure",
+      "originalName": "final-capacity.log",
+      "path": "raw/capacity-before-go-failure/final-capacity.log.gz",
+      "originalBytes": 151,
+      "originalSHA256": "d1ac2f2746ad36043fb37b3420337c949e47703331e75b53c84dfb3ece9c89a1",
+      "storedBytes": 147,
+      "storedSHA256": "33eba6747d9a8d679fbdfb4c1097257699444de2e760e8a1b5ca833ffeead8c5"
+    },
+    {
+      "stage": "capacity-before-go-failure",
+      "originalName": "receipt.json",
+      "path": "raw/capacity-before-go-failure/receipt.json.gz",
+      "originalBytes": 82461,
+      "originalSHA256": "1da92e970342f8784a29347e335ee815ada307e96f05659d8322fa5cef0c51fa",
+      "storedBytes": 18314,
+      "storedSHA256": "1fd1f4d97bcd5e47add9043ba919bb1e5ba78032adce04c75b6e703f403180e2"
+    },
+    {
+      "stage": "capacity-before-go-failure",
+      "originalName": "selected-go-version-before-capacity.log",
+      "path": "raw/capacity-before-go-failure/selected-go-version-before-capacity.log.gz",
+      "originalBytes": 151,
+      "originalSHA256": "d1ac2f2746ad36043fb37b3420337c949e47703331e75b53c84dfb3ece9c89a1",
+      "storedBytes": 147,
+      "storedSHA256": "33eba6747d9a8d679fbdfb4c1097257699444de2e760e8a1b5ca833ffeead8c5"
+    },
+    {
+      "stage": "capacity-before-go-failure",
+      "originalName": "source-selection.json",
+      "path": "raw/capacity-before-go-failure/source-selection.json.gz",
+      "originalBytes": 2465704,
+      "originalSHA256": "1e61a09cc0a1c4c6ebcdd936aaf0dd5593287f3cfb0c164b8ad9a3ca43c3d4ba",
+      "storedBytes": 534689,
+      "storedSHA256": "9f07cd345b9dc557edf664aca4b546405d8c941cca3eee04aecf477058c074d6"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "baseline-originals/internal/delivery/provider/builtin_ca.go",
+      "path": "raw/missing-config-fixture-failure/baseline-originals/internal/delivery/provider/builtin_ca.go.gz",
+      "originalBytes": 2439,
+      "originalSHA256": "d310c2217f7c0773867a4cc37adcd8c0d6c6266e5d0f1a206b5b9fd9f96005be",
+      "storedBytes": 1028,
+      "storedSHA256": "bd8abc6326d05a52ea6b16f4ab5b3bc7f1e7008ef9f8f193a281873666242027"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "final-capacity.log",
+      "path": "raw/missing-config-fixture-failure/final-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "focused-physical-ca-race-after-capacity.log",
+      "path": "raw/missing-config-fixture-failure/focused-physical-ca-race-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "focused-physical-ca-race-before-capacity.log",
+      "path": "raw/missing-config-fixture-failure/focused-physical-ca-race-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "focused-physical-ca-race-maintained-2-capacity.log",
+      "path": "raw/missing-config-fixture-failure/focused-physical-ca-race-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "focused-physical-ca-race-maintained-3-capacity.log",
+      "path": "raw/missing-config-fixture-failure/focused-physical-ca-race-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "focused-physical-ca-race-prelaunch-1-capacity.log",
+      "path": "raw/missing-config-fixture-failure/focused-physical-ca-race-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "focused-physical-ca-race.log",
+      "path": "raw/missing-config-fixture-failure/focused-physical-ca-race.log.gz",
+      "originalBytes": 74276,
+      "originalSHA256": "a5b2c826ab5c766b8509001f1025c85441d32b3975e4e220121ddb5efc16e105",
+      "storedBytes": 4843,
+      "storedSHA256": "9bfc1651eeef31a807c04cb259370be62c80516869240a9dcb1054f423c458e6"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "receipt.json",
+      "path": "raw/missing-config-fixture-failure/receipt.json.gz",
+      "originalBytes": 450513,
+      "originalSHA256": "b4298847fa11e0654e2f2da9b835796fd607376091d346c8cc2c2c54ee6592ec",
+      "storedBytes": 89656,
+      "storedSHA256": "60d1ab796a0f339e8c91eba06c498699c21bb51fae53da612545430b264e9475"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-go-version-after-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-go-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-go-version-before-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-go-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-go-version-maintained-2-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-go-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-go-version-prelaunch-1-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-go-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-go-version.log",
+      "path": "raw/missing-config-fixture-failure/selected-go-version.log.gz",
+      "originalBytes": 32,
+      "originalSHA256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "storedBytes": 52,
+      "storedSHA256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-node-version-after-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-node-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-node-version-before-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-node-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-node-version-maintained-2-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-node-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-node-version-prelaunch-1-capacity.log",
+      "path": "raw/missing-config-fixture-failure/selected-node-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "selected-node-version.log",
+      "path": "raw/missing-config-fixture-failure/selected-node-version.log.gz",
+      "originalBytes": 9,
+      "originalSHA256": "ff9f714664f5d87ac6548bb3700b0c18bd57add52ac986b01d4aec21543ccfda",
+      "storedBytes": 29,
+      "storedSHA256": "4fa190a929cd6a07ed736eb3a969f673140737da9bc7e3c5d8569365144cce7d"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "source-selection.json",
+      "path": "raw/missing-config-fixture-failure/source-selection.json.gz",
+      "originalBytes": 2465704,
+      "originalSHA256": "1e61a09cc0a1c4c6ebcdd936aaf0dd5593287f3cfb0c164b8ad9a3ca43c3d4ba",
+      "storedBytes": 534689,
+      "storedSHA256": "9f07cd345b9dc557edf664aca4b546405d8c941cca3eee04aecf477058c074d6"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "unchanged-provider-ca-baseline-after-capacity.log",
+      "path": "raw/missing-config-fixture-failure/unchanged-provider-ca-baseline-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "unchanged-provider-ca-baseline-before-capacity.log",
+      "path": "raw/missing-config-fixture-failure/unchanged-provider-ca-baseline-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "unchanged-provider-ca-baseline-maintained-2-capacity.log",
+      "path": "raw/missing-config-fixture-failure/unchanged-provider-ca-baseline-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "unchanged-provider-ca-baseline-maintained-3-capacity.log",
+      "path": "raw/missing-config-fixture-failure/unchanged-provider-ca-baseline-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "unchanged-provider-ca-baseline-prelaunch-1-capacity.log",
+      "path": "raw/missing-config-fixture-failure/unchanged-provider-ca-baseline-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "missing-config-fixture-failure",
+      "originalName": "unchanged-provider-ca-baseline.log",
+      "path": "raw/missing-config-fixture-failure/unchanged-provider-ca-baseline.log.gz",
+      "originalBytes": 3597,
+      "originalSHA256": "d20f3c52b3e23f042473f728675c43a216838b5383f267a88f8c731fc72a83ae",
+      "storedBytes": 531,
+      "storedSHA256": "48f09e4cb1e0aaf6667f4ff71b89374b575d4f21442835131cc3819c74d54015"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "baseline-originals/internal/delivery/provider/builtin_ca.go",
+      "path": "raw/corrected-pass/baseline-originals/internal/delivery/provider/builtin_ca.go.gz",
+      "originalBytes": 2439,
+      "originalSHA256": "d310c2217f7c0773867a4cc37adcd8c0d6c6266e5d0f1a206b5b9fd9f96005be",
+      "storedBytes": 1028,
+      "storedSHA256": "bd8abc6326d05a52ea6b16f4ab5b3bc7f1e7008ef9f8f193a281873666242027"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "boundaries-after-capacity.log",
+      "path": "raw/corrected-pass/boundaries-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "boundaries-before-capacity.log",
+      "path": "raw/corrected-pass/boundaries-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "boundaries-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/boundaries-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "boundaries-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/boundaries-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "boundaries.log",
+      "path": "raw/corrected-pass/boundaries.log.gz",
+      "originalBytes": 65,
+      "originalSHA256": "a802baaab5b543286e072c9ccd7858a61941282161443bb640838a3c85a831c4",
+      "storedBytes": 81,
+      "storedSHA256": "3edf250f0548f26c4e96fcb104abfb7be36aa3eb543a4186d1db3e622d422455"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "cli-docs-after-capacity.log",
+      "path": "raw/corrected-pass/cli-docs-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "cli-docs-before-capacity.log",
+      "path": "raw/corrected-pass/cli-docs-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "cli-docs-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/cli-docs-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "cli-docs-maintained-3-capacity.log",
+      "path": "raw/corrected-pass/cli-docs-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "cli-docs-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/cli-docs-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "cli-docs.log",
+      "path": "raw/corrected-pass/cli-docs.log.gz",
+      "originalBytes": 57,
+      "originalSHA256": "97d3a236a5bebfcbff0d3cb428b1ad6620be9a60e5eb514aeaa3b44a582297a9",
+      "storedBytes": 74,
+      "storedSHA256": "48e0c16ceccc9afe8f9a7a1ede246d0647ed7ebfc835e11eaadf0f79c6049d66"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "complexity-after-capacity.log",
+      "path": "raw/corrected-pass/complexity-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "complexity-before-capacity.log",
+      "path": "raw/corrected-pass/complexity-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "complexity-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/complexity-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "complexity-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/complexity-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "complexity.log",
+      "path": "raw/corrected-pass/complexity.log.gz",
+      "originalBytes": 101,
+      "originalSHA256": "b55da56d971e278075255d4b1f2a3b6413242ff5c53a9994bd58efa292f3f8f2",
+      "storedBytes": 102,
+      "storedSHA256": "afd203d885541d3a2284a5151b0dd9a0ced1822108b6ff0f27d135a7cb6d6a14"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "docs-after-capacity.log",
+      "path": "raw/corrected-pass/docs-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "docs-before-capacity.log",
+      "path": "raw/corrected-pass/docs-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "docs-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/docs-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "docs-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/docs-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "docs.log",
+      "path": "raw/corrected-pass/docs.log.gz",
+      "originalBytes": 562,
+      "originalSHA256": "1bcfa40a3522c26c615ceea622111d1e56947f32e75e2c113737b783fc5f97e0",
+      "storedBytes": 308,
+      "storedSHA256": "33e77d149db74f3e0ca3374ac6c4a85ea877331eae3093e4826cd1bc70e3a8e7"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "final-capacity.log",
+      "path": "raw/corrected-pass/final-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "focused-physical-ca-race-after-capacity.log",
+      "path": "raw/corrected-pass/focused-physical-ca-race-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "focused-physical-ca-race-before-capacity.log",
+      "path": "raw/corrected-pass/focused-physical-ca-race-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "focused-physical-ca-race-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/focused-physical-ca-race-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "focused-physical-ca-race-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/focused-physical-ca-race-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "focused-physical-ca-race.log",
+      "path": "raw/corrected-pass/focused-physical-ca-race.log.gz",
+      "originalBytes": 73909,
+      "originalSHA256": "d4148111e2cabf1a99a2d507b86f8dca020d6520d478a9f264ad46139faa4ec3",
+      "storedBytes": 4849,
+      "storedSHA256": "d2aca308201c8fa7ae969e923e86d70f5967579640c2b80ef5020a4e76dc3425"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "full-physical-ca-coupled-race-after-capacity.log",
+      "path": "raw/corrected-pass/full-physical-ca-coupled-race-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "full-physical-ca-coupled-race-before-capacity.log",
+      "path": "raw/corrected-pass/full-physical-ca-coupled-race-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "full-physical-ca-coupled-race-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/full-physical-ca-coupled-race-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "full-physical-ca-coupled-race-maintained-3-capacity.log",
+      "path": "raw/corrected-pass/full-physical-ca-coupled-race-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "full-physical-ca-coupled-race-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/full-physical-ca-coupled-race-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "full-physical-ca-coupled-race.log",
+      "path": "raw/corrected-pass/full-physical-ca-coupled-race.log.gz",
+      "originalBytes": 545664,
+      "originalSHA256": "38e8a3fcf76ee81f683e11c360bba8718f8b7070ecc64ffe89e3e7c2698a054b",
+      "storedBytes": 32524,
+      "storedSHA256": "3717529d1c3a16b44940e719a4cba0645e22be9e2d935b3eb06dcfd986f21fc9"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "json-governance-after-capacity.log",
+      "path": "raw/corrected-pass/json-governance-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "26cc7fd945abfad1e8733cdceef850d113cfdec5800b05e2e4012dd443395269",
+      "storedBytes": 100,
+      "storedSHA256": "1602c5cd29237b9d74426207ea6e27d09ad5a749e8e3b0688350c9125257d74c"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "json-governance-before-capacity.log",
+      "path": "raw/corrected-pass/json-governance-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "json-governance-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/json-governance-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "json-governance-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/json-governance-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "json-governance.log",
+      "path": "raw/corrected-pass/json-governance.log.gz",
+      "originalBytes": 153,
+      "originalSHA256": "559dbd67379696a743b45bf156e87ff1973fc9d1c1a49bb1e77ce7267691bdb5",
+      "storedBytes": 140,
+      "storedSHA256": "981a39d2209933e4c860addc731b36d5d34274dbb89ca9776db293aa129d2496"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race-after-capacity.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race-before-capacity.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race-maintained-3-capacity.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race-maintained-3-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race-maintained-4-capacity.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race-maintained-4-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "original-publisher-signed-graph-readback-race.log",
+      "path": "raw/corrected-pass/original-publisher-signed-graph-readback-race.log.gz",
+      "originalBytes": 222908,
+      "originalSHA256": "1d78695dcaa74d73dfe1de657e73bf802acc82821424ce1dd8087ca1102dec97",
+      "storedBytes": 12504,
+      "storedSHA256": "0d7a4270e2ea88713ee315859c6d8e62c9cc775ee6de2bba5e2a377bd8f1ff9f"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "receipt.json",
+      "path": "raw/corrected-pass/receipt.json.gz",
+      "originalBytes": 1308594,
+      "originalSHA256": "9c7a3f231625c2682cea575f9e82a4664078ae6b4218ad6eb7b7d81f416311a3",
+      "storedBytes": 237177,
+      "storedSHA256": "71bb15386c4a8ccea873a09c291a2975fc9601b336573ccf684be73307cb3242"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-go-version-after-capacity.log",
+      "path": "raw/corrected-pass/selected-go-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-go-version-before-capacity.log",
+      "path": "raw/corrected-pass/selected-go-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-go-version-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/selected-go-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-go-version-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/selected-go-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-go-version.log",
+      "path": "raw/corrected-pass/selected-go-version.log.gz",
+      "originalBytes": 32,
+      "originalSHA256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "storedBytes": 52,
+      "storedSHA256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-node-version-after-capacity.log",
+      "path": "raw/corrected-pass/selected-node-version-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-node-version-before-capacity.log",
+      "path": "raw/corrected-pass/selected-node-version-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-node-version-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/selected-node-version-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-node-version-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/selected-node-version-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "selected-node-version.log",
+      "path": "raw/corrected-pass/selected-node-version.log.gz",
+      "originalBytes": 9,
+      "originalSHA256": "ff9f714664f5d87ac6548bb3700b0c18bd57add52ac986b01d4aec21543ccfda",
+      "storedBytes": 29,
+      "storedSHA256": "4fa190a929cd6a07ed736eb3a969f673140737da9bc7e3c5d8569365144cce7d"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "source-selection.json",
+      "path": "raw/corrected-pass/source-selection.json.gz",
+      "originalBytes": 2466059,
+      "originalSHA256": "940272666ba241d945ab0fdb08c26549e71d181ce57b3e6eb99af42aaaf58788",
+      "storedBytes": 534775,
+      "storedSHA256": "afc9bbf1e6e529c64e93a29ceff6122373dbb83c29da1e87f461701e775fa9bc"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "unchanged-provider-ca-baseline-after-capacity.log",
+      "path": "raw/corrected-pass/unchanged-provider-ca-baseline-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "unchanged-provider-ca-baseline-before-capacity.log",
+      "path": "raw/corrected-pass/unchanged-provider-ca-baseline-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "unchanged-provider-ca-baseline-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/unchanged-provider-ca-baseline-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "unchanged-provider-ca-baseline-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/unchanged-provider-ca-baseline-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "unchanged-provider-ca-baseline.log",
+      "path": "raw/corrected-pass/unchanged-provider-ca-baseline.log.gz",
+      "originalBytes": 3592,
+      "originalSHA256": "9df65e4bec39ab8fd8ba7b866fa036d85d6769de4058c3a95a00922ec3c69414",
+      "storedBytes": 522,
+      "storedSHA256": "65f637dfd9a8f11132d54ea13cdd0c454600eb998bc778afe2cf485a585be2db"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "vet-after-capacity.log",
+      "path": "raw/corrected-pass/vet-after-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "vet-before-capacity.log",
+      "path": "raw/corrected-pass/vet-before-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "vet-maintained-2-capacity.log",
+      "path": "raw/corrected-pass/vet-maintained-2-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "vet-prelaunch-1-capacity.log",
+      "path": "raw/corrected-pass/vet-prelaunch-1-capacity.log.gz",
+      "originalBytes": 81,
+      "originalSHA256": "019a034ed1978fbb038a7eef27288dd3f6ecd8fd91631ac992c33a9ed4826451",
+      "storedBytes": 99,
+      "storedSHA256": "e3cb67c9c33f334c20e83f31391e9b254b244aa03090e263f8fd9c258af12055"
+    },
+    {
+      "stage": "corrected-pass",
+      "originalName": "vet.log",
+      "path": "raw/corrected-pass/vet.log.gz",
+      "originalBytes": 0,
+      "originalSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storedBytes": 20,
+      "storedSHA256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "stage": "runner-source",
+      "originalName": "plan032-w04-mirrored-ca-config-closed-gates.py",
+      "path": "runner/plan032-w04-mirrored-ca-config-closed-gates.py.txt",
+      "originalBytes": 17161,
+      "originalSHA256": "0d796142cc774c4bede8d934b956e6cf726ddf5635603c538c649b171de76215",
+      "storedBytes": 17161,
+      "storedSHA256": "0d796142cc774c4bede8d934b956e6cf726ddf5635603c538c649b171de76215"
+    },
+    {
+      "stage": "runner-source",
+      "originalName": "plan032_w04_owned_runner.py",
+      "path": "runner/plan032_w04_owned_runner.py.txt",
+      "originalBytes": 4144,
+      "originalSHA256": "60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d",
+      "storedBytes": 4144,
+      "storedSHA256": "60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d"
+    },
+    {
+      "stage": "runner-source",
+      "originalName": "plan032-w04-mirrored-ca-runner-controls.py",
+      "path": "runner/plan032-w04-mirrored-ca-runner-controls.py.txt",
+      "originalBytes": 9111,
+      "originalSHA256": "afab820977517399e4998a4ceb2f9997c86e1464bb966c7da0a442e9c5a62e5e",
+      "storedBytes": 9111,
+      "storedSHA256": "afab820977517399e4998a4ceb2f9997c86e1464bb966c7da0a442e9c5a62e5e"
+    },
+    {
+      "stage": "runner-source",
+      "originalName": "plan032-w04-mirrored-ca-runner-controls.log",
+      "path": "runner/plan032-w04-mirrored-ca-runner-controls.log.txt",
+      "originalBytes": 1422,
+      "originalSHA256": "9fb5acee39b881aa3b729621d9a4ac4376d3a612530b70b7536b7adee2a7b4ed",
+      "storedBytes": 1422,
+      "storedSHA256": "9fb5acee39b881aa3b729621d9a4ac4376d3a612530b70b7536b7adee2a7b4ed"
+    },
+    {
+      "stage": "runner-source",
+      "originalName": "plan032-w04-mirrored-ca-config-closed-runner.patch",
+      "path": "runner/plan032-w04-mirrored-ca-config-closed-runner.patch.txt",
+      "originalBytes": 1839,
+      "originalSHA256": "ed0a404790aee0e6b6c74b9e49df6378ed206fdf6985d21d0d5b390b3efc1adf",
+      "storedBytes": 1839,
+      "storedSHA256": "ed0a404790aee0e6b6c74b9e49df6378ed206fdf6985d21d0d5b390b3efc1adf"
+    },
+    {
+      "stage": "runner-source",
+      "originalName": "plan032-w04-mirrored-ca-config-closed-runner-bindings.json",
+      "path": "runner/plan032-w04-mirrored-ca-config-closed-runner-bindings.json.txt",
+      "originalBytes": 508,
+      "originalSHA256": "66c369aad444e95d4284d5d5aaf507b88e316b4333555c6961f6466ed3718e5f",
+      "storedBytes": 508,
+      "storedSHA256": "66c369aad444e95d4284d5d5aaf507b88e316b4333555c6961f6466ed3718e5f"
+    }
+  ]
+}

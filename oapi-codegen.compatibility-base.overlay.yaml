@@ -1,0 +1,125 @@
+# OpenAPI Overlay (https://github.com/OAI/Overlay-Specification) applied by
+# oapi-codegen BEFORE generation (see oapi-codegen.yaml -> output-options.overlay).
+#
+# WHY THIS EXISTS
+# docs/openapi.yaml is the canonical wire contract. This Go-only overlay
+# preserves released v1 source identities and pointer layouts while resolving
+# Go field-name collisions. It also retains the released inhibition pointer
+# fields while canonical schemas describe current writer requirements.
+#
+#   1. ResourceSearchResult includes upstream snake_case Kubernetes metadata
+#      alongside the canonical camelCase projection. Both normalize to the
+#      same Go field names, so the wire-specific fields need explicit names.
+#
+# These are generator-only Go representation adjustments. Canonical JSON
+# property names and HTTP operations come from docs/openapi.yaml.
+overlay: 1.0.0
+info:
+  title: astroclient codegen fixups
+  version: 1.0.0
+actions:
+  # --- duplicate camel/snake field names in one struct ------------------------
+  # ResourceSearchResult.results[].(cluster_id|cluster_name) collide with
+  # ResourceRow.clusterId and the sibling clusterName.
+  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_id
+    description: Rename snake_case dup so it does not collide with ResourceRow.clusterId.
+    update:
+      x-go-name: ClusterIdSnake
+  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_name
+    description: Rename snake_case dup so it does not collide with clusterName.
+    update:
+      x-go-name: ClusterNameSnake
+  # Preserve the v1 Go SDK pointer layout while the canonical document states
+  # the already-enforced runtime requirements and nullable defaults.
+  - target: $.components.schemas.InhibitionRequest.required
+    description: Replace the required array rather than append to it in overlay semantics.
+    remove: true
+  - target: $.components.schemas.InhibitionRequest
+    description: Keep optional pointer fields in existing Go clients.
+    update:
+      required: [name]
+  - target: $.components.schemas.InhibitionRequest.properties.equal_labels
+    description: Retain *[]string with omitempty in the v1 SDK.
+    update:
+      nullable: false
+  - target: $.components.schemas.InhibitionRequest.properties.enabled
+    description: Retain *bool with omitempty in the v1 SDK.
+    update:
+      nullable: false
+
+  # Preserve released v1 parameter struct layouts. The canonical browser/wire
+  # contract includes cursor; Go callers use the compatible WithPaginationCursor
+  # request editor with their existing generated method and parameter values.
+  - target: $.paths['/api/v1/catalog/charts/'].get.parameters[?(@.name == 'cursor')]
+    description: Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.
+    remove: true
+  - target: $.paths['/api/v1/controllers/alerts'].get.parameters[?(@.name == 'cursor')]
+    description: Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.
+    remove: true
+  - target: $.paths['/api/v1/controllers/silences'].get.parameters[?(@.name == 'cursor')]
+    description: Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.
+    remove: true
+
+  # Signed mode changes wire bounds without changing released Go field types.
+  # Request editors explicitly select the new mode; existing response models
+  # already hold arbitrary Go strings and preserve their released layouts.
+  - target: $.components.schemas.ControlPlaneAlertPage.properties.pagination
+    update:
+      $ref: "#/components/schemas/PaginationMetadata"
+  - target: $.components.schemas.ControlPlaneSilencePage.properties.pagination
+    update:
+      $ref: "#/components/schemas/PaginationMetadata"
+  - target: $.paths['/api/v1/catalog/charts/'].get.responses['200'].content['application/json'].schema.allOf[0]
+    update:
+      $ref: "#/components/schemas/PageEnvelope"
+  - target: $.components.schemas.SignedCursorPaginationMetadata
+    remove: true
+  - target: $.components.schemas.SignedCursorPageEnvelope
+    remove: true
+  # Preserve released Go method/response layouts while canonical optional paging
+  # remains available through a compatible request editor and browser client.
+  - target: "$.paths['/api/v1/admin/queues/{queue}/dlq'].get.parameters[?(@.name == 'page')]"
+    description: Retain the released Go method signature; WithAdminDLQPage supplies the canonical native page parameter.
+    remove: true
+  - target: "$.paths['/api/v1/admin/queues/{queue}/dlq'].get.responses['200'].content['application/json'].schema.allOf[1].properties.pagination"
+    description: Retain the released anonymous response struct layout; existing SDK users follow native pages using unchanged per-page count.
+    remove: true
+  # Canonical v1 wire status has RespondJSON's data envelope. Preserve the
+  # shipped Go SDK's original flat anonymous JSON200 field/pointer layout;
+  # CatalogControllerWindowFromResponse reads the actual wrapped raw Body.
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.properties.data"
+    description: Preserve the released anonymous response struct by removing the canonical data wrapper only from Go generation.
+    remove: true
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.required"
+    description: Remove the canonical envelope requirement only from the released Go representation.
+    remove: true
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema"
+    description: Restore the exact released six-field inline status layout; the raw-body reader supplies the actual additive wrapped window.
+    update:
+      type: object
+      properties:
+        reconciler:
+          type: object
+        catalog:
+          type: object
+          properties:
+            chartCount:
+              type: integer
+              format: int64
+            installedCount:
+              type: integer
+              format: int64
+              nullable: true
+        operations:
+          type: object
+          additionalProperties:
+            type: integer
+        recentFailureCount:
+          type: integer
+        recentOperations:
+          type: array
+          items:
+            type: object
+        latestFailure:
+          type: object
+          nullable: true

@@ -61,6 +61,7 @@ test("native grant review sends exact scope, preserves denied confirmations and 
             name: "grant-cluster",
             display_name: "Grant Cluster",
             status: "active",
+            registration_phase: "ready",
           },
         ],
         pagination: {
@@ -81,6 +82,7 @@ test("native grant review sends exact scope, preserves denied confirmations and 
           name: "grant-cluster",
           display_name: "Grant Cluster",
           status: "active",
+          registration_phase: "ready",
         },
       },
     }),

@@ -4,6 +4,7 @@
 {{- $releaseCompatibility := (.Files.Get "files/release-compatibility.json" | fromJson) -}}
 {{- $minimumUpgradeSchema := int $releaseCompatibility.postgresql.minimum_upgrade_schema -}}
 {{- $targetSchema := int $releaseCompatibility.postgresql.target_schema -}}
+{{- $cnpgUpgrade := and .Release.IsUpgrade (eq (include "astronomer.postgresMode" .) "cloudNativePG") -}}
 {{- if or (ne (int .Values.preflight.databaseSchema.minimumUpgradeVersion) $minimumUpgradeSchema) (ne (int .Values.preflight.databaseSchema.targetVersion) $targetSchema) -}}
 {{- fail "preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate" -}}
 {{- end }}
@@ -31,34 +32,36 @@ spec:
       # The read-only database gate runs before Kubernetes prerequisite checks.
       # Failure fails the Helm hook and leaves the database/PVC untouched.
       #
-      # IMPORTANT: this init container only runs when the operator points
-      # at an *external* Postgres. The chart-bundled Postgres
-      # StatefulSet is itself a regular release resource, so it doesn't
-      # exist at pre-install-hook time and the connectivity check would
-      # always fail. T13's value is gating production-mode installs
-      # against an unreachable / mis-configured external DB; that path
-      # is preserved here.
+      # External databases and existing CNPG upgrade targets must pass the
+      # schema gate. Fresh managed databases do not exist before installation.
+      # A migration to CNPG must create and restore its target before upgrading.
       initContainers:
-        {{- if eq (include "astronomer.postgresMode" .) "external" }}
+        {{- if or $cnpgUpgrade (eq (include "astronomer.postgresMode" .) "external") }}
         - name: db-preflight
           {{- with .Values.preflight.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if $cnpgUpgrade }}
+          image: {{ .Values.postgres.cloudNativePG.imageName | quote }}
+          {{- else }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "digest" .Values.postgres.image.digest "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
+          {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: HOME
               value: /tmp
-            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            - name: PGCONNECT_TIMEOUT
+              value: "10"
+            {{- if or $cnpgUpgrade .Values.postgres.external.dsnSecretRef.name }}
             # Operator-provided secret: must already exist in the
             # namespace before `helm install`. Pre-install hooks can
             # reference it because secrets are not chart-managed here.
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                  name: {{ include "astronomer.databaseSecretName" . | quote }}
+                  key: {{ include "astronomer.databaseSecretKey" . | quote }}
             {{- else }}
             # Inline the computed URL via the same helper the ConfigMap
             # uses at install time. The ConfigMap itself is a regular
@@ -111,6 +114,9 @@ spec:
 
               has_migrations=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.schema_migrations') IS NOT NULL;") || exit 1
               if [ "$has_migrations" != "t" ]; then
+                {{- if $cnpgUpgrade }}
+                fail_schema_preflight "CNPG upgrade target must contain a restored or initialized v1 database; refusing an empty cutover"
+                {{- end }}
                 public_tables=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "
                   SELECT count(*) FROM pg_catalog.pg_class c
                   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -476,6 +482,12 @@ spec:
                 exit 0
               fi
 
+              {{- if $cnpgUpgrade }}
+              # The init container has validated the actual CNPG target schema.
+              # A retained source PVC is rollback data, not the active database.
+              echo "CloudNativePG target schema validated; retained source PVCs are allowed."
+              exit 0
+              {{- end }}
               legacy_pvc="data-{{ include "astronomer.fullname" . }}-postgres-0"
               if kube_read "legacy bundled Postgres PVC ${legacy_pvc}" get pvc "${legacy_pvc}" -n "{{ .Release.Namespace }}" -o name; then
                 echo "Refusing upgrade: detected legacy bundled Postgres PVC ${legacy_pvc} in namespace {{ .Release.Namespace }}."

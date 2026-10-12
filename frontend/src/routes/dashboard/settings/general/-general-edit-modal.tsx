@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   useGeneralSettings,
   useSaveGeneralSettings,
@@ -14,6 +14,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
   const { data: generalSettings } = useGeneralSettings();
   const saveGeneralSettings = useSaveGeneralSettings();
 
+  const [serverError, setServerError] = useState<string>();
   const generalForm = useAppForm({
     defaultValues: {
       platformName: "Astronomer",
@@ -25,9 +26,12 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
     onSubmit: async ({ value }) => {
       try {
         await saveGeneralSettings.mutateAsync(value);
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error is handled by the mutation's onError callback
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -48,6 +52,11 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!generalForm.store.state.isSubmitting)
+          void generalForm.handleSubmit();
+      }}
       title="Platform Settings"
       onClose={onClose}
       size="md"
@@ -56,7 +65,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void generalForm.handleSubmit()}
+            type="submit"
             loading={saveGeneralSettings.isPending}
           >
             Save Settings
@@ -65,6 +74,9 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <generalForm.AppForm>
+        <generalForm.FormErrorSummary serverError={serverError} />
+      </generalForm.AppForm>
       <div className="space-y-4">
         <div className="space-y-1.5">
           <label
@@ -76,6 +88,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
           <generalForm.Field name="platformName">
             {(field) => (
               <Input
+                name={field.name}
                 id="platform-name"
                 aria-label="Platform Name"
                 value={field.state.value}
@@ -96,6 +109,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
           <generalForm.Field name="agentHeartbeatInterval">
             {(field) => (
               <Select
+                name={field.name}
                 id="agent-heartbeat"
                 aria-label="Agent Heartbeat Interval"
                 value={field.state.value}
@@ -120,6 +134,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
           <generalForm.Field name="defaultSessionTimeout">
             {(field) => (
               <Select
+                name={field.name}
                 id="session-timeout"
                 aria-label="Default Session Timeout"
                 value={field.state.value}

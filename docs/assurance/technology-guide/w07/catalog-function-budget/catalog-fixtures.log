@@ -1,0 +1,3 @@
+npm notice run astronomer-frontend@1.2.1 test
+npm notice run vitest run src/routes/dashboard/catalog/installed-tab.test.tsx src/routes/dashboard/catalog/repositories-table.test.tsx src/components/catalog/project-scope.test.tsx src/lib/api/catalog-cursor.test.ts src/components/ui/cursor-pagination.test.tsx --maxWorkers=1 --reporter=json --outputFile=/tmp/w02-catalog-budget-ea24c5a5/catalog-test-report.json
+JSON report written to /tmp/w02-catalog-budget-ea24c5a5/catalog-test-report.json

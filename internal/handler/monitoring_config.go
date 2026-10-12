@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -62,8 +61,12 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		return
 	}
 	var req UpdateMonitoringBackendRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	if _, err := monitoringRetryPolicy(req.AuthConfig); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
 	// RMW site (migration 146). This used to be a pure writer: whatever the
@@ -116,6 +119,10 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		policies["maxRetryAttempts"] = req.MaxRetryAttempts
 	} else if _, ok := policies["maxRetryAttempts"]; !ok {
 		policies["maxRetryAttempts"] = int32(1)
+	}
+	if _, err := monitoringRetryAttempts(policies["maxRetryAttempts"]); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
 	}
 	authConfigMap["operationPolicies"] = policies
 	if req.BackendType == "" {

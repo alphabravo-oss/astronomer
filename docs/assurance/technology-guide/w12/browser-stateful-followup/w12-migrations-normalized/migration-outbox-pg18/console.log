@@ -1,0 +1,8 @@
+=== RUN   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
+--- PASS: TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders (0.05s)
+=== RUN   TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted
+--- PASS: TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted (0.04s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	0.096s
+
+DONE 2 tests in 0.096s

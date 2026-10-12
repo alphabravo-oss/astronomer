@@ -33,8 +33,12 @@ type alertEventSummaryResponse struct {
 
 // ListEvents handles GET /api/v1/alerting/events/.
 func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	// Filters are pushed into SQL so pagination totals are correct across
 	// pages (previously status/severity/cluster were applied in-memory to a

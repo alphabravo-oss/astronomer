@@ -52,6 +52,7 @@ type TrivyVulnerabilityReport struct {
 
 // TrivyMetadata is the standard k8s metadata block.
 type TrivyMetadata struct {
+	UID       string            `json:"uid"`
 	Name      string            `json:"name"`
 	Namespace string            `json:"namespace"`
 	Labels    map[string]string `json:"labels"`
@@ -90,9 +91,8 @@ type TrivyRegistry struct {
 }
 
 // TrivySummary holds the per-severity aggregate counts. The operator
-// emits these along with the report so we don't have to re-derive them
-// from the Vulnerabilities slice — but the ingest path also recomputes
-// them as a defensive cross-check (see normalizeSummary).
+// emits these along with the report. Ingest validates their range without
+// re-deriving them from a possibly incomplete Vulnerabilities slice.
 type TrivySummary struct {
 	CriticalCount int `json:"criticalCount"`
 	HighCount     int `json:"highCount"`
@@ -118,6 +118,7 @@ type TrivyCVE struct {
 // Querier is the slice of *sqlc.Queries Ingest needs. Defined as an
 // interface so tests can stub the DB without standing up Postgres.
 type Querier interface {
+	UpsertImageVulnerabilityObservation(context.Context, sqlc.UpsertImageVulnerabilityObservationParams) (sqlc.ImageVulnerabilityObservation, error)
 	UpsertImageVulnerabilityReport(ctx context.Context, arg sqlc.UpsertImageVulnerabilityReportParams) (sqlc.ImageVulnerabilityReport, error)
 	// Sprint 081: history snapshot appended on every ingest so the
 	// dashboard can render trend lines + diff-vs-yesterday. The
@@ -203,14 +204,9 @@ func (i *Ingester) IngestUnstructured(ctx context.Context, clusterID uuid.UUID, 
 // report name REPLACES the CVE rows (DELETE-then-INSERT inside the
 // tx) so operators never see a mix of stale + fresh CVEs.
 func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVulnerabilityReport) error {
-	if i == nil {
-		return errors.New("scanner: ingester is nil")
-	}
-	if clusterID == uuid.Nil {
-		return errors.New("scanner: cluster_id is required")
-	}
-	if strings.TrimSpace(raw.Metadata.Name) == "" {
-		return errors.New("scanner: report metadata.name is required")
+	summary, err := checkedIngestReportSummary(i, clusterID, raw)
+	if err != nil {
+		return err
 	}
 
 	scannedAt := parseRFC3339OrNow(raw.Report.UpdateTimestamp)
@@ -234,11 +230,11 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 		ImageDigest:    raw.Report.Artifact.Digest,
 		Scanner:        scannerName,
 		ScannerVersion: raw.Report.Scanner.Version,
-		CriticalCount:  int32(raw.Report.Summary.CriticalCount),
-		HighCount:      int32(raw.Report.Summary.HighCount),
-		MediumCount:    int32(raw.Report.Summary.MediumCount),
-		LowCount:       int32(raw.Report.Summary.LowCount),
-		UnknownCount:   int32(raw.Report.Summary.UnknownCount),
+		CriticalCount:  summary.critical,
+		HighCount:      summary.high,
+		MediumCount:    summary.medium,
+		LowCount:       summary.low,
+		UnknownCount:   summary.unknown,
 		ScannedAt:      scannedAt,
 	}
 
@@ -284,6 +280,15 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 		_ = rollback(ctx)
 		i.recordOutcome("error")
 		return fmt.Errorf("scanner: upsert report: %w", err)
+	}
+
+	// Same transaction and BEFORE deleting any existing CVEs. The upstream
+	// field remains nullable; received_at is assigned by the database clock,
+	// never substituted for upstream time or interpreted as scan-used proof.
+	if err := persistReportObservation(ctx, q, report.ID, raw.Metadata.UID, raw.Report.UpdateTimestamp); err != nil {
+		rollbackReportObservation(rollback)
+		i.recordOutcome("error")
+		return err
 	}
 
 	// Append a history-snapshot row alongside the live upsert. The

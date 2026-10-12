@@ -62,6 +62,15 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    {{- if eq (include "astronomer.postgresMode" $root) "cloudNativePG" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" $root | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ $root.Values.postgres.port }}
+    {{- end }}
     {{- range $cidr := $postgresCIDRs }}
     # External Postgres connectivity check in the preflight init container.
     - to:

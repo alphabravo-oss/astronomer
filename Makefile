@@ -20,11 +20,11 @@ SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 # Pinned golangci-lint — mirrors the sqlc pinned-tool pattern. Kept in sync with
 # the default in scripts/check-go-lint.sh, which is what CI actually invokes.
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.14.0
 GOVULNCHECK_VERSION   ?= v1.8.0
 
 # Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
-OAPI_CODEGEN_VERSION ?= v2.5.0
+OAPI_CODEGEN_VERSION ?= v2.5.1
 OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
 # Local CI executes the real PR workflow with the official GitHub runner. The
@@ -120,8 +120,8 @@ test-postgres-failover-certification: ## Measure PostgreSQL streaming failover R
 test-postgres-failover-static: ## Validate the PostgreSQL failover certification runner contract
 	./scripts/tests/postgres-failover-runner-test.sh
 
-test-live-browser: ## Run live Playwright against disposable PostgreSQL, Redis, server, worker, and preview
-	./scripts/test-live-browser.sh
+test-live-browser: ## Run three browser engines against a fresh owned PostgreSQL/Valkey app stack per engine
+	./scripts/test-live-browser-matrix.sh
 
 test-live-browser-static: ## Validate the disposable live-browser runner without starting dependencies
 	./scripts/tests/live-browser-runner-test.sh
@@ -153,6 +153,7 @@ openapi-embed: ## Sync the served spec asset from the source-of-truth docs/opena
 openapi-generate: ## Deterministically sync routes, frontend operations/types, embedded spec, and Go SDK
 	node scripts/sync-openapi-routes.mjs --write
 	node scripts/openapi-quality.mjs
+	python3 scripts/categorical-contracts.py write
 	node scripts/generate-openapi-types.mjs --write
 	node scripts/generate-openapi-client.mjs --write
 	$(MAKE) openapi-embed
@@ -275,6 +276,21 @@ sqlc-extensions-check: ## Verify isolated legacy sqlc extension adapters
 
 data-governance-check: ## Verify JSON writer and destructive-delete ownership inventories
 	python3 ./scripts/check-data-governance.py
+
+.PHONY: versions-check versions-generate versions-release-check updates
+versions-check: ## Validate selected versions and all generated consumers offline
+	python3 scripts/toolchain.py --check
+	python3 -m unittest discover -s scripts/tests -p 'toolchain*test.py'
+
+versions-generate: ## Explicitly regenerate version consumers from reviewed authority
+	python3 scripts/toolchain.py --write
+
+versions-release-check: ## Reject missing or stale discovery and expired exceptions
+	test -n "$(TOOLCHAIN_RESOLUTION)" && test -n "$(TOOLCHAIN_RESOLUTION_BUNDLE)"
+	python3 scripts/toolchain-resolution.py --verify --record "$(TOOLCHAIN_RESOLUTION)" --bundle "$(TOOLCHAIN_RESOLUTION_BUNDLE)"
+
+updates: ## Discover final upstream releases without changing selected versions
+	python3 scripts/toolchain.py --discover --output .artifacts/toolchain-updates.json
 
 sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml
@@ -452,3 +468,15 @@ load-test: ## Run the load-test harness (see scripts/loadtest/README.md)
 	 LOADTEST_OUT='$(LOADTEST_OUT)' \
 	 LOADTEST_TOKEN='$(LOADTEST_TOKEN)' \
 	 go run ./scripts/loadtest
+
+categorical-contract-check: ## Verify canonical category/database/model/browser parity
+	python3 scripts/categorical-contracts.py check
+	python3 -m unittest discover -s scripts/tests -p categorical_contract_test.py
+
+sdk-v1-compatibility: ## Compile every released SDK field/function/method against current SDK
+	./scripts/check-sdk-v1-compatibility.sh
+
+.PHONY: support-matrix-check
+support-matrix-check: ## Validate scoped support claims and executable qualification lanes
+	python3 scripts/runtime-qualification-matrix.py --check
+	python3 -m unittest discover -s scripts/tests -p 'runtime_qualification_matrix_test.py'

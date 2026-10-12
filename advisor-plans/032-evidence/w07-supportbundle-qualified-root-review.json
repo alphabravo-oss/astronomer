@@ -1,0 +1,40 @@
+{
+  "utc": "2026-10-10T03:09:04.894186+00:00",
+  "sourceCommit": "898d94088b1969147f0da63b8d0310638ee1b03a",
+  "integratedCommit": "41cf0fc6e0e9d2cb5006904a8848914eff4fba9a",
+  "scope": "Four finite support-bundle Kubernetes streams only",
+  "fullDiffRead": true,
+  "packetSHA256": "0ad93a921fada96b5b929799d26e15187995d7d0cdbb36530ab0a4963d139fad",
+  "verifiedArtifacts": 8,
+  "frozenSourceMapsVerified": 2,
+  "maintainedCapacityGuardsVerified": 74,
+  "focusedRace": {
+    "parents": 5,
+    "leaves": 11,
+    "passEvents": 13,
+    "failEvents": 0,
+    "skipEvents": 0
+  },
+  "fullHandlerRace": {
+    "parents": 1572,
+    "leaves": 2394,
+    "passEvents": 2571,
+    "failEvents": 0,
+    "skipEvents": 18,
+    "skipReasonsIndependentlyVerified": true,
+    "qualifiedSkippedPaths": false
+  },
+  "handlerVet": "PASS",
+  "originalFixtureFailureRetained": true,
+  "changedSourceBytesMatch": [
+    "internal/handler/supportbundle_kubernetes.go",
+    "internal/handler/supportbundle_pagination.go",
+    "internal/handler/supportbundle_continuation_test.go"
+  ],
+  "rootReexecutedGo": false,
+  "combinedCandidateQualified": false,
+  "wholeW07Complete": false,
+  "reviewCommandCorrections": [
+    "Initial read-only Python command used missing python launcher; repeated with python3, no source/evidence mutation."
+  ]
+}

@@ -108,13 +108,13 @@ export default defineConfig({
           : undefined,
       },
     },
-    {
+    ...(["chromium", "firefox", "webkit"] as const).map((browserName) => ({
       // P7.2 live tier: explicit journeys against a REAL Go backend, reached
       // through the preview server's `/api` proxy (BACKEND_URL, see
       // vite.config.ts preview.proxy). Critical release journeys are
       // retry-free: an intermittent failure remains a failure and retains
       // its diagnostics.
-      name: "live",
+      name: browserName === "chromium" ? "live" : `live-${browserName}`,
       testDir: "./tests/e2e-live",
       // Optional measurement journeys are selected before collection, never skipped.
       testIgnore:
@@ -131,11 +131,18 @@ export default defineConfig({
       // moment the login spec signs out. Serial is correct, not a workaround.
       workers: 1,
       use: {
-        ...devices["Desktop Chrome"],
-        launchOptions: chromiumExecutable
-          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
-          : undefined,
+        ...devices[
+          browserName === "chromium"
+            ? "Desktop Chrome"
+            : browserName === "firefox"
+              ? "Desktop Firefox"
+              : "Desktop Safari"
+        ],
+        launchOptions:
+          browserName === "chromium" && chromiumExecutable
+            ? { executablePath: chromiumExecutable, chromiumSandbox: false }
+            : undefined,
       },
-    },
+    })),
   ],
 });

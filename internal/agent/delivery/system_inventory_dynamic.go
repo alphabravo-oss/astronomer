@@ -3,7 +3,6 @@ package delivery
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -40,10 +39,18 @@ func (p *ClusterProbe) inspectLonghornNodes(ctx context.Context) (protocol.Syste
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
-	return longhornNodesComponent(items)
+	component, valid := longhornNodesComponent(items)
+	if !valid {
+		return invalidInventoryProjection("nodes", "Longhorn storage nodes"), true
+	}
+	return component, true
 }
 
 func longhornNodesComponent(items *unstructured.UnstructuredList) (protocol.SystemComponent, bool) {
+	total, countOK := inventoryLength32(len(items.Items))
+	if !countOK {
+		return protocol.SystemComponent{}, false
+	}
 	var ready int32
 	var maximum, scheduled, available int64
 	resources := make([]protocol.SystemResourceObservation, 0, len(items.Items))
@@ -54,19 +61,24 @@ func longhornNodesComponent(items *unstructured.UnstructuredList) (protocol.Syst
 			ready++
 		}
 		nodeMaximum, nodeScheduled, nodeAvailable := int64(0), int64(0), int64(0)
-		disks, _, _ := unstructured.NestedMap(item.Object, "status", "diskStatus")
+		disks, _, diskErr := unstructured.NestedMap(item.Object, "status", "diskStatus")
+		if diskErr != nil {
+			return protocol.SystemComponent{}, false
+		}
 		for _, raw := range disks {
 			disk, ok := raw.(map[string]any)
 			if !ok {
-				continue
+				return protocol.SystemComponent{}, false
 			}
-			nodeMaximum += nestedInt64(disk, "storageMaximum")
-			nodeScheduled += nestedInt64(disk, "storageScheduled")
-			nodeAvailable += nestedInt64(disk, "storageAvailable")
+			if !addNestedInventoryNumber(&nodeMaximum, disk, "storageMaximum") ||
+				!addNestedInventoryNumber(&nodeScheduled, disk, "storageScheduled") ||
+				!addNestedInventoryNumber(&nodeAvailable, disk, "storageAvailable") {
+				return protocol.SystemComponent{}, false
+			}
 		}
-		maximum += nodeMaximum
-		scheduled += nodeScheduled
-		available += nodeAvailable
+		if !addInventoryNumber(&maximum, nodeMaximum) || !addInventoryNumber(&scheduled, nodeScheduled) || !addInventoryNumber(&available, nodeAvailable) {
+			return protocol.SystemComponent{}, false
+		}
 		health := "unavailable"
 		if isReady {
 			health = "healthy"
@@ -78,7 +90,6 @@ func longhornNodesComponent(items *unstructured.UnstructuredList) (protocol.Syst
 			Detail: fmt.Sprintf("%d bytes maximum, %d scheduled, and %d currently available.", nodeMaximum, nodeScheduled, nodeAvailable),
 		})
 	}
-	total := int32(len(items.Items))
 	return protocol.SystemComponent{
 		ID: "longhorn-system/longhorn.io/nodes", Name: "Longhorn storage nodes",
 		Category: "storage", Owner: "cluster", ManagementMethod: "longhorn",
@@ -117,10 +128,18 @@ func (p *ClusterProbe) inspectLonghornVolumes(ctx context.Context) (protocol.Sys
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
-	return longhornVolumesComponent(items)
+	component, valid := longhornVolumesComponent(items)
+	if !valid {
+		return invalidInventoryProjection("volumes", "Longhorn volumes"), true
+	}
+	return component, true
 }
 
 func longhornVolumesComponent(items *unstructured.UnstructuredList) (protocol.SystemComponent, bool) {
+	total, countOK := inventoryLength32(len(items.Items))
+	if !countOK {
+		return protocol.SystemComponent{}, false
+	}
 	var healthy int32
 	var provisioned, used int64
 	var minimumReplicas int32
@@ -131,9 +150,11 @@ func longhornVolumesComponent(items *unstructured.UnstructuredList) (protocol.Sy
 		if strings.EqualFold(robustness, "healthy") {
 			healthy++
 		}
-		provisioned += nestedInt64(item.Object, "spec", "size")
-		used += nestedInt64(item.Object, "status", "actualSize")
-		replicas := int32(nestedInt64(item.Object, "spec", "numberOfReplicas"))
+		actualSize, sizeOK := nestedInventoryNumber(item.Object, "status", "actualSize")
+		replicas, replicasOK := nestedInventoryCount32(item.Object, "spec", "numberOfReplicas")
+		if !sizeOK || !replicasOK || !addNestedInventoryNumber(&provisioned, item.Object, "spec", "size") || !addInventoryNumber(&used, actualSize) {
+			return protocol.SystemComponent{}, false
+		}
 		if replicas > 0 && (minimumReplicas == 0 || replicas < minimumReplicas) {
 			minimumReplicas = replicas
 		}
@@ -141,10 +162,9 @@ func longhornVolumesComponent(items *unstructured.UnstructuredList) (protocol.Sy
 			Name: item.GetName(), Namespace: item.GetNamespace(),
 			Group: "longhorn.io", Version: "v1beta2", Plural: "volumes", Kind: "Volume",
 			Health: strings.ToLower(robustness),
-			Detail: fmt.Sprintf("%d configured replicas; %d bytes actual size.", replicas, nestedInt64(item.Object, "status", "actualSize")),
+			Detail: fmt.Sprintf("%d configured replicas; %d bytes actual size.", replicas, actualSize),
 		})
 	}
-	total := int32(len(items.Items))
 	return protocol.SystemComponent{
 		ID: "longhorn-system/longhorn.io/volumes", Name: "Longhorn volumes",
 		Category: "storage", Owner: "cluster", ManagementMethod: "longhorn",
@@ -168,6 +188,10 @@ func (p *ClusterProbe) inspectCertificates(ctx context.Context) (protocol.System
 }
 
 func certificatesComponent(items *unstructured.UnstructuredList, now time.Time) (protocol.SystemComponent, bool) {
+	total, countOK := inventoryLength32(len(items.Items))
+	if !countOK {
+		return protocol.SystemComponent{}, false
+	}
 	var ready int32
 	resources := make([]protocol.SystemResourceObservation, 0, len(items.Items))
 	for index := range items.Items {
@@ -187,7 +211,6 @@ func certificatesComponent(items *unstructured.UnstructuredList, now time.Time) 
 			Health: health, Detail: detail,
 		})
 	}
-	total := int32(len(items.Items))
 	return protocol.SystemComponent{
 		ID: "cluster/cert-manager.io/certificates", Name: "Managed certificates",
 		Category: "certificates", Owner: "cluster", ManagementMethod: "cert-manager",
@@ -204,10 +227,18 @@ func (p *ClusterProbe) inspectGateways(ctx context.Context) (protocol.SystemComp
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
-	return gatewaysComponent(items)
+	component, valid := gatewaysComponent(items)
+	if !valid {
+		return invalidInventoryProjection("gateways", "Gateway API gateways"), true
+	}
+	return component, true
 }
 
 func gatewaysComponent(items *unstructured.UnstructuredList) (protocol.SystemComponent, bool) {
+	total, countOK := inventoryLength32(len(items.Items))
+	if !countOK {
+		return protocol.SystemComponent{}, false
+	}
 	var ready int32
 	var listeners int64
 	var attachedRoutes int64
@@ -218,11 +249,20 @@ func gatewaysComponent(items *unstructured.UnstructuredList) (protocol.SystemCom
 		if programmed {
 			ready++
 		}
-		statuses, _, _ := unstructured.NestedSlice(item.Object, "status", "listeners")
-		listeners += int64(len(statuses))
+		statuses, _, listenerErr := unstructured.NestedSlice(item.Object, "status", "listeners")
+		if listenerErr != nil {
+			return protocol.SystemComponent{}, false
+		}
+		if !addInventoryNumber(&listeners, int64(len(statuses))) {
+			return protocol.SystemComponent{}, false
+		}
 		for _, status := range statuses {
 			if object, ok := status.(map[string]any); ok {
-				attachedRoutes += nestedInt64(object, "attachedRoutes")
+				if !addNestedInventoryNumber(&attachedRoutes, object, "attachedRoutes") {
+					return protocol.SystemComponent{}, false
+				}
+			} else {
+				return protocol.SystemComponent{}, false
 			}
 		}
 		health := "unavailable"
@@ -235,7 +275,6 @@ func gatewaysComponent(items *unstructured.UnstructuredList) (protocol.SystemCom
 			Health: health, Detail: fmt.Sprintf("%d listener status entries.", len(statuses)),
 		})
 	}
-	total := int32(len(items.Items))
 	return protocol.SystemComponent{
 		ID: "cluster/gateway.networking.k8s.io/gateways", Name: "Gateway API gateways",
 		Category: "gateway", Owner: "cluster", ManagementMethod: "gateway-api",
@@ -263,24 +302,4 @@ func inventoryConditionTrue(item *unstructured.Unstructured, wanted string) bool
 func nestedString(object map[string]any, fields ...string) string {
 	value, _, _ := unstructured.NestedString(object, fields...)
 	return value
-}
-
-func nestedInt64(object map[string]any, fields ...string) int64 {
-	value, found, _ := unstructured.NestedFieldNoCopy(object, fields...)
-	if !found {
-		return 0
-	}
-	switch typed := value.(type) {
-	case int64:
-		return typed
-	case int32:
-		return int64(typed)
-	case float64:
-		return int64(typed)
-	case string:
-		parsed, _ := strconv.ParseInt(typed, 10, 64)
-		return parsed
-	default:
-		return 0
-	}
 }

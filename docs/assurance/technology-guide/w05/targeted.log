@@ -1,0 +1,14 @@
+npm notice run astronomer-frontend@1.2.1 test
+npm notice run vitest run src/lib/api/transport-auth.test.ts src/lib/api/transport-query.test.ts src/lib/api/read-cancellation.test.ts src/lib/api/auth.test.ts src/lib/api/account-security.test.ts src/routes/dashboard/settings/siem/forwarder-modal.test.tsx src/routes/dashboard/alerting/inhibition-panel.test.tsx src/components/ui/__tests__/form-adoption.test.ts src/components/form/__tests__/error-summary.test.tsx
+
+ RUN  v5.0.0 /root/astronomer-all/astronomer-032-w05/frontend
+
+
+ Test Files  9 passed (9)
+      Tests  65 passed (65)
+   Start at  19:18:57
+   Duration  4.77s (environment 36%, import 33%, transform 16%, tests 10%, setup 4%)
+
+Environment  jsdom was created 9 times · 6.01s total, 36% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments

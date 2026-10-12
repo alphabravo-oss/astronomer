@@ -61,6 +61,18 @@ spec:
             runbook_url: {{ $.Values.metrics.prometheusRule.runbookBaseURL }}/application-metrics-unavailable.md
         {{- end }}
 
+        - alert: AstronomerTraceExportFailing
+          expr: |
+            sum by (namespace,service,astronomer_instance_id) (rate(astronomer_tracing_exports_total{namespace={{ .Release.Namespace | quote }},result="failure",service=~{{ printf "%s-(server|worker)-metrics" (include "astronomer.fullname" .) | quote }}}[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: tracing
+          annotations:
+            summary: "Astronomer trace exports are failing"
+            description: "Completed SDK export calls are failing. This is missing diagnostic evidence, not a process or dependency readiness failure."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/trace-export-failing.md
+
         # ── Server HTTP error rate ──────────────────────────────────────
         - alert: AstronomerHighHTTPErrorRate
           expr: astronomer:http_5xx_ratio:5m > 0.01

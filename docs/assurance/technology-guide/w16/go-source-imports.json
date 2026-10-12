@@ -1,0 +1,2237 @@
+{
+  "cryptoImportFiles": 254,
+  "goSourceFilesParsed": 2537,
+  "schemaVersion": 1,
+  "scope": "All tracked Go files parsed with the Go AST; literal crypto/security-provider imports only. Separate third-party module closure, Python/OpenSSL, browser/NGINX and database boundaries require their own evidence.",
+  "sourceCommit": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+  "sources": [
+    {
+      "path": "cmd/charlie-qualification-hook/main.go",
+      "sha256": "ed90d7e4a6f7d8a4dcdcbd87db94215cfea9523b41775c67abfd2002cb3d2d80",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "cmd/keyrotate/owned_postgres_test.go",
+      "sha256": "d402952cbd9dc253ebde21f572f4e2d98a31da6c35920918ed2416eb705f088e",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/agent/overrides.go",
+      "sha256": "2922630745d183012575e9a7a15091de947813210c82cd00ee225eecec94a1bd",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/agent/template.go",
+      "sha256": "88963e4d0c47efc13716c71135c37c6bc23470978208396365240a2005d50505",
+      "imports": [
+        "crypto/sha256",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/agent/template_ca_test.go",
+      "sha256": "3f8bf3afbe73028cdb95693c50fe257cf8995e8232bffc74d1f1cfae0a61e91c",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/agent/template_test.go",
+      "sha256": "c97c441c127701a7cbcabdf968beb23cdb0c0c086dfbacf0ad1aed59f7ba9629",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/builder_test.go",
+      "sha256": "f50f7dcf10031dd9125e6d166f3e7324610b26a0254f9ffb55a09eeb549127a5",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "sha256": "e8e0e9a8921e30d14cf065ede2f4ff00fa100ab36e0c2ecb66fc07e1a34d8869",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/database_preparation.go",
+      "sha256": "368abb515183b232f3ff2f0d4efbe302f6ff781accac394de88420df17227455",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/database_preparation_test.go",
+      "sha256": "5ec4263e94552efe0c6e4486ab4a050f80b42afc195b4c1621e2bf0ccc50f38b",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/main.go",
+      "sha256": "ca6ac6b8697b995dc6c8ae382bfaf95c68a84eedb5e917f983e11fc8832d2d41",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/mirror_test.go",
+      "sha256": "4bfd34bf55d3f783e0169042219503d7d085689f8dbb5fc16efe3961fd455e74",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/publication_test.go",
+      "sha256": "ba5f58f46a02a6626b466f9ac60286116c3a9912ff6b6ec3119c919d82aa7181",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/publication_tls_test.go",
+      "sha256": "6ca06fb8b61709d293c45a044aad17eed3b55ce7a10056d30b146d8ca8e18bcc",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/registry_tool_client.go",
+      "sha256": "ba9be0733772884182bf2ba74bd347fc49528ef477f7114712d97ebbc56c915d",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/registry_tool_client_test.go",
+      "sha256": "86e45bc6eadd5e84cf8edfce6097b7f3bccc45fca960ce62e76bbd84d86bf209",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/verification_test.go",
+      "sha256": "6fb8a6a55e013231906e02c3d54ecfd99fcc48eb3707c8edc526938602b1594f",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "deploy/chartrepo.go",
+      "sha256": "162c08de7fc90d1d1bd0eef3973b5ac9c6b6af90a34ab61081b94b971d980073",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "deploy/flux/embed.go",
+      "sha256": "0e6ca6f50ed9224929f04a328c03dcdb9678ec79fdf11a951377a0ceda021a15",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/agent/delivery/checkpoint.go",
+      "sha256": "8381322600be69d393df126c99f1bf0b5805ca0fef12d837bbaab400f67da069",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/agent/delivery/materializer_test.go",
+      "sha256": "3797f3f29fc6d76022a726340261da4e6289326cd8f9a074d99a545e1314a55f",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/agent/delivery/probe_shared.go",
+      "sha256": "a3a8ea159613be4cbad8a4ad7576e1f9dc3efc896696186ab0e3692a7ffa8757",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/agent/delivery/system_test.go",
+      "sha256": "ed5e24efd58623ac60171c4501e4a3f6cb735c5321875db8264c681da3f79054",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/agent/observation/tracker.go",
+      "sha256": "ff2e6c8d212868a5e91f0873f87c538a20d68ae64f63e07b4a347318f7136d71",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/agent/tls.go",
+      "sha256": "a19a2dc21453dbf16e719cccbecfc1556a430ede82dd56caa21d6b444c68ac5f",
+      "imports": [
+        "crypto/sha256",
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/agent/tls_test.go",
+      "sha256": "8dc3f15c6a17c1b315953a5ce581c0673841382f8cd1cd1de1966ae594cee028",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/tls",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/agent/upgrade_preflight.go",
+      "sha256": "b1b366d70a8e736595442740b83bb8b0e513459d320898dddbfe746061b7ed51",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/apisvr/allowlist/providers/eks.go",
+      "sha256": "52cd729d7fb0637e3203100f71eca5a46cebc97dfaac4a5817c051e844bb5acc",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/audit/outbox.go",
+      "sha256": "7b544b7b856c2490adea2f14a134151ade4669e7f9ac247265f2263f3c28e7c4",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/agent_ingest_token.go",
+      "sha256": "c498673c6882165f5457a159d6ec55a3c4ea1fbbb6b51b3b095ef2c53565f7fb",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/browser_session.go",
+      "sha256": "9bd69d6807c4d2b26be784f4f7e9f9d4766d5492934f6cc507794873cc1b40b9",
+      "imports": [
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/crypto.go",
+      "sha256": "fe1feb60fa897e54bd2471758f2fff3c54c1d0cc45fba1f90edecdbf774439ab",
+      "imports": [
+        "crypto/sha256",
+        "github.com/fernet/fernet-go"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/crypto_test.go",
+      "sha256": "905bf57492ebb4fa9fe8b0cd03448017b4efdfcab1663b9128ccea6beca36c85",
+      "imports": [
+        "github.com/fernet/fernet-go"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/auth/ensure_admin.go",
+      "sha256": "2e374e4b5b327e046f8062ba537d5000d66a5632f1e9e94a965f7c0353ef7b8b",
+      "imports": [
+        "crypto/rand",
+        "golang.org/x/crypto/bcrypt"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/extension_tickets.go",
+      "sha256": "f7b434a4903bcbbc7e7bffe76219ee874d005836146be445085595048fea27b7",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/grafana_tickets.go",
+      "sha256": "5e6a16839744a65ed8cebefd3cf65db746be204e16da1ea8420c51b6b6f2f202",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/jwt.go",
+      "sha256": "f96e46ad567a1742717ef5724c3ca5bda88ec834faf36eb73812b071ad11ce2b",
+      "imports": [
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/jwt_revocation_test.go",
+      "sha256": "ed0400a2857222be129ffe82ba5c4f625b3d7ea6da4e2aa29737078e826299fe",
+      "imports": [
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/auth/jwt_session.go",
+      "sha256": "d8844f781b40ddd9abec2211a2cf88cd95f39c57ffa7af2934f9ccb3b593f961",
+      "imports": [
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/jwt_test.go",
+      "sha256": "b20f230f8a07d0277c6a69d9b85451f9da14eeb204f3aafa0589da1d2f517b34",
+      "imports": [
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/auth/oauth.go",
+      "sha256": "f59c833ade5dfaf1152771807db75861f060c2e3ced7470c0abf316dcdf60cd7",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/oidc_discovery.go",
+      "sha256": "8e014e5c81e49840315303cf95978bd513f0816ab6402c494caf7d524ecb9480",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rsa",
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/oidc_discovery_test.go",
+      "sha256": "f7d62af9befc135e8ff11684f0b91633d5ab38b2a52392c5038ae95f7fece89a",
+      "imports": [
+        "crypto/rand",
+        "crypto/rsa",
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/auth/oidc_ec_key_test.go",
+      "sha256": "8965063c2a6d0831e4f9193441e57af516744ab2074437df0ab20156394983a2",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/auth/opaque_token.go",
+      "sha256": "f38eb801a3899a94f2ec5b8bbecfdc10cb829e76613bf05beb79e26f69175e10",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/password.go",
+      "sha256": "e98eab32fd06a1e8f4f8a6df2358f4bb227db6da11a1e0a7d5c2d62c0147ca06",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha1",
+        "crypto/sha256",
+        "crypto/subtle",
+        "golang.org/x/crypto/argon2",
+        "golang.org/x/crypto/bcrypt",
+        "golang.org/x/crypto/pbkdf2"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/password_test.go",
+      "sha256": "5fec4472f28ac7cf97611e2cf6471328daed7f2b3b76a6b35f8936b492aacc08",
+      "imports": [
+        "crypto/sha256",
+        "golang.org/x/crypto/argon2",
+        "golang.org/x/crypto/bcrypt",
+        "golang.org/x/crypto/pbkdf2"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/auth/scim_token.go",
+      "sha256": "ae873b6a26fc85a239f74e71811a32fc52149791ff968135a0e4555d2de222f7",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/stream_tickets.go",
+      "sha256": "9cdeaf021eb1fbc6db26adcdd47275607194892cc4ee8bdffc49464cee845f36",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/totp.go",
+      "sha256": "8468c0499b2a2565c51e53a0fb50776d4752a2d3d4255a65d2424d43d30194cd",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256",
+        "github.com/pquerna/otp",
+        "github.com/pquerna/otp/totp"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/auth/totp_test.go",
+      "sha256": "c3390df981bd7f363c59ad9276f63e42f4be1f354fb2cf9de0430a1add663170",
+      "imports": [
+        "github.com/pquerna/otp",
+        "github.com/pquerna/otp/totp"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/catalog/blessed.go",
+      "sha256": "eed6ca11f178318560395e70a8b673cb7d0325770996d74c1013f3fb10fb8725",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/catalog/source.go",
+      "sha256": "874a3d6983da46b82b38433cb2524a5819164857a1543aa66e7cbf9a6729ecbb",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/action_envelope_contract_test.go",
+      "sha256": "da88ade02f63fd603b6e6e68394610bd828d07be29a623aa57d368a371027034",
+      "imports": [
+        "crypto/ed25519"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/action_guard.go",
+      "sha256": "e6ffd69ba8cd8c94b6f936da2f446f9ce75bfbd4ad9fd1b890938fed6e9bd5de",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/action_guard_test.go",
+      "sha256": "bf6a95b0e679aa10dea0b1d24b565d73a29761b32d9d173491ffab4a47e43cee",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/action_safety.go",
+      "sha256": "dcdafbfc01a2e4ed0411f5089a724d0cf55e57a6fa2cefd86b0986423dec8938",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/activation_test.go",
+      "sha256": "4394fd371d484d323c7dcc1ee52d1938efbf39830d2bdae05f9bbb0378ca203a",
+      "imports": [
+        "crypto/ed25519"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/approval_access.go",
+      "sha256": "de0e0d1a971630f06aaa87b427d47c9519ae99f7a9720327366aeeb4f94e92e5",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/approval_access_test.go",
+      "sha256": "2d9f9b6340e90826e092cf1dbb418c4de690224e5d5fb72965d7f329e5e21a62",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand",
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/authority_alert_acceptance_test.go",
+      "sha256": "88f17a779f2792b710a13fbdf49aa55823743f576ecae09514d5c0c33aedd8ce",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/bridge_adapter.go",
+      "sha256": "2ac13540371f62a42008057d004c8a6688638cca185a78022a33a51e6a36e3d1",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/catalog_safety_test.go",
+      "sha256": "ff8c980a07a7a15f283af37f42c9ee243959fad60dcb7402f5adb552b27f1b09",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/connect_token.go",
+      "sha256": "6d91994481766981d87dea5993e9df65ed74478049e37d9c0929bf612cc8fc9c",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/contract/approval.go",
+      "sha256": "4de15162a6499c73ef173802177dae2c0d6180d344094a914714e6d1dbe6879d",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/contract/approval_test.go",
+      "sha256": "f0c66481a8be725c1093eb2e08f0eb59c8687d4d4c33e3a207128ef6cdbaa007",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/contract/client.go",
+      "sha256": "e6b2274ad5af41e8257ca749523f01137774e522e2565f6fe73a6471b0faf1ef",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/contract/client_test.go",
+      "sha256": "094bac1e0250c18dad1eb560227d57e6030555723d3db56af8046ed48a8be5ff",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/contract/revocation.go",
+      "sha256": "bca1711c8b2106bc74132700b39949666f949258e858eeaf834af9e72158aab1",
+      "imports": [
+        "crypto/ed25519"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/contract/revocation_test.go",
+      "sha256": "7679fad36eaaebcb25f2eeffc047c4f3fd43e27a91318f7ad1e408a96cf7a717",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/contract/runtime.go",
+      "sha256": "2eddf729fc06e48980d6bb69595192289ebe79f7fdd60f85a2765e06ef51b20c",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/contract/verify.go",
+      "sha256": "039e326a3316383e0ccf20744eecc5bfc8ddd0d8ca5670c7283df1ffd0eb5255",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/delegation.go",
+      "sha256": "932c6589d40da406ae776ffc4b675df32388f1023b6366ba2a437a6bccbfa1be",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/downstream_boundary_test.go",
+      "sha256": "99d7582118db4ed627a1291f96c2b9e48dc3494b5e380464521df700cda607c8",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/finding_access.go",
+      "sha256": "b65a67c819d375e5459a84cb77353157d1f0932f981d33e532bb66ecf7176e28",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/managed_bridge.go",
+      "sha256": "8db88e3c8dfaaaa1ef5c65047d2ffa70d96c7eb943ef47aef497ea7114d763b6",
+      "imports": [
+        "crypto/sha256",
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/managed_bridge_test.go",
+      "sha256": "416508a568ce5f0cb7e61c485118643f0d4cd09d6a67ca2930077042a058b4d6",
+      "imports": [
+        "crypto/ed25519"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/mcp.go",
+      "sha256": "ffb9bed2cbf18c40d8719b41b198a62fe7cbbd2a900373c5996f1e8264b56f6c",
+      "imports": [
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/mcp_listener.go",
+      "sha256": "f9d238fac98a1315a5f85d9c3fef273d88b58b109ca4eefbcd9b3b45e95d123b",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/mcp_listener_test.go",
+      "sha256": "10cc6dfe2ea9e7c63f8f97748ba76357bddb2a2b71eaba63ca854b30d43e6c32",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/mcp_runtime.go",
+      "sha256": "73bc785d42ae8ae63a58279549851d515593d49d1cb1c228d668d8f5d7117e29",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/mcp_runtime_test.go",
+      "sha256": "fd44f64f0d4c8f388987ea85d73ee547e714fdeca63d66fd7b55b7c8abd07052",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/mcp_test.go",
+      "sha256": "0ba54dbf4bbdec023b9b718db0e46bc64319aad0d462af396456e46557d27424",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/onboarding.go",
+      "sha256": "7b608de6d74873af838de1bcc9120e06269f1ea40b01457b28d75ab8503455bf",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/onboarding_test.go",
+      "sha256": "41f5c546f5e6dc31e03fc2cb92e4abe99b21a1e64afe9a77a33dd3b0cee656e8",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/operational_capability_adapter.go",
+      "sha256": "2f5655d45a439cc7a86dd61cced1fe4d51d76b898451976f871aaa5568d04f1d",
+      "imports": [
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/product_adapter_conformance_test.go",
+      "sha256": "d2287ab0d4625cd0f07096d980d2f4cf3f67ca3adba4cc67aee72f61d96f426a",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256",
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charlie/secret_writer.go",
+      "sha256": "665964778d1ce535bdc161379be27eaccf14cd7d4c0a82aa2d9f13789a6520db",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/triggers.go",
+      "sha256": "efd39bd2ac064a8d6f356925d59d3caf80f3814047cae151efb1b5519e6cb4af",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/trust.go",
+      "sha256": "27e68d03cffcbbe487746d53bcc2db85f62f72bc21a856cdff212ee0883bba12",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charlie/trust_test.go",
+      "sha256": "03947263a61157b200e1935358c6fd14976baa74c66354e413787db314681648",
+      "imports": [
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/charliequalification/deploy_hook.go",
+      "sha256": "ff3e7a5aea559a47b7e416a7ee68d427e0abf2acfa9542c104e6745662ab77e1",
+      "imports": [
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charliequalification/driver.go",
+      "sha256": "47f0120984057d05839b90f328fd51a6692d9c02668524ab678aa9121a14015e",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charliequalification/hook.go",
+      "sha256": "fcc482de7d63a2b901d2ac6dbd98b7dccc531d82788e3e9eca7998813d7ff206",
+      "imports": [
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charliequalification/isolation.go",
+      "sha256": "05d2d6e5cb1cfe34899335d27dcecc733b0595bfc091f2149d3778d86e2a4f7e",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/charliequalification/leader_failover.go",
+      "sha256": "835a9800edc06a02407fb509dd1d94f1f5cb86699dfd6ece7c11262226ac20d1",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/cloudcreds/aws.go",
+      "sha256": "e22ea4efd2eed8d5fd55d3d11f0dfea268e1d5a36ba0cd6ca59de9b053c0b46e",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/config/config_test.go",
+      "sha256": "c916121a0a4a26bc9ab9bbab4be8231aceaaa59e63c57e05fde644911b494200",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/config/production.go",
+      "sha256": "6fa8a5f60a2e14fb7b6c10026369c82594d440781faf36a887079ced4dc980ba",
+      "imports": [
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/config/production_test.go",
+      "sha256": "eda9b9ea8a9658b58be7464064d68d52aef77147eb1a9521abb8cd316b150820",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/dashboards/prom.go",
+      "sha256": "0ef2bcb0bc9ff367c9cd06b448cc1e9f0096deabbf6660ef0389c7934ee09764",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/db/sqlc/refresh_sessions_integration_test.go",
+      "sha256": "1355e109689ba49257a68ad1c3cb58f4c24a4fc11fd6157edce34223b8baa391",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/builtin/provisioner.go",
+      "sha256": "1d2add9a4c58ea9277af6ddcc6013c851eb8bbad75907994a79d38d7b822438b",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/catalogapp/service.go",
+      "sha256": "75695f85735550082fd7406850be6df71814046e6a19debfb3dd480084f67510",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/configuration/merge.go",
+      "sha256": "4e7d5e161f8e9c85dcc6babb199cb2ad919ec2b484cf210da76147f56e12af40",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/distribution/contract.go",
+      "sha256": "f128ac8d1070db12f303b5e643f3d73149433f4ccee1d6539d1ac52619aa7d23",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/distribution/database_descriptor_test.go",
+      "sha256": "63b83a0aee0cb48efb27274d4237c7c3a12b0c9e6dfe27ce50541b46a53adc67",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/distribution/mirror_test.go",
+      "sha256": "60034cef7d30780e7bb06b5bb35b1a817b8d8ca9720432b8e9dcb7cdef9639c0",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/distribution/offline_database_stream.go",
+      "sha256": "f9959b74937e1859fa526fe92ad2337f0397c33e7dbc552b4df5f428cbc77fcd",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/distribution/verified_registry_test.go",
+      "sha256": "6eda90777d37f6c536dd4f3ddcad1b537308237f3f6ec67bf75713191df0ff88",
+      "imports": [
+        "crypto/rand",
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/model/digest.go",
+      "sha256": "456a1428ee45b5fa423ba51d1502aa81d42929c15963970a8fe7e279b345b7e2",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/provider/builtin_ca.go",
+      "sha256": "8677dd118a4b4a27e3197bb10129b8ce56d0d24c97fa711a3dd1c03a2792f924",
+      "imports": [
+        "crypto/sha256",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/provider/builtin_ca_test.go",
+      "sha256": "27cbe72d4ab87279392d3bf1b1dd71f0374b0cf1fa80a31f1cac2d9bfe6dd8ea",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/provider/builtin_public_key.go",
+      "sha256": "357813109453d7a19a0e127228b0b435372ce309d689b1c4f0d8a471be8b68ed",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/provider/builtin_public_key_test.go",
+      "sha256": "5506b98cb8cafccbd3688729690691115ef3b2398f77604a39efbc1f70d77fd6",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/provider/provider.go",
+      "sha256": "83babf8bed8929b75c4b0950e98a919ce6a4c7684518e10cf84de7ec924163f9",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/qualification/scale.go",
+      "sha256": "24061a115007be9aff53702d3874b9aaf8c2a321aa43382fd910fe70ec4d0ff8",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/artifact_metadata_test.go",
+      "sha256": "3b1d668aa7a014fce3ce6f4bd0411fe4505e9a863a6473530bad272a29e5d767",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/resolver/database_stream.go",
+      "sha256": "dce0490a0597d4814a5dbdd4f6e6e74d75b90798e45914423221da35275475b9",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/database_stream_test.go",
+      "sha256": "4a09632e49c0165ebc18348911dc2130800cfb6c7ed2a431dc0985131bdbf72f",
+      "imports": [
+        "crypto/sha256",
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/resolver/git.go",
+      "sha256": "1f253fb44ca6a2d06662f1bb7fc20926228efbff34681b76a4b595be72440d96",
+      "imports": [
+        "golang.org/x/crypto/ssh"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/git_ssh_test.go",
+      "sha256": "8e105b6e657fffa2a47cf5d77a69a84905dd98fc51888b33cdb3a801027d0bbc",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand",
+        "golang.org/x/crypto/ssh",
+        "golang.org/x/crypto/ssh/knownhosts"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/resolver/helm_http.go",
+      "sha256": "9c7b601f4302dca52c0b50e620a0157d46ad09667ab6b04d0549b65ea4f02380",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/network.go",
+      "sha256": "57ecc077676906d6ddab66c641d9242096a5d48d919b071efb4ce571762ccc0f",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/oci_claims_test.go",
+      "sha256": "3b02bdb27a0919fbc6c98470c1b76c1ec24cb97dcc4847fdb4e630ae95a14422",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/resolver/public_key_snapshot.go",
+      "sha256": "bea2568524c272d7cb3b5ef632dfef1dbb9000c377faf2fb53fcda751cd263c1",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/public_key_snapshot_test.go",
+      "sha256": "71575adcf60206322b329d1df6771523e9561fec6e8e2553936b4ba3d999333d",
+      "imports": [
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/resolver/resolver_test.go",
+      "sha256": "edd5bdf63b5ffd4609180f4161f9814a2f1ce27c48509f0fbd134748e2f55025",
+      "imports": [
+        "crypto/sha256",
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/resolver/service.go",
+      "sha256": "753969a3d6ffbaad9565b22e457b848e7aa425f4a5511fce049757b1d3465d54",
+      "imports": [
+        "crypto/sha256",
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/types.go",
+      "sha256": "ad3ed58f53df45b42f584d6b6799650e4d1564510199ee7d0054d5cb7cd04c21",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/verifier.go",
+      "sha256": "8c1c20121e1617f5616b715a3b27766b24d0aeddeb582d1da38f99c1a4950067",
+      "imports": [
+        "crypto/sha256",
+        "crypto/x509",
+        "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1",
+        "github.com/sigstore/protobuf-specs/gen/pb-go/common/v1",
+        "github.com/sigstore/protobuf-specs/gen/pb-go/rekor/v1",
+        "github.com/sigstore/sigstore-go/pkg/bundle",
+        "github.com/sigstore/sigstore-go/pkg/root",
+        "github.com/sigstore/sigstore-go/pkg/verify",
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/resolver/verifier_test.go",
+      "sha256": "cba4d3196553f91ca99ed12ae028f4969c1ae293573b8ed995ce49836c5de932",
+      "imports": [
+        "crypto/sha256",
+        "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1",
+        "github.com/sigstore/protobuf-specs/gen/pb-go/common/v1",
+        "github.com/sigstore/protobuf-specs/gen/pb-go/rekor/v1",
+        "github.com/sigstore/sigstore-go/pkg/bundle",
+        "github.com/sigstore/sigstore-go/pkg/root",
+        "github.com/sigstore/sigstore-go/pkg/testing/ca",
+        "github.com/sigstore/sigstore-go/pkg/tlog",
+        "github.com/sigstore/sigstore/pkg/cryptoutils",
+        "github.com/sigstore/sigstore/pkg/signature"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/rollout/cohorts.go",
+      "sha256": "0ff59078df4abc19f36dcf433d30dd91d39c35322cb679f519ea85fdffc0aed5",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/systemrelease/bootstrap.go",
+      "sha256": "946f3cdbbcb6b6bde47e52aa81e02fd3c359ed645f8a765c679df37c98e2619b",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/delivery/systemrelease/bootstrap_test.go",
+      "sha256": "3fdd9f0e13f100ed675462fc3d73fd62856dfa5c7a1127badebb39127f0434c9",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/delivery/systemrollout/service.go",
+      "sha256": "e58a92ed27c4854fdbf8a38c93c000a3c0bad5386fb8e48a54e12554b36525ee",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/email/mime.go",
+      "sha256": "77d667fbbff31c88acfbdb0eecb596754547ba427cb29f6e04243119f8205846",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/email/sender.go",
+      "sha256": "df421b5eaa8f6c1aafc935f55aa96864cde79de7ab3ae786e7ed4a024e7549b2",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/email/sender_test.go",
+      "sha256": "dbdf366f8f9dc07b5f983329f32d62c0ef8335f11e4d640d38266a89cd10e7d1",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/gitops/apply.go",
+      "sha256": "d5d23cd3dea6595afe6287e3e06a976aa6a8ec1bc6572e830311da1a4deaa00d",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/grafanaproxy/auth.go",
+      "sha256": "d4fbe5ebfa1a699042c3c8b3b535911cca653ddce9d2646fbffdff5b6dd04a8e",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/apiserver_allowlist.go",
+      "sha256": "20725fcbca84a75a148d2165050cbb3335ff393f92edfd99ae0009be784217e4",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/audit.go",
+      "sha256": "840531e2004b113c50793d6419bd41d779805e39c9bef690c6e9d6a8e4f7ef93",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/auth.go",
+      "sha256": "da2a6fae99efd358def8ff5a44d7dcfa61f25336563acb6d8a3a9004e70c7486",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/auth_revocation_test.go",
+      "sha256": "17521940d0a7f451cfc64ea775a28ec13cc88bca46644df592081c7ca8710d9d",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/auth_session_families.go",
+      "sha256": "f1947b7e7bf9c171b6189bd2c8969031b091e2b939424dc331216ed63d5f694d",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/auth_sessions.go",
+      "sha256": "0d8cfc8b2285f2fe5be5014dda5321032b4c3ca8c020688f7af3cf9cc36548a7",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/auth_test.go",
+      "sha256": "35d1f94e32bccdc958295b19b0c02bc473bcb4ed606c05e25d93afa92f9a9382",
+      "imports": [
+        "crypto/tls",
+        "golang.org/x/crypto/bcrypt"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/auth_tokens.go",
+      "sha256": "af5eaf37a5a263a1faba0875ec470e10fbbc998e5b34ab7fef2c1cfd2447b744",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/backups_helpers.go",
+      "sha256": "69772e4fc181929da4288cefd5c3f99f693e3f82624753741a3193955d5b80b8",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/backups_network.go",
+      "sha256": "cc8dfd5d72074c3fe62dfd389122fe56a13bfbe138ddaf26eea434abc956d063",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/catalog_applications.go",
+      "sha256": "3be64bcec9aa7142c353cf39e440f74fdbce9647f6227565bedc1d9edeab4636",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/catalog_network.go",
+      "sha256": "c146550f06615b281897c2e75c18f42b1246a8136c3a6d68ce9458dc9e2ff7a9",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/catalog_values_schema.go",
+      "sha256": "927e15309acfc731cdb152684da7c8c12b1bbc8036ddf7cdb0dcbd6deaeeaeca",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/charlie_audit.go",
+      "sha256": "8553ee881eb8b166b77c0ef205c146cd264bab172be34e012d5430130d0d8b7c",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/cloud_credentials_gcp_endpoint_test.go",
+      "sha256": "69f993941a5a10ece8d6387e4e23bc800ad04873fc52a55b3b3da65b98c71a12",
+      "imports": [
+        "crypto/rand",
+        "crypto/rsa",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/cloud_credentials_targets.go",
+      "sha256": "304a3dc4b97d3630603a70ed2ee63574c289a1e253ffbb60ff4fac2b7a386a4c",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/cloud_credentials_test_endpoint.go",
+      "sha256": "6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe",
+      "imports": [
+        "crypto/rand",
+        "crypto/rsa",
+        "crypto/sha256",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/cluster_agents_upgrade_plan.go",
+      "sha256": "5923d3cceb061f3515a5845cfe2ec3bef861f336ab0486d2dba71c58c1d4746e",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/cluster_snapshots_operations.go",
+      "sha256": "d486212031f2c058b7095987563c577102ee248a884d749ad9f01e07360e6669",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/clusters_ca_pin_test.go",
+      "sha256": "2c65dac45b3befd84e8bfcd1e94ef6d377c3b5bc7d89b91106e9ccee09efe305",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/clusters_direct_kubeconfig.go",
+      "sha256": "b8f94d12301974f3e558d2da9daa1d5076ce0512ae7cf205ec95d403ae9a0578",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/clusters_registration.go",
+      "sha256": "d60bda70a1bcfbdfc340289e6cfdb34eedac2ef46b7e73a5bfe7c8f24a73cc91",
+      "imports": [
+        "crypto/hmac",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/delivery/source.go",
+      "sha256": "110676e472ccb0d90fa2d827f9475cfb97c9ead8bf103374ad8ec18eba0b6d5b",
+      "imports": [
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/dex_operations.go",
+      "sha256": "f43aba584bac949cd3a442aaf63e07403184a04a835df08db307446e44f71aed",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/extension_bridge_test.go",
+      "sha256": "d91ea083043325aafa30e6366225d82a33e6e3cc7f7f6b7e9bf6c665b2379d97",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/extensions.go",
+      "sha256": "3cbd9f9fcfcc092d8583b749fb5771f866769dd0a670bd4748ba6dc7f5905915",
+      "imports": [
+        "crypto/ed25519"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/extensions_bundle.go",
+      "sha256": "83803caa71a3f8d790efa94b2592f5de252126fdc63fa391c0e1523bfc261009",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/sha256",
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/extensions_reinstall_test.go",
+      "sha256": "90c29cc8ee016592042210bcfd21f530875ab4aa280e036d3c85228b136c7f84",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/extensions_response.go",
+      "sha256": "176e75a6eec9617a8133c834397053a051e4276de501cb76749524e9a6e68a96",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/extensions_test.go",
+      "sha256": "87c96ca8bed2fffe6d100bd9042c04a63cc5f5b203a714a142a0e5475fb77983",
+      "imports": [
+        "crypto/ed25519",
+        "crypto/rand"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/gitops_test.go",
+      "sha256": "ef2b8aade0860b2582f932dde45aa7804c8102c2950897914eca9663fc9f9f40",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/gitops_webhook.go",
+      "sha256": "827d237572d19fd73232dff418d9305114fbfa3defc753bd60a648d388848151",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/jwt_revocation_checker.go",
+      "sha256": "41467eaf9eef1a212655ce4e269045e4e92c93cc59315c458ac9c79ad887de97",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/logging_loki_query.go",
+      "sha256": "f52d071248c4afa08d1fe83e8ec82edbdb5d4f8d8cd8820e10e96e6f9c0571bc",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/logging_loki_token.go",
+      "sha256": "f43d602d196693edbfda3d1d0b06caf1f63ffb3645dd097b300693b850e231e2",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/logging_saved_searches.go",
+      "sha256": "606390061bb22390e7815d3e53d2392fae03fe219a3a8b0ad139133ee12a08fe",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/logout_refresh_test.go",
+      "sha256": "3aea9cf3fcd6d5ac12d03465479e6a8f5aa797ee2168b2187070b1f8b3d7a712",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/management_logging_loki.go",
+      "sha256": "c4850538b97088a7743c085f665186784c0fc5c6ed7414cc3c90b9a6dfb8c69b",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/monitoring_apply.go",
+      "sha256": "ead33a2695c9774ce9b707a140a86374cc7fc8e0c7ce2adbf87f35e2f2c1666a",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/node_operations.go",
+      "sha256": "ac2543006edbeb020c3b598dddbee6e567d0127768cc842400d3279821dffced",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/operation_idempotency.go",
+      "sha256": "48746043095fe866d1ab9166d26ac27d63ab02b427352a7c4331bbab6688f822",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/password_reset.go",
+      "sha256": "7b9d1bdcb4035093da1be4e10caab1639f204ab18985ea112e2be0aef782932c",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/principals.go",
+      "sha256": "9d0576a2bc05b25b0460df7380020f18a80bd31b2b3897a0b8e0fcbb9a045a6b",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/rbac_templates.go",
+      "sha256": "888a793bdc80ebc35c62d3a0437bfddb529fa41f550e4bc344fa964c5b5b07f2",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/resource_operations.go",
+      "sha256": "77fbca50bf5f3f2895c7d5b03ae682ffa36caed5069c7af3ed43a73c4a9443ac",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/siem.go",
+      "sha256": "f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/sso.go",
+      "sha256": "5da0cb8817661c3d48733a4f80cb8e8398a821de7ac0afb13c683700102124b0",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/supportbundle_api.go",
+      "sha256": "e0d4e97b65da07fe415266cd8eb4e239c72185a05d966d86c52b68190ecfaf29",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/supportbundle_redaction.go",
+      "sha256": "36804c363f3669cd0434dd015be1a7a8fa4b63498fdcb0724722403cdcf8f45c",
+      "imports": [
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/handler/supportbundle_test.go",
+      "sha256": "8c75a08669aa2a2f1d3b24beba82a9652280fb1494fa6e1c8db2c3f58303f4ec",
+      "imports": [
+        "crypto/rand",
+        "crypto/rsa",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/totp_test.go",
+      "sha256": "75f10aa62d9d288980240424ed4b3c97209d3ddffcef274dc57160d179c9d7c5",
+      "imports": [
+        "github.com/pquerna/otp",
+        "github.com/pquerna/otp/totp"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/totp_transactional_audit_test.go",
+      "sha256": "d28f08bb83909b02b503633545a43610894e6c9f0144a5deaa3a9c09b5fc842c",
+      "imports": [
+        "github.com/pquerna/otp/totp"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/handler/users.go",
+      "sha256": "b72b28eb3b3c8cc5bca591fb5ac7d51389528b8eca3521d5c626451f5881d431",
+      "imports": [
+        "crypto/rand",
+        "golang.org/x/crypto/bcrypt"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/httpclient/destinations.go",
+      "sha256": "13cba064838d7868c2aaf68ed6d71123309081fc2ed9cb03f79e924fed9becfc",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/httpclient/safeclient.go",
+      "sha256": "b03c2e66dfae892c0e1c272feb894d9d23d7526b6382d53a3b72db87a8fa625d",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/httpclient/trust.go",
+      "sha256": "06449eff7ebc4eea07507d8d87ae290605337b2d16e77f789d2d679358debbc9",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/kubectl/manifests.go",
+      "sha256": "a1ec0583225eac95c8adcc996816c1103ac169e01345bedd247d49d57136e85d",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/kubeutil/metadata.go",
+      "sha256": "7f91aa7f9d10af41e339b4a89053fe21fb33a8afa37f4c09212ab35446d1ce23",
+      "imports": [
+        "crypto/sha1"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/lokiauth/auth.go",
+      "sha256": "203dc066f0a9217115f9eb7091816f476bb1c98ff5c953db5bcafe13139755ab",
+      "imports": [
+        "crypto/sha256",
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/pagination/cursor.go",
+      "sha256": "20b129886beb7911bd4ed89a5ae6edf31249db43244870f65a92779d1a2b6545",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/pagination/signed_cursor.go",
+      "sha256": "82c6eeabdd3d836c077e9d316724b01c7bf50a2dc52fa01275a160b0d0eb4943",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/principal/ldap.go",
+      "sha256": "b516b1deb10703fc6e404f2e6d819d64fac1353b830411955a6e1e2c71d34c73",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/redisconn/parse.go",
+      "sha256": "3323b7a42036aace8302dc29c0cbfcc29fa3a4882e8de270940a3cfc5af104bd",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/redisconn/parse_test.go",
+      "sha256": "037e865b890bbb919c9078d4b2c82f8db9f33862be054806a48cf8cc8ba0915a",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/releasecontract/manifest.go",
+      "sha256": "49894f2c424b54612a7d913f7ee5efcd18cfd1956dbd0b0eaa59824c15766544",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/releasecontract/manifest_test.go",
+      "sha256": "74de6d53153cf3dc04b6aa17419d06eb9487fc40f97cc5036806f3e8a98578ac",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/reqctx/request_test.go",
+      "sha256": "86537ac8cff48d942b49caaf6faee6146b9f7f7ae9f2a91dba27d664ae663e7a",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/server/app_distribution.go",
+      "sha256": "2e47d126d0edf6f3ca102ef82162a2ba173643330bd73029029b24f48b79954a",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/server/app_distribution_mirror.go",
+      "sha256": "f32b0c1b6e79a7aa1acf8f2ef14d11d8db36a68eeeff67ebb6bdf06a9f328c8e",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/server/localcluster.go",
+      "sha256": "188f3043d2314b9f2a60e3d99c9aa70b13e1705482a16bc351abd553f0a270fe",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/server/middleware/api_token_ip_test.go",
+      "sha256": "1fb0d32af869d53ad275d2005b6f4fa4d9abc095b8e7bb5dd869f12c57d49e79",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/server/middleware/auth.go",
+      "sha256": "317796f2ae39235b4f09ddad891df97d9aedea8b8743560cba8ac6d7c72f011d",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/server/middleware/auth_test.go",
+      "sha256": "70b6ea51b7a2a9a23e5c6fb2de58c2f64bfc420788939852adbaa49e2aae3b10",
+      "imports": [
+        "github.com/golang-jwt/jwt/v5"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/server/middleware/idempotency.go",
+      "sha256": "c37505b9b5dfe0736f5e563793a9779e35c4b350f5bf47f49c055a6aada4439d",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/server/middleware/read_audit.go",
+      "sha256": "969a2e9515a216a06f4ed5886289c43107396f0ccf84301860dde540436e9661",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/server/middleware/security_headers_test.go",
+      "sha256": "5e2fe0f1d30c06acb4763e91211da98aa6bd3ca519c99eb45a46b8d70d872e38",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/server/routes_security_test.go",
+      "sha256": "a811a7aaefcc178cdc69f9cebed52eb79860eea65c8c40bea34b396e1b6605c2",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/siem/transport.go",
+      "sha256": "94f96473f1ed20f609a122a34bf77e0d177158ed9180ac48ead42078bb72d120",
+      "imports": [
+        "crypto/tls"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/tunnel/internal_auth.go",
+      "sha256": "6e4fe0c625340f8ded6296add9c0726d946dca3531494ff80c65d4a40fee16d8",
+      "imports": [
+        "crypto/hmac",
+        "crypto/rand",
+        "crypto/sha256",
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/tunnel/internal_k8s.go",
+      "sha256": "6ecd97e7fe4528f02d8fc80bfcf586bfcecd0b80b2144190971719d8e5f5393b",
+      "imports": [
+        "crypto/subtle"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/tunnel/namespace_collection.go",
+      "sha256": "24d744942b8846e2fc52cc484e64e80a36083e84ddceaacda2312d4d4a6caa36",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/tunnel/server.go",
+      "sha256": "1a84393114051050a87024510888e363b39a4d94ebfefe84b20faeacab565612",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/vault/client.go",
+      "sha256": "75d4429d742232b149292029b17603769226ee1694de4327421656b98068b58f",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/webhook/sender.go",
+      "sha256": "c05a9450fee54f7b060a3e4121ae21cad05567962de3f2295bc93884996002fd",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/webhook/sender_test.go",
+      "sha256": "702315374588323b7ae04f03256f4fc6c9cb0c213e2ef2f280c0779349ad993f",
+      "imports": [
+        "crypto/hmac",
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/worker/tasks/alert_inhibition.go",
+      "sha256": "9a7f22d0613ad00620b732de4915a632d429ccaaa619aa49f727f31d335493c6",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/worker/tasks/audit_export_operation.go",
+      "sha256": "8e96a7d2b2701868665c7547536eabcc61f4bc35b5e7602658b3069223b32c03",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/worker/tasks/cluster_condition_reconcile.go",
+      "sha256": "5e78234ae1085d42cd718611dba6ceae34e41dd33e4e45b4f28d5a0651990a7f",
+      "imports": [
+        "crypto/rand"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/worker/tasks/notification_dispatch.go",
+      "sha256": "597d492c02569c88b598806de19e41dfbe11ff6c0aa65a9786c8fae53878b9cf",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/worker/tasks/siem_tls.go",
+      "sha256": "47f1b32825ffffa72760449f66c8de28081e208848980ef2b98ce2d9808a196a",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/worker/tasks/support_bundle_operation.go",
+      "sha256": "3a1327e3494d49cb1364aec87912b3bf40f769c1649ef9602f2c88464be9b471",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "internal/worker/tasks/support_bundle_operation_test.go",
+      "sha256": "a54a3d8b20e5846f4ba23dccc0b6ac3820a3a7d867c8f8bb83a030d9331afed3",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "internal/worker/worker_postgres_redis_integration_test.go",
+      "sha256": "d1e3bef67cfdd5e7b4642f27d74e7a760e1a4395eae742e2bd7a10bd27b7f24f",
+      "imports": [
+        "crypto/rand",
+        "crypto/rsa",
+        "crypto/sha256",
+        "crypto/tls",
+        "crypto/x509",
+        "crypto/x509/pkix"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "pkg/protocol/delivery.go",
+      "sha256": "ea906a0871bede0eb057ddd22c9780b19119fce52a1cbb973d546c43d948b055",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "pkg/protocol/delivery_system.go",
+      "sha256": "c38d12cc5af8ddaba0bd29d846659b7a95b1326fa10888b273e9c98355ceef7c",
+      "imports": [
+        "crypto/sha256",
+        "crypto/x509"
+      ],
+      "role": "application"
+    },
+    {
+      "path": "pkg/protocol/delivery_system_test.go",
+      "sha256": "8d13d9e0b3729c96a88e2f33e5d5bbb5ea9d9d1c0329e3d43d60d58f0374996a",
+      "imports": [
+        "crypto/ecdsa",
+        "crypto/elliptic",
+        "crypto/rand",
+        "crypto/x509"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "scripts/cnpg-failover/ledger.go",
+      "sha256": "61a4842253914338fbfc067b25446c909b56778ef31d2de86b60c8819b203814",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/cnpg-recovery-fixture/keys.go",
+      "sha256": "e5ff81028e3aad5d41e9ebfa7de8ac8712986b3f84d6b9653d9f9a3691583a19",
+      "imports": [
+        "crypto/rand",
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/cnpg-recovery-fixture/verify.go",
+      "sha256": "dcb6ef0ffc1558b85004bf1c2a7bbe355fb0934bd5dd5fb77cf0ff01188c9775",
+      "imports": [
+        "crypto/tls",
+        "crypto/x509"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/crypto-inventory/main.go",
+      "sha256": "198ad37fb407b88c49fe592be778749cd898e48317fbfac8906b86f5ecb3a2b9",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/fips-mode-probe/main.go",
+      "sha256": "91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b",
+      "imports": [
+        "crypto/aes",
+        "crypto/cipher",
+        "crypto/fips140",
+        "crypto/rand",
+        "github.com/fernet/fernet-go",
+        "golang.org/x/crypto/argon2",
+        "golang.org/x/crypto/bcrypt"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_compare.go",
+      "sha256": "b2571a4cf4c65ad5a0635ef907cb1ce8eaee0d9b020818137d4c81c3e95f0797",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_compare_cli.go",
+      "sha256": "079b9b70ad0ecd8df54faff5667fadeee47ef5b6fba7a94416962e4aed4d2a7a",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_compare_input.go",
+      "sha256": "1167cef54480e6a1711009a7b303d54c010b8608b9be8de5b5507991c8f91c1f",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_manifest.go",
+      "sha256": "11bd4c0d1472ec49ca95b0a8b5d47e05db3f72261e250f1c1146d59e50f34a7f",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_measured_phase.go",
+      "sha256": "483fa3941fc270c85a52816d8dd3adfe5c1868103151a086ee23c52f30dbe569",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_metrics.go",
+      "sha256": "104b5db95d21ed9810fb4bac6ff61c65a085e299dc604549ec7d854f803f2f8d",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_report.go",
+      "sha256": "45282e220bee09e8585345ebf82b1c3bc114ae0aaa5c3003e1e5f80003508bb3",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/real_estate_report_test.go",
+      "sha256": "9b890e75b979ae4ec44f12b6902b63aa6496e9e4a74c6a69643d7eeab696b9d8",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "scripts/loadtest/report.go",
+      "sha256": "999fab7823a0706e47b49a1bb7eb68de44caf614c1aff6eca1b64e7a88303746",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "scripts/loadtest/report_test.go",
+      "sha256": "e20c02c0de812fb421e659556cea0c99bf52bde803b80db692f04b08ee6324fe",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "test"
+    },
+    {
+      "path": "scripts/qualify-offerings/main.go",
+      "sha256": "8a3485e493987eafc31b2688bb58ae3cc4ef6e0b60007fbddd4a6dd26f81603e",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    },
+    {
+      "path": "tools/sql-governance/main.go",
+      "sha256": "ca62de501d3ba57accc1705af2df40a03429c0933815e63fdc395b9d4af793b8",
+      "imports": [
+        "crypto/sha256"
+      ],
+      "role": "engineering_or_build_tool"
+    }
+  ]
+}

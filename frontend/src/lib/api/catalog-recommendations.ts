@@ -15,15 +15,23 @@ function mapChartScore(wire: ChartRecommendationWire): ChartScore {
     weight: wire.weight,
   };
 }
-export async function getPopularCharts(limit = 6): Promise<ChartScore[]> {
-  const response = await getCatalogRecommendationsPopular({ query: { limit } });
+export async function getPopularCharts(
+  limit = 6,
+  signal?: AbortSignal,
+): Promise<ChartScore[]> {
+  const response = await getCatalogRecommendationsPopular({
+    signal,
+    query: { limit },
+  });
   return (response.data ?? []).map(mapChartScore);
 }
 export async function getSimilarCharts(
   chartId: string,
   limit = 5,
+  signal?: AbortSignal,
 ): Promise<ChartScore[]> {
   const response = await getCatalogRecommendationsSimilarByChartId({
+    signal,
     path: { chart_id: chartId },
     query: { limit },
   });

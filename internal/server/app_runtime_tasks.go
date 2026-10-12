@@ -33,6 +33,9 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 		CatalogDecryptor:       tasks.CatalogDecryptorFor(c.encryptor),
 		MonitoringCipher:       tasks.MonitoringCipherFor(c.encryptor),
 	}}
+	if err := tasks.ConfigureCatalogNetwork(&core.Deps, cfg); err != nil {
+		return nil, err
+	}
 	clusterDecommission := tasks.ClusterDecommissionRuntime{Deps: tasks.ClusterDecommissionDeps{
 		Queries: c.queries, Tunnel: c.hub, RBACCache: c.rbacQuerier.Cache(),
 	}}

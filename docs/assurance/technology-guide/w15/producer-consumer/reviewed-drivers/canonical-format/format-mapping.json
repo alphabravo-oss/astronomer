@@ -1,0 +1,24 @@
+{
+  "scope": "canonical gofmt whitespace/import formatting only; no compile/runtime execution",
+  "before": {
+    "path": "/tmp/w15-catalog-producer-consumer-53a5625/application_catalog_producer_interop_test.go",
+    "sha256": "e93533b1e5fc69d700bc620a5c4d6c13297adfacecf31170b85051e3076c1d18",
+    "bytes": 9194
+  },
+  "after": {
+    "path": "/tmp/w15-catalog-producer-consumer-formatted-fc47f31/application_catalog_producer_interop_test.go",
+    "sha256": "a7a2dc0a767c8753bbbf57aad7745f930ebde6a4266ebcc73bd90ac02957db86",
+    "bytes": 9936
+  },
+  "formatter": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/gofmt",
+    "sha256": "5583dbb3339147fee7cdb067eb3cd4a50015b48c27084377f49d93833aa4ad77",
+    "device": 2049,
+    "inode": 2360705,
+    "size": 3144728,
+    "mtime_ns": 1791570925941518757
+  },
+  "catalog_source": "fc47f31175475112068c4a451cedfe2b564960e6",
+  "consumer_source": "22cfc6a7 (advisory only atop unchanged 7f source)",
+  "runtime": "UNEXECUTED"
+}

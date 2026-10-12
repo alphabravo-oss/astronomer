@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T22:40:29.708208+00:00",
+  "reviewBy": "2026-10-16",
+  "owner": "Plan032 release-owner / QA-platform",
+  "runtime": "deploy/qualification/runtime.json",
+  "offeringInventory": {
+    "path": "advisor-plans/028-offering-source-inventory.json",
+    "sha256": "c6869b1823e94a6fddc48eb869ed1309e7c9706e48b43f3d8e56976b87926e67",
+    "functionalInventory": "advisor-plans/028-offering-test-inventory.md",
+    "functionalRows": 174,
+    "policy": "Retain all original NOT_RUN cases until the exact inventory is executed; refresh source/catalog reconciliation before candidate claims."
+  },
+  "lanes": [
+    "postgres17",
+    "postgres17-race",
+    "postgres18",
+    "postgres18-race",
+    "worker17",
+    "worker17-race",
+    "worker18",
+    "worker18-race",
+    "process-restart17",
+    "process-restart17-race",
+    "process-restart18",
+    "process-restart18-race",
+    "redis-outage17",
+    "redis-outage17-race",
+    "redis-outage18",
+    "redis-outage18-race",
+    "postgres-outage17",
+    "postgres-outage17-race",
+    "postgres-outage18",
+    "postgres-outage18-race",
+    "streaming17",
+    "streaming17-race",
+    "streaming18",
+    "streaming18-race",
+    "migrations",
+    "components",
+    "live-chromium",
+    "live-firefox",
+    "live-webkit"
+  ],
+  "claims": [
+    {
+      "id": "postgres-advertised",
+      "source": "deploy/release/compatibility.yaml#/postgresql/supported_majors",
+      "classification": "unknown",
+      "scope": "The released contract advertises PostgreSQL16/17. Owned current characterization uses18/17; a17\u219218 production upgrade and signed candidate acceptance remain unperformed.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "postgres-fixtures",
+      "source": "deploy/qualification/runtime.json",
+      "classification": "exercised_locally",
+      "scope": "Official immutable18.6/17.11 operands; frozen9dda passes37 mandatory parents and64 total cases on both majors, including18 race. Required extensions are checked before migrations.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": [
+        {
+          "path": "docs/assurance/technology-guide/w12/frozen-9dda3bf5/pg17/evidence.json",
+          "sha256": "bbe24aa57d4e58f278a609c0c2525f5a68c5599237c397f8cfe91d4a8394dc26"
+        },
+        {
+          "path": "docs/assurance/technology-guide/w12/frozen-9dda3bf5/pg18/evidence.json",
+          "sha256": "d1961c6c01434ec0c02d55fe9b9500d0224d2bdf8c3b92abf3ddac42a2bd9322"
+        },
+        {
+          "path": "docs/assurance/technology-guide/w12/frozen-9dda3bf5/pg18-race/evidence.json",
+          "sha256": "362f01d3cbaccea654d800a37ada4304a10f3f034ea4fcb293fb17f9d93ddccc"
+        }
+      ]
+    },
+    {
+      "id": "valkey-fixtures",
+      "source": "deploy/qualification/runtime.json#/valkey",
+      "classification": "implemented",
+      "scope": "Authenticated Valkey9 with AOF fixture source exists. Each worker, outage and restart observation must attach its own immutable source receipt.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "cnpg-failover",
+      "source": "advisor-plans/032-technology-guide-alignment-and-latest-stable-master-plan.md#W12.7",
+      "classification": "exercised_locally",
+      "scope": "Owned CNPG18: three instances, synchronous standby1, persistent production pgx pool, primary pod deleted under synthetic ledger writes.62 acknowledged writes,0 acknowledged rows lost,23.520s fault-to-new-primary commit. One sample; no whole-app RTO claim.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": [
+        {
+          "path": "advisor-plans/032-evidence/cnpg18-application-pool-failover.json",
+          "sha256": "bb4549e26735f300f9f9f94c4d4e7069680757e09a034d075a03ed8ad7f96596"
+        }
+      ]
+    },
+    {
+      "id": "cnpg-fresh-restore",
+      "source": "advisor-plans/032-technology-guide-alignment-and-latest-stable-master-plan.md#W12.8",
+      "classification": "exercised_locally",
+      "scope": "Owned18 physical restore: three healthy instances,202 table counts equal; production credentials, keys, tenant and generation readers pass. Initial end-WAL failure retained; final source WAL archived before retry. No PITR or native audit-chain claim.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": [
+        {
+          "path": "docs/assurance/technology-guide/w12/cnpg18-physical-restore/root-receipt.json",
+          "sha256": "459ae4754bee5a5c908e6e69fb69d5b75bbce6f5dc57fdbd0bc13c4bbed7dffe"
+        }
+      ]
+    },
+    {
+      "id": "standalone-streaming",
+      "source": "scripts/test-postgres-failover-certification.sh",
+      "classification": "implemented",
+      "scope": "Standalone physical streaming, primary SIGKILL and pg_ctl promotion use a separate ownership path from CNPG. Its own actual strict receipt is required.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "browser-chromium",
+      "source": "deploy/release/compatibility.yaml#/browsers",
+      "classification": "exercised_locally",
+      "scope": "Frozen8cc: Playwright1.64 Chromium1248 component21 cases pass; full Vitest2364 cases pass. Component HTTP mocks do not qualify real authenticated server workflows.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": [
+        {
+          "path": "docs/assurance/technology-guide/w06/final-frozen-8cc5c79c/qualification.json",
+          "sha256": "4b4afee831b686b13bc4eb6591e89e8660081690bb87872dd0b9e1798e1907b1"
+        }
+      ]
+    },
+    {
+      "id": "browser-firefox-webkit",
+      "source": "frontend/playwright.components.config.ts",
+      "classification": "implemented",
+      "scope": "Matching browser engines, responsive projects and actual authenticated live runner are implemented; each engine requires an actual source-bound receipt.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "shipping-safari",
+      "source": "deploy/release/compatibility.yaml#/browsers/minimum_versions/safari",
+      "classification": "deferred",
+      "scope": "Playwright WebKit does not certify shipping Safari. Current and previous Safari on named macOS and iOS releases and physical devices require funded external execution.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "kubernetes-old-range",
+      "source": "deploy/release/compatibility.yaml#/kubernetes",
+      "classification": "unknown",
+      "scope": "Published Kubernetes1.33\u20131.35 identities remain historical. Literal runner versions do not prove current candidate adoption, upgrade or runtime qualification.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "kubernetes-36",
+      "source": "advisor-plans/032-technology-guide-alignment-and-latest-stable-master-plan.md#W12.13",
+      "classification": "exercised_locally",
+      "scope": "Owned K3s1.36.5 prerequisite readiness with CNPG1.30.1. Kubernetes1.36 is vendor-supported by CNPG; upstream distribution support covers vanilla Kubernetes, not a separate K3s certification.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": [
+        {
+          "path": "advisor-plans/032-evidence/cnpg36-operator-prerequisites.json",
+          "sha256": "ea563e2806889d42480cf0160a8ce4aa6288d8c050bdf4b3f455784eac0b91c5"
+        }
+      ]
+    },
+    {
+      "id": "kubernetes-37",
+      "source": "advisor-plans/032-technology-guide-alignment-and-latest-stable-master-plan.md#W12.13",
+      "classification": "exercised_locally",
+      "scope": "Owned K3s1.37.1 prerequisite readiness only. CNPG1.30 lists1.37 as tested but NOT supported: this is an experimental lane without a production vendor-support claim.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": [
+        {
+          "path": "advisor-plans/032-evidence/cnpg-operator-prerequisites.json",
+          "sha256": "a13b8f2104d091aba630c857b15e88c0a9349e57ca34574461ecdd558618f599"
+        }
+      ]
+    },
+    {
+      "id": "offerings-two-cluster",
+      "source": "advisor-plans/028-offering-source-inventory.json",
+      "classification": "deferred",
+      "scope": "Reuse Plans028/029:21 applications and12 Tools,25 unique products and8 duplicated entrypoints,174 functional rows remain NOT_RUN. Owned SQL/browser fixtures do not change the denominator.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "optional-providers",
+      "source": "advisor-plans/028-offering-test-inventory.md",
+      "classification": "deferred",
+      "scope": "Vault, cloud, notification, logging and Charlie provider cases require available services and explicitly scoped credentials. Unavailable services remain NOT_RUN, never passed or silently skipped.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "cloud-scale-rancher",
+      "source": "advisor-plans/029-two-cluster-offering-install-and-functional-validation.md",
+      "classification": "deferred",
+      "scope": "Historical v1.2.0/v1.2.1 cloud, scale and Rancher deferrals remain. Native three-node, CSI, host-loss and cloud CIS proof cannot be derived from disposable K3d.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "automated-accessibility",
+      "source": "frontend/tests/browser-components",
+      "classification": "implemented",
+      "scope": "Keyboard, focus and semantic table/dialog checks exist. Scoped axe checks must report engine, rules and results. Automated violations and manual review are separate evidence.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "human-accessibility",
+      "source": "advisor-plans/032-technology-guide-alignment-and-latest-stable-master-plan.md#W12.16",
+      "classification": "deferred",
+      "scope": "Human keyboard and screen-reader assessment requires named reviewer, device, browser and tasks in a funded session; automated axe does not certify it.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    },
+    {
+      "id": "published-slos",
+      "source": "deploy/release/compatibility.yaml#/slos",
+      "classification": "unknown",
+      "scope": "Product targets include monthly99.95% availability, management5min RPO and60min RTO. One synthetic failover/restore sample cannot establish a universal SLA.",
+      "owner": "Plan032 release-owner / QA-platform",
+      "reviewBy": "2026-10-16",
+      "evidence": []
+    }
+  ],
+  "upstream": [
+    {
+      "url": "https://cloudnative-pg.io/docs/1.30/supported_releases/",
+      "fact": "CNPG1.30: Kubernetes1.34/1.35/1.36 supported;1.37 tested but NOT supported; PostgreSQL14\u201318."
+    },
+    {
+      "url": "https://kubernetes.io/releases/version-skew-policy/",
+      "fact": "Maintained Kubernetes branches1.37/1.36/1.35; kubectl within one minor of the API server."
+    },
+    {
+      "url": "https://playwright.dev/docs/browsers",
+      "fact": "Use matching browser binaries; WebKit coverage is not shipping Safari certification."
+    }
+  ],
+  "limits": [
+    "Implementation, local exercise and external qualification are distinct states. No external lane is qualified.",
+    "Every actual run records candidate source and artifact identity; a past pass never substitutes for changed source.",
+    "The future funding proposal requires approval. No approved budget is invented."
+  ]
+}

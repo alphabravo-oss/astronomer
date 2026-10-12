@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "scope": "Actual mirrored CA red attempt and test-only declared config closure",
+  "frozenSource": "9a621785524758289cb42678bc97a9f8337c2a7c",
+  "immutableOriginalDirectory": "/root/.cache/astronomer-032/qualification/w04-mirrored-ca-9a621785-retry",
+  "receiptSHA256": "b4298847fa11e0654e2f2da9b835796fd607376091d346c8cc2c2c54ee6592ec",
+  "rootVerification": {
+    "all23GateAndGuardLogHashesVerified": true,
+    "allFourGateAnd19GuardHeldGroupsDrained": true,
+    "all19ActualNumeric20GiB20PercentGuardsPassed": true,
+    "baselineParentsAndCasesPassed": 3,
+    "focusedParents": 20,
+    "focusedTerminals": 62,
+    "focusedPass": 60,
+    "focusedFail": 2,
+    "skips": 0,
+    "failedNames": [
+      "TestPinnedDatabaseAuthorityBindsSignedFeedToExactOperatorMirror/exact-mirror",
+      "TestPinnedDatabaseAuthorityBindsSignedFeedToExactOperatorMirror"
+    ],
+    "baselineRestoredAndSourceUnchanged": true
+  },
+  "fixturePatchSHA256": "c6e732ac2bc3d3951351f9818ddb184833780568c3a97c0f5061214152677b15",
+  "fixtureReview": "Exact declared authenticated empty config inserted only in test registry; canonical production metadata fetch/hash requirement unchanged",
+  "successorDriverSHA256": "0d796142cc774c4bede8d934b956e6cf726ddf5635603c538c649b171de76215",
+  "successorOnlyChanges": [
+    "frozen commit",
+    "full tracked count7150",
+    "new exclusive output"
+  ],
+  "successorExecuted": false,
+  "unreached": [
+    "full coupled race",
+    "actual Cosign producer",
+    "publisher",
+    "vet",
+    "governance",
+    "complexity",
+    "boundaries",
+    "docs",
+    "CLI"
+  ],
+  "wholeCandidateQualified": false
+}

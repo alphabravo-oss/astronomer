@@ -1,0 +1,27 @@
+=== RUN   TestConnectionMetricsIncompletePagePreservesSnapshot
+    connection_metrics_lifecycle_test.go:47: failed collection removed the previous disconnected-cluster sample
+--- FAIL: TestConnectionMetricsIncompletePagePreservesSnapshot (0.00s)
+=== RUN   TestConnectionMetricsCompleteSnapshotRetiresRemovedCounters
+    connection_metrics_lifecycle_test.go:68: removed-cluster series remains in astronomer_agent_reconnects_total
+    connection_metrics_lifecycle_test.go:68: removed-cluster series remains in astronomer_agent_messages_total
+--- FAIL: TestConnectionMetricsCompleteSnapshotRetiresRemovedCounters (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/tunnel	0.020s
+=== RUN   TestMetricsBoundsUnrecognizedRequestMethodsWithoutChangingRequests
+    metrics_method_budget_test.go:34: unrecognized-method bucket = 0, want 3
+--- FAIL: TestMetricsBoundsUnrecognizedRequestMethodsWithoutChangingRequests (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.034s
+
+=== Failed
+=== FAIL: internal/server/middleware TestMetricsBoundsUnrecognizedRequestMethodsWithoutChangingRequests (0.00s)
+    metrics_method_budget_test.go:34: unrecognized-method bucket = 0, want 3
+
+=== FAIL: internal/tunnel TestConnectionMetricsIncompletePagePreservesSnapshot (0.00s)
+    connection_metrics_lifecycle_test.go:47: failed collection removed the previous disconnected-cluster sample
+
+=== FAIL: internal/tunnel TestConnectionMetricsCompleteSnapshotRetiresRemovedCounters (0.00s)
+    connection_metrics_lifecycle_test.go:68: removed-cluster series remains in astronomer_agent_reconnects_total
+    connection_metrics_lifecycle_test.go:68: removed-cluster series remains in astronomer_agent_messages_total
+
+DONE 3 tests, 3 failures in 9.438s

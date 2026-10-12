@@ -1,0 +1,14 @@
+=== RUN   TestRuntimeSQLDiscoveryFindsEmbeddedDeleteAndUnresolvedCalls
+--- PASS: TestRuntimeSQLDiscoveryFindsEmbeddedDeleteAndUnresolvedCalls (0.00s)
+=== RUN   TestRuntimeSQLDiscoveryBindsChangedLiteralContent
+--- PASS: TestRuntimeSQLDiscoveryBindsChangedLiteralContent (0.00s)
+=== RUN   TestRuntimeSQLDiscoveryBindsLocalBuilderAndReceiver
+--- PASS: TestRuntimeSQLDiscoveryBindsLocalBuilderAndReceiver (0.00s)
+=== RUN   TestRuntimeSQLDiscoveryIncludesTemplateAndRejectsInvalidSyntax
+--- PASS: TestRuntimeSQLDiscoveryIncludesTemplateAndRejectsInvalidSyntax (0.00s)
+=== RUN   TestRuntimeSQLDiscoveryFindsSQLMethodAliasAndQuotedDelete
+--- PASS: TestRuntimeSQLDiscoveryFindsSQLMethodAliasAndQuotedDelete (0.00s)
+=== RUN   TestRuntimeSQLDiscoveryDoesNotExemptNestedSQLCDirectoryOrTestdata
+--- PASS: TestRuntimeSQLDiscoveryDoesNotExemptNestedSQLCDirectoryOrTestdata (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/tools/sql-governance	0.005s

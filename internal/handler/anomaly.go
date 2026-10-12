@@ -63,6 +63,10 @@ func (h *AnomalyHandler) SetAuthorization(engine *rbac.Engine, querier rbac.Bind
 // Supports ?clusterId= to scope the listing to one cluster. The
 // default is all baselines, sorted by most-recently-updated.
 func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "anomaly baseline querier not configured")
 		return
@@ -109,7 +113,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	var rows []sqlc.AnomalyBaseline
 	var total int64
 	if all {
-		rows, err = h.queries.ListAnomalyBaselines(r.Context(), sqlc.ListAnomalyBaselinesParams{Limit: int32(limit), Offset: int32(offset)})
+		rows, err = h.queries.ListAnomalyBaselines(r.Context(), sqlc.ListAnomalyBaselinesParams{Limit: queryLimit32(r, 50), Offset: queryOffset32(r)})
 		if err == nil {
 			total, err = h.queries.CountAnomalyBaselines(r.Context())
 		}
@@ -120,7 +124,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rows, err = pager.ListAnomalyBaselinesForScopes(r.Context(), sqlc.ListAnomalyBaselinesForScopesParams{
-			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterIds: clusterIDs, QueryLimit: queryLimit32(r, 50), QueryOffset: queryOffset32(r),
 		})
 		if err == nil {
 			total, err = pager.CountAnomalyBaselinesForScopes(r.Context(), clusterIDs)

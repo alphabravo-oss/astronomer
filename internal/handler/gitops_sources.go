@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -24,12 +23,16 @@ func (h *GitOpsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
 
 // List handles GET /api/v1/admin/gitops-sources/.
 func (h *GitOpsHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}
 	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListGitOpsSourcesPage(r.Context(), sqlc.ListGitOpsSourcesPageParams{
-		QueryLimit: int32(limit), QueryOffset: int32(offset),
+		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list gitops sources")
@@ -53,7 +56,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req gitopsSourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -158,7 +161,7 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req gitopsSourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

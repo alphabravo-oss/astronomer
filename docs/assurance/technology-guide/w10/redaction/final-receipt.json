@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T00:07:35.297151+00:00",
+  "sourceCommit": "9a6cc5f20defbe6522c6c9e0c064d8c53ddc30af",
+  "sourceDirty": false,
+  "sourceIdentityBeforeEvidence": {
+    "schema_version": 2,
+    "source_file_count": 6449,
+    "source_tree_sha256": "3a2f934ac3b575a772698578810c0bf96ad59daeb762db76aa48cc3c5fc023c9"
+  },
+  "sourceStableDuringGates": true,
+  "commands": [
+    {
+      "command": "gotestsum --jsonfile [cache]/go.jsonl --junitfile [cache]/junit.xml --format standard-quiet -- -race ./internal/observability ./internal/auth ./internal/monitoring ./internal/db ./scripts/otel-pgx-qualification",
+      "exitCode": 0
+    },
+    {
+      "command": "go vet ./internal/observability ./internal/auth ./internal/monitoring ./internal/db ./scripts/otel-pgx-qualification ./cmd/server ./cmd/worker ./cmd/agent",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "exitCode": 0
+    }
+  ],
+  "testParents": 197,
+  "testCases": 271,
+  "passed": 271,
+  "failed": 0,
+  "skipped": 0,
+  "junit": {
+    "tests": "271",
+    "failures": "0",
+    "errors": "0",
+    "time": "14.627251"
+  },
+  "packageCases": {
+    "github.com/alphabravocompany/astronomer-go/internal/observability": 29,
+    "github.com/alphabravocompany/astronomer-go/internal/auth": 203,
+    "github.com/alphabravocompany/astronomer-go/internal/monitoring": 12,
+    "github.com/alphabravocompany/astronomer-go/internal/db": 23,
+    "github.com/alphabravocompany/astronomer-go/scripts/otel-pgx-qualification": 4
+  },
+  "baselineHTTPSourceCommit": "2dff2b64",
+  "baselineHTTPSourceOverrides": [
+    {
+      "path": "oauth.go",
+      "sha256": "a2b06080ed78a7b14006bf99069c682c602c53d28aad2b8e0a248d23a2f2c40f"
+    },
+    {
+      "path": "oidc_discovery.go",
+      "sha256": "1ecf0f2c74675418e35ebad019a12b8558922e195ef8696dc2cc5f655b7e874f"
+    },
+    {
+      "path": "prometheus.go",
+      "sha256": "a7a5a28e1fe07d298df37690dd97163a95758f4aa15737480157f2eb69219fd3"
+    }
+  ],
+  "baselineHTTPExitCode": 1,
+  "baselineExpected": "fail: real upstream body entered final shared JSON handler",
+  "actualWireCoverage": [
+    "Resource secret attribute",
+    "Link secret and safe attributes",
+    "span/event/status attributes",
+    "wrapped PostgreSQL error SQLSTATE without server payload",
+    "wrapped Kubernetes error safe HTTP status/reason without rejected manifest",
+    "SSO profile/discovery/JWKS actual HTTP503",
+    "Prometheus health/query actual HTTP503 and HTTP200 error payload"
+  ],
+  "actualOwnedSQLProbeReceipt": "docs/assurance/technology-guide/w10/redaction/receipt.json",
+  "actualOwnedSQLProbeSourceCommit": "e65c61b7b2b11ec8f7795e055325cd0a6ca740e8",
+  "limitations": [
+    "Actual SQL-literal production probe is bound to e65c61b7; final 9a6cc5f2 package tests qualify later resource/link, typed-error and raw-body changes. No new live SQL probe claimed for 9a6.",
+    "Heuristic text policy cannot detect arbitrary unlabelled secrets; structured sensitive fields are omitted.",
+    "No whole application collector deployment or performance acceptance is claimed."
+  ],
+  "artifacts": [
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/baseline-upstream-http-result.json",
+      "sha256": "f5d87a712317024cd3a486eaa6d6b10a36810c969980f573c8f5e9ae36fe3dc4",
+      "bytes": 113
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/baseline-upstream-http.log",
+      "sha256": "987e6dc99bbc116f0c6f0ec3b49d376146bc271736bdf75fd9b3c20db253be93",
+      "bytes": 463
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/final-complexity.log",
+      "sha256": "6b2c743d6f319d83371755c968f58c80f8f1c4a408d30e21e9203328817752f3",
+      "bytes": 101
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/final-go.jsonl",
+      "sha256": "6af4a82064c4d63d952446231f3beeb9ad6071fbc0f164817e4770a03705c39b",
+      "bytes": 253247
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/final-junit.xml",
+      "sha256": "044e20ecc2a2b8d29af8214b9285e0367d82f9005be9b8d81450fcc8014ca84c",
+      "bytes": 44010
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/final-race.log",
+      "sha256": "7a6241ad940a2abf517c298620cb2e4ad2c33e5730616d4bcb10f5aa04b4ceeb",
+      "bytes": 403
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/final-vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ]
+}

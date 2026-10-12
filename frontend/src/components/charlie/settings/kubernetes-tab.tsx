@@ -71,7 +71,7 @@ export function KubernetesTab() {
   });
   if (query.isLoading)
     return <LoadingPanel title="Loading Kubernetes visibility" lines={2} />;
-  if (query.isError || !query.data)
+  if (query.isError || !query.data || query.data.state === "unsupported")
     return (
       <Unavailable
         name="Kubernetes visibility"

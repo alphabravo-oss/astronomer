@@ -1,0 +1,134 @@
+{
+  "time": "2026-10-09T22:01:22.531734+00:00",
+  "scope": "Exact unchanged regenerable Go cache objects from completed root verification source paths; active executor/frozen qualification and unrelated entries preserved",
+  "removed": [
+    {
+      "path": "/root/.cache/go-build/5a/5af69891e485c14dd09662586c96575db5de77920d316fe87ece142b14d7a17c-d",
+      "bytes": 3561048,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/c0/c05a743cefd6b0df4026b24be881b9d24cdbcb46ab870fd2aec5048ff0f706dc-d",
+      "bytes": 5108968,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/e8/e8a20fd2bcdb702675d985ef7d9420052500ce8efa6493ea8de6ccb2abe7495a-d",
+      "bytes": 17757582,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/94/946e9635d2701b4f8c4e444c6fae71cd802123928075114a4a5c058b95a7949b-d",
+      "bytes": 23385536,
+      "source_worktrees": [
+        "astronomer-032-audit-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/03/03960f218823d9ad254e01663e4809ed08cabe5ce4fe056bf6c039dd0094dbd7-d",
+      "bytes": 2405676,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/4f/4f67a9b4b9e90095985b5ac5a60f40c54a8da66a70d8e230ec58c43b57c53272-d",
+      "bytes": 1358996,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/a6/a6f76ae6d5566250c8f442d648a13b18fed941cf9cf1d8bebde656bb4b40d4e7-d",
+      "bytes": 5837442,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/b0/b027a299725345e4941abed10ee1ed65740ee10c582b9db8927b33739ed1efb7-d",
+      "bytes": 17589914,
+      "source_worktrees": [
+        "astronomer-032-cnpg-failover-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/52/52eab7031c0c295292eb4ddcf5923807451c8ce2b5b8d37100a766417930732a-d",
+      "bytes": 17589690,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/c7/c7060782de973647adb8f90544c240c107daee5fce6a1d3928b4e572e9ecd6dd-d",
+      "bytes": 1069006,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/47/47db515bfce7da9b8b07ba4e4c0293ebd298b3c8110f04f0d03e32c1a6e59858-d",
+      "bytes": 2411236,
+      "source_worktrees": [
+        "astronomer-032-audit-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/9e/9eab02892fe5fc571831e32def501e7799372abad24a0e3558cc9edbb5951d00-d",
+      "bytes": 2630598,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/9c/9cbae3237dd70efe015620e7fb33f8f37d0be91e12c504b8f7e6d60727e2c40b-d",
+      "bytes": 1069014,
+      "source_worktrees": [
+        "astronomer-032-cnpg-failover-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/dd/ddafa887c7839bd1f4bbfe9f8b4f6afeabd552e389075de59917895afce40e1b-d",
+      "bytes": 1518014,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/d0/d0a157c2577abc7646489520162c0d56f6c0c05a0344b99c6c0cf580e2ccb745-d",
+      "bytes": 17631054,
+      "source_worktrees": [
+        "astronomer-032-audit-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/59/59d3a032613bbdb97851d932b7b1e3182f39e6cc3037ea2e4b1b4f275814af7c-d",
+      "bytes": 1300220,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/9f/9f3e2d60062af3250cabd6efc2871d1e26215d25e5ef57f98a6a20d31ac9e200-d",
+      "bytes": 1128458,
+      "source_worktrees": [
+        "astronomer-032-audit-review"
+      ]
+    },
+    {
+      "path": "/root/.cache/go-build/9f/9f611b37256455af18a7c02e92c1fc232ab3daa062004431e8d51884eb8365ea-d",
+      "bytes": 3165152,
+      "source_worktrees": [
+        "astronomer-032-distribution-review"
+      ]
+    }
+  ],
+  "bytes": 126517604,
+  "original_receipt_sha256": "5c8777b2468a5e4ee3955c9bd01f1ec7def08c67483db89fccc728b27b42499c"
+}

@@ -41,7 +41,7 @@ import type {
   InstalledChart,
   PaginatedResponse,
 } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
 type Schemas = OpenAPIComponents["schemas"];
@@ -152,13 +152,16 @@ export async function setCatalogChartFavorite(
   };
 }
 
-export async function previewCatalogInstallation(data: {
-  cluster_id: string;
-  chart_version_id: string;
-  namespace: string;
-  values_override?: string;
-}): Promise<CatalogInstallationPreview> {
-  const response = await postCatalogApplicationsPreview({ body: data });
+export async function previewCatalogInstallation(
+  data: {
+    cluster_id: string;
+    chart_version_id: string;
+    namespace: string;
+    values_override?: string;
+  },
+  signal?: AbortSignal,
+): Promise<CatalogInstallationPreview> {
+  const response = await postCatalogApplicationsPreview({ signal, body: data });
   return requireData(response, "previewCatalogInstallation");
 }
 
@@ -365,19 +368,29 @@ export async function getHelmCharts(
     projectId?: string;
     repository?: string;
     category?: string;
+    tag?: string;
     search?: string;
     limit?: number;
     offset?: number;
+    cursor?: string;
   },
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<HelmChart>> {
+  if (
+    params.cursor !== undefined &&
+    (params.offset !== undefined || params.cursor.length > 4096)
+  ) {
+    throw new Error("Chart cursor must be one bounded value without offset");
+  }
   const response = await getCatalogCharts({
     query: {
       cluster_id: params.projectId ? undefined : params.clusterId,
       project_id: params.projectId,
       search: params.search?.trim() || undefined,
+      tag: params.tag,
       limit: params.limit ?? CATALOG_PAGE_LIMIT,
       offset: params.offset,
+      cursor: params.cursor,
     },
     signal,
   });
@@ -618,8 +631,10 @@ export async function rateChart(
 export async function getChartRatings(
   chartId: string,
   params?: { limit?: number; offset?: number },
+  signal?: AbortSignal,
 ): Promise<ChartRating[]> {
   const response = await getChartsByChartIdRatings({
+    signal,
     path: { chart_id: chartId },
     query: params,
   });
@@ -628,8 +643,10 @@ export async function getChartRatings(
 
 export async function getChartRatingAggregate(
   chartId: string,
+  signal?: AbortSignal,
 ): Promise<ChartRatingAggregate> {
   const response = await getChartsByChartIdRatingsAggregate({
+    signal,
     path: { chart_id: chartId },
   });
   return mapChartRatingAggregate(
@@ -639,9 +656,11 @@ export async function getChartRatingAggregate(
 
 export async function getMyChartRating(
   chartId: string,
+  signal?: AbortSignal,
 ): Promise<ChartRating | null> {
   try {
     const response = await getChartsByChartIdRatingsMine({
+      signal,
       path: { chart_id: chartId },
     });
     return mapChartRating(requireData(response, "getMyChartRating"));

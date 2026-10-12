@@ -14,12 +14,16 @@ import (
 
 // ListBackups handles GET /api/v1/backups/.
 func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	backups, err := h.queries.ListBackups(r.Context(), sqlc.ListBackupsParams{
 		Limit:  limit,

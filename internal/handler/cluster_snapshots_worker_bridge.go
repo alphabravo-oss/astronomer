@@ -16,6 +16,7 @@ package handler
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 
@@ -165,7 +166,12 @@ func WireSnapshotWorkerMetrics() {
 		if outcome == "" {
 			return
 		}
-		clusterSnapshotsTotal.WithLabelValues(observability.MetricValues(clusterID, outcome)...).Inc()
+		switch outcome {
+		case "completed", "failed", "partial":
+		default:
+			outcome = "other"
+		}
+		clusterSnapshotsTotal.WithLabelValues(observability.MetricValues("unknown", outcome)...).Inc()
 	})
 	// Publish the per-cluster in-flight gauge the poller aggregates each tick
 	// (otherwise cluster_snapshots_in_flight stays a documented-but-dead metric).
@@ -177,5 +183,18 @@ func WireSnapshotWorkerMetrics() {
 // stays accurate even when snapshots churn quickly. The argument is
 // the number of non-terminal rows the poller observed for the cluster.
 func SetInFlightSnapshotGauge(clusterID string, count float64) {
-	clusterSnapshotsInFlight.WithLabelValues(observability.MetricValues(clusterID)...).Set(count)
+	// A string-only legacy caller cannot prove current cluster ownership.
+	// Production uses a captured generation; do not publish an unverifiable gauge.
+}
+
+// CaptureSnapshotWorkerMetrics preserves the worker's package boundary while
+// binding its callbacks to current database identity before remote operations.
+func CaptureSnapshotWorkerMetrics(source any) func(context.Context, uuid.UUID) tasks.SnapshotMetricRecorder {
+	return func(ctx context.Context, id uuid.UUID) tasks.SnapshotMetricRecorder {
+		metric := captureClusterSnapshotMetric(ctx, source, id)
+		if !metric.lease.IsCaptured() {
+			return nil
+		}
+		return metric
+	}
 }

@@ -1,0 +1,29 @@
+{
+  "W07": {
+    "frozenSource": "df5598e2c636e1ee21dfa102d4bbbe7ee3046b8f",
+    "sourceSHAAgainstGit": 7,
+    "artifactSHA": 1,
+    "parents": 3,
+    "leafCases": 5,
+    "failedTerminalEventsIncludingParent": 6,
+    "zeroSkip": true,
+    "actualFailure": "All first-page omissions and false TLS absence projections reproduced; no production fix qualification yet."
+  },
+  "W10": {
+    "frozenSource": "afb39632a10ec3d23e93eaf96096cebdadcc1c6f",
+    "publicAndPrivateArtifactSHA": 6,
+    "recordedBeforeAfterExact": true,
+    "parents": 3,
+    "allFailed": true,
+    "zeroSkip": true,
+    "race": false,
+    "actualFailure": "Partial snapshot erased gauge; retirement retained counters; unknown HTTP methods produced arbitrary labels. No production fix qualification yet.",
+    "fullGitFingerprintIndependentlyRecomputed": true,
+    "sourceFingerprint": {
+      "schema_version": 2,
+      "source_file_count": 6780,
+      "source_tree_sha256": "bf3c4a700ce7f4eccec72f0b3f4b12b601abd7bb9815ba9d0c23d018971cd144"
+    }
+  },
+  "utc": "2026-10-10T02:49:47.255831+00:00"
+}

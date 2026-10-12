@@ -1,0 +1,85 @@
+{
+  "observedAt": "2026-10-09T23:20:51.816742+00:00",
+  "sources": [
+    {
+      "arch": "x86_64",
+      "packages": [
+        {
+          "A": "x86_64",
+          "C": "Q1KlCtqvgihl9rC6XaaIME3EjkW8c=",
+          "D": "so:libc.musl-x86_64.so.1 so:libcurl.so.4 so:libexpat.so.1 so:libpcre2-8.so.0 so:libz.so.1",
+          "I": "7032728",
+          "L": "GPL-2.0-only",
+          "P": "git",
+          "S": "3546724",
+          "T": "Distributed version control system",
+          "U": "https://www.git-scm.com/",
+          "V": "2.54.0-r0",
+          "c": "b3ed5f8f4ce6b2ef13adeaf7494557add6546bda",
+          "m": "Natanael Copa <ncopa@alpinelinux.org>",
+          "o": "git",
+          "p": "cmd:git-receive-pack=2.54.0-r0 cmd:git-shell=2.54.0-r0 cmd:git-upload-archive=2.54.0-r0 cmd:git-upload-pack=2.54.0-r0 cmd:git=2.54.0-r0",
+          "t": "1776707195"
+        },
+        {
+          "A": "x86_64",
+          "C": "Q15ttwVVS5ciXaRFidK8fZdLM3dB0=",
+          "D": "git=2.54.0-r0 git=2.54.0-r0 so:libc.musl-x86_64.so.1 so:libpcre2-8.so.0 so:libz.so.1",
+          "I": "1328544",
+          "L": "GPL-2.0-only",
+          "P": "git-daemon",
+          "S": "671364",
+          "T": "Git protocol daemon",
+          "U": "https://www.git-scm.com/",
+          "V": "2.54.0-r0",
+          "c": "b3ed5f8f4ce6b2ef13adeaf7494557add6546bda",
+          "m": "Natanael Copa <ncopa@alpinelinux.org>",
+          "o": "git",
+          "t": "1776707195"
+        }
+      ],
+      "sha256": "24fc2ccb08f3125429a38b31bd6c76a7b394c6236df0975760dc8259e50dfbd5",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/APKINDEX.tar.gz"
+    },
+    {
+      "arch": "aarch64",
+      "packages": [
+        {
+          "A": "aarch64",
+          "C": "Q126zNtIm8mtM8tiWL07AHUOSM1Ak=",
+          "D": "so:libc.musl-aarch64.so.1 so:libcurl.so.4 so:libexpat.so.1 so:libpcre2-8.so.0 so:libz.so.1",
+          "I": "7328696",
+          "L": "GPL-2.0-only",
+          "P": "git",
+          "S": "3594478",
+          "T": "Distributed version control system",
+          "U": "https://www.git-scm.com/",
+          "V": "2.54.0-r0",
+          "c": "b3ed5f8f4ce6b2ef13adeaf7494557add6546bda",
+          "m": "Natanael Copa <ncopa@alpinelinux.org>",
+          "o": "git",
+          "p": "cmd:git-receive-pack=2.54.0-r0 cmd:git-shell=2.54.0-r0 cmd:git-upload-archive=2.54.0-r0 cmd:git-upload-pack=2.54.0-r0 cmd:git=2.54.0-r0",
+          "t": "1776707195"
+        },
+        {
+          "A": "aarch64",
+          "C": "Q1mC6M11zGgzY7dbdHs1hh4iTEgBU=",
+          "D": "git=2.54.0-r0 git=2.54.0-r0 so:libc.musl-aarch64.so.1 so:libpcre2-8.so.0 so:libz.so.1",
+          "I": "1466032",
+          "L": "GPL-2.0-only",
+          "P": "git-daemon",
+          "S": "683271",
+          "T": "Git protocol daemon",
+          "U": "https://www.git-scm.com/",
+          "V": "2.54.0-r0",
+          "c": "b3ed5f8f4ce6b2ef13adeaf7494557add6546bda",
+          "m": "Natanael Copa <ncopa@alpinelinux.org>",
+          "o": "git",
+          "t": "1776707195"
+        }
+      ],
+      "sha256": "28053719c18be2ee9cf4dfaa9703450225628ed1f2bded0f3758d72b4fb57634",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/APKINDEX.tar.gz"
+    }
+  ]
+}

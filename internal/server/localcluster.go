@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -98,6 +99,9 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 			}
 		}
 		if nodes, err := k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err == nil {
+			if len(nodes.Items) > math.MaxInt32 {
+				return nil, fmt.Errorf("local node count exceeds the supported database range")
+			}
 			nodeCount = int32(len(nodes.Items))
 		}
 	}

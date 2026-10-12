@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/pem"
 	"io"
 	"log"
 	"net/http"
@@ -13,6 +14,16 @@ import (
 )
 
 func TestFixtureHandlerServesSmartGitAndHelmRepository(t *testing.T) {
+	for _, tls := range []bool{false, true} {
+		name := "http"
+		if tls {
+			name = "https"
+		}
+		t.Run(name, func(t *testing.T) { testFixtureHandler(t, tls) })
+	}
+}
+
+func testFixtureHandler(t *testing.T, tls bool) {
 	root := t.TempDir()
 	worktree := filepath.Join(root, "worktree")
 	repository := filepath.Join(root, "git", "repository.git")
@@ -39,15 +50,27 @@ func TestFixtureHandlerServesSmartGitAndHelmRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(handler)
+	server := httptest.NewUnstartedServer(handler)
+	if tls {
+		server.StartTLS()
+	} else {
+		server.Start()
+	}
 	defer server.Close()
 
 	command := exec.Command("git", "ls-remote", server.URL+"/git/repository.git", "refs/heads/main")
+	if tls {
+		certificate := filepath.Join(root, "fixture-ca.pem")
+		if err := os.WriteFile(certificate, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		command.Env = append(os.Environ(), "GIT_SSL_CAINFO="+certificate)
+	}
 	output, err := command.CombinedOutput()
 	if err != nil || !strings.Contains(string(output), "refs/heads/main") {
 		t.Fatalf("smart Git fixture failed: output=%s err=%v", output, err)
 	}
-	response, err := http.Get(server.URL + "/helm/index.yaml")
+	response, err := server.Client().Get(server.URL + "/helm/index.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -45,6 +45,7 @@ type MonitoringHandler struct {
 	grafanaTickets *auth.GrafanaTicketStore
 	users          UserByIDQuerier
 	serverURL      string
+	toolUIDomain   string
 	proxyImage     string
 	grafanaExpose  GrafanaExpose
 	sessionTTL     func(context.Context) time.Duration

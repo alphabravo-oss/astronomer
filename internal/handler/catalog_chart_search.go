@@ -14,13 +14,10 @@ import (
 // catalogChartFilter resolves authorization once; the exact same predicate is
 // used by both the SQL page and count. Search never filters an already-cut page.
 func (h *CatalogHandler) catalogChartFilter(w http.ResponseWriter, r *http.Request) (sqlc.CountFilteredHelmChartsParams, bool) {
-	filter := sqlc.CountFilteredHelmChartsParams{Tag: strings.TrimSpace(r.URL.Query().Get("tag"))}
-	search := r.URL.Query().Get("search")
-	if !utf8.ValidString(search) || utf8.RuneCountInString(search) > 256 || len(r.URL.Query()["search"]) > 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "search must be one string of at most 256 characters")
+	filter, ok := catalogChartSearchFilter(w, r)
+	if !ok {
 		return filter, false
 	}
-	filter.SearchPattern = literalChartSearchPattern(strings.TrimSpace(search))
 	projectID, projectScoped, ok := catalogProjectQuery(w, r)
 	if !ok {
 		return filter, false
@@ -64,6 +61,17 @@ func (h *CatalogHandler) catalogChartFilter(w http.ResponseWriter, r *http.Reque
 		return filter, false
 	}
 	filter.GlobalScope = true
+	return filter, true
+}
+
+func catalogChartSearchFilter(w http.ResponseWriter, r *http.Request) (sqlc.CountFilteredHelmChartsParams, bool) {
+	filter := sqlc.CountFilteredHelmChartsParams{Tag: strings.TrimSpace(r.URL.Query().Get("tag"))}
+	search := r.URL.Query().Get("search")
+	if !utf8.ValidString(search) || utf8.RuneCountInString(search) > 256 || len(r.URL.Query()["search"]) > 1 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "search must be one string of at most 256 characters")
+		return filter, false
+	}
+	filter.SearchPattern = literalChartSearchPattern(strings.TrimSpace(search))
 	return filter, true
 }
 

@@ -172,20 +172,19 @@ func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
-		rel, held, err := elector.TryLeader(ctx, job)
-		if err != nil {
-			log.Warn("server reconciler leader election failed", "error", err)
+		held, err := elector.RunWhileLeader(ctx, job, run)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if errors.Is(err, leader.ErrLeadershipLost) {
+			log.Warn("server reconciler leadership lost; stopped reconcilers", "error", err)
 		} else if held {
-			log.Info("server reconciler leadership acquired", "job", job)
-			runErr := run(ctx)
-			rel()
-			if ctx.Err() != nil {
-				return nil
+			if err == nil {
+				err = errors.New("reconciler group exited without cancellation")
 			}
-			if runErr == nil {
-				runErr = errors.New("reconciler group exited without cancellation")
-			}
-			return runErr
+			return err
+		} else if err != nil {
+			log.Warn("server reconciler leader election failed", "error", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -251,8 +250,10 @@ func reportInsecureDevKeys(cfg *config.Config, logger *slog.Logger) {
 }
 
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
-	_ = cfg // Security wiring is mandatory in every environment.
 	var errs []string
+	if err := validateToolUIConfig(cfg); err != nil {
+		errs = append(errs, err.Error())
+	}
 	if deps.CoreAuth.JWT == nil {
 		errs = append(errs, "JWT manager is not wired")
 	} else if !deps.CoreAuth.JWT.HasRevocationChecker() {

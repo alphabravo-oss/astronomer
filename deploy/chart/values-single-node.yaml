@@ -1,0 +1,48 @@
+# Compact, non-HA installation. Install the CloudNativePG operator first.
+# Layer site-specific routing, secrets, image digests and backup settings last.
+# Production HA continues to use values-production.yaml on independent nodes.
+config:
+  env: development
+  debug: "false"
+  logLevel: info
+
+server:
+  replicaCount: 1
+  podDisruptionBudget: {enabled: false}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+worker:
+  replicaCount: 1
+  concurrency: 8
+  podDisruptionBudget: {enabled: false}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+frontend:
+  replicaCount: 1
+  podDisruptionBudget: {enabled: false}
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+postgres:
+  mode: cloudNativePG
+  bundled: {enabled: false}
+  pool: {maxConns: 12, minConns: 2}
+  cloudNativePG:
+    instances: 1
+    synchronousReplication: {enabled: false}
+    parameters:
+      max_connections: "100"
+      shared_buffers: "128MB"
+    resources:
+      requests: {cpu: 250m, memory: 512Mi}
+      limits: {cpu: "2", memory: 2Gi}
+
+redis:
+  mode: standalone
+  bundled: {enabled: true}
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: "1", memory: 512Mi}

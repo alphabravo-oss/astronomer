@@ -37,7 +37,7 @@ export function useImageScanQueries({
   const [lastRescanAt, setLastRescanAt] = useState<number | null>(null);
   const summary = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnSummary(clusterId),
-    queryFn: () => getImageVulnSummary(clusterId),
+    queryFn: ({ signal }) => getImageVulnSummary(clusterId, signal),
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
@@ -45,11 +45,15 @@ export function useImageScanQueries({
 
   const images = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnImages(clusterId, namespace),
-    queryFn: () =>
-      listVulnerableImages(clusterId, {
-        namespace: namespace || undefined,
-        limit: 20,
-      }),
+    queryFn: ({ signal }) =>
+      listVulnerableImages(
+        clusterId,
+        {
+          namespace: namespace || undefined,
+          limit: 20,
+        },
+        signal,
+      ),
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
@@ -62,9 +66,14 @@ export function useImageScanQueries({
     queryKey: openReport
       ? queryKeys.clusterPages.imageVulnReportHistory(clusterId, openReport.id)
       : ["noop-rh"],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       openReport
-        ? getImageVulnReportHistory(clusterId, openReport.id, { limit: 50 })
+        ? getImageVulnReportHistory(
+            clusterId,
+            openReport.id,
+            { limit: 50 },
+            signal,
+          )
         : Promise.resolve(null),
     enabled: scansEnabled && !!openReport,
     refetchInterval: liveFallback(30_000),
@@ -107,15 +116,19 @@ export function useImageScanQueries({
   // page stays in sync as new Trivy reports flow in.
   const history = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnHistory(clusterId, 24 * 30),
-    queryFn: () =>
-      getImageVulnHistory(clusterId, { sinceHours: 24 * 30, limit: 200 }),
+    queryFn: ({ signal }) =>
+      getImageVulnHistory(
+        clusterId,
+        { sinceHours: 24 * 30, limit: 200 },
+        signal,
+      ),
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
   const diff = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnDiff(clusterId, 24),
-    queryFn: () => getImageVulnDiff(clusterId, 24),
+    queryFn: ({ signal }) => getImageVulnDiff(clusterId, 24, signal),
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
@@ -127,7 +140,7 @@ export function useImageScanQueries({
   //   • otherwise                    → 30s  (don't hammer the tunnel)
   const progress = useQuery({
     queryKey: queryKeys.clusterPages.imageVulnProgress(clusterId),
-    queryFn: () => getImageVulnProgress(clusterId),
+    queryFn: ({ signal }) => getImageVulnProgress(clusterId, signal),
     enabled: scansEnabled,
     refetchInterval: (query) => {
       if (query.state.data?.scanning) return 3_000;

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.alphabravo.io/schemas/revocations-v1.json",
+  "title": "Astronomer catalog revocations v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entries"],
+  "properties": {
+    "$schema": { "const": "../schemas/revocations-v1.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slug", "version", "reason", "revokedAt"],
+        "properties": {
+          "slug": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+          "version": { "type": "string", "minLength": 1 },
+          "artifactDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "reason": { "type": "string", "minLength": 1 },
+          "replacement": { "type": "string" },
+          "revokedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

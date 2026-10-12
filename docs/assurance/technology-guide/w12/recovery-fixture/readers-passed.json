@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "name": "recovery-readers",
+  "sourceCommit": "f5fdd99eb0893439ecafe9a2c7269fb5562d0c2d",
+  "sourceDirty": true,
+  "sourceBefore": {
+    "schema_version": 2,
+    "source_file_count": 5762,
+    "source_tree_sha256": "619c5375dcb0d55ce18727ef8499cb473fc14105a94798e310f9fdd77c0860b5"
+  },
+  "sourceAfter": {
+    "schema_version": 2,
+    "source_file_count": 5762,
+    "source_tree_sha256": "619c5375dcb0d55ce18727ef8499cb473fc14105a94798e310f9fdd77c0860b5"
+  },
+  "sourceStable": true,
+  "startedAt": "2026-10-09T22:12:55.330264+00:00",
+  "completedAt": "2026-10-09T22:13:00.759082+00:00",
+  "durationSeconds": 5.428818,
+  "exitCode": 0,
+  "status": "pass",
+  "goVersion": "go version go1.27.2 linux/amd64",
+  "gotestsumVersion": "gotestsum version v1.13.0",
+  "goArguments": [
+    "-tags=integration",
+    "-p=1",
+    "-count=1",
+    "-timeout=2m",
+    "-run",
+    "^TestPostgresRecoveryFixtureProductionReaders$",
+    "./scripts/cnpg-recovery-fixture"
+  ],
+  "race": false,
+  "buildTags": [
+    "integration"
+  ],
+  "postgresMajor": "18",
+  "operands": {
+    "schemaVersion": 1,
+    "defaultPostgresMajor": "18",
+    "postgres": {
+      "18": {
+        "version": "18.6",
+        "image": "ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-standard-trixie@sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d",
+        "lane": "current-major qualification candidate"
+      },
+      "17": {
+        "version": "17.11",
+        "image": "ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+        "lane": "previous production major"
+      }
+    },
+    "valkey": {
+      "version": "9.1.2",
+      "image": "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11"
+    },
+    "gotestsum": "1.13.0",
+    "requiredExtensions": [
+      "citext",
+      "pgcrypto",
+      "uuid-ossp",
+      "vector"
+    ],
+    "sourceEvidence": "advisor-plans/032-evidence/cnpg18-prerequisites.json",
+    "limits": [
+      "These immutable operands qualify disposable test databases; they do not switch the production chart major.",
+      "Standalone Docker fixtures do not qualify CloudNativePG operator failover, backup or recovery."
+    ]
+  },
+  "testContract": {
+    "expected": [
+      "TestPostgresRecoveryFixtureProductionReaders"
+    ],
+    "terminal": {
+      "TestPostgresRecoveryFixtureProductionReaders": "pass"
+    },
+    "missing": [],
+    "skipped": [],
+    "failed": [],
+    "complete": true
+  },
+  "privateOriginalDirectory": "/tmp/astronomer-private-go-evidence-iqunkooi",
+  "originalDigests": {
+    "console.log": "sha256:9a266ccb0435836a88d735abc77c0df543f27148e844abf63c28c87becbf110e",
+    "junit.xml": "sha256:72ab87b71982bea3a2957e4d275d2632d8dbd3d0fc1f9c8085ab2fbba11e2b76",
+    "go-test.json": "sha256:b74e90359c2f0109efd4b1ee1ac3033a53432759c262ed45045b77ebc65cbd54"
+  },
+  "publicDigests": {
+    "junit.xml": "sha256:72ab87b71982bea3a2957e4d275d2632d8dbd3d0fc1f9c8085ab2fbba11e2b76",
+    "console.log": "sha256:9a266ccb0435836a88d735abc77c0df543f27148e844abf63c28c87becbf110e",
+    "go-test.json": "sha256:b74e90359c2f0109efd4b1ee1ac3033a53432759c262ed45045b77ebc65cbd54"
+  }
+}

@@ -1,6 +1,6 @@
 # Astronomer management-plane chart
 
-This chart installs the Astronomer 1.2.1 API, worker, web application, database
+This chart installs the Astronomer 2.0.0 API, worker, web application, database
 migration job, and optional supporting services. It is the only supported
 management-plane installation path for the v1 release line.
 
@@ -12,7 +12,7 @@ never installs delivery controllers in the management cluster.
 
 | Contract | Supported value |
 |---|---|
-| Chart and application | 1.2.1 |
+| Chart and application | 2.0.0 |
 | Kubernetes | 1.33 through 1.35 |
 | Agent protocol | 2 |
 | Flux | 2.9.3 |
@@ -30,10 +30,24 @@ sync with that file.
 
 ## Install
 
-Generate the two long-lived application keys before invoking Helm. This first
-command is a runnable local or evaluation install using the bundled single-node
-data services. The chart owns the bundled PostgreSQL password so its database
-and application connection string cannot drift:
+For a compact single-node installation, install the CloudNativePG operator and
+add `-f deploy/chart/values-single-node.yaml` to the Helm command below, before
+site-specific overrides. This profile uses one CNPG PostgreSQL instance, one
+Valkey instance, and one API/worker/frontend replica with bounded resources and
+connection pools. It accepts host downtime and uses the development environment;
+it does not qualify as production HA. For HA, use `values-production.yaml` with
+three independent nodes and the required production inputs. Both profiles keep
+the same application architecture and CNPG operator. Do not layer both profiles.
+
+The base chart retains legacy PostgreSQL defaults for upgrade compatibility.
+Switching an existing database to CNPG requires a verified migration; changing
+the values alone creates an empty database. See
+[the CNPG migration runbook](../../docs/runbooks/single-node-cnpg.md).
+
+Generate the two long-lived application keys before invoking Helm. This local
+or evaluation install uses single-instance CNPG and Valkey. The CNPG operator
+must already be installed; its generated application Secret supplies database
+credentials to the application:
 
 ```bash
 openssl rand -base64 32 > ./jwt-key
@@ -41,6 +55,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 helm upgrade --install astronomer ./deploy/chart \
   --namespace astronomer --create-namespace \
+  -f deploy/chart/values-single-node.yaml \
   --set-file secrets.secretKey=./jwt-key \
   --set-file secrets.encryptionKey=./fernet-key \
   --set gateway.enabled=false \
@@ -54,7 +69,7 @@ Gateway routing and requires its hostname and TLS inputs.
 The exact Secret key names accepted by `secrets.existingSecret` are documented
 beside the `secrets` values. Prefer an external secret controller or an
 encrypted secret workflow; do not commit plaintext production values. An
-externally-owned core Secret must be paired with external PostgreSQL; the chart
+externally-owned core Secret must be paired with CNPG or external PostgreSQL; the chart
 fails fast if `secrets.existingSecret` is combined with bundled PostgreSQL
 because Kubernetes cannot safely interpolate that Secret's password into the
 application DSN.
@@ -456,3 +471,7 @@ A release is not complete until online and disconnected installs have both
 passed, a newly enrolled test cluster reaches Ready using the pinned downstream
 distribution, an application rollout converges, status reaches the UI, and a
 clean Helm upgrade from the previous v1 tag succeeds.
+
+### Downstream UI isolation
+
+Set `toolUI.domain` to a dedicated wildcard DNS suffix under the console's registrable domain. Every tool target receives a separate HTTPS hostname; the chart routes all tool paths to the server. Configure DNS-01 with `tls.letsEncrypt.cloudflare.apiTokenSecretName`, supply a wildcard TLS Secret, or use an external HTTPS Gateway. Without this configuration, downstream UI launches fail closed while management APIs remain available. See the [setup and validation runbook](../../docs/runbooks/tool-ui-isolation.md).

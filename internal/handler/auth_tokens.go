@@ -90,7 +90,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -229,6 +229,10 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 
 // ListTokens handles GET /api/v1/auth/tokens/.
 func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
@@ -246,8 +250,8 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	tokens, err := h.tokens.ListTokensByUser(r.Context(), sqlc.ListTokensByUserParams{
 		UserID: userID,

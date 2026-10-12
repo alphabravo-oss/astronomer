@@ -492,6 +492,12 @@ type CatalogBlessedChart struct {
 	Revoked              bool            `json:"revoked"`
 }
 
+type CatalogGlobalChartKey struct {
+	ChartID      uuid.UUID `json:"chart_id"`
+	RepositoryID uuid.UUID `json:"repository_id"`
+	Name         string    `json:"name"`
+}
+
 type CatalogOperation struct {
 	ID            uuid.UUID          `json:"id"`
 	TargetType    string             `json:"target_type"`
@@ -2119,6 +2125,41 @@ type ImageVulnerability struct {
 	CreatedAt        time.Time      `json:"created_at"`
 }
 
+type ImageVulnerabilityDatabaseWitness struct {
+	ReportID                  uuid.UUID `json:"report_id"`
+	ClaimID                   uuid.UUID `json:"claim_id"`
+	ClusterID                 uuid.UUID `json:"cluster_id"`
+	UpdateID                  uuid.UUID `json:"update_id"`
+	ScanJobUid                uuid.UUID `json:"scan_job_uid"`
+	ScanPodUid                uuid.UUID `json:"scan_pod_uid"`
+	ScannerImageID            string    `json:"scanner_image_id"`
+	HelperImageID             string    `json:"helper_image_id"`
+	ScannerStartedAt          time.Time `json:"scanner_started_at"`
+	ScannerFinishedAt         time.Time `json:"scanner_finished_at"`
+	InitialLogAt              time.Time `json:"initial_log_at"`
+	FinalLogAt                time.Time `json:"final_log_at"`
+	MainDatabaseDigest        string    `json:"main_database_digest"`
+	MainDatabaseSize          int64     `json:"main_database_size"`
+	JavaDatabaseDigest        string    `json:"java_database_digest"`
+	JavaDatabaseSize          int64     `json:"java_database_size"`
+	WorkloadManifestDigest    string    `json:"workload_manifest_digest"`
+	WorkloadLayoutDigest      string    `json:"workload_layout_digest"`
+	ReportPayloadDigest       string    `json:"report_payload_digest"`
+	ReportObservationRevision int64     `json:"report_observation_revision"`
+	ReportObservedAt          time.Time `json:"report_observed_at"`
+	JavaApplicability         string    `json:"java_applicability"`
+	ReceivedAt                time.Time `json:"received_at"`
+}
+
+type ImageVulnerabilityObservation struct {
+	ReportID          uuid.UUID          `json:"report_id"`
+	UpstreamReportUid string             `json:"upstream_report_uid"`
+	UpstreamTime      pgtype.Timestamptz `json:"upstream_time"`
+	ReceivedAt        time.Time          `json:"received_at"`
+	TimeState         string             `json:"time_state"`
+	Revision          int64              `json:"revision"`
+}
+
 type ImageVulnerabilityReport struct {
 	ID             uuid.UUID `json:"id"`
 	ClusterID      uuid.UUID `json:"cluster_id"`
@@ -2333,6 +2374,12 @@ type ManagementBackupDestination struct {
 	ReconcileStatus      string             `json:"reconcile_status"`
 	LastError            string             `json:"last_error"`
 	LastReconciledAt     pgtype.Timestamptz `json:"last_reconciled_at"`
+}
+
+type MetricOwnerGeneration struct {
+	Family     string    `json:"family"`
+	OwnerID    uuid.UUID `json:"owner_id"`
+	Generation uuid.UUID `json:"generation"`
 }
 
 type MirroredGatewayClass struct {
@@ -3130,6 +3177,218 @@ type VaultConnection struct {
 	CreatedBy            pgtype.UUID        `json:"created_by"`
 	CreatedAt            time.Time          `json:"created_at"`
 	UpdatedAt            time.Time          `json:"updated_at"`
+}
+
+type VulnerabilityDatabaseAuthority struct {
+	Singleton bool      `json:"singleton"`
+	BaseID    uuid.UUID `json:"base_id"`
+	BaseEpoch int64     `json:"base_epoch"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type VulnerabilityDatabaseBasis struct {
+	ID                            uuid.UUID          `json:"id"`
+	Epoch                         int64              `json:"epoch"`
+	BaseRelease                   string             `json:"base_release"`
+	DistributionDigest            string             `json:"distribution_digest"`
+	DistributionIdentity          string             `json:"distribution_identity"`
+	MirrorEndorsementDigest       pgtype.Text        `json:"mirror_endorsement_digest"`
+	MirrorPolicyFingerprint       pgtype.Text        `json:"mirror_policy_fingerprint"`
+	MirrorTrustFingerprint        pgtype.Text        `json:"mirror_trust_fingerprint"`
+	MirrorTrustOriginFingerprint  pgtype.Text        `json:"mirror_trust_origin_fingerprint"`
+	CatalogDigest                 string             `json:"catalog_digest"`
+	Profile                       string             `json:"profile"`
+	CandidateSourceCommit         string             `json:"candidate_source_commit"`
+	ScannerDigest                 string             `json:"scanner_digest"`
+	ScannerVersion                string             `json:"scanner_version"`
+	MainSchema                    int32              `json:"main_schema"`
+	JavaSchema                    int32              `json:"java_schema"`
+	PolicyFingerprint             string             `json:"policy_fingerprint"`
+	TrustMaterialFingerprint      string             `json:"trust_material_fingerprint"`
+	PhysicalSnapshotVersion       int16              `json:"physical_snapshot_version"`
+	VendorTrustFingerprint        string             `json:"vendor_trust_fingerprint"`
+	VendorTrustOriginFingerprint  string             `json:"vendor_trust_origin_fingerprint"`
+	RegistryRootsFingerprint      pgtype.Text        `json:"registry_roots_fingerprint"`
+	RegistryPolicyFingerprint     pgtype.Text        `json:"registry_policy_fingerprint"`
+	RegistryRootOriginFingerprint pgtype.Text        `json:"registry_root_origin_fingerprint"`
+	ScanningEnabled               bool               `json:"scanning_enabled"`
+	ChartSourceUrl                string             `json:"chart_source_url"`
+	ChartName                     string             `json:"chart_name"`
+	ChartVersion                  string             `json:"chart_version"`
+	ChartDigest                   string             `json:"chart_digest"`
+	BindingFingerprint            string             `json:"binding_fingerprint"`
+	NextGeneration                int64              `json:"next_generation"`
+	AcceptedGeneration            int64              `json:"accepted_generation"`
+	RevokedAt                     pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt                     time.Time          `json:"created_at"`
+}
+
+type VulnerabilityDatabaseClusterState struct {
+	ClusterID                  uuid.UUID `json:"cluster_id"`
+	BaseID                     uuid.UUID `json:"base_id"`
+	BaseEpoch                  int64     `json:"base_epoch"`
+	UpdateID                   uuid.UUID `json:"update_id"`
+	UpdateGeneration           int64     `json:"update_generation"`
+	ProjectID                  uuid.UUID `json:"project_id"`
+	SourceID                   uuid.UUID `json:"source_id"`
+	VersionID                  uuid.UUID `json:"version_id"`
+	TargetID                   uuid.UUID `json:"target_id"`
+	TargetGeneration           int64     `json:"target_generation"`
+	BundleSpecDigest           string    `json:"bundle_spec_digest"`
+	DeploymentID               uuid.UUID `json:"deployment_id"`
+	DeploymentGeneration       int64     `json:"deployment_generation"`
+	ConfigurationDigest        string    `json:"configuration_digest"`
+	DesiredSpecDigest          string    `json:"desired_spec_digest"`
+	AssignmentGeneration       int64     `json:"assignment_generation"`
+	AssignmentDigest           string    `json:"assignment_digest"`
+	AssignmentEtag             string    `json:"assignment_etag"`
+	AssignmentCredentialEpoch  int64     `json:"assignment_credential_epoch"`
+	AssignmentCredentialDigest string    `json:"assignment_credential_digest"`
+	UpdatedAt                  time.Time `json:"updated_at"`
+}
+
+type VulnerabilityDatabaseRescanIntent struct {
+	ID               uuid.UUID          `json:"id"`
+	ClusterID        uuid.UUID          `json:"cluster_id"`
+	UpdateID         uuid.UUID          `json:"update_id"`
+	TargetID         uuid.UUID          `json:"target_id"`
+	TargetGeneration int64              `json:"target_generation"`
+	Reason           string             `json:"reason"`
+	Phase            string             `json:"phase"`
+	LeaseExpiresAt   pgtype.Timestamptz `json:"lease_expires_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+}
+
+type VulnerabilityDatabaseScanClaim struct {
+	ID                         uuid.UUID          `json:"id"`
+	IntentID                   uuid.UUID          `json:"intent_id"`
+	ClusterID                  uuid.UUID          `json:"cluster_id"`
+	UpdateID                   uuid.UUID          `json:"update_id"`
+	BaseID                     uuid.UUID          `json:"base_id"`
+	BaseEpoch                  int64              `json:"base_epoch"`
+	UpdateGeneration           int64              `json:"update_generation"`
+	FeedDigest                 string             `json:"feed_digest"`
+	ProjectID                  uuid.UUID          `json:"project_id"`
+	SourceID                   uuid.UUID          `json:"source_id"`
+	VersionID                  uuid.UUID          `json:"version_id"`
+	TargetID                   uuid.UUID          `json:"target_id"`
+	BundleSpecDigest           string             `json:"bundle_spec_digest"`
+	DeploymentID               uuid.UUID          `json:"deployment_id"`
+	ConfigurationDigest        string             `json:"configuration_digest"`
+	DesiredSpecDigest          string             `json:"desired_spec_digest"`
+	AssignmentCredentialEpoch  int64              `json:"assignment_credential_epoch"`
+	AssignmentCredentialDigest string             `json:"assignment_credential_digest"`
+	Cycle                      int64              `json:"cycle"`
+	TargetGeneration           int64              `json:"target_generation"`
+	DeploymentGeneration       int64              `json:"deployment_generation"`
+	AssignmentGeneration       int64              `json:"assignment_generation"`
+	AssignmentDigest           string             `json:"assignment_digest"`
+	AssignmentEtag             string             `json:"assignment_etag"`
+	WorkloadNamespace          string             `json:"workload_namespace"`
+	WorkloadPodName            string             `json:"workload_pod_name"`
+	WorkloadPodUid             uuid.UUID          `json:"workload_pod_uid"`
+	WorkloadContainerName      string             `json:"workload_container_name"`
+	WorkloadRepository         string             `json:"workload_repository"`
+	WorkloadManifestDigest     string             `json:"workload_manifest_digest"`
+	WorkloadImage              string             `json:"workload_image"`
+	WorkloadSpecDigest         string             `json:"workload_spec_digest"`
+	WorkloadRestartCount       int32              `json:"workload_restart_count"`
+	WorkloadContainerID        string             `json:"workload_container_id"`
+	WorkloadImageID            string             `json:"workload_image_id"`
+	NodeUid                    uuid.UUID          `json:"node_uid"`
+	NodeName                   string             `json:"node_name"`
+	Architecture               string             `json:"architecture"`
+	HelperIndexDigest          string             `json:"helper_index_digest"`
+	HelperChildDigest          string             `json:"helper_child_digest"`
+	ScannerIndexDigest         string             `json:"scanner_index_digest"`
+	ScannerChildDigest         string             `json:"scanner_child_digest"`
+	Phase                      string             `json:"phase"`
+	LeaseToken                 pgtype.UUID        `json:"lease_token"`
+	LeaseExpiresAt             pgtype.Timestamptz `json:"lease_expires_at"`
+	PreparationJobUid          pgtype.UUID        `json:"preparation_job_uid"`
+	PreparationPodUid          pgtype.UUID        `json:"preparation_pod_uid"`
+	PreparationPodName         string             `json:"preparation_pod_name"`
+	PreparationSpecDigest      pgtype.Text        `json:"preparation_spec_digest"`
+	ScanJobUid                 pgtype.UUID        `json:"scan_job_uid"`
+	ScanPodUid                 pgtype.UUID        `json:"scan_pod_uid"`
+	ScanPodName                string             `json:"scan_pod_name"`
+	ScanSpecDigest             pgtype.Text        `json:"scan_spec_digest"`
+	AuthoritySecretUid         pgtype.UUID        `json:"authority_secret_uid"`
+	ImagePullSecretUid         pgtype.UUID        `json:"image_pull_secret_uid"`
+	VolumeClaimUid             pgtype.UUID        `json:"volume_claim_uid"`
+	DenyEgressPolicyUid        pgtype.UUID        `json:"deny_egress_policy_uid"`
+	PreparedRecord             []byte             `json:"prepared_record"`
+	ReportID                   pgtype.UUID        `json:"report_id"`
+	ErrorCategory              string             `json:"error_category"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
+}
+
+type VulnerabilityDatabaseScanDiscoveryCursor struct {
+	ClusterID    uuid.UUID `json:"cluster_id"`
+	Continuation string    `json:"continuation"`
+	TouchedAt    time.Time `json:"touched_at"`
+}
+
+type VulnerabilityDatabaseScanResource struct {
+	ClaimID       uuid.UUID          `json:"claim_id"`
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	Role          string             `json:"role"`
+	ResourcePath  string             `json:"resource_path"`
+	RequestDigest string             `json:"request_digest"`
+	ResourceUid   pgtype.UUID        `json:"resource_uid"`
+	RemovedAt     pgtype.Timestamptz `json:"removed_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+}
+
+type VulnerabilityDatabaseUpdate struct {
+	ID                       uuid.UUID          `json:"id"`
+	AttemptID                uuid.UUID          `json:"attempt_id"`
+	AttemptPhase             string             `json:"attempt_phase"`
+	DecisionDigest           string             `json:"decision_digest"`
+	BaseID                   uuid.UUID          `json:"base_id"`
+	BaseEpoch                int64              `json:"base_epoch"`
+	Generation               int64              `json:"generation"`
+	FeedDigest               string             `json:"feed_digest"`
+	PolicyFingerprint        string             `json:"policy_fingerprint"`
+	TrustMaterialFingerprint string             `json:"trust_material_fingerprint"`
+	PublishedAt              time.Time          `json:"published_at"`
+	ExpiresAt                time.Time          `json:"expires_at"`
+	AcceptedAt               time.Time          `json:"accepted_at"`
+	RevokedAt                pgtype.Timestamptz `json:"revoked_at"`
+}
+
+type VulnerabilityDatabaseUpdateAsset struct {
+	UpdateID         uuid.UUID `json:"update_id"`
+	Role             string    `json:"role"`
+	SupplierSubject  string    `json:"supplier_subject"`
+	PublishedSubject string    `json:"published_subject"`
+	ManifestDigest   string    `json:"manifest_digest"`
+	ManifestSize     int64     `json:"manifest_size"`
+	ManifestMedia    string    `json:"manifest_media"`
+	ConfigDigest     string    `json:"config_digest"`
+	ConfigSize       int64     `json:"config_size"`
+	ConfigMedia      string    `json:"config_media"`
+	LayerDigest      string    `json:"layer_digest"`
+	LayerSize        int64     `json:"layer_size"`
+	LayerMedia       string    `json:"layer_media"`
+	MetadataDigest   string    `json:"metadata_digest"`
+	MetadataSize     int64     `json:"metadata_size"`
+	MetadataSchema   int32     `json:"metadata_schema"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	NextUpdate       time.Time `json:"next_update"`
+}
+
+type VulnerabilityDatabaseUpdateAttempt struct {
+	ID                  uuid.UUID   `json:"id"`
+	BaseID              uuid.UUID   `json:"base_id"`
+	BaseEpoch           int64       `json:"base_epoch"`
+	Generation          int64       `json:"generation"`
+	DecisionDigest      string      `json:"decision_digest"`
+	Phase               string      `json:"phase"`
+	PublishedFeedDigest pgtype.Text `json:"published_feed_digest"`
+	CreatedAt           time.Time   `json:"created_at"`
+	ExpiresAt           time.Time   `json:"expires_at"`
 }
 
 type WebhookDelivery struct {

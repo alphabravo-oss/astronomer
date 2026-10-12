@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="3" failures="0" errors="0" time="13.923152">
+	<testsuite tests="3" failures="0" time="13.923000" name="github.com/alphabravocompany/astronomer-go/internal/worker" timestamp="2026-10-09T22:47:21Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/worker" name="TestProcessRestartQualification/server_rolling_restart_preserves_tunnel_task_and_CIS_progress" time="4.090000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/worker" name="TestProcessRestartQualification/worker_restart_preserves_committed_task_and_audit_intent" time="9.770000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/worker" name="TestProcessRestartQualification" time="13.870000"></testcase>
+	</testsuite>
+</testsuites>

@@ -20,7 +20,7 @@ RUN sudo apt-get update \
  && sudo ln -sf git.real /usr/bin/git-upload-pack
 
 ARG HELM_VERSION=v3.21.0
-ARG K3D_VERSION=v5.8.3
+ARG K3D_VERSION=v5.9.0
 ARG KUBECTL_VERSION=v1.35.2
 RUN set -eux; \
     architecture="$(dpkg --print-architecture)"; \

@@ -176,12 +176,16 @@ func validEnforcement(s string) bool { return s == "soft" || s == "hard" }
 
 // ListPlans handles GET /api/v1/admin/quota-plans/.
 func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}
 	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListQuotaPlansPage(r.Context(), sqlc.ListQuotaPlansPageParams{
-		QueryLimit: int32(limit), QueryOffset: int32(offset),
+		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list quota plans")
@@ -227,7 +231,7 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req quotaPlanRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -267,7 +271,7 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req quotaPlanRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

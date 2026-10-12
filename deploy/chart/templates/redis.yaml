@@ -301,7 +301,7 @@ spec:
             - name: sentinel-config
               mountPath: /sentinel
           resources:
-            {{- toYaml .Values.redis.resources | nindent 12 }}
+            {{- toYaml .Values.redis.sentinel.resources | nindent 12 }}
       volumes:
         - name: sentinel-config
           emptyDir: {}

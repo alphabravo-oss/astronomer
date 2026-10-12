@@ -32,6 +32,12 @@ type Code = string
 // --- Validation / bad client input (typically HTTP 400) ---
 
 const (
+	// OffsetNotSupported rejects a continuation beyond the bounded legacy range.
+	OffsetNotSupported Code = "offset_not_supported"
+
+	// CursorNotSupported rejects an opaque continuation on a legacy collection.
+	CursorNotSupported Code = "cursor_not_supported"
+
 	// AgentOverloaded indicates the connected cluster agent reached its bounded
 	// in-flight request capacity. Clients may retry after the response's
 	// Retry-After interval (HTTP 429).

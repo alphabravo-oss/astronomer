@@ -1,0 +1,193 @@
+{
+  "catalog_source": "afd3af678a0c7ab70a1d03b526b6b1b1f6a96135",
+  "consumer_source": "b82a6bdd254011ed1323b8bb904a91d38e0346b8",
+  "environment_source": "4e6d27a1fd2b8320864161017d2c59e077692311",
+  "scope": "Two canonical private producer outputs with complete deterministic file graph; actual signed synthetic-key OCI consumer and zero-write negatives. No registry TLS, keyless trust, GitHub publication, database or customer deployment.",
+  "steps": [
+    {
+      "name": "python-version",
+      "argv": [
+        "/tmp/w15-private-typing-environment-4e6d27a-run1/typing-environment/bin/python",
+        "--version"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.137
+      },
+      "source_stable": true,
+      "elapsed_seconds": 3.169784435071051,
+      "log_sha256": "8d4f04b10a8a6c0cf7aec26d237d8a830221b19fee177b0c39f0362e65d9fba6"
+    },
+    {
+      "name": "go-version",
+      "argv": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "version"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.133
+      },
+      "source_stable": true,
+      "elapsed_seconds": 3.1558432509191334,
+      "log_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376"
+    },
+    {
+      "name": "producer-0",
+      "argv": [
+        "/tmp/w15-private-typing-environment-4e6d27a-run1/typing-environment/bin/python",
+        "-B",
+        "/tmp/w15-catalog-producer-consumer-runner-afd3af6/produce.py",
+        "/root/astronomer-all/astronomer-catalog-032-w15",
+        "/tmp/w15-catalog-producer-consumer-afd3af6-run1/producer-0"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.837
+      },
+      "source_stable": true,
+      "elapsed_seconds": 3.803242125082761,
+      "log_sha256": "f96b4656e331f11f18b74b037dadbe09abb2d05583fe462b6dc3967413408732"
+    }
+  ],
+  "qualified": false,
+  "source_before": {
+    "catalog": {
+      "schema_version": 2,
+      "source_file_count": 75,
+      "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+    },
+    "consumer": {
+      "schema_version": 2,
+      "source_file_count": 9087,
+      "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+    }
+  },
+  "environment_binding": {
+    "files": 5210,
+    "bytes": 137972863,
+    "sha256": "b5e5c668b9110a0fb432381430ebd8aefa6631b51f6e1367a7d4897066070bff",
+    "external_interpreter": "/tmp/w15-bootstrap-e3c1964-run1/tools/python/python/bin/python3.15",
+    "external_interpreter_sha256": "aac3ade3f7d90fbf63e3ea0c46120a0cfbd159e1e503dde04721979507a1548b"
+  },
+  "private_environment_receipt_sha256": "28629fd83b6d4c7be478fca4c32f61ed6d1206f263c566bbfd7cb3b5fad610c7",
+  "safe_go_environment": {
+    "GOTOOLCHAIN": "go1.27.2",
+    "GOWORK": "off",
+    "GOMAXPROCS": "4",
+    "GOFLAGS": "-p=2 -mod=readonly",
+    "GOFIPS140": "off"
+  },
+  "failure_category": "AssertionError",
+  "failure_message": "",
+  "source_after": {
+    "catalog": {
+      "schema_version": 2,
+      "source_file_count": 75,
+      "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+    },
+    "consumer": {
+      "schema_version": 2,
+      "source_file_count": 9087,
+      "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+    }
+  },
+  "source_stable": true,
+  "runner_final_guard_pass": true
+}

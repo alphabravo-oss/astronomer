@@ -29,8 +29,10 @@ function mapSCIMToken(token: SCIMTokenWire): SCIMToken {
   };
 }
 
-export async function listSCIMTokens(): Promise<SCIMToken[]> {
-  const response = await getAdminScimTokens();
+export async function listSCIMTokens(
+  signal?: AbortSignal,
+): Promise<SCIMToken[]> {
+  const response = await getAdminScimTokens({ signal });
   return response.data.tokens.map(mapSCIMToken);
 }
 

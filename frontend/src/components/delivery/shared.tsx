@@ -295,7 +295,15 @@ export function DeliveryPhaseBadge({ value }: { value: string }) {
               "queued",
             ].includes(normalized)
           ? "running"
-          : "pending";
+          : [
+                "draft",
+                "pending",
+                "created",
+                "awaiting_approval",
+                "awaiting_agent",
+              ].includes(normalized)
+            ? "pending"
+            : "unknown";
   return <StatusBadge status={status} label={value.replaceAll("_", " ")} />;
 }
 

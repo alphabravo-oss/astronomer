@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -14,7 +13,7 @@ import (
 )
 
 func (h *MonitoringHandler) UnmarshalBody(r *http.Request, dst any) error {
-	return json.NewDecoder(r.Body).Decode(dst)
+	return decodeV1JSONBody(r, dst)
 }
 
 // --- Monitoring endpoints CRUD (Python: /api/v1/monitoring/endpoints/) ---
@@ -24,6 +23,10 @@ func (h *MonitoringHandler) UnmarshalBody(r *http.Request, dst any) error {
 
 // ListEndpoints handles GET /api/v1/monitoring/endpoints/.
 func (h *MonitoringHandler) ListEndpoints(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.queries == nil {
 		paging.Write(w, []any{}, paging.Exact(0, queryLimit(r, 20), queryOffset(r), len([]any{})))
 		return

@@ -303,6 +303,7 @@ GET /api/v1/clusters/{cluster_id}/vulnerabilities/history
 GET /api/v1/clusters/{cluster_id}/vulnerabilities/images
 GET /api/v1/clusters/{cluster_id}/vulnerabilities/progress
 GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}
+GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status
 GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history
 GET /api/v1/clusters/{cluster_id}/vulnerabilities/summary
 GET /api/v1/clusters/{cluster_id}/workloads

@@ -104,3 +104,16 @@ func TestClusterAgentHealthCannotImportDownstreamTunnel(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterAgentPaginationRejectsOverflow(t *testing.T) {
+	service := NewClusterAgentHealthService(clusterAgentHealthFake{})
+	for _, tc := range []struct {
+		page, size int
+		valid      bool
+	}{{0, 100, true}, {21474836, 100, true}, {21474837, 100, false}, {4294967296, 1, false}, {9223372036854775807, 100, false}} {
+		_, err := service.List(context.Background(), ClusterAgentListFilter{Page: tc.page, PageSize: tc.size})
+		if (err == nil) != tc.valid {
+			t.Fatalf("page=%d size=%d: %v", tc.page, tc.size, err)
+		}
+	}
+}

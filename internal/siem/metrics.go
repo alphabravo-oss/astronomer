@@ -57,43 +57,22 @@ func init() {
 
 // RecordDispatched bumps the per-forwarder dispatched counter. Called
 // by the worker dispatcher on every (success | failure) outcome.
-func RecordDispatched(forwarder, format, outcome string, n int) {
-	if forwarder == "" {
-		forwarder = "unknown"
+// A name-only caller cannot prove current ownership. Legacy public helpers
+// retain finite unknown aggregate counters; production async consumers use a
+// generation-bound MetricLease. The bus hot path stays free of database reads.
+func RecordDispatched(_ string, format, outcome string, n int) {
+	if n <= 0 {
+		return
 	}
-	if format == "" {
-		format = "rfc5424"
-	}
-	if outcome == "" {
-		outcome = "unknown"
-	}
-	dispatchedTotal.
-		WithLabelValues(observability.MetricValues(forwarder, format, outcome)...).
-		Add(float64(n))
+	dispatchedTotal.WithLabelValues(observability.MetricValues("unknown", formatLabel(format), outcomeLabel(outcome))...).Add(float64(n))
 }
-
-// RecordQueueDepth sets the per-forwarder gauge. The dispatcher calls
-// this after each tick using the live row count.
-func RecordQueueDepth(forwarder string, depth int) {
-	if forwarder == "" {
-		forwarder = "unknown"
-	}
-	queueDepth.
-		WithLabelValues(observability.MetricValues(forwarder)...).
-		Set(float64(depth))
+func RecordQueueDepth(_ string, _ int) {
+	// Unknown names cannot publish a current per-owner gauge. Product queues are
+	// unaffected; the qualified dispatcher uses MetricLease.QueueDepth instead.
 }
-
-// RecordDropped bumps the dropped counter for a reason. Called by the
-// bus tap (queue_full) and the dispatcher (retries_exhausted /
-// format_error).
-func RecordDropped(forwarder, reason string, n int) {
-	if forwarder == "" {
-		forwarder = "unknown"
+func RecordDropped(_ string, reason string, n int) {
+	if n <= 0 {
+		return
 	}
-	if reason == "" {
-		reason = "unknown"
-	}
-	droppedTotal.
-		WithLabelValues(observability.MetricValues(forwarder, reason)...).
-		Add(float64(n))
+	droppedTotal.WithLabelValues(observability.MetricValues("unknown", reasonLabel(reason))...).Add(float64(n))
 }

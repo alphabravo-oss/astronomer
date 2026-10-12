@@ -1,0 +1,13 @@
+# github.com/alphabravocompany/astronomer-go/internal/delivery/distribution [github.com/alphabravocompany/astronomer-go/internal/delivery/distribution.test]
+internal/delivery/distribution/assets_test.go:55:51: not enough arguments in call to validateArtifactAssets
+	have ([]Asset, map[string][]byte)
+	want (int, []Asset, map[string][]byte)
+internal/delivery/distribution/assets_test.go:63:45: not enough arguments in call to validateArtifactAssets
+	have ([]Asset, map[string][]byte)
+	want (int, []Asset, map[string][]byte)
+internal/delivery/distribution/assets_test.go:85:46: not enough arguments in call to validateArtifactAssets
+	have ([]Asset, map[string][]byte)
+	want (int, []Asset, map[string][]byte)
+FAIL	github.com/alphabravocompany/astronomer-go/internal/delivery/distribution [build failed]
+ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution	0.156s
+FAIL

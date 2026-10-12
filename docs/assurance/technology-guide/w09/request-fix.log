@@ -1,0 +1,3 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	1.255s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/delivery	0.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/jsoncontract	0.173s

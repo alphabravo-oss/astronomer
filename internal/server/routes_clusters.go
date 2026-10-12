@@ -98,7 +98,7 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 				r.With(writeClusters).Post("/{id}/logging/outputs/{output_id}/rotate-token/", deps.ClusterResources.Logging.RotateOutputToken)
 			}
 			if deps.ClusterResources.Monitoring != nil {
-				clusterGrafana := http.HandlerFunc(deps.ClusterResources.Monitoring.ProxyClusterGrafana)
+				clusterGrafana := toolUIEntry(deps.CoreAuth.ToolUI, "cluster-grafana")
 				for _, path := range []string{"/{id}/observability/grafana", "/{id}/observability/grafana/", "/{id}/observability/grafana/*"} {
 					for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodOptions} {
 						r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Method(method, path, clusterGrafana)

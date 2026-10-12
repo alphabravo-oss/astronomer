@@ -483,6 +483,7 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 // internalK8sForwardClient is the HTTP client used for cross-pod K8s
 // request forwarding. No global timeout — per-request context governs.
 var internalK8sForwardClient = &http.Client{
+	CheckRedirect: tunnel.RejectPeerRedirect,
 	Transport: &http.Transport{
 		MaxIdleConns:          16,
 		IdleConnTimeout:       60 * time.Second,

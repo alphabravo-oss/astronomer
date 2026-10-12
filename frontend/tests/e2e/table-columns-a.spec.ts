@@ -67,6 +67,7 @@ const clustersList = get("/api/v1/clusters", {
         i,
       ),
       status: pick(["active", "warning", "disconnected", "active"], i),
+      registration_phase: "ready",
       provider: pick(["aws", "gcp", "bare_metal", "azure"], i),
       environment: "production",
       distribution: pick(["eks", "gke", "k3s", "aks"], i),

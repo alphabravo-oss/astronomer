@@ -26,7 +26,7 @@ export function RemoteStoragePicker({
   const params = { page: pageIndex + 1, page_size: 25 };
   const query = useQuery({
     queryKey: b2Keys.storage(params),
-    queryFn: () => b2ListStorageLocations(params),
+    queryFn: ({ signal }) => b2ListStorageLocations(params, signal),
     enabled: open && read.allowed,
     throwOnError: false,
   });

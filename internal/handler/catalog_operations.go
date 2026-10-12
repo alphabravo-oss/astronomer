@@ -22,9 +22,13 @@ import (
 )
 
 func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := queryLimit(r, 50)
 	offset := queryOffset(r)
-	arg := sqlc.ListCatalogOperationsParams{Limit: int32(limit), Offset: int32(offset)}
+	arg := sqlc.ListCatalogOperationsParams{Limit: queryLimit32(r, 50), Offset: queryOffset32(r)}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}
 	}
@@ -56,7 +60,7 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		}
 		ops, err = pager.ListCatalogOperationsForScopes(r.Context(), sqlc.ListCatalogOperationsForScopesParams{
 			TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
-			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterIds: clusterIDs, QueryLimit: queryLimit32(r, 50), QueryOffset: queryOffset32(r),
 		})
 		if err == nil {
 			total, err = pager.CountCatalogOperationsForScopes(r.Context(), sqlc.CountCatalogOperationsForScopesParams{
@@ -159,51 +163,6 @@ func (h *CatalogHandler) ControllerStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
-}
-
-func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any, error) {
-	ops, err := h.queries.ListCatalogOperations(ctx, sqlc.ListCatalogOperationsParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		return nil, err
-	}
-	bindings, restricted, err := h.authz.bindingsForContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	opSummary := summarizeOperations(ctx, ops, operationStatusSummaryConfig[sqlc.CatalogOperation]{
-		Status:    func(op sqlc.CatalogOperation) string { return op.Status },
-		CreatedAt: func(op sqlc.CatalogOperation) time.Time { return op.CreatedAt },
-		IsStaleRunning: func(op sqlc.CatalogOperation, now time.Time) bool {
-			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) > time.Minute
-		},
-		Include: func(_ context.Context, op sqlc.CatalogOperation) bool {
-			if !restricted {
-				return true
-			}
-			clusterID, err := catalogOperationClusterID(op)
-			return err == nil && h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead)
-		},
-		Preview:               func(ctx context.Context, op sqlc.CatalogOperation) map[string]any { return h.operationPreview(ctx, op) },
-		StaleThresholdSeconds: 60,
-	})
-	charts, _ := h.queries.CountHelmCharts(ctx)
-	installed, _ := h.queries.CountInstalledCharts(ctx)
-	return map[string]any{
-		"reconciler": opSummary.reconcilerMap(),
-		"catalog": map[string]any{
-			"chartCount": charts,
-			"installedCount": func() any {
-				if restricted {
-					return nil
-				}
-				return installed
-			}(),
-		},
-		"operations":         opSummary.Counts,
-		"recentFailureCount": opSummary.RecentFailures,
-		"recentOperations":   opSummary.Recent,
-		"latestFailure":      opSummary.LatestFailure,
-	}, nil
 }
 
 type catalogOperationCreator interface {

@@ -22,4 +22,5 @@ plans
 !content/**/*.md
 coverage
 test-artifacts
+.artifacts
 **/*_test.go

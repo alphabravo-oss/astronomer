@@ -1,5 +1,11 @@
 export const SESSION_COOKIE = "astronomer_session";
 export const CSRF_COOKIE = "astronomer_csrf";
+export function browserCookieName(name: string): string {
+  return typeof location !== "undefined" && location.protocol === "https:"
+    ? `__Host-${name}`
+    : name;
+}
+
 export const LEGACY_ACCESS_TOKEN_KEY = "astronomer_token";
 export const LEGACY_REFRESH_TOKEN_KEY = "astronomer_refresh";
 
@@ -14,7 +20,7 @@ export function hasSessionHint(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie
     .split("; ")
-    .some((cookie) => cookie.startsWith(`${CSRF_COOKIE}=`));
+    .some((cookie) => cookie.startsWith(`${browserCookieName(CSRF_COOKIE)}=`));
 }
 
 /**
@@ -27,7 +33,9 @@ export function sanitizeReturnTo(returnTo: unknown): string {
   if (
     typeof returnTo === "string" &&
     returnTo.startsWith("/") &&
-    !returnTo.startsWith("//")
+    !returnTo.startsWith("//") &&
+    !returnTo.includes("\\") &&
+    [...returnTo].every((character) => character.charCodeAt(0) > 0x20)
   ) {
     return returnTo;
   }

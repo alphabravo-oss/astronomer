@@ -2,13 +2,17 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
@@ -33,7 +37,24 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 	}
 
 	if err := c.runtime.GoLoop("connection-metrics-reporter", true, func(ctx context.Context) {
-		tunnel.RunConnectionMetricsReporter(ctx, c.queries, logger)
+		tunnel.RunConnectionMetricsCollector(ctx, func(ctx context.Context) ([]sqlc.ListClusterConnectionStatusRow, error) {
+			return collectConnectionMetricsSnapshot(ctx, c.database.Pool().BeginTx)
+		}, logger)
+	}); err != nil {
+		return err
+	}
+	if err := c.runtime.GoLoop("registration-metrics-reporter", true, func(ctx context.Context) {
+		runRegistrationMetricsCollector(ctx, c.database.Pool().BeginTx, logger)
+	}); err != nil {
+		return err
+	}
+	if err := c.runtime.GoLoop("vault-metrics-reporter", true, func(ctx context.Context) {
+		runVaultMetricsCollector(ctx, c.database.Pool().BeginTx, logger)
+	}); err != nil {
+		return err
+	}
+	if err := c.runtime.GoLoop("metric-generation-reporter", true, func(ctx context.Context) {
+		observability.RunMetricGenerationCollector(ctx, c.database.Pool().BeginTx, []observability.MetricOwnerFamily{observability.MetricSSOProvider, observability.MetricSIEMForwarder, observability.MetricCluster})
 	}); err != nil {
 		return err
 	}
@@ -48,11 +69,7 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		logger.Warn("local cluster bootstrap failed", "error", err)
 	} else if localCluster != nil {
 		c.workloadHandler.SetLocalClusterID(localCluster.ID.String())
-		localAgent, err := buildLocalAgentLeaderRuntime(logger, c.queries, localCluster.ID, helmruntime.Config{
-			Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
-			RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
-			PluginsDirectory: cfg.HelmPluginsDirectory, BurstLimit: 100,
-		}, cfg.PodNamespace, cfg.ProcessHostname, localAgentDeliveryConfig{
+		localAgent, err := buildLocalAgentLeaderRuntime(logger, c.queries, localCluster.ID, helmRuntimeFromConfig(cfg), cfg.PodNamespace, cfg.ProcessHostname, localAgentDeliveryConfig{
 			Enabled:            cfg.DeliveryEnabled,
 			Namespace:          cfg.PodNamespace,
 			SystemOIDCIssuer:   cfg.DeliveryFluxDistributionOIDCIssuer,
@@ -81,8 +98,26 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 			return err
 		}
 	}
-	kickFirstBootCatalogSync(foundation.ctx, logger, c.queries, c.queue)
+	return c.startApplicationCatalog(foundation.ctx, cfg, logger)
+}
+
+func (c *productionComposition) startApplicationCatalog(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+	networkPolicy, err := httpclient.ParseDestinationPolicy(cfg.DistributionDestinationPolicy)
+	if err != nil {
+		return err
+	}
+	if networkPolicy.Restricted && cfg.CatalogURL != "" && (!strings.HasPrefix(cfg.CatalogURL, "oci://") || !strings.Contains(cfg.CatalogURL, "@sha256:") || cfg.CatalogDigest == "" || !cfg.CatalogSignatureRequired) {
+		return errors.New("disconnected application catalog requires an immutable authenticated source or disabled-unavailable configuration")
+	}
+	if !networkPolicy.Restricted && cfg.CatalogURL != "" {
+		kickFirstBootCatalogSync(ctx, logger, c.queries, c.queue)
+	}
+	if networkPolicy.Restricted && cfg.CatalogURL == "" {
+		logger.Info("application catalog unavailable in disconnected mode", "blocked_category", "application_catalog")
+		return nil
+	}
 	catalogClients, catalogClientErr := catalog.NewSourceClients(catalog.SourceClientOptions{
+		DestinationPolicy:   &networkPolicy,
 		Timeout:             15 * time.Second,
 		ProxyURL:            cfg.CatalogProxyURL,
 		CAFile:              cfg.CatalogCAFile,
@@ -102,7 +137,7 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		}
 		catalogTrust = &policy
 	}
-	if count, err := catalog.LoadSource(foundation.ctx, c.queries, catalog.SourceOptions{
+	if count, err := catalog.LoadSource(ctx, c.queries, catalog.SourceOptions{
 		URL:            cfg.CatalogURL,
 		ExpectedDigest: cfg.CatalogDigest,
 		MirrorsJSON:    cfg.CatalogMirrors,
@@ -110,9 +145,9 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		TrustPolicy:    catalogTrust,
 		TrustDirectory: cfg.CatalogTrustDirectory,
 	}); err != nil {
-		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "url", cfg.CatalogURL, "error", err)
+		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "error", err)
 	} else if count > 0 {
-		logger.Info("blessed catalog reconciled", "entries", count, "url", cfg.CatalogURL)
+		logger.Info("blessed catalog reconciled", "entries", count)
 	}
 	return nil
 }

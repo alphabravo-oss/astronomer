@@ -79,7 +79,8 @@ export function useSetCatalogChartFavorite() {
 
 export function usePreviewCatalogInstallation() {
   return useMutation({
-    mutationFn: previewCatalogInstallation,
+    mutationFn: (body: Parameters<typeof previewCatalogInstallation>[0]) =>
+      previewCatalogInstallation(body),
     onError: (error: Error) =>
       toastApiError("Failed to preview installation", error),
   });
@@ -138,6 +139,7 @@ export type HelmChartQuery = Record<string, unknown> & {
   search?: string;
   limit?: number;
   offset?: number;
+  cursor?: string;
 };
 
 export function useHelmCharts(params: HelmChartQuery) {

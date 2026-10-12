@@ -98,6 +98,7 @@ export function RegistrationTimeline({
   }, [status?.phase]);
 
   const onRetry = async (step: RegistrationStepView) => {
+    if (status?.phase === "unsupported") return;
     setRetrying(step.id);
     try {
       const s = await retryRegistrationStep(clusterId, step.id);
@@ -143,7 +144,7 @@ export function RegistrationTimeline({
     error: step.errorMessage,
     progressPct: step.progressPct,
     action:
-      step.status === "failed" ? (
+      step.status === "failed" && status?.phase !== "unsupported" ? (
         <ActionButton
           intent="ghost"
           size="sm"

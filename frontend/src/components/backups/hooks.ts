@@ -58,7 +58,8 @@ export const b2Keys = {
 export function useB2StorageLocations(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.storage(params),
-    queryFn: () => b2ListStorageLocations({ ...params, page_size: 100 }),
+    queryFn: ({ signal }) =>
+      b2ListStorageLocations({ ...params, page_size: 100 }, signal),
   });
 }
 
@@ -99,7 +100,8 @@ export function useB2TestStorageLocation() {
 export function useB2Schedules(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.schedules(params),
-    queryFn: () => b2ListSchedules({ ...params, page_size: 100 }),
+    queryFn: ({ signal }) =>
+      b2ListSchedules({ ...params, page_size: 100 }, signal),
   });
 }
 
@@ -159,7 +161,7 @@ export function useB2TriggerScheduleNow() {
 export function useB2Runs(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.runs(params),
-    queryFn: () => b2ListRuns({ ...params, page_size: 100 }),
+    queryFn: ({ signal }) => b2ListRuns({ ...params, page_size: 100 }, signal),
     refetchInterval: liveFallback(15000),
   });
 }
@@ -167,7 +169,7 @@ export function useB2Runs(params?: { cluster_id?: string }) {
 export function useB2Run(id: string) {
   return useQuery({
     queryKey: b2Keys.runDetail(id),
-    queryFn: () => b2GetRun(id),
+    queryFn: ({ signal }) => b2GetRun(id, signal),
     enabled: !!id,
     refetchInterval: liveFallback(10000),
   });
@@ -178,7 +180,7 @@ export function useB2Run(id: string) {
 export function useB2Restore(id: string) {
   return useQuery({
     queryKey: b2Keys.restoreDetail(id),
-    queryFn: () => b2GetRestore(id),
+    queryFn: ({ signal }) => b2GetRestore(id, signal),
     enabled: !!id,
     refetchInterval: liveFallback(10000),
   });

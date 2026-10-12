@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourcePath = path.join(root, "internal/config/config.go");
+const optionalSourcePath = path.join(root, "internal/config/optional_env.go");
 const outputPath = path.join(root, "docs/configuration.md");
 const environmentPath = path.join(root, ".env.example");
 const sessionPolicy = fs.readFileSync(
@@ -74,6 +75,7 @@ const sensitiveKeys = new Set([
   "astronomer_bootstrap_password",
   "database_url",
   "delivery_source_proxy_url",
+  "helm_repository_proxy_url",
   "github_client_secret",
   "google_client_secret",
   "extension_bundle_trusted_key",
@@ -101,7 +103,7 @@ export function render(source) {
     }
   }
   const bindings = new Set(
-    [...source.matchAll(/envconfig\.BindEnv\(v,([\s\S]*?)\); err/g)].flatMap(
+    [...source.matchAll(/envconfig\.BindEnv\(v,([\s\S]*?)\)/g)].flatMap(
       (match) => [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]),
     ),
   );
@@ -205,7 +207,7 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const source = fs.readFileSync(sourcePath, "utf8");
+  const source = fs.readFileSync(sourcePath, "utf8") + "\n" + fs.readFileSync(optionalSourcePath, "utf8");
   const outputs = new Map([
     [outputPath, render(source)],
     [

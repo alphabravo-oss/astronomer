@@ -135,6 +135,7 @@ type Projection struct {
 	FluxRepository                        string
 	FluxDigest                            string
 	BundleRepository                      string
+	BundleCatalogDigest                   string
 	BundleDigest                          string
 	MinimumKubernetesMinor                string
 	MaximumKubernetesMinor                string
@@ -337,7 +338,7 @@ func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
 	bundleRepository, bundleDigest := splitReference(manifest.BuiltInBundles.Artifact.Reference)
 	return Projection{
 		Version: manifest.Release.Version, AgentImage: agentImage, FluxVersion: manifest.Flux.Version,
-		FluxRepository: fluxRepository, FluxDigest: fluxDigest, BundleRepository: bundleRepository, BundleDigest: bundleDigest,
+		FluxRepository: fluxRepository, FluxDigest: fluxDigest, BundleRepository: bundleRepository, BundleDigest: bundleDigest, BundleCatalogDigest: manifest.BuiltInBundles.CatalogDigest,
 		MinimumKubernetesMinor:                manifest.Compatibility.Kubernetes.MinimumMinor,
 		MaximumKubernetesMinor:                manifest.Compatibility.Kubernetes.MaximumMinor,
 		CertificateOIDCIssuer:                 manifest.Release.SigningPolicy.CertificateOIDCIssuer,

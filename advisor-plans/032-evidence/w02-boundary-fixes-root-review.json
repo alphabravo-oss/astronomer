@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T01:39:06.320834+00:00",
+  "frozenSource": "106e496e15800653260d9eb16579a58006341245",
+  "integratedThrough": "a5bdaa2e",
+  "fullSourceAndFollowupReview": "PASS",
+  "integratedChangedPathsExact": 12,
+  "productionBindingsVerified": 7,
+  "pairedArtifactHashesVerified": 13,
+  "managedReviewHashVerified": true,
+  "actualCountsIndependentlyParsed": {
+    "numeric": 47,
+    "siem": 24,
+    "cryptoSampler": 9,
+    "affectedPackageRace": 771,
+    "tlsFollowupRace": 21
+  },
+  "namedRegressionsZeroSkips": true,
+  "affectedPackageRaceSkips": [
+    "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses",
+    "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease"
+  ],
+  "rootIndependentRuntimeReplay": "NOT_RUN; executor immutable actual logs inspected and hashed; full current source rescan and integrated governance pending",
+  "scope": "Numeric overflow/fraction/negative count rejection before effects; malformed custom CA fails before SIEM delivery; cryptographic read audit sampling; not whole W02 acceptance"
+}

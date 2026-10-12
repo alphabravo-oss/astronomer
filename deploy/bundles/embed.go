@@ -26,9 +26,14 @@ var imagePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9
 var sourceHostnamePattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type Catalog struct {
-	SchemaVersion int         `json:"schema_version"`
-	Release       string      `json:"release"`
-	Components    []Component `json:"components"`
+	SchemaVersion        int         `json:"schema_version"`
+	Release              string      `json:"release"`
+	Components           []Component `json:"components"`
+	DistributionIdentity string      `json:"-"`
+	VerificationIdentity string      `json:"-"`
+	VerificationIssuer   string      `json:"-"`
+	VerificationProvider string      `json:"-"`
+	VerificationKeyRef   string      `json:"-"`
 }
 
 type Component struct {
@@ -46,11 +51,13 @@ type Component struct {
 }
 
 type Source struct {
-	Kind        string `json:"kind"`
-	URL         string `json:"url"`
-	Chart       string `json:"chart"`
-	Version     string `json:"version"`
-	ChartDigest string `json:"chart_digest"`
+	OriginalURL           string `json:"-"`
+	OriginalArchiveDigest string `json:"-"`
+	Kind                  string `json:"kind"`
+	URL                   string `json:"url"`
+	Chart                 string `json:"chart"`
+	Version               string `json:"version"`
+	ChartDigest           string `json:"chart_digest"`
 }
 
 type Requirements struct {
@@ -132,13 +139,13 @@ func NormalizeSourceURL(raw string) (string, error) {
 }
 
 func (c Catalog) Validate() error {
-	if c.SchemaVersion != 1 || !strings.HasPrefix(c.Release, "v1.") || len(c.Components) == 0 {
+	if c.SchemaVersion != 1 || !regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+$`).MatchString(c.Release) || len(c.Components) == 0 {
 		return errors.New("built-in bundle catalog has invalid release metadata")
 	}
 	seen := make(map[string]struct{}, len(c.Components))
 	artifacts := make(map[string]string, len(c.Components))
 	for index, component := range c.Components {
-		if component.Slug == "" || component.Name == "" || component.Source.Kind != "helm_http" ||
+		if component.Slug == "" || component.Name == "" || (component.Source.Kind != "helm_http" && (c.DistributionIdentity == "" || component.Source.OriginalURL == "" || component.Source.Kind != "helm_oci")) ||
 			component.Source.Chart == "" ||
 			component.Source.Version == "" || !digestPattern.MatchString(component.Source.ChartDigest) ||
 			component.Scope != "platform" || component.TargetNamespace == "" || component.ReleaseName == "" ||
@@ -147,6 +154,16 @@ func (c Catalog) Validate() error {
 			return fmt.Errorf("built-in component %d is incomplete or unpinned", index)
 		}
 		normalizedSource, err := NormalizeSourceURL(component.Source.URL)
+		if c.DistributionIdentity != "" && component.Source.OriginalURL != "" {
+			if _, originalErr := NormalizeSourceURL(component.Source.OriginalURL); originalErr != nil {
+				return originalErr
+			}
+			if component.Source.Kind == "helm_oci" {
+				normalizedSource, err = NormalizeOCISourceURL(component.Source.URL)
+			} else {
+				normalizedSource, err = NormalizeMirrorSourceURL(component.Source.URL)
+			}
+		}
 		if err != nil {
 			return fmt.Errorf("component %q has unsafe Helm source URL: %w", component.Slug, err)
 		}

@@ -60,8 +60,11 @@ func TestSSOLoginSetsSignedStateCookie(t *testing.T) {
 		t.Fatal("expected SSO state cookie")
 	}
 	cookie := cookies[0]
-	if cookie.Name != "astro_sso_state" {
+	if cookie.Name != ssoStateCookieName("github") {
 		t.Fatalf("unexpected cookie %q", cookie.Name)
+	}
+	if !strings.HasPrefix(cookie.Name, "__Host-") || cookie.Path != "/" || cookie.Domain != "" || !cookie.Secure || !cookie.HttpOnly {
+		t.Fatal("SSO state cookie is not host-bound")
 	}
 	loc := res.Header.Get("Location")
 	parsed, err := url.Parse(loc)
@@ -74,6 +77,27 @@ func TestSSOLoginSetsSignedStateCookie(t *testing.T) {
 	}
 	if !h.verifyStateCookie(cookie.Value, "github", state) {
 		t.Fatal("expected signed cookie to verify")
+	}
+}
+
+func TestSSOCallbackRejectsTossedSignedStateCookie(t *testing.T) {
+	h := testSSOHandler(t)
+	value, err := h.signStateCookie("github", "attacker-flow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !h.verifyStateCookie(value, "github", "attacker-flow") {
+		t.Fatal("fixture must be a valid attacker-owned signed flow")
+	}
+	r := withProvider(httptest.NewRequest("GET", "https://app.example.com/api/v1/auth/login/github/callback?code=attacker-code&state=attacker-flow", nil), "github")
+	r.AddCookie(&http.Cookie{Name: "astro_sso_state", Value: value})
+	w := httptest.NewRecorder()
+	h.Callback(w, r)
+	if w.Code != 403 || len(w.Result().Cookies()) != 0 || !strings.Contains(w.Body.String(), "cookie missing") {
+		t.Fatalf("tossed state admitted: %d %s", w.Code, w.Body.String())
+	}
+	if ssoStateCookieName("github") == ssoStateCookieName("dex") {
+		t.Fatal("parallel provider flows share a cookie")
 	}
 }
 
@@ -104,7 +128,7 @@ func TestSSOCallbackRejectsTamperedStateCookie(t *testing.T) {
 	cookie = cookie[:len(cookie)-1] + "A"
 
 	req := withProvider(httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/github/?code=x&state=abc123", nil), "github")
-	req.AddCookie(&http.Cookie{Name: "astro_sso_state", Value: cookie})
+	req.AddCookie(&http.Cookie{Name: ssoStateCookieName("github"), Value: cookie})
 	rec := httptest.NewRecorder()
 
 	h.Callback(rec, req)
@@ -127,7 +151,7 @@ func TestSSOCallbackRejectsExpiredStateCookie(t *testing.T) {
 	h.now = func() time.Time { return time.Unix(1_700_000_000, 0).UTC().Add(11 * time.Minute) }
 
 	req := withProvider(httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/github/?code=x&state=abc123", nil), "github")
-	req.AddCookie(&http.Cookie{Name: "astro_sso_state", Value: cookie})
+	req.AddCookie(&http.Cookie{Name: ssoStateCookieName("github"), Value: cookie})
 	rec := httptest.NewRecorder()
 
 	h.Callback(rec, req)

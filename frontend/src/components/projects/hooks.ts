@@ -66,7 +66,7 @@ export const clusterTemplateKeys = {
 export function useProjectPolicy(projectId: string) {
   return useQuery({
     queryKey: projectDetailKeys.policy(projectId),
-    queryFn: () => api.getProjectPolicy(projectId),
+    queryFn: ({ signal }) => api.getProjectPolicy(projectId, { signal }),
     enabled: !!projectId,
   });
 }
@@ -141,7 +141,7 @@ export function useRemoveProjectNamespace(projectId: string) {
 export function useProjectQuotaUsage(projectId: string) {
   return useQuery({
     queryKey: projectDetailKeys.quotaUsage(projectId),
-    queryFn: () => api.getProjectQuotaUsage(projectId),
+    queryFn: ({ signal }) => api.getProjectQuotaUsage(projectId, { signal }),
     enabled: !!projectId,
     // Quota.status.used ticks with workload pressure; tighten the stale time
     // so the policy page stays approximately live without a manual refresh.
@@ -157,7 +157,7 @@ export function useProjectQuotaUsage(projectId: string) {
 export function useProjectEffectiveQuota(projectId: string) {
   return useQuery({
     queryKey: projectDetailKeys.effectiveQuota(projectId),
-    queryFn: () => api.getProjectEffectiveQuota(projectId),
+    queryFn: ({ signal }) => api.getProjectEffectiveQuota(projectId, signal),
     enabled: !!projectId,
   });
 }
@@ -169,7 +169,7 @@ export function useProjectEffectiveQuota(projectId: string) {
 export function useCloudCredentialProviders() {
   return useQuery({
     queryKey: projectDetailKeys.cloudCredentialProviders,
-    queryFn: () => api.listCloudCredentialProviders(),
+    queryFn: ({ signal }) => api.listCloudCredentialProviders({ signal }),
     // The provider registry is process-static on the backend; cache hard.
     staleTime: 5 * 60 * 1000,
   });
@@ -178,7 +178,8 @@ export function useCloudCredentialProviders() {
 export function useProjectCloudCredentials(projectId: string) {
   return useQuery({
     queryKey: projectDetailKeys.cloudCredentials(projectId),
-    queryFn: () => api.listProjectCloudCredentials(projectId),
+    queryFn: ({ signal }) =>
+      api.listProjectCloudCredentials(projectId, { signal }),
     enabled: !!projectId,
   });
 }
@@ -189,8 +190,10 @@ export function useProjectCloudCredential(
 ) {
   return useQuery({
     queryKey: projectDetailKeys.cloudCredential(projectId, credentialId || ""),
-    queryFn: () =>
-      api.getProjectCloudCredential(projectId, credentialId as string),
+    queryFn: ({ signal }) =>
+      api.getProjectCloudCredential(projectId, credentialId as string, {
+        signal,
+      }),
     enabled: !!projectId && !!credentialId,
   });
 }
@@ -277,14 +280,14 @@ export function useClusterTemplates(params?: {
 }) {
   return useQuery({
     queryKey: clusterTemplateKeys.list(params),
-    queryFn: () => api.listClusterTemplates(params),
+    queryFn: ({ signal }) => api.listClusterTemplates({ ...params, signal }),
   });
 }
 
 export function useClusterTemplate(id: string | undefined) {
   return useQuery({
     queryKey: clusterTemplateKeys.detail(id || ""),
-    queryFn: () => api.getClusterTemplate(id as string),
+    queryFn: ({ signal }) => api.getClusterTemplate(id as string, { signal }),
     enabled: !!id,
   });
 }
@@ -292,7 +295,8 @@ export function useClusterTemplate(id: string | undefined) {
 export function useClusterTemplateBoundClusters(id: string | undefined) {
   return useQuery({
     queryKey: clusterTemplateKeys.boundClusters(id || ""),
-    queryFn: () => api.getClusterTemplateBoundClusters(id as string),
+    queryFn: ({ signal }) =>
+      api.getClusterTemplateBoundClusters(id as string, { signal }),
     enabled: !!id,
   });
 }
@@ -393,7 +397,7 @@ export function canWriteClusterTemplates(user: RoleHolder): boolean {
 export function useProjectCatalogs(projectId: string) {
   return useQuery({
     queryKey: projectDetailKeys.catalogs(projectId),
-    queryFn: () => api.listProjectCatalogs(projectId),
+    queryFn: ({ signal }) => api.listProjectCatalogs(projectId, { signal }),
     enabled: !!projectId,
   });
 }

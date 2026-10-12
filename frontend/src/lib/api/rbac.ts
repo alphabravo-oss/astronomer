@@ -538,8 +538,10 @@ export function mapPermissionPreview(
 
 export async function previewPermissions(
   input: PermissionPreviewRequest,
+  signal?: AbortSignal,
 ): Promise<PermissionPreviewResponse> {
   const response = await postRbacPermissionPreview({
+    signal,
     body: previewRequest(input),
   });
   return mapPermissionPreview(requireData(response, "previewPermissions"));

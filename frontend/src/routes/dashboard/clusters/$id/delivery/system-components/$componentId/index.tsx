@@ -57,7 +57,8 @@ function SystemComponentDetailPage() {
   });
   const query = useQuery({
     queryKey: queryKeys.delivery.clusterInventory(projectId, clusterId),
-    queryFn: () => getClusterDeliveryInventory(projectId, clusterId),
+    queryFn: ({ signal }) =>
+      getClusterDeliveryInventory(projectId, clusterId, signal),
     enabled: Boolean(projectId && clusterId && allowed),
     refetchInterval: liveFallback(15_000),
   });

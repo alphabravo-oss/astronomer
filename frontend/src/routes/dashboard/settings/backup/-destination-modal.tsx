@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppForm } from "@/lib/form";
 import { FormShell } from "@/components/ui/form-shell";
 import { extractApiErrorMessage } from "@/lib/api/errors";
@@ -53,6 +54,7 @@ export function DestinationModal({
   const update = useUpdateManagementBackupDestination();
   const test = useTestManagementBackupDestination();
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: formFromDest(existing),
     onSubmit: async ({ value }) => {
@@ -70,8 +72,13 @@ export function DestinationModal({
         keep_weekly: value.keep_weekly,
         keep_monthly: value.keep_monthly,
       };
-      await update.mutateAsync({ id: existing.id, body });
-      onClose();
+      try {
+        await update.mutateAsync({ id: existing.id, body });
+        setServerError(undefined);
+        onClose();
+      } catch (error) {
+        setServerError(extractApiErrorMessage(error) ?? "Unable to save");
+      }
     },
   });
 
@@ -86,7 +93,9 @@ export function DestinationModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
+            form="management-backup-destination-edit"
+            loading={update.isPending}
           >
             {existing ? "Save" : "Add destination"}
           </ActionButton>
@@ -94,19 +103,16 @@ export function DestinationModal({
       }
     >
       <FormShell
+        id="management-backup-destination-edit"
         form={form}
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void form.handleSubmit();
+          if (!form.store.state.isSubmitting) void form.handleSubmit();
         }}
       >
         <form.AppForm>
-          <form.FormErrorSummary
-            serverError={
-              update.error ? extractApiErrorMessage(update.error) : null
-            }
-          />
+          <form.FormErrorSummary serverError={serverError} />
         </form.AppForm>
         <form.AppField
           name="name"

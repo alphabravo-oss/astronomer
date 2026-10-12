@@ -1,39 +1,44 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { CSRF_COOKIE, SESSION_COOKIE, loginViaForm } from './live.helpers';
+import {
+  CSRF_COOKIE,
+  SESSION_COOKIE,
+  loginViaForm,
+  submitLoginForm,
+} from "./live.helpers";
 
 // Live tier (P7.2): bootstrap admin → HttpOnly cookie session → dashboard →
 // logout → guard bounces. End-to-ends the real credential path the mocked
 // tier can only stub: bcrypt verify, cookie issuance, revocation on logout.
 
-test('bootstrap admin login issues HttpOnly session, logout revokes it', async ({
+test("bootstrap admin login issues HttpOnly session, logout revokes it", async ({
   page,
   context,
 }) => {
   await loginViaForm(page);
-  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
 
   // The session cookie is HttpOnly: present in the context's jar, invisible
   // to page JS. The CSRF double-submit cookie is deliberately JS-readable.
   const cookies = await context.cookies();
   const session = cookies.find((c) => c.name === SESSION_COOKIE);
-  expect(session, 'backend must set the session cookie').toBeTruthy();
+  expect(session, "backend must set the session cookie").toBeTruthy();
   expect(session!.httpOnly).toBe(true);
   const csrf = cookies.find((c) => c.name === CSRF_COOKIE);
-  expect(csrf, 'backend must set the CSRF cookie').toBeTruthy();
+  expect(csrf, "backend must set the CSRF cookie").toBeTruthy();
   expect(csrf!.httpOnly).toBe(false);
   const documentCookie = await page.evaluate(() => document.cookie);
   expect(documentCookie).not.toContain(`${SESSION_COOKIE}=`);
 
   // Logout via the user menu: POST /auth/logout revokes server-side and
   // clears both cookies; the SPA lands back on the login page.
-  await page.getByRole('button', { name: 'User menu' }).click();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole("button", { name: "User menu" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/auth\/login/);
 
   // Guard bounce: with the cookies gone, a dashboard deep link redirects to
   // login with the attempted location captured in returnTo.
-  await page.goto('/dashboard');
+  await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/auth\/login\?.*returnTo=/);
 
   // Logout bumps the per-user revocation cutoff, and JWT iat is
@@ -42,4 +47,24 @@ test('bootstrap admin login issues HttpOnly session, logout revokes it', async (
   // second would mint an already-revoked session. Let the cutoff second
   // elapse before handing the (serial) worker to the next spec.
   await page.waitForTimeout(1100);
+});
+
+// Model WebKit's stale document.cookie view immediately after the response.
+// The real backend still issues and validates the HttpOnly session cookie.
+test("login starts a fresh document when the old document cannot see new cookies", async ({
+  page,
+}) => {
+  await page.goto(
+    "/auth/login?returnTo=%2Fdashboard%2Falerting%3Ftab%3Dchannels",
+  );
+  await page.evaluate(() => {
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      get: () => "",
+    });
+  });
+  await submitLoginForm(page);
+  await expect(page).toHaveURL(/\/dashboard\/alerting\?tab=channels/);
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Channel" })).toBeVisible();
 });

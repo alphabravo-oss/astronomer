@@ -1,0 +1,443 @@
+[
+  {
+    "original": "/root/.cache/astronomer-032/qualification/w02-charlie-sql-pagination-before-32c58221/before.log",
+    "stored": "originals/before/before.log.gz",
+    "original_bytes": 104638,
+    "original_sha256": "0caaf999c71f1f64d8ca92f4c563e38cac69dde75d8a658e2249bc7963a94add",
+    "stored_bytes": 5030,
+    "stored_sha256": "c56f7eb79ba1c6ec68ed12763fe776fa73a9a417e2b318a8bafbb50af9c2afb8",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/root/.cache/astronomer-032/qualification/w02-charlie-sql-pagination-before-32c58221/capacity.jsonl",
+    "stored": "originals/before/capacity.jsonl.gz",
+    "original_bytes": 3822,
+    "original_sha256": "2444b34e6c2ab696758a2b053abed50c121f8f17bedf65202475196d429f615c",
+    "stored_bytes": 436,
+    "stored_sha256": "deff59ac0c76b2acd0f67f86468b4076dcb97dfa697a60eff157484fa8303087",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/root/.cache/astronomer-032/qualification/w02-charlie-sql-pagination-before-32c58221/go-version.log",
+    "stored": "originals/before/go-version.log.gz",
+    "original_bytes": 32,
+    "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+    "stored_bytes": 52,
+    "stored_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/root/.cache/astronomer-032/qualification/w02-charlie-sql-pagination-before-32c58221/receipt.json",
+    "stored": "originals/before/receipt.json.gz",
+    "original_bytes": 4068,
+    "original_sha256": "ddaaefe96cff7980990b3d211ce852dffcaa75a4aa3f86a633f0c25708a55205",
+    "stored_bytes": 1229,
+    "stored_sha256": "33bbbdd60cdc30bc3227754bdf44aadd753238af92688605826cd0307cab58b3",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-a1799b78-run1/capacity.jsonl",
+    "stored": "originals/after/capacity.jsonl.gz",
+    "original_bytes": 5734,
+    "original_sha256": "28c4c1022a4b367e6f327f93677703accf60fc2cfb3ea0cd9818d55d41aa85fe",
+    "stored_bytes": 524,
+    "stored_sha256": "4e81c8731a0f61de48a23e8b3bada98c059fd9745f7d48c9c5af8df0c65ca60d",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-a1799b78-run1/focused-race.log",
+    "stored": "originals/after/focused-race.log.gz",
+    "original_bytes": 114990,
+    "original_sha256": "9e42e5d52c2d48a59a0762787cb71827f89168d76c55c7a4992fe52c5941d153",
+    "stored_bytes": 5459,
+    "stored_sha256": "4bae2c75fedcb9d17b0ebe03addb7271f10da5d5564b7e97035e48c3b22d0fa6",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-a1799b78-run1/full-race.log",
+    "stored": "originals/after/full-race.log.gz",
+    "original_bytes": 6995795,
+    "original_sha256": "eee20486ab8090ea5bb5e8eeb771ca3bfcdadfafcc6588dfd64431fb16fe581b",
+    "stored_bytes": 279243,
+    "stored_sha256": "c2af7c95c93f8c864bd8f340d4c77b73f08431d04d7ab53a918537e03fc8bd68",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-a1799b78-run1/go-version.log",
+    "stored": "originals/after/go-version.log.gz",
+    "original_bytes": 32,
+    "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+    "stored_bytes": 52,
+    "stored_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-a1799b78-run1/receipt.json",
+    "stored": "originals/after/receipt.json.gz",
+    "original_bytes": 5270,
+    "original_sha256": "968568ec8a80b6be2a5fbeab8a7fb429ba3465f13a9a5c2ff46dc20da59a64fb",
+    "stored_bytes": 1351,
+    "stored_sha256": "925ee8e2eb79077ecd720747e63e5f24975848fa68be256a0a47972e45e931e4",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/boundaries.log",
+    "stored": "originals/supplement/boundaries.log.gz",
+    "original_bytes": 65,
+    "original_sha256": "33d6e6b2cc354373ee115da460fc0cef08c6c590f09e406f9cbce90bbdc6cc94",
+    "stored_bytes": 81,
+    "stored_sha256": "4fe11abded6fa9d2497d1ef029bef7d7cd397d052dc50a17f8aeb1bc6c8b1b30",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/capacity.jsonl",
+    "stored": "originals/supplement/capacity.jsonl.gz",
+    "original_bytes": 6999,
+    "original_sha256": "0c57372a882d2ab6089190ca0a6ad8242cb8440f312d750dc4fda84b1a8f3c0b",
+    "stored_bytes": 563,
+    "stored_sha256": "457779f0cef631970302f730b994188ff5c63a76c29b6c19d46e487c8af5a55a",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/complexity.log",
+    "stored": "originals/supplement/complexity.log.gz",
+    "original_bytes": 101,
+    "original_sha256": "8cb8b3e4864949040b471bf12d2a366d0bbb16739e4ed6e7a0987294c916d479",
+    "stored_bytes": 102,
+    "stored_sha256": "c833a898333bffd289b1accf2c818d3997069bff3d039d3c5647167882bd6f6f",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/json-governance.log",
+    "stored": "originals/supplement/json-governance.log.gz",
+    "original_bytes": 153,
+    "original_sha256": "649ee4339a083c90408218ef94eb6427f14956231d2d1c9de71389291c5e773f",
+    "stored_bytes": 140,
+    "stored_sha256": "15288f42de7d6bf64c59bf3d9867d4124cf37cbfb56124dfbca57748a9535555",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/receipt.json",
+    "stored": "originals/supplement/receipt.json.gz",
+    "original_bytes": 8645,
+    "original_sha256": "db7ddf28ab30c794f208fa603d249fa5379b2561769e44c74e83669c98c0b141",
+    "stored_bytes": 1885,
+    "stored_sha256": "26b278c14c0c964fe02299947518591f24de816a8480e100fc3ddddc11f43639",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/sql-governance.log",
+    "stored": "originals/supplement/sql-governance.log.gz",
+    "original_bytes": 93,
+    "original_sha256": "f7bdd13b30592a29284edbb0348a5d1fb1bff40afd1b5515f85b9da79cbdd212",
+    "stored_bytes": 103,
+    "stored_sha256": "87d3f45daa03b623b449113077252bed6a33da1e685e366f9c55217cfac2b067",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78-run1/vet.log",
+    "stored": "originals/supplement/vet.log.gz",
+    "original_bytes": 0,
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stored_bytes": 20,
+    "stored_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-before-runner-32c58221/README.md",
+    "stored": "originals/before-driver/README.md.gz",
+    "original_bytes": 1411,
+    "original_sha256": "a01f814fc197468d784854d0cd45c42fe6fb2ffd1ede0c09b0b9c0a4165eeeb4",
+    "stored_bytes": 843,
+    "stored_sha256": "458dec867df5e5bff6ce4df6b0aa1fa7c5d1ae74619dcb59ea9d14e65aa9d45b",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-before-runner-32c58221/index.json",
+    "stored": "originals/before-driver/index.json.gz",
+    "original_bytes": 1066,
+    "original_sha256": "0204ab83be067a8eaca38fecd9c8e8088e8156b2f502202264bd180e71cef58f",
+    "stored_bytes": 535,
+    "stored_sha256": "17ee3c0dd49f7d70958678ffb4e938b3e9222d49eb1bf4262bada7861f0ace11",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-before-runner-32c58221/run_before.py",
+    "stored": "originals/before-driver/run_before.py.gz",
+    "original_bytes": 9519,
+    "original_sha256": "5d80ae8752513b782382b37b7b94ec94c55eba4d806abea0475c28bd1df5b18f",
+    "stored_bytes": 3749,
+    "stored_sha256": "60231f6b3d35aaf470c55647953bfc4b41066db758af7e93563d440e209a17a8",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-before-runner-32c58221/source-bindings.json",
+    "stored": "originals/before-driver/source-bindings.json.gz",
+    "original_bytes": 3045,
+    "original_sha256": "2d2b0d64ab4d8e6b455631944f970ce25463201899f4f0e1439ae89af9d9cc73",
+    "stored_bytes": 1162,
+    "stored_sha256": "0f4d8f9782334513f99136e3cc2026e822ed0f78928e4b10a9f33b5240481d14",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-before-runner-32c58221/test-first.patch",
+    "stored": "originals/before-driver/test-first.patch.gz",
+    "original_bytes": 20441,
+    "original_sha256": "59d777b0a13ba9b37e937093eaba9f4300b3aae697c57d8a10b810d5f9e7ebfb",
+    "stored_bytes": 4110,
+    "stored_sha256": "1ff9d092f4270365c1e0a1ab3c92e544a7a0dd477c737d484729fdd2a7bac4d8",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-before-runner-32c58221/test_run_before.py",
+    "stored": "originals/before-driver/test_run_before.py.gz",
+    "original_bytes": 2913,
+    "original_sha256": "56536358b82b999c8f375daf78d44fee55df94d8938b8aac4de8b6e282837577",
+    "stored_bytes": 1068,
+    "stored_sha256": "dda95a074341cca69bab08845408e43465f20ff18a82e8bcb434d6075851c3df",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/README.md",
+    "stored": "originals/after-driver/README.md.gz",
+    "original_bytes": 1819,
+    "original_sha256": "985ec6bb8d9ba5b3c5471cb90377631040ab0c9d0890ca020eaaf5ffc63f9717",
+    "stored_bytes": 1054,
+    "stored_sha256": "6f4d9a248a1b30a34773358f2d7ae7d930e6d5002821c380613c7ed2750e0762",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/check_cached.py",
+    "stored": "originals/after-driver/check_cached.py.gz",
+    "original_bytes": 1689,
+    "original_sha256": "6046b93ac5a9d0ad2a3e0c81d2b030a4615732432e79da850d687de7b05885db",
+    "stored_bytes": 882,
+    "stored_sha256": "8e393de5605b7a11a02d1bf0569f95fc892fd425f6fd616e3f679a35c022df06",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/coupled-sql-actual.json",
+    "stored": "originals/after-driver/coupled-sql-actual.json.gz",
+    "original_bytes": 497757,
+    "original_sha256": "22834a1972261b45e12ac644eb8b48843118ece475765a9004fedc0c442139e2",
+    "stored_bytes": 79647,
+    "stored_sha256": "faa4c2977a968174da7ab62a7d445c34076c9a0fa1d7e3719874671ab37baae0",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/full-parents.json",
+    "stored": "originals/after-driver/full-parents.json.gz",
+    "original_bytes": 28042,
+    "original_sha256": "9218b79fe65e6527e78596453f14c25791ef43b4c9b1528b12d3683bdd519e01",
+    "stored_bytes": 8505,
+    "stored_sha256": "df8278e00dc82d985fcadb1442089269e18bc5d425a033fcb4bc59ec0fefd4ab",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/index.json",
+    "stored": "originals/after-driver/index.json.gz",
+    "original_bytes": 1185,
+    "original_sha256": "aa6e7ed51da30c91f23cedd0731d8ce902cf54ae0cacf926711de4ac074c7f9c",
+    "stored_bytes": 568,
+    "stored_sha256": "766ec3a81b1d13b7e039bf4a4beb5767345d13ccdc0aeebd25a7293be1eabae3",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/run_after.py",
+    "stored": "originals/after-driver/run_after.py.gz",
+    "original_bytes": 13850,
+    "original_sha256": "4cd6e6e3a52389135778595027077df0cf03e0ae5184fe99671a6a7e2ed62940",
+    "stored_bytes": 5068,
+    "stored_sha256": "4385bd397df57dea948c3e45bf5a84e107b5fa4f9285821b62ff271aa429cb5b",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/source-bindings.json",
+    "stored": "originals/after-driver/source-bindings.json.gz",
+    "original_bytes": 4263,
+    "original_sha256": "693cbe38029006c728d5601f19d4fa3bdabacde2c26eba30327f2f31ba9c4341",
+    "stored_bytes": 1390,
+    "stored_sha256": "774928d47a3f31c27d37967c5f6cad3832ff844fcb3ccf423afa3459fdcc0812",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-after-runner-a1799b78/test_controls.py",
+    "stored": "originals/after-driver/test_controls.py.gz",
+    "original_bytes": 2621,
+    "original_sha256": "55e2c7cfbb54883afdc6d37d681f6378ddec02f4ae7aea8ac072af2c9ad873ca",
+    "stored_bytes": 933,
+    "stored_sha256": "0829e2292b26a388be94d301c95ea1889046be6582f31137bcd17170d3edd6bb",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/README.md",
+    "stored": "originals/supplement-driver/README.md.gz",
+    "original_bytes": 1944,
+    "original_sha256": "bc981aa2d1218250d27c838c75b4b0c9cd837505eb2e22fca816330f9fbcd4c1",
+    "stored_bytes": 1052,
+    "stored_sha256": "ab63199b9298608bdf3957795e3d8710b152e5b4b40852623e99fbf139043ff7",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/check_cached.py",
+    "stored": "originals/supplement-driver/check_cached.py.gz",
+    "original_bytes": 1689,
+    "original_sha256": "6046b93ac5a9d0ad2a3e0c81d2b030a4615732432e79da850d687de7b05885db",
+    "stored_bytes": 882,
+    "stored_sha256": "8e393de5605b7a11a02d1bf0569f95fc892fd425f6fd616e3f679a35c022df06",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/controls.log",
+    "stored": "originals/supplement-driver/controls.log.gz",
+    "original_bytes": 107,
+    "original_sha256": "7fc5f2f21d548c41100beac4e406a660cb9de1f9215153fa438389d418d8eb81",
+    "stored_bytes": 54,
+    "stored_sha256": "ab18acad24e6bf1a5e88cff7aa9358739d2de2bff75c4cd84f14bf84a475e4d3",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/full-parents.json",
+    "stored": "originals/supplement-driver/full-parents.json.gz",
+    "original_bytes": 28154,
+    "original_sha256": "3d8bb225e63b33075b7ea3aef8b213837dd04deadf82f95e40117b808bfa7532",
+    "stored_bytes": 8532,
+    "stored_sha256": "aba7923ab39863322af2b6263ae2d660ca9a6abd244e58bb2987fa48ccaf895d",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/index.json",
+    "stored": "originals/supplement-driver/index.json.gz",
+    "original_bytes": 3363,
+    "original_sha256": "4dfc7deb101212eeeb27d6ca1a6562167fe1b1592e8dc577c0ff2dc8e8bf7657",
+    "stored_bytes": 1333,
+    "stored_sha256": "752f9ab63e41638edcdef9c8dbadc3ed109b957eac62c0212d000720ae7684f5",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/original-reparse.json",
+    "stored": "originals/supplement-driver/original-reparse.json.gz",
+    "original_bytes": 1613,
+    "original_sha256": "a5f423037200a353ffd6136d7f12563dd17e718722e602788cc133083f2045ac",
+    "stored_bytes": 642,
+    "stored_sha256": "d24406a1329e04d498ab497bd28ac1599e4e693d3e49cc9b103a3d70734e36ca",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/run_after.py",
+    "stored": "originals/supplement-driver/run_after.py.gz",
+    "original_bytes": 16637,
+    "original_sha256": "c4f44fa03fbb2eb24f54aa1d18d7af9aebe7a088f206f89daf85f6158b2c869c",
+    "stored_bytes": 5995,
+    "stored_sha256": "44ad155120eaef37ff60d4fda9467891794ef145d7f89303e41b29afc0302af4",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/runner-successor.patch",
+    "stored": "originals/supplement-driver/runner-successor.patch.gz",
+    "original_bytes": 9149,
+    "original_sha256": "d27843e30c61b88b522f772ed1bc9071ff909ea3edf663fc96845977bea467b2",
+    "stored_bytes": 3603,
+    "stored_sha256": "e5663f5c522c50485c29df5cb7e6733368a383cf7375fd319c3f747490d747b3",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/source-bindings.json",
+    "stored": "originals/supplement-driver/source-bindings.json.gz",
+    "original_bytes": 4666,
+    "original_sha256": "3d313a6c59d153a1fd73b0af3d72569423b7e3693b64e323a260c696ea8e1997",
+    "stored_bytes": 1489,
+    "stored_sha256": "1b274d42830be050cb8b4f2570ca2e691060f7603133b4fde0fdf69eb5c072a8",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-pagination-supplement-a1799b78/test_controls.py",
+    "stored": "originals/supplement-driver/test_controls.py.gz",
+    "original_bytes": 3280,
+    "original_sha256": "62b2ef58048b478edf678b7b237a0df58127bcc355060d2847ffdb040ad28efb",
+    "stored_bytes": 1063,
+    "stored_sha256": "205993212f7d5cbd30af5fed4eb0e6cce226d7dc01f8b65c65ad1b223626406d",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-completed-gate-proof-a1799b78/README.md",
+    "stored": "originals/completed-proof/README.md.gz",
+    "original_bytes": 478,
+    "original_sha256": "cfffbca84ffbc6f49b7e6433de72c49d757c175e1023fe8c0bc05ceb82494980",
+    "stored_bytes": 318,
+    "stored_sha256": "cc53d5ece6800d6ae53ffb97fbe625c7c664b91c355f2a8d6f5648e373bd366e",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-completed-gate-proof-a1799b78/index.json",
+    "stored": "originals/completed-proof/index.json.gz",
+    "original_bytes": 391,
+    "original_sha256": "c87405fccf3ce635f009bbb909e86de3efabfad512aff45f0f4dc144cc4ddd57",
+    "stored_bytes": 260,
+    "stored_sha256": "faa31d06951f525dcb95e48f469f673a7370b6604b33dced4133a1ad3646e839",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-completed-gate-proof-a1799b78/proof.json",
+    "stored": "originals/completed-proof/proof.json.gz",
+    "original_bytes": 4292,
+    "original_sha256": "0cb5e509ca894b8628a8cc2d9a8af9a286bbc0a59bdbdbd606e0f9739d229cef",
+    "stored_bytes": 1572,
+    "stored_sha256": "52666e0ba60e97153ba23a7e49226cb669cc7486004e6d18f435fad7151e93d5",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-owner-proposal-a1799b78/README.md",
+    "stored": "originals/sql-owner-proposal/README.md.gz",
+    "original_bytes": 1218,
+    "original_sha256": "6626f9bf90519206b8482e2d6750bcfda4c8e85e24734980286529110a58719a",
+    "stored_bytes": 700,
+    "stored_sha256": "8223221bf22b6449aa6e23caa5e47b589bae214d9c78a9b65c05fa1fa3f45a3a",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-owner-proposal-a1799b78/bindings.json",
+    "stored": "originals/sql-owner-proposal/bindings.json.gz",
+    "original_bytes": 7768,
+    "original_sha256": "cb934b8c949b7d0f4061035d20cf4e452d44782213a766227315bcfc2be8bdb2",
+    "stored_bytes": 1478,
+    "stored_sha256": "0b3856e78456d5ee9c5ead5d0a4ddb21335593d9802712bc55cfe2cacffe6463",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-owner-proposal-a1799b78/index.json",
+    "stored": "originals/sql-owner-proposal/index.json.gz",
+    "original_bytes": 874,
+    "original_sha256": "fbf463da56ba879ea449a8fd5d923236bb3fbf29032c0162685f917190b27f16",
+    "stored_bytes": 452,
+    "stored_sha256": "98b90057d68209c9918eb2ae3da697a890aa9d77caf4de999844c3a625a56f78",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-owner-proposal-a1799b78/production-reviewed.patch",
+    "stored": "originals/sql-owner-proposal/production-reviewed.patch.gz",
+    "original_bytes": 9115,
+    "original_sha256": "4f2bf0268be6c6e1441a6921b41616fcb48dd32ad7a2e57223d6cc0588f2fe65",
+    "stored_bytes": 1799,
+    "stored_sha256": "af41bd8ac39d9783409f856b5c97a2e0b6f2dcc4a1b53bf1042e31214ceeb9c6",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-owner-proposal-a1799b78/review.patch",
+    "stored": "originals/sql-owner-proposal/review.patch.gz",
+    "original_bytes": 479,
+    "original_sha256": "346273a3d9c630361d45703130071456d881840b9bb20b409509ce6d3fbad116",
+    "stored_bytes": 285,
+    "stored_sha256": "cf80dcf0598f74e1b00441538139a47fe6e40ba50d3b2b3d20f4951b97b74f85",
+    "gzip_mtime": 0
+  },
+  {
+    "original": "/tmp/w02-charlie-sql-owner-proposal-a1799b78/runtime-sql.json",
+    "stored": "originals/sql-owner-proposal/runtime-sql.json.gz",
+    "original_bytes": 523096,
+    "original_sha256": "84bf339db4e79b91be16bdfa77a10953d7c78396013a01948ac9905fbdc8798e",
+    "stored_bytes": 70000,
+    "stored_sha256": "eff92aca85fe749345135c5dd5b1230605b6cbb4135c23add0fff3c0d8e76386",
+    "gzip_mtime": 0
+  }
+]

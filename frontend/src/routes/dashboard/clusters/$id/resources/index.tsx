@@ -44,23 +44,23 @@ function ClusterResourcesPage() {
 
   const ingressClassesQ = useQuery({
     queryKey: queryKeys.clusterPages.mirroredIngressClasses(id),
-    queryFn: () => listMirroredIngressClasses(id),
+    queryFn: ({ signal }) => listMirroredIngressClasses(id, signal),
   });
   const gatewayClassesQ = useQuery({
     queryKey: queryKeys.clusterPages.mirroredGatewayClasses(id),
-    queryFn: () => listMirroredGatewayClasses(id),
+    queryFn: ({ signal }) => listMirroredGatewayClasses(id, signal),
   });
   const networkPoliciesQ = useQuery({
     queryKey: queryKeys.clusterPages.mirroredNetworkPolicies(id),
-    queryFn: () => listMirroredNetworkPolicies(id),
+    queryFn: ({ signal }) => listMirroredNetworkPolicies(id, undefined, signal),
   });
   const resourceQuotasQ = useQuery({
     queryKey: queryKeys.clusterPages.mirroredResourceQuotas(id),
-    queryFn: () => listMirroredResourceQuotas(id),
+    queryFn: ({ signal }) => listMirroredResourceQuotas(id, undefined, signal),
   });
   const limitRangesQ = useQuery({
     queryKey: queryKeys.clusterPages.mirroredLimitRanges(id),
-    queryFn: () => listMirroredLimitRanges(id),
+    queryFn: ({ signal }) => listMirroredLimitRanges(id, undefined, signal),
   });
 
   return (

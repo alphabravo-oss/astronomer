@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "STATIC_CURRENT_IDENTITY_REVIEW_ONLY",
+  "source_commit": "b3a34ddd05f2e0456a3d6239d8fdfdaf7464edf7",
+  "historical_native_commit": "927151bebf20c6a8f63fe76ff804b45e86044ded",
+  "reviewer": "root/source-review",
+  "source_fully_read": "internal/handler/audit.go",
+  "finding": {
+    "tool": "gosec",
+    "rule_id": "G109",
+    "path": "internal/handler/audit.go",
+    "line": 686,
+    "column": 23,
+    "source_digest": "sha256:b58a3bece0351047daabecdfc8d718fd1b7c51da88dbc5ca9783ee321632300f",
+    "level": "HIGH",
+    "fingerprint": "sha256:4751dbc4e4cdec8e7c043d508b12339dac29bce1b41a2ae77948b13310600085"
+  },
+  "reason": "Exact status_code narrowing remains guarded by successful strconv.Atoi and inclusive 0..599 check, with immediate error return before cast. The complete current file differs from the original scanner source only in the separately reviewed checked SQL offset call. No other narrowing sink is covered.",
+  "scope": "first-party-source-policy",
+  "expires_at": "2026-10-16T00:00:00Z",
+  "observations": [
+    "Current positive fixture mixes old native finding identity with changed current source and fails closed; two actual fixture errors retained.",
+    "Current identity is recomputed for this static review; no new native scanner execution is claimed."
+  ],
+  "limits": [
+    "No full source-policy PASS, application test, native finding closure or release approval.",
+    "Whole-file drift, new sink, wrong scope and expiry must continue to reject.",
+    "Original native/source/policy receipts remain historical and unchanged."
+  ]
+}

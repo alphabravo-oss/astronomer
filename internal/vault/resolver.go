@@ -189,6 +189,20 @@ type Observer interface {
 	OnHealth(ctx context.Context, connectionName string, ok bool)
 }
 
+// LookupObserver optionally captures an observation before the connection read
+// and binds it to the verified row before async work. Existing audit-only
+// observers continue using their unchanged Observer interface.
+type LookupObserver interface {
+	BeginConnectionLookup() func(uuid.UUID, string) Observer
+}
+
+func beginConnectionObservation(observer Observer) func(uuid.UUID, string) Observer {
+	if capture, ok := observer.(LookupObserver); ok {
+		return capture.BeginConnectionLookup()
+	}
+	return func(uuid.UUID, string) Observer { return observer }
+}
+
 // NoopObserver is the default — does nothing. Useful for tests that
 // don't care about observability hooks.
 type NoopObserver struct{}
@@ -269,7 +283,8 @@ func (r *Resolver) Resolve(ctx context.Context, projectID uuid.UUID, blob string
 
 	// Per-call connection cache so we resolve the project default once
 	// and re-use it across every "default" reference in the blob.
-	conns := map[string]sqlc.VaultConnection{} // keyed by ref.ConnectionName ("" = default)
+	conns := map[string]sqlc.VaultConnection{}
+	observations := map[string]Observer{} // keyed by ref.ConnectionName ("" = default)
 
 	// Substitution map: ref.Raw → resolved string. We build this map
 	// then do all replacements at the end so an error part-way through
@@ -287,6 +302,7 @@ func (r *Resolver) Resolve(ctx context.Context, projectID uuid.UUID, blob string
 		// Resolve connection (cached per-call).
 		conn, ok := conns[ref.ConnectionName]
 		if !ok {
+			bindObservation := beginConnectionObservation(r.observer)
 			c, err := r.resolveConnection(ctx, projectID, ref.ConnectionName)
 			if err != nil {
 				r.observer.OnFailed(ctx, ref.ConnectionName, ref, err)
@@ -294,10 +310,12 @@ func (r *Resolver) Resolve(ctx context.Context, projectID uuid.UUID, blob string
 			}
 			conn = c
 			conns[ref.ConnectionName] = conn
+			observations[ref.ConnectionName] = bindObservation(conn.ID, conn.Name)
 		}
+		observer := observations[ref.ConnectionName]
 		if !conn.Enabled {
 			err := fmt.Errorf("connection %q is disabled", conn.Name)
-			r.observer.OnFailed(ctx, conn.Name, ref, err)
+			observer.OnFailed(ctx, conn.Name, ref, err)
 			return "", fmt.Errorf("vault: reference %q: %w", ref.Raw, err)
 		}
 
@@ -311,29 +329,29 @@ func (r *Resolver) Resolve(ctx context.Context, projectID uuid.UUID, blob string
 		if !ok {
 			client, err := r.clientFor(conn)
 			if err != nil {
-				r.observer.OnFailed(ctx, conn.Name, ref, err)
+				observer.OnFailed(ctx, conn.Name, ref, err)
 				return "", fmt.Errorf("vault: reference %q: %w", ref.Raw, err)
 			}
 			start := time.Now()
 			d, err := client.FetchSecret(ctx, engine, ref.Path)
 			if err != nil {
-				r.observer.OnFailed(ctx, conn.Name, ref, err)
+				observer.OnFailed(ctx, conn.Name, ref, err)
 				return "", fmt.Errorf("vault: reference %q: %w", ref.Raw, err)
 			}
 			cache[ck] = d
 			data = d
-			r.observer.OnResolved(ctx, conn.Name, ref, time.Since(start))
+			observer.OnResolved(ctx, conn.Name, ref, time.Since(start))
 		} else {
 			// Cache hit: still record an OnResolved with zero duration so
 			// the metrics count every reference resolved (including
 			// dedupe hits).
-			r.observer.OnResolved(ctx, conn.Name, ref, 0)
+			observer.OnResolved(ctx, conn.Name, ref, 0)
 		}
 
 		val, ok := data[ref.Key]
 		if !ok {
 			err := fmt.Errorf("key %q not found in secret at %s/%s", ref.Key, engine, ref.Path)
-			r.observer.OnFailed(ctx, conn.Name, ref, err)
+			observer.OnFailed(ctx, conn.Name, ref, err)
 			return "", fmt.Errorf("vault: reference %q: %w", ref.Raw, err)
 		}
 		subs[ref.Raw] = fmt.Sprint(val)

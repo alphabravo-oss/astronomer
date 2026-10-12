@@ -1,0 +1,96 @@
+{
+  "catalog_source": "53a562509f164e930dd9c18b1fecf9420e1c968e",
+  "consumer_source": "7f6926af0b4c42284f13e0105a2a4acb52378661",
+  "paths": [
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/scripts/build_catalog.py",
+      "sha256": "a9ea3c82f0343ca5dc847044a373946d53d61d7af38f8541352bc22c80e78f00",
+      "bytes": 8141
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/scripts/resolve_artifacts.py",
+      "sha256": "01f420b94e3e24f76cfa04034bc62b69cc44f262eac277fb464e6d8a7e5366b0",
+      "bytes": 9308
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/scripts/validate_schema.py",
+      "sha256": "46775a47251d603c082ad8f091d5e7f835ab0e904c80c77bdd8949cd463f21c5",
+      "bytes": 2453
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/catalog.json",
+      "sha256": "084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c",
+      "bytes": 26483
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/artifact-lock.json",
+      "sha256": "460236a81165341ac134604a2d327e2528f95530f2ee3567b003b068f7c56fe0",
+      "bytes": 6376
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/policies/revocations.json",
+      "sha256": "1628ce2a124a0110682c0a10bc1a7b8db0b43c2438583a368b0d81e258d67ff3",
+      "bytes": 96
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/pyproject.toml",
+      "sha256": "7a97c4a01883786e352a13a724f2a3646e1ae533db9ba68a12d20333ed34eb5e",
+      "bytes": 1138
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/uv.lock",
+      "sha256": "bf78f8d4672790ed4af4dacec4c7b994576b76d35d67dbe21909f31b19f643d5",
+      "bytes": 132910
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/schemas/catalog-entry-v1.schema.json",
+      "sha256": "6ae9675d34c08b123e9e0c805abfddb7a05e1a9626710ab71e47ed34e0fbe02f",
+      "bytes": 6709
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/schemas/catalog-entry-version-v1.schema.json",
+      "sha256": "2152df26c606b3bb685a83fefca2454bc10a4c6e36db339f530cadc85ba69844",
+      "bytes": 2006
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/schemas/catalog-index-v1.schema.json",
+      "sha256": "011360fb118e5844530ae37649a555a4b7cd8067c2087f4ce20b5fa90e800dd6",
+      "bytes": 1597
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/schemas/presentation-v1.schema.json",
+      "sha256": "696f4a024b0ffba043cb660fc96c6083388f2900676e4b824e42edfab1e81e3d",
+      "bytes": 889
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-catalog-032-w15/schemas/revocations-v1.schema.json",
+      "sha256": "0a4c8c40388dc07545702bc2967674407484618174e0816374572b162f48c4dc",
+      "bytes": 1048
+    },
+    {
+      "path": "/root/astronomer-all/astronomer/internal/catalog/source.go",
+      "sha256": "874a3d6983da46b82b38433cb2524a5819164857a1543aa66e7cbf9a6729ecbb",
+      "bytes": 10154
+    },
+    {
+      "path": "/root/astronomer-all/astronomer/internal/catalog/blessed.go",
+      "sha256": "eed6ca11f178318560395e70a8b673cb7d0325770996d74c1013f3fb10fb8725",
+      "bytes": 14513
+    },
+    {
+      "path": "/root/astronomer-all/astronomer/internal/catalog/oci_test.go",
+      "sha256": "246eba78872bf00465f17cf2cb3c3228a56f056dd1e296bac782fa8635ed6688",
+      "bytes": 5144
+    },
+    {
+      "path": "/root/astronomer-all/astronomer/internal/delivery/resolver/verifier.go",
+      "sha256": "63c3b497ed7717d6fc0d52368d65b229c3fd8fb6177edd46a8fa3cf32a1f0443",
+      "bytes": 17591
+    },
+    {
+      "path": "/root/astronomer-all/astronomer/internal/delivery/resolver/artifact_metadata_test.go",
+      "sha256": "9346594e0ba200d3a6653762e22d2316b718cfdbf3670bd34c3c452cbb1f5cf0",
+      "bytes": 6088
+    }
+  ]
+}

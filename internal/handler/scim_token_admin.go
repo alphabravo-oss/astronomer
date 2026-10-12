@@ -20,7 +20,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -131,7 +130,7 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createSCIMTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -180,13 +179,17 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 // List returns one bounded page of SCIM token metadata. Neither the plaintext
 // token nor its hash is selected from the database.
 func (h *SCIMTokenAdminHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.superuser(w, r) {
 		return
 	}
 
 	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListSCIMTokenMetadata(r.Context(), sqlc.ListSCIMTokenMetadataParams{
-		QueryLimit: int32(limit), QueryOffset: int32(offset),
+		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())

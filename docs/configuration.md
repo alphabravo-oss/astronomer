@@ -40,6 +40,9 @@ Production-specific invariants are enforced at startup by
 | `HELM_PLUGINS` | `HelmPluginsDirectory` | string | `/tmp/helm/data/plugins` | No |
 | `ASTRONOMER_TUNNEL_EGRESS_CIDRS` | `TunnelEgressCIDRs` | string | Go zero value | No |
 | `ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS` | `RCAllowPrivateWebhooks` | boolean | Go zero value | No |
+| `HELM_REPOSITORY_DESTINATION_POLICY` | `HelmRepositoryDestinationPolicy` | string | Go zero value | No |
+| `HELM_REPOSITORY_PROXY_URL` | `HelmRepositoryProxyURL` | string | Go zero value | Yes |
+| `HELM_REPOSITORY_NO_PROXY` | `HelmRepositoryNoProxy` | string | Go zero value | No |
 | `ASTRONOMER_BOOTSTRAP_PASSWORD` | `BootstrapAdminPassword` | string | Go zero value | Yes |
 | `ASTRONOMER_BOOTSTRAP_USERNAME` | `BootstrapAdminUsername` | string | `admin` | No |
 | `ASTRONOMER_BOOTSTRAP_EMAIL` | `BootstrapAdminEmail` | string | `admin@astronomer.local` | No |
@@ -50,6 +53,7 @@ Production-specific invariants are enforced at startup by
 | `REGISTRATION_TOKEN_TTL_HOURS` | `RegistrationTokenTTLHours` | integer | `1` | No |
 | `MANIFEST_SIGNING_SECRET` | `ManifestSigningSecret` | string | Go zero value | Yes |
 | `SERVER_URL` | `ServerURL` | string | Go zero value | No |
+| `TOOL_UI_DOMAIN` | `ToolUIDomain` | string | Go zero value | No |
 | `ASTRONOMER_ENCRYPTION_KEY` | `EncryptionKey` | string | Go zero value | Yes |
 | `ASTRONOMER_INTERNAL_PSK` | `InternalPSK` | string | Go zero value | Yes |
 | `ASTRONOMER_INTERNAL_PSK_PREVIOUS` | `InternalPSKPrevious` | string | Go zero value | No |
@@ -76,7 +80,27 @@ Production-specific invariants are enforced at startup by
 | `DELIVERY_FLUX_DISTRIBUTION_OIDC_ISSUER` | `DeliveryFluxDistributionOIDCIssuer` | string | Go zero value | No |
 | `DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEY` | `DeliveryFluxDistributionPublicKey` | string | Go zero value | No |
 | `DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS` | `DeliveryFluxDistributionPublicKeys` | string | Go zero value | No |
+| `DELIVERY_DATABASE_SCAN_ENABLED` | `DeliveryDatabaseScanEnabled` | boolean | Go zero value | No |
+| `DELIVERY_DATABASE_JOB_PULL_CREDENTIAL_REF` | `DeliveryDatabaseJobPullCredentialRef` | string | Go zero value | No |
+| `DELIVERY_DATABASE_UPDATES_ENABLED` | `DeliveryDatabaseUpdatesEnabled` | boolean | Go zero value | No |
+| `DELIVERY_DATABASE_REGISTRY_ROOTS_REF` | `DeliveryDatabaseRegistryRootsRef` | string | Go zero value | No |
+| `DELIVERY_DATABASE_READ_CREDENTIAL_REF` | `DeliveryDatabaseReadCredentialRef` | string | Go zero value | No |
+| `DELIVERY_DATABASE_READ_REGISTRY` | `DeliveryDatabaseReadRegistry` | string | Go zero value | No |
+| `DELIVERY_DATABASE_READ_REALM_URL` | `DeliveryDatabaseReadRealmURL` | string | Go zero value | No |
+| `DELIVERY_DATABASE_READ_SERVICE` | `DeliveryDatabaseReadService` | string | Go zero value | No |
+| `DELIVERY_DATABASE_READ_REPOSITORIES` | `DeliveryDatabaseReadRepositories` | string | Go zero value | No |
+| `DELIVERY_DATABASE_SCANNER_DIGEST` | `DeliveryDatabaseScannerDigest` | string | Go zero value | No |
+| `DELIVERY_DATABASE_SCANNER_VERSION` | `DeliveryDatabaseScannerVersion` | string | Go zero value | No |
+| `DELIVERY_DATABASE_UPDATE_REPOSITORY` | `DeliveryDatabaseUpdateRepository` | string | Go zero value | No |
+| `DELIVERY_DATABASE_CACHE_DIRECTORY` | `DeliveryDatabaseCacheDirectory` | string | Go zero value | No |
+| `DISTRIBUTION_MIRROR_PLAN_PATH` | `DistributionMirrorPlanPath` | string | Go zero value | No |
+| `DISTRIBUTION_MIRROR_SIGNATURE_PATH` | `DistributionMirrorSignaturePath` | string | Go zero value | No |
+| `DISTRIBUTION_MIRROR_KEY_REF` | `DistributionMirrorKeyRef` | string | Go zero value | No |
+| `DISTRIBUTION_DESTINATION_POLICY` | `DistributionDestinationPolicy` | string | Go zero value | No |
+| `BACKUP_S3_DESTINATION_POLICY` | `BackupS3DestinationPolicy` | string | Go zero value | No |
+| `BACKUP_S3_CA_FILE` | `BackupS3CAFile` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_REPOSITORY` | `DeliveryBundleRepository` | string | Go zero value | No |
+| `DELIVERY_BUNDLE_CATALOG_DIGEST` | `DeliveryBundleCatalogDigest` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_DIGEST` | `DeliveryBundleDigest` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_CERTIFICATE_IDENTITY` | `DeliveryBundleCertificateIdentity` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_OIDC_ISSUER` | `DeliveryBundleOIDCIssuer` | string | Go zero value | No |

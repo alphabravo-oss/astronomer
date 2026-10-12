@@ -1,8 +1,11 @@
 package systemrollout
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
@@ -138,5 +141,55 @@ func TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets(t *testing.T) {
 	current.rollbackFailed = 1
 	if rollbackComplete(current) {
 		t.Fatal("failed rollback must not be classified as complete")
+	}
+}
+
+func TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData(t *testing.T) {
+	for _, raw := range []string{`null`, `{"type":"rolling","max_concurrent":0,"private-fixture":true}`, `{"max_concurrent":"private-fixture"}`} {
+		if _, err := viewFromRecord(sqlc.DeliverySystemRollout{Strategy: []byte(raw)}, nil); err == nil {
+			t.Error("malformed stored strategy became a valid system rollout")
+		} else if strings.Contains(err.Error(), "private-fixture") {
+			t.Error("stored strategy leaked into reader error")
+		}
+	}
+}
+
+func TestScanViewRetainsValidAdditiveV1Strategy(t *testing.T) {
+	raw, err := json.Marshal(model.RolloutStrategy{
+		Type: model.StrategyRolling, MaxConcurrent: 1,
+		MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 0},
+		ProgressDeadline: model.Duration(60000000000),
+		FailureThreshold: model.Amount{Type: model.AmountCount, Value: 1},
+		OnFailure:        model.FailurePause,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = append(raw[:len(raw)-1], []byte(`,"future_v1":true}`)...)
+	view, err := viewFromRecord(sqlc.DeliverySystemRollout{Strategy: []byte(raw)}, nil)
+	if err != nil || view.Strategy.MaxConcurrent != 1 {
+		t.Fatalf("valid additive strategy lost: %v", err)
+	}
+}
+
+func TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing(t *testing.T) {
+	for _, budget := range []uint32{1 << 31, ^uint32(0)} {
+		strategy := model.RolloutStrategy{MaxConcurrent: budget, MaxUnavailable: model.Amount{Type: model.AmountCount, Value: budget}}
+		if got := systemReleaseSlots(strategy, 3, counts{}); got != 3 {
+			t.Errorf("large v1 budget stalled rollout: got=%d want=3", got)
+		}
+		if got := systemReleaseSlots(strategy, 3, counts{inFlight: 1}); got != 2 {
+			t.Errorf("in-flight reservation lost: got=%d want=2", got)
+		}
+		if got := systemReleaseSlots(strategy, 0, counts{}); got != 0 {
+			t.Errorf("empty fleet has slots: %d", got)
+		}
+		if got := systemReleaseSlots(strategy, -1, counts{}); got != 0 {
+			t.Errorf("invalid negative fleet has slots: %d", got)
+		}
+	}
+	strategy := model.RolloutStrategy{MaxConcurrent: ^uint32(0), MaxUnavailable: model.Amount{Type: model.AmountCount, Value: ^uint32(0)}}
+	if got := systemReleaseSlots(strategy, 1<<31-1, counts{inFlight: 1<<31 - 1, immatureReady: 1<<31 - 1, failed: 1<<31 - 1}); got != 0 {
+		t.Errorf("count subtraction wrapped into available slots: %d", got)
 	}
 }

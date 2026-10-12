@@ -1,3 +1,5 @@
+import { pipelineDefaults } from "./-pipeline-form";
+import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   useCreateLoggingPipeline,
@@ -13,7 +15,6 @@ import { PipelineNamespaces } from "./-pipeline-namespaces";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, X } from "lucide-react";
-import { toastError } from "@/lib/toast";
 
 export function CreatePipelineModal({
   onClose,
@@ -24,18 +25,9 @@ export function CreatePipelineModal({
 }) {
   const createPipeline = useCreateLoggingPipeline();
 
+  const [serverError, setServerError] = useState<string>();
   const pipelineForm = useAppForm({
-    defaultValues: {
-      name: "",
-      description: "",
-      clusterId: clusterId || "",
-      namespaces: [] as string[],
-      outputIds: [] as string[],
-      labelKey: "",
-      labelValue: "",
-      labels: {} as Record<string, string>,
-      enabled: true,
-    },
+    defaultValues: pipelineDefaults(clusterId),
     validators: {
       // Old pre-submit checks, ported 1:1 (same messages, same order).
       onSubmit: ({ value }) =>
@@ -48,11 +40,6 @@ export function CreatePipelineModal({
               : !validOutputSelection(value.outputIds, outputList)
                 ? "Select available outputs belonging to this cluster"
                 : undefined,
-    },
-    // Same UX as before: the failed check surfaces as a toast, not inline.
-    onSubmitInvalid: ({ formApi }) => {
-      const err = formApi.state.errors.find((e) => typeof e === "string");
-      if (err) toastError(err);
     },
     onSubmit: async ({ value }) => {
       const filters = Object.entries(value.labels).map(([field, pattern]) => ({
@@ -71,9 +58,12 @@ export function CreatePipelineModal({
           filters,
           enabled: value.enabled,
         });
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -128,6 +118,11 @@ export function CreatePipelineModal({
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!pipelineForm.store.state.isSubmitting)
+          void pipelineForm.handleSubmit();
+      }}
       title="Create Logging Pipeline"
       onClose={onClose}
       size="lg"
@@ -136,7 +131,7 @@ export function CreatePipelineModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void pipelineForm.handleSubmit()}
+            type="submit"
             disabled={
               !form.name ||
               !form.clusterId ||
@@ -152,6 +147,9 @@ export function CreatePipelineModal({
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <pipelineForm.AppForm>
+        <pipelineForm.FormErrorSummary serverError={serverError} />
+      </pipelineForm.AppForm>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label
@@ -163,6 +161,7 @@ export function CreatePipelineModal({
           <pipelineForm.Field name="name">
             {(field) => (
               <Input
+                name={field.name}
                 id="logging-pipeline-name"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -208,6 +207,7 @@ export function CreatePipelineModal({
         <pipelineForm.Field name="description">
           {(field) => (
             <Textarea
+              name={field.name}
               id="logging-pipeline-description"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -288,6 +288,7 @@ export function CreatePipelineModal({
         <pipelineForm.Field name="enabled">
           {(field) => (
             <Input
+              name={field.name}
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}

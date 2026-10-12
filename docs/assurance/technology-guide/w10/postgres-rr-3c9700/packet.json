@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "preparedAt": "2026-10-10T04:33:16.343152+00:00",
+  "scope": "Connection/registration/Vault bounded repeatable-read collectors on two dedicated owned CNPG databases; deadline post-commit regression",
+  "sourceCommit": "3c9700dbfcb501d83e656fef42d3b86ebbb4b75a",
+  "sourceFiles": [
+    {
+      "path": "internal/server/connection_metrics_snapshot.go",
+      "sha256": "a493ef2fc643d56d6c88ecd5d5756ded78ba99178523249298aefc88d5ec8707"
+    },
+    {
+      "path": "internal/server/connection_metrics_deadline_test.go",
+      "sha256": "9d18518eb55d9d62b6485d849054c161d2d9c6287b289b79118f55e9328b86b9"
+    },
+    {
+      "path": "internal/server/metrics_snapshot_postgres_test.go",
+      "sha256": "c380a33d9209fec827efc4bde7638ed0b088802e143e31dae7b86fd58b5ccfa8"
+    },
+    {
+      "path": "scripts/metrics-postgres-qualification.py",
+      "sha256": "dbd1cf70f1596c22975e0e726ae35ec55eb4de1798eb2d2fb5f84c5233cc9eb5"
+    },
+    {
+      "path": "scripts/metrics-postgres-allocate.py",
+      "sha256": "651adeefcd0753d6d4d3d2a777ba36b14f186be469a850634c5503dc538bb116"
+    },
+    {
+      "path": "scripts/tests/metrics_postgres_qualification_test.py",
+      "sha256": "6b85190d3045e7b394af9eea9c6a732edfc489ef798410f25093ccca69340b1d"
+    },
+    {
+      "path": "scripts/tests/metrics_postgres_allocate_test.py",
+      "sha256": "00d18d91f72f482b031d12a585f7dad9f24754b1e30871130f32c92f8d593c65"
+    }
+  ],
+  "deadline": {
+    "before": {
+      "sourceCommit": "24b77982be2cdd2310fef523e1d1db2825109ea5",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6897,
+        "source_tree_sha256": "3f0e1303ed9d8caf61feb7532eb436bfc0201fbcced27f7884b806fd7538bdf4"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6897,
+        "source_tree_sha256": "3f0e1303ed9d8caf61feb7532eb436bfc0201fbcced27f7884b806fd7538bdf4"
+      },
+      "sourceStable": true,
+      "terminal": [
+        {
+          "test": "TestConnectionMetricsDerivedDeadlineDuringCommitPreservesObservation",
+          "action": "fail"
+        }
+      ],
+      "exitCode": 1,
+      "goVersion": "go version go1.27.2 linux/amd64",
+      "finalCapacityExitCode": 0
+    },
+    "after": {
+      "sourceCommit": "bba890a8f0af219d93aff343af1cd841fd0a2f11",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6902,
+        "source_tree_sha256": "845e3bbee8464dcc77f21e4f9815976a935488eaf7734873f6fb09c156152a46"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6902,
+        "source_tree_sha256": "845e3bbee8464dcc77f21e4f9815976a935488eaf7734873f6fb09c156152a46"
+      },
+      "sourceStable": true,
+      "terminal": [
+        {
+          "test": "TestConnectionMetricsDerivedDeadlineDuringCommitPreservesObservation",
+          "action": "pass"
+        }
+      ],
+      "exitCode": 0,
+      "goVersion": "go version go1.27.2 linux/amd64",
+      "finalCapacityExitCode": 0
+    }
+  },
+  "postgresLanes": [
+    {
+      "postgresMajor": 17,
+      "serverVersionNum": 170011,
+      "cleanSchema": 75,
+      "race": true,
+      "sourceCommit": "3c9700dbfcb501d83e656fef42d3b86ebbb4b75a",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6902,
+        "source_tree_sha256": "d33bceae081b2341093052f3835f8999d0113bc8b1dc61659f034507afa7f9f5"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6902,
+        "source_tree_sha256": "d33bceae081b2341093052f3835f8999d0113bc8b1dc61659f034507afa7f9f5"
+      },
+      "sourceStable": true,
+      "exitCode": 0,
+      "parents": {
+        "expected": [
+          "TestPostgresConnectionMetricsRepeatableReadAcrossMutation",
+          "TestPostgresRegistrationMetricsRepeatableReadAcrossMutation",
+          "TestPostgresVaultMetricsRepeatableReadAcrossMutation"
+        ],
+        "terminal": [
+          [
+            "TestPostgresConnectionMetricsRepeatableReadAcrossMutation",
+            "pass"
+          ],
+          [
+            "TestPostgresRegistrationMetricsRepeatableReadAcrossMutation",
+            "pass"
+          ],
+          [
+            "TestPostgresVaultMetricsRepeatableReadAcrossMutation",
+            "pass"
+          ]
+        ],
+        "failed": [],
+        "qualified": true
+      },
+      "finalCapacityExitCode": 0,
+      "privateReceipt": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2/receipt.json"
+    },
+    {
+      "postgresMajor": 18,
+      "serverVersionNum": 180006,
+      "cleanSchema": 75,
+      "race": true,
+      "sourceCommit": "3c9700dbfcb501d83e656fef42d3b86ebbb4b75a",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6902,
+        "source_tree_sha256": "d33bceae081b2341093052f3835f8999d0113bc8b1dc61659f034507afa7f9f5"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6902,
+        "source_tree_sha256": "d33bceae081b2341093052f3835f8999d0113bc8b1dc61659f034507afa7f9f5"
+      },
+      "sourceStable": true,
+      "exitCode": 0,
+      "parents": {
+        "expected": [
+          "TestPostgresConnectionMetricsRepeatableReadAcrossMutation",
+          "TestPostgresRegistrationMetricsRepeatableReadAcrossMutation",
+          "TestPostgresVaultMetricsRepeatableReadAcrossMutation"
+        ],
+        "terminal": [
+          [
+            "TestPostgresConnectionMetricsRepeatableReadAcrossMutation",
+            "pass"
+          ],
+          [
+            "TestPostgresRegistrationMetricsRepeatableReadAcrossMutation",
+            "pass"
+          ],
+          [
+            "TestPostgresVaultMetricsRepeatableReadAcrossMutation",
+            "pass"
+          ]
+        ],
+        "failed": [],
+        "qualified": true
+      },
+      "finalCapacityExitCode": 0,
+      "privateReceipt": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2/receipt.json"
+    }
+  ],
+  "safeLaunchEnvironment": {
+    "GOTOOLCHAIN": "go1.27.2",
+    "GOFLAGS": "-p=2",
+    "GOWORK": "off",
+    "GOMAXPROCS": "4"
+  },
+  "compilerEvidence": {
+    "deadlineActualVersionCaptured": true,
+    "postgresActualVersionCapturedBeforeLaunch": false,
+    "postgresForcedToolchainSelector": "go1.27.2",
+    "limitation": "Original RR receipts did not retain a separate contemporaneous actual go version output. The explicit launch selector and source go directive are retained; deadline actual-version receipts are separate evidence, not retrofitted RR proof."
+  },
+  "retainedFailures": [
+    {
+      "scope": "PostgreSQL18 allocation",
+      "created": true,
+      "exitCode": 1,
+      "reason": "final capacity failure after clone; allocated reference/database preserved"
+    },
+    {
+      "scope": "initial PostgreSQL17 qualification attempt",
+      "testProcessExitCode": null,
+      "reason": "capacity_before failed; zero Go tests/fixture writes"
+    },
+    {
+      "scope": "deadline unchanged source",
+      "parentsFailed": 1,
+      "reason": "expired derived context allowed post-commit observation publication"
+    }
+  ],
+  "watchdogQualification": {
+    "actualNumericGuardsPassedBothRuns": true,
+    "originalWatcherFailurePathsQualified": false,
+    "limitations": [
+      "Capacity never failed during either actual RR run.",
+      "Original external watcher lacked complete no-child/prelaunch, process identity/closure and exception receipt controls; source hardening is required before another run.",
+      "Exact watcher bytes and all maintained/final numeric guards are retained privately and SHA-bound."
+    ]
+  },
+  "vet": {
+    "command": [
+      "go",
+      "vet",
+      "./internal/server"
+    ],
+    "exitCode": 0,
+    "sourceCommit": "3c9700dbfcb501d83e656fef42d3b86ebbb4b75a",
+    "provenance": "Session exec-command result; no separate original logfile/source-fingerprint pair was captured for this bounded vet command."
+  },
+  "limitations": [
+    "No whole-application, collector-stack, fleet-scale, API-to-worker trace or performance qualification.",
+    "Dedicated database templates were cloned from closed owned schema75 fixtures; this is not a backup/restore or migration qualification.",
+    "The four remaining metric-family characterization parents are unexecuted source drafts; no full-package green claim.",
+    "All original receipts/logs and protected database references remain external/private; no UUID-rich runtime logs are copied into public history."
+  ],
+  "privateArtifactBindings": [
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-24b-before/final-capacity.json",
+      "bytes": 204,
+      "sha256": "d5480354193aaca08278bd8b32c411cfdbd121fc9cebb0bef308f65263f1f5de"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-24b-before/go-test.json",
+      "bytes": 2110,
+      "sha256": "d196dcb17f2db7434b44107510eb979e9400d77668ee75e236b1077bc916568f"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-24b-before/initial-capacity.json",
+      "bytes": 204,
+      "sha256": "528238a764f54154fa3d4a8e5bff64c7ba6817f64004f8f67c72768a4a30d6c1"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-24b-before/receipt.json",
+      "bytes": 1344,
+      "sha256": "6eba36538785158c5e17e71c4dd2d36bd81776edc1be0efb2d13234000ec9944"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-after/final-capacity.json",
+      "bytes": 204,
+      "sha256": "587a151dcfb5681e52cfd4b67c4656884fede3ab63a8c190e3f8b9394d6d4252"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-after/go-test.json",
+      "bytes": 1745,
+      "sha256": "952f2aea72625b5a6dfb7b6b837d5232dd8400482cd8ca5acb747938a6a9f49c"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-after/initial-capacity.json",
+      "bytes": 204,
+      "sha256": "856ffa9f4f2348209b68a797b517c90bd18aca5ec6ffbe765ab59e785035f8be"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-after/receipt.json",
+      "bytes": 1344,
+      "sha256": "a03a4697c82131fa58ce0926018acf505ac1365d8911b333721a5abb7b9fcf9b"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-inspect17-3c9700db/capacity-after.json",
+      "bytes": 204,
+      "sha256": "c35f57faf052da2c5e1b1c81f9b4cbbaeef5bd490d77cfb092669cd2ac2769ee"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-inspect17-3c9700db/capacity-before.json",
+      "bytes": 204,
+      "sha256": "69e001ac0bf545bb78b2fa1f37a58d1a13814974a6dd7e2a16ab16df4aac4c22"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-inspect17-3c9700db/receipt.json",
+      "bytes": 934,
+      "sha256": "7b8cb23278860d08d8412f2c178cfa702e835b9a61e807c7c410478ee0621d5b"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-inspect18-3c9700db/capacity-after.json",
+      "bytes": 204,
+      "sha256": "d96a4d4dab0886ee0d410073ecd9ea668f9d30504b554db4a96090fc80c75a0e"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-inspect18-3c9700db/capacity-before.json",
+      "bytes": 204,
+      "sha256": "62280b6b0c26e517a7f5d18fb7352fbcb6cf784072f778bf6460dc6c5d24a9b4"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-inspect18-3c9700db/receipt.json",
+      "bytes": 938,
+      "sha256": "7142a813934caddfe5302fd7b336c9e4268a9c9d259091cc0b80aab43cced19b"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-allocation17-3c9700db/capacity-after.json",
+      "bytes": 204,
+      "sha256": "0d9774e8cb2c1f9d5708c0b660a44af212fa196093a9a4b7764e21aa04d7d948"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-allocation17-3c9700db/capacity-before.json",
+      "bytes": 204,
+      "sha256": "361586d1b86115a3f08508bcf5dfb17571a62b7100ededdeca179b85962e4cae"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-allocation17-3c9700db/receipt.json",
+      "bytes": 1147,
+      "sha256": "c8a6e7322f8fc7683b9f71d4e8ba4508cea3b454b3ebc7bc14c6f07e74311395"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-allocation18-3c9700db/capacity-after.json",
+      "bytes": 205,
+      "sha256": "1634d373065266fc0694e286f8215d5ceda6df7e0355d18976dd622609b8411c"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-allocation18-3c9700db/capacity-before.json",
+      "bytes": 204,
+      "sha256": "04a935001e9a9bbbbeca0271387e62d03c2e292f3cce7234e011a553b74d7643"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-allocation18-3c9700db/receipt.json",
+      "bytes": 1192,
+      "sha256": "acea83913bccf4ef9dfc9d64e553028203eaec51755ee4e97a6bbf4408a2b6aa"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db/capacity-after.json",
+      "bytes": 205,
+      "sha256": "82f4d85a5eeea36e85a0b6571ba1c202e026a91793e7b5f5ab3da55f592bcbc1"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db/capacity-before.json",
+      "bytes": 205,
+      "sha256": "387abb8d285d45a11b0f9bf623b295f39f28588e1617e21596db170af0a034d0"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db/receipt.json",
+      "bytes": 1363,
+      "sha256": "4b592f2f670c039e6e70c227137712b9a17176fd5daa0cb142dacd3213351634"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2/capacity-after.json",
+      "bytes": 204,
+      "sha256": "99c7336427e022da1d8a292cad1224e5991a1d47fd653fb45561060865db5dd2"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2/capacity-before.json",
+      "bytes": 204,
+      "sha256": "601c70ce77f9874cecf54c298d35535c13ef06f7dee4e8424ad9c6943cd9ca5f"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2/go-test.jsonl",
+      "bytes": 4753,
+      "sha256": "2c880e8d1a04294c712f9f9af5929148aeb5cc260b053c0a52e5e4322a6ba35e"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2/ownership-before-process.json",
+      "bytes": 686,
+      "sha256": "677451126ceb8280378448f644e9c33164aaf934768a991cd3e03319146a5675"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2/receipt.json",
+      "bytes": 1730,
+      "sha256": "cddef3b1e80e2d0dc00a939dcb11f180230545fcd578853d78ff8311afe7a236"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2/capacity-after.json",
+      "bytes": 204,
+      "sha256": "07a743dbfdbb0d4671463359ec1eb857dc43b50681901fee954bacd4a643c81a"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2/capacity-before.json",
+      "bytes": 204,
+      "sha256": "77735eb71b9cb16cd234b89861c03a061b839c94426f36e9568b1a39309d08ba"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2/go-test.jsonl",
+      "bytes": 4752,
+      "sha256": "630061b459a4d92f002e2f01da14ffde12b30c1ff21342be591715cae0c78dba"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2/ownership-before-process.json",
+      "bytes": 690,
+      "sha256": "f0f51abac1b85894f190309d338812eb9aa07eeaed451578cda8d9062e9db1a7"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2/receipt.json",
+      "bytes": 1730,
+      "sha256": "07b3ade2154f254931e2863465c880dc4180315b9fc19666e6c5a8ccdf13ec4f"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2-capacity-watch/capacities.jsonl",
+      "bytes": 3020,
+      "sha256": "c689f342e688a26a42bc6aa8ff43f08b9a4c74106eccd8e49c2622d40a5d3798"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2-capacity-watch/receipt.json",
+      "bytes": 1047,
+      "sha256": "908b27f1dca97eba05199311b76ec64d49eba34e37c58096147a6b72b243ff3d"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres17-3c9700db-run2-capacity-watch/runner-console.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2-capacity-watch/capacities.jsonl",
+      "bytes": 2114,
+      "sha256": "0f21e246fb6e329fcdedfd34280b83d7aa7afc98982badd6041cf12b92e416e7"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2-capacity-watch/receipt.json",
+      "bytes": 1047,
+      "sha256": "f4df732d08d0e73ad614f3a9245c49b4f22f62dfecbdedbe0b7274e28856969b"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-metrics-postgres18-3c9700db-run2-capacity-watch/runner-console.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-deadline-run.py",
+      "bytes": 2447,
+      "sha256": "cdbd66a128c75d23f9be9744ee2657dffb4a06a41b5080360a269ac1c376d20c"
+    },
+    {
+      "privatePath": "/root/.cache/astronomer-032/qualification/w10-rr-capacity-watch.py",
+      "bytes": 2538,
+      "sha256": "1d627dcd6198328927a8f5304f063968c1f615afdccaf20af6aee22cf8284a75"
+    }
+  ]
+}

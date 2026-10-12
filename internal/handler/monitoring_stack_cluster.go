@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -96,7 +95,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		return
 	}
 	var req UpdateClusterMonitoringConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -449,7 +448,7 @@ func clusterMonitoringConfigResponse(cfg sqlc.ClusterMonitoringConfig) map[strin
 // these routes were a global check.
 func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request, clusterID string, routeVerb rbac.Verb) (string, MonitoringStackRequest, map[string]any, error) {
 	var req MonitoringStackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
 		return "", MonitoringStackRequest{}, nil, fmt.Errorf("invalid JSON body")
 	}
 	// A managed stack's fleet identity is derived from the routed cluster, not

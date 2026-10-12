@@ -1,0 +1,54 @@
+{
+  "utc": "2026-10-10T05:06:30.599006+00:00",
+  "review": "APPROVE_SCOPED_QUALIFIED_CORE",
+  "source": "ece59583d37a43afaa1c0ccd5683f3f011e50ebb",
+  "sourceReview": "w14-core-source-root-review.json",
+  "packetSHA256": "e9365abf2bc2e75bbd0a3ffcaf7361f45d9dc1ed235185803c0e3f21cb20a497",
+  "integratedCommits": [
+    "44fa66b8",
+    "7e417656",
+    "403c59ea",
+    "3114eec6",
+    "0df6d169",
+    "04f3b015",
+    "8388d214"
+  ],
+  "independentVerification": {
+    "restrictedOriginalHashes": 32,
+    "exactFrozenGitSourceHashes": 15,
+    "wholeGitSource": {
+      "schema_version": 2,
+      "source_file_count": 7204,
+      "source_tree_sha256": "e3958d89b990ec3733ab89a7ba8ec8c7086584a422ab1160f16f20476f299c2c"
+    },
+    "actualTerminalParents": 33,
+    "actualCases": 79,
+    "skips": 0,
+    "failures": 0,
+    "numericFatalGuards": 23,
+    "ownedDrainedGroups": 6,
+    "actualGoVersion": "go version go1.27.2 linux/amd64",
+    "allPacketReceiptProjectionsEqual": true,
+    "postRuntimeOnlyDifference": "Reviewed61bfeb86 qualification wording in upgrade-source-contract.md; every production/test source remains byte-identical.",
+    "rootIntegratedStatic": "JSON governance1164sites,dependency14rules,complexity2205files,docs123/621 PASS"
+  },
+  "fullRead": "All source/test hunks were reviewed before runtime in w14-core-source-root-review.json. Full finite runner and complete988-line packet/README reviewed after runtime; private originals/terminal inventories/source Git tree independently reconstructed.",
+  "preserved": [
+    "Unknown mutations reconciled before rollback; unresolved ownership retains recovery",
+    "Exclusive private checkpoint publication, no automatic backup/checkpoint cleanup",
+    "Synthetic committed-before-ack child failure does not imply absent mutation",
+    "Linux unreaped-leader/pidfd ownership and bounded TERM/KILL/wait",
+    "Exact historical/candidate runtime roles without incidental PostgreSQL-major migration"
+  ],
+  "limitations": [
+    "No production upgrade adapter, Cobra wiring, shell wrapper replacement or disposable release parity has run.",
+    "No Kubernetes, database, release publication or application upgrade mutation occurred.",
+    "The tested owned children are synthetic; Linux process-group ownership does not certify arbitrary daemonized descendants.",
+    "Private checkpoint intent and owner binding do not verify release signatures or prove unknown mutation success.",
+    "Arbitrary caller-provided argv or literal environment values are not guaranteed secret-safe.",
+    "The four-parent Helm argv adapter draft and embedded Helm4 SDK draft are excluded from this frozen source and qualification.",
+    "No production adapter or shell entrypoint changed; wholeW14 remainsIN_PROGRESS",
+    "Helm argv source5278782a reviewed separately and uncompiled; Helm4 strategy needs explicit qualified4 binding",
+    "Generic14-rule dependency gate does not yet enforce a specificinternal/ops import boundary; followuprequested"
+  ]
+}

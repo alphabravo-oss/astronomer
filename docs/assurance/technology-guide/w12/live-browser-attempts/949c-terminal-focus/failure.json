@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "status": "fail",
+  "sourceCommit": "949cefd2cee345ce546e84d7d5d0352a4a33518c",
+  "browser": "chromium",
+  "passed": 17,
+  "failed": 1,
+  "skipped": 0,
+  "retries": 0,
+  "failure": {
+    "sessionPostStatus": 201,
+    "socket": "connected",
+    "stage": "pointer click on keyboard textarea",
+    "cause": "WTerm renders its focusable keyboard textarea behind term-grid. Pointer action is intercepted by the visible terminal grid; test times out120s before typing."
+  },
+  "correction": "Focus the named keyboard input and assert focus before typing; do not force-click or dispatch synthetic stdin. All real output/Disconnect/session/pod assertions retained.",
+  "privateArtifacts": [
+    {
+      "privateRelativePath": "browser/playwright-report/data/8d189e3d2a65bcab7de995bcdb25c3701db72bfa.png",
+      "sha256": "1e030bea51efd44d8b193ce4ac480e63ed4b3b38459fc78a9a141b90b5cb9e91",
+      "bytes": 63938
+    },
+    {
+      "privateRelativePath": "browser/playwright-report/data/a7757edf83c660d9327af6737cf51c9b2c27bf85.zip",
+      "sha256": "64fd0b4c4f7c64df221d39f4e9944834bd45b4eb2b1f8e21e374d932e5416df0",
+      "bytes": 190497012
+    },
+    {
+      "privateRelativePath": "browser/playwright-report/data/b671c80a430dbda3a6c5938b6a9458e029430634.webm",
+      "sha256": "065a4d5944535446fc99d29ea7b93ef02cceb4308158f9713bdc5761ca336fff",
+      "bytes": 3695025
+    },
+    {
+      "privateRelativePath": "browser/playwright.log",
+      "sha256": "7151482589bce6b7d44fe325ba9db8f327b63a9b6fa7e7e30132483e34f0fe0e",
+      "bytes": 10356
+    },
+    {
+      "privateRelativePath": "browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/test-failed-1.png",
+      "sha256": "1e030bea51efd44d8b193ce4ac480e63ed4b3b38459fc78a9a141b90b5cb9e91",
+      "bytes": 63938
+    },
+    {
+      "privateRelativePath": "browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/trace.zip",
+      "sha256": "64fd0b4c4f7c64df221d39f4e9944834bd45b4eb2b1f8e21e374d932e5416df0",
+      "bytes": 190497012
+    },
+    {
+      "privateRelativePath": "browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/video.webm",
+      "sha256": "065a4d5944535446fc99d29ea7b93ef02cceb4308158f9713bdc5761ca336fff",
+      "bytes": 3695025
+    },
+    {
+      "privateRelativePath": "runner.log",
+      "sha256": "abee230cf91e5837736399af643a75777b5b211f8d2de80c8423fb8e5004880c",
+      "bytes": 13445
+    }
+  ],
+  "scope": "No actual stdin/stdout/cancellation claim from this failed attempt."
+}

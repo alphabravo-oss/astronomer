@@ -17,12 +17,16 @@ import (
 
 // ListSchedules handles GET /api/v1/backups/schedules/.
 func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	schedules, err := h.queries.ListBackupSchedules(r.Context(), sqlc.ListBackupSchedulesParams{
 		Limit:  limit,
@@ -214,7 +218,7 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

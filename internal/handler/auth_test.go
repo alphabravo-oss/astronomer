@@ -622,7 +622,7 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 			setBrowserSessionCookies(rec, req, "access-token", "refresh-token")
 			resp := rec.Result()
 
-			session := cookieByName(t, resp, auth.SessionCookieName)
+			session := cookieByName(t, resp, auth.BrowserCookieName(req, auth.SessionCookieName))
 			assertCookieSecurity(t, session, cookieSecurityWant{
 				value:    "access-token",
 				path:     "/",
@@ -637,7 +637,7 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 				t.Fatalf("astronomer_session Domain = %q, want empty (host-only; do not widen to grafana.*)", session.Domain)
 			}
 
-			refresh := cookieByName(t, resp, auth.RefreshCookieName)
+			refresh := cookieByName(t, resp, auth.BrowserCookieName(req, auth.RefreshCookieName))
 			assertCookieSecurity(t, refresh, cookieSecurityWant{
 				value:    "refresh-token",
 				path:     "/",
@@ -647,7 +647,7 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 				maxAge:   browserRefreshCookieMaxAge,
 			})
 
-			csrf := cookieByName(t, resp, auth.CSRFCookieName)
+			csrf := cookieByName(t, resp, auth.BrowserCookieName(req, auth.CSRFCookieName))
 			assertCookieSecurity(t, csrf, cookieSecurityWant{
 				value:    csrf.Value,
 				path:     "/",
@@ -670,7 +670,7 @@ func TestClearBrowserSessionCookiesClearsAllSessionCookies(t *testing.T) {
 	resp := rec.Result()
 
 	for _, name := range []string{auth.SessionCookieName, auth.RefreshCookieName, auth.CSRFCookieName} {
-		cookie := cookieByName(t, resp, name)
+		cookie := cookieByName(t, resp, auth.BrowserCookieName(req, name))
 		assertCookieSecurity(t, cookie, cookieSecurityWant{
 			value:    "",
 			path:     "/",

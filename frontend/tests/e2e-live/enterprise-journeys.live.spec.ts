@@ -230,10 +230,11 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     `/dashboard/clusters/${clusterID}/configmaps/default/live-config`,
   );
   await page.getByRole("tab", { name: "YAML" }).click();
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  // The masthead owns YAML mode and tab selection. Generic Edit also names
+  // the overview labels action while tab navigation is completing.
+  await page.getByRole("button", { name: "Edit YAML", exact: true }).click();
 
-  // JSON is valid YAML and avoids Monaco's interactive auto-indentation
-  // changing whitespace while Playwright inserts a multiline document.
+  // JSON is valid YAML and keeps the native keyboard edit on one line.
   const manifest = JSON.stringify({
     apiVersion: "v1",
     kind: "ConfigMap",
@@ -245,12 +246,40 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     data: { message: "after-live-apply" },
   });
   await page.locator(".monaco-editor").click();
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  // Start with a YAML comment so Monaco does not auto-close the opening JSON
-  // quote/brace around the bulk insertion.
-  await page.keyboard.insertText(`# live-browser apply fixture\n${manifest}\n`);
+  const input = page.getByRole("textbox", {
+    name: "Editor content",
+    exact: true,
+  });
+  await expect(input).toBeFocused();
+  // Monaco selects macOS shortcuts from the emulated user agent, including
+  // Desktop Safari running in the Linux WebKit test process.
+  const selectAll = await page.evaluate(() =>
+    navigator.userAgent.includes("Macintosh") ? "Meta+A" : "Control+A",
+  );
+  await input.press(selectAll);
+  await input.press("Backspace");
+  await expect(page.locator(".view-lines")).not.toContainText("apiVersion");
+  // Use real key events so Monaco handles its paired-character editing. The
+  // Firefox bulk-insertion failure duplicated the entire document before any
+  // dry-run request; verify the visible edit before exercising the transport.
+  // Leave an input frame between keys for Monaco's EditContext handling.
+  await input.pressSequentially(manifest, { delay: 20 });
+  await expect(page.locator(".view-lines")).toContainText("after-live-apply");
+  expect(
+    (await page.locator(".view-lines").innerText()).match(/after-live-apply/g)
+      ?.length,
+  ).toBe(1);
+  const dryRunResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "PATCH" &&
+      url.pathname ===
+        `/api/v1/clusters/${clusterID}/k8s/api/v1/namespaces/default/configmaps/live-config` &&
+      url.searchParams.get("dryRun") === "All"
+    );
+  });
   await page.getByRole("button", { name: "Dry run" }).click();
+  expect((await dryRunResponse).status()).toBe(200);
   await expect(page.getByText("Dry run passed", { exact: true })).toBeVisible();
   await expect(page.getByText("Apply preview", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
@@ -549,6 +578,64 @@ test("workload snapshot restores deleted member data through the durable Velero 
   // poll. Keep the member tunnel alive for one full interval before the next
   // journey decommissions it; the runner then asserts the terminal DB phase.
   await page.waitForTimeout(35_000);
+});
+
+test("terminal disconnect cancels the real tunnel and deletes its scoped pod", async ({
+  page,
+  context,
+}) => {
+  await loginViaForm(page);
+  await page.goto(`/dashboard/clusters/${clusterID}/shell`);
+  const opened = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/clusters/${clusterID}/shell/sessions/`),
+  );
+  await page
+    .getByRole("button", { name: "Connect", exact: true })
+    .first()
+    .click();
+  const response = await opened;
+  expect(response.status()).toBe(201);
+  const { data: session } = await response.json();
+  expect(typeof session.id).toBe("string");
+  expect(typeof session.pod_name).toBe("string");
+  await expect(page.getByText("connected", { exact: true })).toBeVisible();
+  // The marker is not present contiguously in the echoed command. Seeing it
+  // proves stdin reached the real remote process and stdout returned through
+  // the authenticated tunnel before Disconnect cancels the long-running task.
+  const terminalInput = page.getByRole("textbox", {
+    name: "Cluster terminal input",
+    exact: true,
+  });
+  // WTerm's keyboard textarea sits behind the painted grid. Enter through its
+  // supported focus/keyboard path instead of clicking through that overlay.
+  await terminalInput.focus();
+  await expect(terminalInput).toBeFocused();
+  await page.keyboard.type("printf '%s%s\\n' w12- remote-ready; sleep 120");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".wterm")).toContainText("w12-remote-ready");
+
+  const closed = page.waitForResponse(
+    (result) =>
+      result.request().method() === "POST" &&
+      result.url().endsWith(`/shell/sessions/${session.id}/close/`),
+  );
+  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+  expect((await closed).status()).toBe(200);
+  await expect(page.getByText("disconnected", { exact: true })).toBeVisible();
+  const sessionPath = `/api/v1/clusters/${clusterID}/shell/sessions/${session.id}/`;
+  await expect
+    .poll(async () => {
+      const result = await context.request.get(sessionPath);
+      if (result.status() !== 200) return `http${result.status()}`;
+      return (await result.json()).data.status;
+    })
+    .toBe("closed");
+  const podPath = `/api/v1/clusters/${clusterID}/k8s/api/v1/namespaces/${session.pod_namespace}/pods/${session.pod_name}`;
+  await expect
+    .poll(async () => (await context.request.get(podPath)).status())
+    .toBe(404);
 });
 
 test("cluster decommission completes through the authenticated agent tunnel", async ({

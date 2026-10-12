@@ -23,9 +23,9 @@ export function findNodeVersionDrift({
       `frontend/package.json engines.node must be ${expectedEngine}`,
     );
   }
-  if (!dockerfile.includes(`FROM node:${major}-alpine@sha256:`)) {
+  if (!dockerfile.includes(`FROM node:${version}-alpine@sha256:`)) {
     failures.push(
-      `frontend/Dockerfile must use a digest-pinned node:${major}-alpine builder`,
+      `frontend/Dockerfile must use a digest-pinned node:${version}-alpine builder`,
     );
   }
   for (const [name, source] of workflows) {

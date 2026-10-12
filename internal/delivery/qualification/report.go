@@ -150,7 +150,7 @@ func sampleResources(path string) Resources {
 	runtime.ReadMemStats(&memory)
 	result := Resources{HeapAllocPeakBytes: memory.HeapAlloc, HeapSysPeakBytes: memory.HeapSys, ProcessRSSPeakBytes: processHighWaterBytes()}
 	var filesystem syscall.Statfs_t
-	if err := syscall.Statfs(path, &filesystem); err == nil {
+	if err := syscall.Statfs(path, &filesystem); err == nil && filesystem.Bsize > 0 && filesystem.Bavail <= math.MaxUint64/uint64(filesystem.Bsize) {
 		result.DiskAvailableBefore = filesystem.Bavail * uint64(filesystem.Bsize)
 		result.DiskAvailableAfter = result.DiskAvailableBefore
 	}

@@ -1,0 +1,20 @@
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/original-vendor-identity-and-optional
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/duplicate-subject-claim
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/duplicate-original-identity
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/duplicate-optional
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/deep-optional
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/trailing-document
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/duplicate-signature-manifest-layers
+=== RUN   TestSignedCosignClaimsHaveOneInterpretation/trailing-signature-manifest
+--- PASS: TestSignedCosignClaimsHaveOneInterpretation (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/original-vendor-identity-and-optional (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/duplicate-subject-claim (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/duplicate-original-identity (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/duplicate-optional (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/deep-optional (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/trailing-document (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/duplicate-signature-manifest-layers (0.00s)
+    --- PASS: TestSignedCosignClaimsHaveOneInterpretation/trailing-signature-manifest (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/resolver	0.033s

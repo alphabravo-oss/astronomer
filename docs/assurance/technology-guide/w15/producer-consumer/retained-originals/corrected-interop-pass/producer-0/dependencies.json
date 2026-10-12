@@ -1,0 +1,1 @@
+{"cert-manager":[],"cloudnative-pg":[],"constellation":[],"external-dns":[],"external-secrets":[],"fluent-bit":[],"gatekeeper":[],"grafana":[],"ingress-nginx":[],"keda":[],"kube-prometheus-stack":[],"kube-state-metrics":[],"kyverno":[],"loki":[],"longhorn":[],"metrics-server":[],"opentelemetry-collector":[],"prometheus-node-exporter":[],"tempo":[],"trivy-operator":[],"velero":[]}

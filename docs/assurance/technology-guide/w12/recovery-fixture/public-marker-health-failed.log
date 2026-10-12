@@ -1,0 +1,12 @@
+=== RUN   TestPostgresRecoveryFixtureProductionReaders
+    postgres_integration_test.go:72: CLI verification failed: migration state unhealthy
+--- FAIL: TestPostgresRecoveryFixtureProductionReaders (0.09s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/scripts/cnpg-recovery-fixture	0.131s
+
+=== Failed
+=== FAIL: scripts/cnpg-recovery-fixture TestPostgresRecoveryFixtureProductionReaders (0.09s)
+    postgres_integration_test.go:72: CLI verification failed: migration state unhealthy
+
+DONE 1 tests, 1 failure in 0.131s
+qualification evidence: /root/.cache/astronomer-032/qualification/w12-recovery-draft6/recovery-readers/evidence.json

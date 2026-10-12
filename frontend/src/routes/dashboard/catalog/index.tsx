@@ -22,7 +22,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
-import { Package, Plus, SearchX } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { AddRepositoryModal } from "./-add-repository-modal";
 import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
@@ -32,11 +32,27 @@ import {
   OffsetPagination,
   useOffsetPagination,
 } from "@/components/ui/offset-pagination";
+import {
+  CursorPagination,
+  useCursorPagination,
+} from "@/components/ui/cursor-pagination";
 import { catalogTabs } from "./-tabs";
 import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
+import { ChartEmptyState } from "./-chart-empty-state";
+
+import { CatalogControllerWindow } from "@/components/catalog/catalog-controller-window";
 
 const TAB_KEYS = ["browse", "installed", "repositories"] as const;
+
+function CatalogClusterBanner({ name }: { name: string }) {
+  return (
+    <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded-sm bg-accent/40 text-foreground">
+      <Package className="h-3.5 w-3.5" />
+      Installing onto <span className="font-medium">{name}</span>
+    </div>
+  );
+}
 
 function CatalogPage() {
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "browse");
@@ -79,7 +95,9 @@ function CatalogPage() {
   } | null>(null);
   const [operationId, setOperationId] = useState<string | null>(null);
 
-  const chartsPaging = useOffsetPagination(projectId);
+  const chartsPaging = useCursorPagination(
+    JSON.stringify([projectId, searchQuery.trim(), selectedCategory]),
+  );
   const installedPaging = useOffsetPagination("installed");
   const reposPaging = useOffsetPagination("repositories");
   const chartsQuery = useHelmCharts({
@@ -143,17 +161,17 @@ function CatalogPage() {
           }
         />
         {presetClusterIdPage && (
-          <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded-sm bg-accent/40 text-foreground">
-            <Package className="h-3.5 w-3.5" />
-            Installing onto{" "}
-            <span className="font-medium">
-              {presetCluster?.displayName ||
-                presetCluster?.name ||
-                presetClusterIdPage}
-            </span>
-          </div>
+          <CatalogClusterBanner
+            name={
+              presetCluster?.displayName ||
+              presetCluster?.name ||
+              presetClusterIdPage
+            }
+          />
         )}
       </div>
+
+      <CatalogControllerWindow />
 
       <Tabs>
         <TabStrip
@@ -184,35 +202,15 @@ function CatalogPage() {
                 errorTitle="Failed to load charts"
                 isEmpty={(page) => page.data.length === 0}
                 empty={
-                  <EmptyState
-                    icon={
-                      searchQuery || selectedCategory !== "all"
-                        ? SearchX
-                        : Package
-                    }
-                    title={
-                      searchQuery || selectedCategory !== "all"
-                        ? "No charts match these filters"
-                        : "No charts available"
-                    }
-                    description={
-                      searchQuery || selectedCategory !== "all"
-                        ? "These filters apply to the current page. Try another page or clear the filters."
-                        : "Try another page, or add and sync a Helm repository."
-                    }
-                    actionLabel={
-                      searchQuery || selectedCategory !== "all"
-                        ? "Clear filters"
-                        : "Manage repositories"
-                    }
-                    onAction={() => {
-                      if (searchQuery || selectedCategory !== "all") {
-                        setSearchQuery("");
-                        setSelectedCategory("all");
-                      } else {
-                        setActiveTab("repositories");
-                      }
+                  <ChartEmptyState
+                    filtered={Boolean(
+                      searchQuery || selectedCategory !== "all",
+                    )}
+                    onClearFilters={() => {
+                      setSearchQuery("");
+                      setSelectedCategory("all");
                     }}
+                    onManageRepositories={() => setActiveTab("repositories")}
                   />
                 }
               >
@@ -230,7 +228,7 @@ function CatalogPage() {
             ))}
 
           {activeTab === "browse" && projectId && (
-            <OffsetPagination
+            <CursorPagination
               control={chartsPaging}
               query={chartsQuery}
               label="charts"

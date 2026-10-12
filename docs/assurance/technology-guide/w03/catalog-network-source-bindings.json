@@ -1,0 +1,73 @@
+{
+  "commands": [
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test -json ./internal/catalog ./internal/server ./internal/worker/tasks -count=1",
+      "receipt": "catalog-network-tests.jsonl",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test ./internal/handler -run TestInteractiveCatalogHydration -count=1",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 make verify-enterprise VERIFY_SCOPE=helm",
+      "receipt": "catalog-chart-helm-verification.log",
+      "result": "PASS"
+    },
+    {
+      "command": "make config-docs-check",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/check-dependency-boundaries.mjs",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "result": "PASS"
+    }
+  ],
+  "qualification": {
+    "actual_registry_application_catalog_runtime": false,
+    "current_supplier_profile": false,
+    "fresh_cache_no_egress_cluster": false,
+    "package_done": false
+  },
+  "schema_version": 1,
+  "slice": "catalog-runtime-and-chart-network-composition",
+  "source_base_commit": "1dbe93089ea805debfd6af3c8cc6bce15e78f6f3",
+  "source_sha256": {
+    "cmd/worker/main.go": "45153eb9444fee93fca0c23373e279061e0e32bf3c86cc00307b252055d8b845",
+    "deploy/chart/templates/_helpers.tpl": "c418ac5adcf57e1d0d802141bd3f0219f54301b038812617346b0335711432b1",
+    "deploy/chart/templates/configmap.yaml": "d0d42828632f69add5104145b36d81e97da7dcc26829cffb1cef457fab68942d",
+    "deploy/chart/templates/distribution-validation.yaml": "3783a23d8da8824bcc22a4c4188305be39f16cec5983a132f9ce3ee2bc5c2d9a",
+    "deploy/chart/templates/release-manifest-configmap.yaml": "99b3de1417fb9af2bf1619727bedf935cf437c96582f5fc6dfeca439c965d64f",
+    "deploy/chart/templates/server-deployment.yaml": "dcec605c10f072fcc86b050d9eaf6f537cbef5e4c81b66066fb169acb39b7326",
+    "deploy/chart/templates/worker-deployment.yaml": "f0e12e9143d18079b58ead63c87d0f13a810680486ca531b562936cdf84f37fb",
+    "deploy/chart/values.schema.json": "bc7d0ab69305803ab675004d8bbf9c1241bb3a927866d8be7ca75dab5d37b902",
+    "deploy/chart/values.yaml": "34be251779108275d00334f87aa8ef3b6f54f0fe9f1335308f27a0187988a105",
+    "deploy/distribution_network_render_test.go": "fa107da540924d3af03ecf23ee07a6c20f41522e9d505ea95953d2eea6da4e9d",
+    "deploy/release_image_contract_test.go": "4b98f5c9a144f4c2e6000aaa7fa7a8bda5c62d316fdd8dc2e29e7b7c6e5792ab",
+    "docs/architecture/complexity-baseline.json": "fc7ddd6ff3e0e6ec577cfb087b4411f51845ef2c629c92cc145b764289919daa",
+    "internal/catalog/network.go": "b4271192bb16b38abdba2cafd09d60c9746d2d5ff1e367be3571574da1d7f62f",
+    "internal/catalog/oci.go": "33934bf95455afdcc93b3ce049bc18de2c9bf604a1b78973fe2d1fe9d08aa17e",
+    "internal/catalog/source.go": "874a3d6983da46b82b38433cb2524a5819164857a1543aa66e7cbf9a6729ecbb",
+    "internal/handler/catalog.go": "e61b87af2794bd091c5a6a4b880bfaab7ff13ef814286b19724924d163cddcc9",
+    "internal/handler/catalog_hydrate.go": "3f2231348fda73e98d1602f8813f88d70bbf67de7dac6dc00694dace669f3fb2",
+    "internal/handler/catalog_network.go": "c146550f06615b281897c2e75c18f42b1246a8136c3a6d68ce9458dc9e2ff7a9",
+    "internal/handler/catalog_network_test.go": "047c5c9763e971ecf7655f8d1b4d7362a37c2e1d9ef55a17302149057450e278",
+    "internal/handler/catalog_oci.go": "c6c7c04b25196275515df904ed2ac0c5c3d14c9df499dfd847f9c37fa54e0f78",
+    "internal/handler/catalog_repositories.go": "cc0322fa4556e87d1da3871e73187813107236dc04e56d43c7886399ed6473a1",
+    "internal/handler/catalog_repository_auth.go": "9e25a6a96cdada9494c969491c9e80a9c68a41d430250546d5198ca929ef284a",
+    "internal/server/app_catalog_network.go": "9871a96d413b16800fb7c2a4c3dc0d2fe19c8843a6e25e909ea3d60921dc9571",
+    "internal/server/app_catalog_network_test.go": "756e4d70b04e1114b08e649e27309b84216df1301b5f4c25aeb74e12d0a01694",
+    "internal/server/app_core_handlers.go": "6f7abf76d7a534868f515cc2dba64d4ec570fd73051028f8fbc7dfae02905b1c",
+    "internal/server/app_runtime_services.go": "381aafb1da991a53edc4fd8dd2e27942422309ef06ae8ad8191851f904861016",
+    "internal/server/app_runtime_tasks.go": "57c2b3277d3c28b566064b5a0151cf719a7d5df8f7d601fea1e7be9e02673d12",
+    "internal/worker/tasks/catalog_network.go": "e259fde52e30ca704aac42494a80e5792c75ab6bd1e9acc578a74d2646789cf4",
+    "internal/worker/tasks/catalog_network_test.go": "c3119b0759de5d6432cbab069ed6a81a7771d6a710da61243d465224af74f983",
+    "internal/worker/tasks/catalog_sync.go": "cb416174a9650761969400bc0a1d1d90284b8f49f6f2614f2804fb38ecbc639a",
+    "internal/worker/tasks/runtime.go": "d54a3666d317ec0e16b044df47b5dbd8017ce944a2a94624162fc7f8373d2241"
+  },
+  "work_package": "W03"
+}

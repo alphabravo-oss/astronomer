@@ -1,0 +1,588 @@
+[
+  {
+    "compatibilityNotes": [
+      "filesystem used by the runner. For each attestation created, the filesystem path",
+      "will be appended to the file `${RUNNER_TEMP}/created_attestation_paths.txt`.",
+      "> be on a GitHub Enterprise Cloud plan.",
+      "> Artifact attestations are NOT supported on GitHub Enterprise Server.",
+      "    # runner-provided $GITHUB_ARTIFACTS_LIST environment variable.",
+      "    # discovered from the runner-provided artifacts list. Defaults to false.",
+      "from the runner-provided `$GITHUB_ARTIFACTS_LIST` environment variable. This",
+      "variable is set by the GitHub Actions runner (see",
+      "[actions/runner#4527](https://github.com/actions/runner/pull/4527)) and points",
+      "> append subject declarations; `$GITHUB_ARTIFACTS_LIST` is the runner-generated"
+    ],
+    "contracts": [
+      {
+        "action": "actions/attest",
+        "newSourceDigest": "sha256:9e4a1b808433f9ec87120b534e11fc35469a039bdbdc62b019441444c9ad0449",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "9e4a1b808433f9ec87120b534e11fc35469a039bdbdc62b019441444c9ad0449",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "./dist/index.js",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "1e69f48acb82d1966a394da916b4c1698aa569d6": "4.2.2"
+    },
+    "latest": "4.2.2",
+    "latestCommit": "1e69f48acb82d1966a394da916b4c1698aa569d6",
+    "metadataDigest": "sha256:80ada36d410382545fe1eca25ebcca37d18945b7c530f90f4a14f290ea3d95bd; sha256:c42799eb72341cf6a384b785e02a65cbcba8e21cfaedf7ee77f5f32c5b4f4b86",
+    "observedAt": "2026-10-09T19:27:12.898366+00:00",
+    "releasedAt": "2026-08-04T20:36:29+00:00",
+    "repo": "actions/attest"
+  },
+  {
+    "compatibilityNotes": [
+      "- Safer fork pull request handling: checkout now refuses to check out fork pull request code by default when the workflow is triggered by `pull_request_target` or `workflow_run`. These triggers run with the base repository's `GITHUB_TOKEN`, secrets, and runner access, where executing a fork's code commonly leads to \"pwn request\" vulnerabilities.",
+      "- Improved credential security: `persist-credentials` now stores credentials in a separate file under `$RUNNER_TEMP` instead of directly in `.git/config`",
+      "- Running authenticated git commands from a [Docker container action](https://docs.github.com/actions/sharing-automations/creating-actions/creating-a-docker-container-action) requires Actions Runner [v2.329.0](https://github.com/actions/runner/releases/tag/v2.329.0) or later",
+      "- Updated to the node24 runtime",
+      "  - This requires a minimum Actions Runner version of [v2.327.1](https://github.com/actions/runner/releases/tag/v2.327.1) to run.",
+      "We will still provide security updates for this project and fix major breaking changes during this time.",
+      "    # https://my-ghes-server.example.com",
+      "    # repository's GITHUB_TOKEN, secrets, default-branch cache scope, and runner",
+      "          # Note: the following account information will not work on GHES",
+      "          # Note: the following account information will not work on GHES"
+    ],
+    "contracts": [
+      {
+        "action": "actions/checkout",
+        "newSourceDigest": "sha256:d59219cb79590abdb877deaa14e3b65a00c05318bf5a6f3b989b9162b5d08c35",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "6188f6991491ed38977347cdaad0b0cd921a6d6232892363c91f433c22954f4f",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/index.js",
+          "post": "dist/index.js",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "11d5960a326750d5838078e36cf38b85af677262": "4.4.0"
+    },
+    "latest": "7.0.1",
+    "latestCommit": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "metadataDigest": "sha256:52ac445486661cac338c9c78b492c453ddb03384b5e361f443b844155d68210a; sha256:8f9ef218e023fcd93b413f05a489c4a0ad8b1b25a5eb2e46b2d0bdfff9a58daf",
+    "observedAt": "2026-10-09T19:27:01.646066+00:00",
+    "releasedAt": "2026-07-20T15:10:05+00:00",
+    "repo": "actions/checkout"
+  },
+  {
+    "compatibilityNotes": [
+      "- [GHES Support](#ghes-support)",
+      "We will still provide security updates for this project and fix major breaking changes during this time.",
+      "## GHES Support",
+      "`download-artifact@v4+` is not currently supported on GitHub Enterprise Server (GHES) yet. If you are on GHES, you must use [v3](https://github.com/actions/download-artifact/releases/tag/v3) (Node 16) or [v3-node20](https://github.com/actions/download-artifact/releases/tag/v3-node20) (Node 20)."
+    ],
+    "contracts": [
+      {
+        "action": "actions/download-artifact",
+        "newSourceDigest": "sha256:e98559b7a31ba31be4709f20d22102dc2737fa630f69a339eb89981151e505fe",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "f81d687a5bb7c2c9428a2cfc32fc099c823d56faf533e7d0e1f3cdc0e10f9cc7",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/index.js",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "d3f86a106a0bac45b974a628896c90dbdf5c8093": "4.3.0"
+    },
+    "latest": "8.0.2",
+    "latestCommit": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+    "metadataDigest": "sha256:5c88a155270504911a82ad115f23e33a64cc313190977433ad8f2a2c9743ec20; sha256:9c1f89aefad3555cb3b4897c96f7dbfc48a7ff4b2776cd4a9608352771c37bb5",
+    "observedAt": "2026-10-09T19:27:09.959047+00:00",
+    "releasedAt": "2026-10-07T10:09:51+00:00",
+    "repo": "actions/download-artifact"
+  },
+  {
+    "compatibilityNotes": [
+      "## Breaking changes in V6",
+      "- **Upgraded Node.js runtime from node20 to node24**",
+      "  > Make sure your runner is on version v2.327.1 or later to ensure compatibility with this release. See [Release Notes](https://github.com/actions/runner/releases/tag/v2.327.1)",
+      "- [Using `setup-go` on GHES](docs/advanced-usage.md#using-setup-go-on-ghes)"
+    ],
+    "contracts": [
+      {
+        "action": "actions/setup-go",
+        "newSourceDigest": "sha256:cbfae748992b96b9a1bfa3f1679d17c898c78375aad8a0d0184820683c82c482",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "ebb00c4462c87740b2cd811941f13ecb03a9d1b417a0db745c5c2df858cdebea",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/setup/index.js",
+          "post": "dist/cache-save/index.js",
+          "post-if": "success()",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "40f1582b2485089dde7abd97c1529aa768e1baff": "5.6.0"
+    },
+    "latest": "7.0.0",
+    "latestCommit": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+    "metadataDigest": "sha256:6e505cbdb51d8d6f3d49037284e518c3fbc64ff8f5a36f4f74c721c23c8139f9; sha256:dba8498a2506f7b926b2a5ccbce2416cf6a246817bc1519743bd6437a8bebaa4",
+    "observedAt": "2026-10-09T19:27:01.608675+00:00",
+    "releasedAt": "2026-07-16T02:50:50+00:00",
+    "repo": "actions/setup-go"
+  },
+  {
+    "compatibilityNotes": [
+      "### Breaking change",
+      "## Breaking changes in V6",
+      "## Breaking changes in V5",
+      "- Upgraded action from node20 to node24.",
+      "  > Make sure your runner is on version v2.327.1 or later to ensure compatibility with this release. [See Release Notes](https://github.com/actions/runner/releases/tag/v2.327.1)",
+      "    # When running on GHES, you can pass a personal access token for github.com if you are experiencing rate limiting.",
+      "For information regarding locally cached versions of Node.js on GitHub hosted runners, check out [GitHub Actions Runner Images](https://github.com/actions/runner-images).",
+      "**Note:** Like the other values, `*` will get the latest [locally-cached Node.js version](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2204-Readme.md#nodejs), or the latest version from [actions/node-versions](https://github.com/actions/node-versions/blob/main/versions-manifest.json), depending on the [`check-latest`](docs/advanced-usage.md#check-latest-version) input.",
+      "## Using `setup-node` on GHES",
+      "`setup-node` comes pre-installed on the appliance with GHES if Actions is enabled. When dynamically downloading Nodejs distributions, `setup-node` downloads distributions from [`actions/node-versions`](https://github.com/actions/node-versions) on github.com (outside of the appliance). These calls to `actions/node-versions` are made via unauthenticated requests, which are limited to [60 requests per hour per IP](https://docs.github.com/en/rest/overview/resources-in-the-rest-api#rate-limiting). If more requests are made within the time frame, then you will start to see rate-limit errors during downloading that looks like: `##[error]API rate limit exceeded for...`. After that error the action will try to download versions directly from the official site, but it also can have rate limit so it's better to put token.",
+      "If the runner is not able to access github.com, any Nodejs versions requested during a workflow run must come from the runner's tool cache. See \"[Setting up the tool cache on self-hosted runners without internet access](https://docs.github.com/en/enterprise-server@3.2/admin/github-actions/managing-access-to-actions-from-githubcom/setting-up-the-tool-cache-on-self-hosted-runners-without-internet-access)\" for more information."
+    ],
+    "contracts": [
+      {
+        "action": "actions/setup-node",
+        "newSourceDigest": "sha256:84cd55863dbadfb83ed786c0bb4336553c2f4ceb52e102fccec01848f1977387",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "8aee59063ebc272d850507febb30930de2684be1b1240cf5f3dff13179fcff0b",
+        "removedInputs": [
+          "always-auth"
+        ],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/setup/index.js",
+          "post": "dist/cache-save/index.js",
+          "post-if": "success()",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "49933ea5288caeca8642d1e84afbd3f7d6820020": "4.4.0"
+    },
+    "latest": "7.1.0",
+    "latestCommit": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+    "metadataDigest": "sha256:0ac4a5ada17ddbc48205a03135c913ac63fe50a7131e3f217d2ea664790fc297; sha256:0cd72e43ce8d616e9215734988e33f9eae76ad7ab03bfc620042f9664740e7fa",
+    "observedAt": "2026-10-09T19:27:04.584817+00:00",
+    "releasedAt": "2026-10-08T02:52:34+00:00",
+    "repo": "actions/setup-node"
+  },
+  {
+    "compatibilityNotes": [
+      "> This deprecation will not impact any existing versions of GitHub Enterprise Server being used by customers.",
+      "  - [GHES Support](#ghes-support)",
+      "We will still provide security updates for this project and fix major breaking changes during this time.",
+      "## GHES Support",
+      "`upload-artifact@v4+` is not currently supported on GitHub Enterprise Server (GHES). If you are on GHES, you must use [v3.2.2](https://github.com/actions/upload-artifact/releases/tag/v3.2.2) (Node 24) or [v3.2.2-node20](https://github.com/actions/upload-artifact/releases/tag/v3.2.2-node20) (Node 20)."
+    ],
+    "contracts": [
+      {
+        "action": "actions/upload-artifact",
+        "newSourceDigest": "sha256:c5979822866a72362e609844b6ebe77d4b7e759af68cc1c2c425dcf51481fab4",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "29b21270ff44638a165ea12abb4481796770c629e513217af7b4df1aa3821177",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/upload/index.js",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "ea165f8d65b6e75b540449e92b4886f43607fa02": "4.6.2"
+    },
+    "latest": "7.0.2",
+    "latestCommit": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+    "metadataDigest": "sha256:d8cdf827616beb5f945e982a5c1ebb7c35427d1e8a7d7c27be9d0f7cd3275020; sha256:be050449232279dcea29d631a711974b74fafd3231e6cf32e43d7886c15ac9f4",
+    "observedAt": "2026-10-09T19:27:01.763401+00:00",
+    "releasedAt": "2026-10-07T10:08:14+00:00",
+    "repo": "actions/upload-artifact"
+  },
+  {
+    "compatibilityNotes": [],
+    "contracts": [
+      {
+        "action": "anchore/sbom-action/download-syft",
+        "newSourceDigest": "sha256:7713f2a7187fcda00f449002e54cbe4d20fb3282d8d12339f21f4106ce019faf",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "7713f2a7187fcda00f449002e54cbe4d20fb3282d8d12339f21f4106ce019faf",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "../dist/index.cjs",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "e22c389904149dbc22b58101806040fa8d37a610": "0.24.0"
+    },
+    "latest": "0.24.3",
+    "latestCommit": "66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c",
+    "metadataDigest": "sha256:6e020e79cf717a4aa6344796b0c1e10b1dc2a1b075f6a23b48d9c5d0403d8712; sha256:0b216a1ffad7017eb6380d85eaa8de86813adaa61b947d1afe80601d672345b1",
+    "observedAt": "2026-10-09T19:27:09.934423+00:00",
+    "releasedAt": "2026-10-02T15:35:43+00:00",
+    "repo": "anchore/sbom-action"
+  },
+  {
+    "compatibilityNotes": [
+      "GitHub Enterprise Server (GHES) uses an invalid `github.token` for `https://github.com` server."
+    ],
+    "contracts": [
+      {
+        "action": "aquasecurity/trivy-action",
+        "newSourceDigest": "sha256:c3cc09c5daa296bc02a1651f6ad1205c6839ac9f0f317ffb204bd5e641a57d73",
+        "oldSourceAvailable": false,
+        "oldSourceDigest": null,
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "steps": [
+            {
+              "if": "${{ inputs.skip-setup-trivy == 'false' }}",
+              "name": "Install Trivy",
+              "uses": "aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514",
+              "with": {
+                "cache": "${{ inputs.cache }}",
+                "token": "${{ inputs.token-setup-trivy }}",
+                "version": "${{ inputs.version }}"
+              }
+            },
+            {
+              "id": "date",
+              "name": "Get current date",
+              "run": "echo \"date=$(date +'%Y-%m-%d')\" >> $GITHUB_OUTPUT",
+              "shell": "bash"
+            },
+            {
+              "if": "${{ inputs.cache == 'true' }}",
+              "name": "Restore DB from cache",
+              "uses": "actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae",
+              "with": {
+                "key": "cache-trivy-${{ steps.date.outputs.date }}",
+                "path": "${{ inputs.cache-dir }}",
+                "restore-keys": "cache-trivy-"
+              }
+            },
+            {
+              "env": {
+                "GITHUB_ACTION_PATH": "${{ github.action_path }}"
+              },
+              "name": "Set GitHub Path",
+              "run": "echo \"$GITHUB_ACTION_PATH\" >> $GITHUB_PATH",
+              "shell": "bash"
+            },
+            {
+              "name": "Clear Trivy Envs file",
+              "run": "rm -f trivy_envs.txt\ntouch trivy_envs.txt\n",
+              "shell": "bash"
+            },
+            {
+              "env": {
+                "INPUT_DOCKER_HOST": "${{ inputs.docker-host }}",
+                "INPUT_EXIT_CODE": "${{ inputs.exit-code }}",
+                "INPUT_FORMAT": "${{ inputs.format }}",
+                "INPUT_HIDE_PROGRESS": "${{ inputs.hide-progress }}",
+                "INPUT_IGNORE_POLICY": "${{ inputs.ignore-policy }}",
+                "INPUT_IGNORE_UNFIXED": "${{ inputs.ignore-unfixed }}",
+                "INPUT_INPUT": "${{ inputs.input }}",
+                "INPUT_LIST_ALL_PKGS": "${{ inputs.list-all-pkgs }}",
+                "INPUT_OUTPUT": "${{ inputs.output }}",
+                "INPUT_SCANNERS": "${{ inputs.scanners }}",
+                "INPUT_SEVERITY": "${{ inputs.severity }}",
+                "INPUT_SKIP_DIRS": "${{ inputs.skip-dirs }}",
+                "INPUT_SKIP_FILES": "${{ inputs.skip-files }}",
+                "INPUT_TEMPLATE": "${{ inputs.template }}",
+                "INPUT_TF_VARS": "${{ inputs.tf-vars }}",
+                "INPUT_TIMEOUT": "${{ inputs.timeout }}",
+                "INPUT_TRIVY_CONFIG": "${{ inputs.trivy-config }}",
+                "INPUT_VULN_TYPE": "${{ inputs.vuln-type }}"
+              },
+              "name": "Set Trivy environment variables",
+              "run": "# Note: There is currently no way to distinguish between undefined variables and empty strings in GitHub Actions.\n# This limitation affects how we handle default values and empty inputs.\n# For more information, see: https://github.com/actions/runner/issues/924\n\n# The following logic implements the configuration priority described in the README:\n#\n# Inputs\n# Environment Variables\n# Config File\n# Defaults\n#\n# As noted above defaults are awkward to handle as GitHub Actions will inject those values as the input\n# if the caller doesn't provide them, thus if the input matches the default we don't set it as we\n# can't tell the difference.  Plus if we did set it when it was the default value then it could potentially\n# override an external environment variable, or something in the callers configuration file, which then wouldn't\n# match the configuration priority that is documented.\nset_env_var_if_provided() {\n  local var_name=\"$1\"\n  local input_value=\"$2\"\n  local default_value=\"$3\"\n\n  if [ -n \"$input_value\" ] && [ \"$input_value\" != \"$default_value\" ]; then\n    # If action was provided with explicit input by the caller set that\n    # Use printf %q to safely escape special characters and prevent command injection\n    printf 'export %s=%q\\n' \"$var_name\" \"$input_value\" >> trivy_envs.txt\n  fi\n}\n\n# Set environment variables, handling those with default values\n# cf. https://aquasecurity.github.io/trivy/latest/docs/configuration/#environment-variables\nset_env_var_if_provided \"TRIVY_INPUT\" \"$INPUT_INPUT\" \"\"\nset_env_var_if_provided \"TRIVY_EXIT_CODE\" \"$INPUT_EXIT_CODE\" \"\"\nset_env_var_if_provided \"TRIVY_IGNORE_UNFIXED\" \"$INPUT_IGNORE_UNFIXED\" \"false\"\nset_env_var_if_provided \"TRIVY_PKG_TYPES\" \"$INPUT_VULN_TYPE\" \"os,library\"\nset_env_var_if_provided \"TRIVY_SEVERITY\" \"$INPUT_SEVERITY\" \"UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL\"\nset_env_var_if_provided \"TRIVY_FORMAT\" \"$INPUT_FORMAT\" \"table\"\nset_env_var_if_provided \"TRIVY_TEMPLATE\" \"$INPUT_TEMPLATE\" \"\"\nset_env_var_if_provided \"TRIVY_OUTPUT\" \"$INPUT_OUTPUT\" \"\"\nset_env_var_if_provided \"TRIVY_SKIP_DIRS\" \"$INPUT_SKIP_DIRS\" \"\"\nset_env_var_if_provided \"TRIVY_SKIP_FILES\" \"$INPUT_SKIP_FILES\" \"\"\nset_env_var_if_provided \"TRIVY_TIMEOUT\" \"$INPUT_TIMEOUT\" \"\"\nset_env_var_if_provided \"TRIVY_IGNORE_POLICY\" \"$INPUT_IGNORE_POLICY\" \"\"\nset_env_var_if_provided \"TRIVY_QUIET\" \"$INPUT_HIDE_PROGRESS\" \"\"\nset_env_var_if_provided \"TRIVY_LIST_ALL_PKGS\" \"$INPUT_LIST_ALL_PKGS\" \"false\"\nset_env_var_if_provided \"TRIVY_SCANNERS\" \"$INPUT_SCANNERS\" \"\"\nset_env_var_if_provided \"TRIVY_CONFIG\" \"$INPUT_TRIVY_CONFIG\" \"\"\nset_env_var_if_provided \"TRIVY_TF_VARS\" \"$INPUT_TF_VARS\" \"\"\nset_env_var_if_provided \"TRIVY_DOCKER_HOST\" \"$INPUT_DOCKER_HOST\" \"\"\n",
+              "shell": "bash"
+            },
+            {
+              "env": {
+                "INPUT_GITHUB_PAT": "${{ inputs.github-pat }}",
+                "INPUT_IMAGE_REF": "${{ inputs.image-ref }}",
+                "INPUT_LIMIT_SEVERITIES_FOR_SARIF": "${{ inputs.limit-severities-for-sarif }}",
+                "INPUT_SCAN_REF": "${{ inputs.scan-ref }}",
+                "INPUT_SCAN_TYPE": "${{ inputs.scan-type }}",
+                "INPUT_TRIVYIGNORES": "${{ inputs.trivyignores }}",
+                "TRIVY_CACHE_DIR": "${{ inputs.cache-dir }}"
+              },
+              "name": "Run Trivy",
+              "run": "entrypoint.sh",
+              "shell": "bash"
+            },
+            {
+              "if": "${{ always() }}",
+              "name": "Remove Trivy Envs file",
+              "run": "rm -f trivy_envs.txt\n",
+              "shell": "bash"
+            }
+          ],
+          "using": "composite"
+        }
+      }
+    ],
+    "current": {
+      "6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8": "0.24.0"
+    },
+    "latest": "0.36.0",
+    "latestCommit": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
+    "metadataDigest": "sha256:d32bdce2b2ace4f42da364a4381a8147c316f8c91658205553b0086cb72c2ca3; sha256:74ed74b30d56e285b3171fbbefc12cf30f196a059d5e6ba5fc984569d63834bc",
+    "observedAt": "2026-10-09T19:27:07.626582+00:00",
+    "releasedAt": "2026-04-22T09:39:33+00:00",
+    "repo": "aquasecurity/trivy-action"
+  },
+  {
+    "compatibilityNotes": [
+      "Install a specific version of helm binary on the runner."
+    ],
+    "contracts": [
+      {
+        "action": "azure/setup-helm",
+        "newSourceDigest": "sha256:a80a29bbe87c77663a47a75d4163cf54f0bd24ae2485b868dd81d6758ec29647",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "10de0b290d182ef312355f2f3472f57730f700d26aa839e0ab4bbd4eaebf8bd8",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "lib/index.js",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "1a275c3b69536ee54be43f2070a358922e12c8d4": "4.3.1"
+    },
+    "latest": "5.0.1",
+    "latestCommit": "9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310",
+    "metadataDigest": "sha256:0b993c0074d648a27ed3811cc1adc572bc12ff66106658b3c366567bcec55d17; sha256:981db40ba20384ddc42a923b0140eac47e375f739fc8cd6d8006d7d3ef225cac",
+    "observedAt": "2026-10-09T19:27:04.498780+00:00",
+    "releasedAt": "2026-06-23T20:07:19+00:00",
+    "repo": "azure/setup-helm"
+  },
+  {
+    "compatibilityNotes": [],
+    "contracts": [
+      {
+        "action": "docker/build-push-action",
+        "newSourceDigest": "sha256:5c1ade75252eabe541b96cc39a2165a07c8850f9bcd3f9b75f5394fbdfb215fd",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "fd0c4465c0d8241bb56e7b88e5653e9431ee4f50d941bf28a6e897823636688b",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/index.cjs",
+          "post": "dist/index.cjs",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "10e90e3645eae34f1e60eeb005ba3a3d33f178e8": "6.19.2"
+    },
+    "latest": "7.4.0",
+    "latestCommit": "c3c9e263c25d99ce0380d002d59b67737d91b0dc",
+    "metadataDigest": "sha256:2549dd158a0d6aec6d9d37dd009ecacfeeeb6ceeefdc46f42fce766884523fae; sha256:8adadb6f360b6ad15ec8271381440868efb00d00c5050d1c948668e9afa76ab7",
+    "observedAt": "2026-10-09T19:27:07.369056+00:00",
+    "releasedAt": "2026-09-15T08:22:01+00:00",
+    "repo": "docker/build-push-action"
+  },
+  {
+    "compatibilityNotes": [
+      "authentication token embedded in GitHub-hosted runners, which is used for",
+      "In this example, base images are pulled using the embedded GitHub-hosted runner"
+    ],
+    "contracts": [
+      {
+        "action": "docker/login-action",
+        "newSourceDigest": "sha256:e65e6bdc57fc10adcee036a393229aae6b9a9f451b69528f4ff50d4b0e93f156",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "049f7114868ef02037f551d4e346b92c2deab0afce85d8e0a4f413938a4c5810",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/index.cjs",
+          "post": "dist/index.cjs",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "c94ce9fb468520275223c153574b00df6fe4bcc9": "3.7.0"
+    },
+    "latest": "4.6.0",
+    "latestCommit": "dbcb813823bdd20940b903addbd779551569679f",
+    "metadataDigest": "sha256:8d22f58b70b4b993e72e7eaf4a7a9171554d3da986e9a8356782d1654aa6cac1; sha256:9d174495812c9f3c2a1e72cc3d78a38cf290b1981791d0d48ad9c7247193d871",
+    "observedAt": "2026-10-09T19:27:10.482869+00:00",
+    "releasedAt": "2026-07-29T12:12:00+00:00",
+    "repo": "docker/login-action"
+  },
+  {
+    "compatibilityNotes": [
+      "| `keep-state`                 | Bool     | `false`            | Keep BuildKit state on `cleanup`. This is only useful on persistent self-hosted runners                                                                                     |"
+    ],
+    "contracts": [
+      {
+        "action": "docker/setup-buildx-action",
+        "newSourceDigest": "sha256:9c55229011a0566758962f36c74309c8ab06f8905a5997591a6a46319401ab38",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "54c34591e6a6eb35505b7bc08171ea27f7cd6d173119a5723e3c612f9333305c",
+        "removedInputs": [
+          "config",
+          "config-inline",
+          "install"
+        ],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/index.cjs",
+          "post": "dist/index.cjs",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f": "3.12.0"
+    },
+    "latest": "4.4.1",
+    "latestCommit": "f87e5991a6d7451dcb8d9637bfbc97413f497069",
+    "metadataDigest": "sha256:2545afe2817170839f8e1dfd41daf47c6b63cf48bc7b4fe3796b7ea4182db300; sha256:c46619b167490054d8789a3ab5717824181fdd84f3950bf39e23b08be52afb05",
+    "observedAt": "2026-10-09T19:27:07.088623+00:00",
+    "releasedAt": "2026-09-16T07:50:21+00:00",
+    "repo": "docker/setup-buildx-action"
+  },
+  {
+    "compatibilityNotes": [
+      "containers built for another architecture on the GitHub-hosted runner."
+    ],
+    "contracts": [
+      {
+        "action": "docker/setup-qemu-action",
+        "newSourceDigest": "sha256:9c74c218c37b889976b0af59861f3fceaec87bd12da00bf6dc37ded77d8954f8",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "edbf813b76da75e74220791b28e766e7ec0da4cc17c5022dc25269f0f430e144",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "dist/index.cjs",
+          "post": "dist/index.cjs",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "c7c53464625b32c7a7e944ae62b3e17d2b600130": "3.7.0"
+    },
+    "latest": "4.4.0",
+    "latestCommit": "99012661954931238ded8c8b007157a8430204e1",
+    "metadataDigest": "sha256:f79add3dd433d9ede724034f49938ba860a596edd098afbdb253ac941e6c2bec; sha256:9fd9294d6c40e47965926084bc7e250e3194d7e2ecec87ad54ccf36011ec6bfc",
+    "observedAt": "2026-10-09T19:27:13.318140+00:00",
+    "releasedAt": "2026-09-15T09:42:21+00:00",
+    "repo": "docker/setup-qemu-action"
+  },
+  {
+    "compatibilityNotes": [
+      "## Supported versions of the CodeQL Bundle on GitHub Enterprise Server",
+      "We typically release new minor versions of the CodeQL Action and Bundle when a new minor version of GitHub Enterprise Server (GHES) is released. When a version of GHES is deprecated, the CodeQL Action and Bundle releases that shipped with it are deprecated as well.",
+      "See the full list of GHES release and deprecation dates at [GitHub Enterprise Server releases](https://docs.github.com/en/enterprise-server/admin/all-releases#releases-of-github-enterprise-server)."
+    ],
+    "contracts": [
+      {
+        "action": "github/codeql-action/upload-sarif",
+        "newSourceDigest": "sha256:6bc5b5a67b053b3bfb3d3c0b2f950e1d1baadf04aab587135ea2b47837dfcb2d",
+        "oldSourceAvailable": false,
+        "oldSourceDigest": null,
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "main": "../lib/upload-sarif-entry.js",
+          "post": "../lib/upload-sarif-post-entry.js",
+          "using": "node24"
+        }
+      }
+    ],
+    "current": {
+      "c20e34f438d671fc35777cc9820dd7adf8252874": null
+    },
+    "latest": "4.38.3",
+    "latestCommit": "24c54180a607b1449ed407dd24f251e4e9147c8d",
+    "metadataDigest": "sha256:e1a462fcbfcf0fee9131432131d578fa4b5a429b2572097814f5d7b6d77423b5; sha256:7ee7782d01e1426fc4248b860b1ea060da560bdb83fffc463c363f3fff8f13ef",
+    "observedAt": "2026-10-09T19:27:13.075465+00:00",
+    "releasedAt": "2026-10-08T13:01:01+00:00",
+    "repo": "github/codeql-action"
+  },
+  {
+    "compatibilityNotes": [
+      "This action currently supports GitHub-provided Linux, macOS and Windows runners (self-hosted runners may not work)."
+    ],
+    "contracts": [
+      {
+        "action": "sigstore/cosign-installer",
+        "newSourceDigest": "sha256:71e926bd0fb5115735340d0e9aadf031210548b8346c70cdacb27447003528ec",
+        "oldSourceAvailable": true,
+        "oldSourceDigest": "bbd7f51b170057ad223c140c8fb4dd781010d7265416bb94651c64c1bee30f37",
+        "removedInputs": [],
+        "removedOutputs": [],
+        "runs": {
+          "steps": [
+            {
+              "env": {
+                "input_cosign_release": "${{ inputs.cosign-release }}",
+                "input_install_dir": "${{ inputs.install-dir }}",
+                "input_use_sudo": "${{ inputs.use-sudo }}",
+                "runner_arch": "${{ runner.arch }}",
+                "runner_os": "${{ runner.os }}"
+              },
+              "run": "#!/bin/bash\n# Substitute environment variables in install-dir input\ninstall_dir=$(envsubst <<<\"${input_install_dir}\")\n\n# cosign install script\nshopt -s expand_aliases\nif [ -z \"$NO_COLOR\" ]; then\n  alias log_info=\"echo -e \\\"\\033[1;32mINFO\\033[0m:\\\"\"\n  alias log_error=\"echo -e \\\"\\033[1;31mERROR\\033[0m:\\\"\"\nelse\n  alias log_info=\"echo \\\"INFO:\\\"\"\n  alias log_error=\"echo \\\"ERROR:\\\"\"\nfi\nset -e\n\nCURL_RETRIES=3\n\n# This function helps compare versions.\n# Returns 0 if version1 >= version2, 1 otherwise.\n# Usage: is_version_ge \"3.0.0\" \"$version_num\"\nis_version_ge() {\n    [ \"$(printf '%s\\n' \"$1\" \"$2\" | sort -V | head -n1)\" == \"$1\" ]\n}\n\n# Check for unsupported old versions (anything below v2.0.0)\nif [[ \"${input_cosign_release}\" != \"main\" ]]; then\n  # Extract version without 'v' prefix for comparison\n  version_num=\"${input_cosign_release}\"\n  version_num=\"${version_num#v}\"\n\n  # Check if version is less than v2.0.0\n  if ! is_version_ge \"2.0.0\" \"$version_num\"; then\n    log_error \"cosign versions below v2.0.0 are no longer supported.\"\n    log_error \"Requested version: ${input_cosign_release}\"\n    log_error \"Please use cosign v2.6.0 or later.\"\n    log_error \"See https://github.com/sigstore/cosign/releases for available versions.\"\n    exit 1\n  fi\nfi\n\nmkdir -p \"${install_dir}\"\n\nif [[ \"${input_cosign_release}\" == \"main\" ]]; then\n  log_info \"installing cosign via 'go install' from its main version\"\n  GOBIN=$(go env GOPATH)/bin\n  go install github.com/sigstore/cosign/v3/cmd/cosign@main\n  ln -s \"$GOBIN/cosign\" \"${install_dir}/cosign\"\n  exit 0\nfi\n\nshaprog() {\n  case ${runner_os} in\n    Linux|linux)\n      sha256sum \"$1\" | cut -d' ' -f1\n      ;;\n    macOS|macos)\n      shasum -a256 \"$1\" | cut -d' ' -f1\n      ;;\n    Windows|windows)\n      powershell -command \"(Get-FileHash $1 -Algorithm SHA256 | Select-Object -ExpandProperty Hash).ToLower()\"\n      ;;\n    *)\n      log_error \"unsupported OS ${runner_os}\"\n      exit 1\n      ;;\n  esac\n}\n\n## curl -sL https://github.com/sigstore/cosign/releases/download/v3.0.6/cosign_checksums.txt |\\\n##   gawk 'match($2,/^cosign-([[:alnum:]]+)-([[:alnum:]]+)(\\.[[:alnum:]]+)?$/,a){printf \"bootstrap_%s_%s_sha=\\\"%s\\\"\\n\",a[1],a[2],$1}' |\\\n##   LANG=C sort\nbootstrap_version='v3.0.6'\nbootstrap_darwin_amd64_sha=\"4c3e7af8372d3ca3296e62fa56f23fcbb5721cc6ac1827900d398f110d7cd280\"\nbootstrap_darwin_arm64_sha=\"5fadd012ae6381a6a29ff86a7d39aa873878852f1073fc90b15995961ecfb084\"\nbootstrap_linux_amd64_sha=\"c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74\"\nbootstrap_linux_arm64_sha=\"bedac92e8c3729864e13d4a17048007cfafa79d5deca993a43a90ffe018ef2b8\"\nbootstrap_linux_arm_sha=\"67bd25d32daff5664caf51208c95defcb2ad7ac1296f394fa677bb8bacee62f5\"\nbootstrap_linux_ppc64le_sha=\"08c3e5e0a09c440f49e9a69d8639d37fbec522ec8c5c0ac805243b098e6ea512\"\nbootstrap_linux_riscv64_sha=\"e25952e798958b0f9168d044153ccc353f5469ca4b71a1707dffad0534d27017\"\nbootstrap_linux_s390x_sha=\"3cf4b769258ed9cc3c2a93268c0d5c1cc3fbd094af8df21035cbac8fb0d7c088\"\nbootstrap_windows_amd64_sha=\"9b85a88ebff2d9dd30ff4984a6f61f2cedc232dd87d81fa7f2ff3c0ed96c241c\"\n\ncosign_executable_name=cosign\n\ntrap \"popd >/dev/null\" EXIT\n\npushd \"${install_dir}\" > /dev/null\n\ncase ${runner_os} in\n  Linux|linux)\n    case ${runner_arch} in\n      X64|amd64)\n        bootstrap_filename='cosign-linux-amd64'\n        bootstrap_sha=${bootstrap_linux_amd64_sha}\n        desired_cosign_filename='cosign-linux-amd64'\n        ;;\n\n      ARM|arm)\n        bootstrap_filename='cosign-linux-arm'\n        bootstrap_sha=${bootstrap_linux_arm_sha}\n        desired_cosign_filename='cosign-linux-arm'\n        ;;\n\n      ARM64|arm64)\n        bootstrap_filename='cosign-linux-arm64'\n        bootstrap_sha=${bootstrap_linux_arm64_sha}\n        desired_cosign_filename='cosign-linux-arm64'\n        ;;\n\n      *)\n        log_error \"unsupported architecture ${runner_arch}\"\n        exit 1\n        ;;\n    esac\n    ;;\n\n  macOS|macos)\n    case ${runner_arch} in\n      X64|amd64)\n        bootstrap_filename='cosign-darwin-amd64'\n        bootstrap_sha=${bootstrap_darwin_amd64_sha}\n        desired_cosign_filename='cosign-darwin-amd64'\n        ;;\n\n      ARM64|arm64)\n        bootstrap_filename='cosign-darwin-arm64'\n        bootstrap_sha=${bootstrap_darwin_arm64_sha}\n        desired_cosign_filename='cosign-darwin-arm64'\n        ;;\n\n      *)\n        log_error \"unsupported architecture ${runner_arch}\"\n        exit 1\n        ;;\n    esac\n    ;;\n\n  Windows|windows)\n    case ${runner_arch} in\n      X64|amd64)\n        bootstrap_filename='cosign-windows-amd64.exe'\n        bootstrap_sha=${bootstrap_windows_amd64_sha}\n        desired_cosign_filename='cosign-windows-amd64.exe'\n        cosign_executable_name=cosign.exe\n        ;;\n      *)\n        log_error \"unsupported architecture ${runner_arch}\"\n        exit 1\n        ;;\n    esac\n    ;;\n  *)\n    log_error \"unsupported os ${runner_os}\"\n    exit 1\n    ;;\nesac\n\nSUDO=\nif [[ \"${input_use_sudo}\" == \"true\" ]] && command -v sudo >/dev/null; then\n  SUDO=sudo\nfi\n\nexpected_bootstrap_version_digest=${bootstrap_sha}\nlog_info \"Downloading bootstrap version '${bootstrap_version}' of cosign to verify version to be installed...\\n      https://github.com/sigstore/cosign/releases/download/${bootstrap_version}/${bootstrap_filename}\"\n$SUDO curl --retry \"${CURL_RETRIES}\" -fsSL \"https://github.com/sigstore/cosign/releases/download/${bootstrap_version}/${bootstrap_filename}\" -o \"${cosign_executable_name}\"\nshaBootstrap=$(shaprog \"${cosign_executable_name}\")\nif [[ \"$shaBootstrap\" != \"${expected_bootstrap_version_digest}\" ]]; then\n  log_error \"Unable to validate cosign version: '${input_cosign_release}'\"\n  exit 1\nfi\n$SUDO chmod +x \"${cosign_executable_name}\"\n\n# If the bootstrap and specified `cosign` releases are the same, we're done.\nif [[ \"${input_cosign_release}\" == \"${bootstrap_version}\" ]]; then\n  log_info \"bootstrap version successfully verified and matches requested version so nothing else to do\"\n  exit 0\nfi\n\nsemver='^v([0-9]+\\.){0,2}(\\*|[0-9]+)(-?r?c?)(\\.[0-9]+)$'\nif [[ \"${input_cosign_release}\" =~ $semver ]]; then\n  log_info \"Custom cosign version '${input_cosign_release}' requested\"\nelse\n  log_error \"Unable to validate requested cosign version: '${input_cosign_release}'\"\n  exit 1\nfi\n\n# Download custom cosign\nlog_info \"Downloading platform-specific version '${input_cosign_release}' of cosign...\\n      https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${desired_cosign_filename}\"\n$SUDO curl --retry \"${CURL_RETRIES}\" -fsSL \"https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${desired_cosign_filename}\" -o \"cosign_${input_cosign_release}\"\nshaCustom=$(shaprog \"cosign_${input_cosign_release}\");\n\n# same hash means it is the same release\nif [[ \"$shaCustom\" != \"$shaBootstrap\" ]]; then\n  log_info \"Downloading cosign public key '${input_cosign_release}' of cosign...\\n    https://raw.githubusercontent.com/sigstore/cosign/${input_cosign_release}/release/release-cosign.pub\"\n  RELEASE_COSIGN_PUB_KEY=https://raw.githubusercontent.com/sigstore/cosign/${input_cosign_release}/release/release-cosign.pub\n  RELEASE_COSIGN_PUB_KEY_SHA='f4cea466e5e887a45da5031757fa1d32655d83420639dc1758749b744179f126'\n\n  log_info \"Verifying public key matches expected value\"\n  $SUDO curl --retry \"${CURL_RETRIES}\" -fsSL \"$RELEASE_COSIGN_PUB_KEY\" -o public.key\n  sha_fetched_key=$(shaprog public.key)\n  if [[ \"$sha_fetched_key\" != \"$RELEASE_COSIGN_PUB_KEY_SHA\" ]]; then\n    log_error \"Fetched public key does not match expected digest, exiting\"\n    exit 1\n  fi\n\n  if is_version_ge \"3.0.1\" \"$version_num\"; then\n    # we're trying to get something greater than or equal to v3.0.1\n    keyless_signature_file=${desired_cosign_filename}.sigstore.json\n    log_info \"Downloading keyless verification bundle for platform-specific '${input_cosign_release}' of cosign...\\n      https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${keyless_signature_file}\"\n    $SUDO curl --retry \"${CURL_RETRIES}\" -fsSLO \"https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${keyless_signature_file}\"\n\n    log_info \"Using bootstrap cosign to verify keyless signature of desired cosign version\"\n    \"./${cosign_executable_name}\" verify-blob --certificate-identity=keyless@projectsigstore.iam.gserviceaccount.com --certificate-oidc-issuer=https://accounts.google.com --bundle \"${keyless_signature_file}\" \"cosign_${input_cosign_release}\"\n\n    if is_version_ge \"3.0.3\" \"$version_num\"; then\n      # we're trying to get something greater than or equal to v3.0.3\n      kms_signature_file=${desired_cosign_filename}-kms.sigstore.json\n      log_info \"Downloading KMS verification bundle for platform-specific '${input_cosign_release}' of cosign...\\n      https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${kms_signature_file}\"\n      $SUDO curl --retry \"${CURL_RETRIES}\" -fsSLO \"https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${kms_signature_file}\"\n\n      log_info \"Using bootstrap cosign to verify signature of desired cosign version\"\n      \"./${cosign_executable_name}\" verify-blob --key public.key --bundle \"${kms_signature_file}\" \"cosign_${input_cosign_release}\"\n    fi\n  else\n    signature_file=${desired_cosign_filename}.sig\n    log_info \"Downloading detached signature for platform-specific '${input_cosign_release}' of cosign...\\n      https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${signature_file}\"\n    $SUDO curl --retry \"${CURL_RETRIES}\" -fsSLO \"https://github.com/sigstore/cosign/releases/download/${input_cosign_release}/${signature_file}\"\n\n    log_info \"Using bootstrap cosign to verify signature of desired cosign version\"\n    \"./${cosign_executable_name}\" verify-blob --key public.key --signature \"${signature_file}\" \"cosign_${input_cosign_release}\"\n  fi\n\n  $SUDO rm \"${cosign_executable_name}\"\n  $SUDO mv \"cosign_${input_cosign_release}\" \"${cosign_executable_name}\"\n  $SUDO chmod +x \"${cosign_executable_name}\"\n  log_info \"Installation complete!\"\nfi\n",
+              "shell": "bash"
+            },
+            {
+              "env": {
+                "input_install_dir": "${{ inputs.install-dir }}"
+              },
+              "if": "${{ runner.os == 'Linux' || runner.os == 'macOS' }}",
+              "run": "envsubst <<<\"${input_install_dir}\" >> \"$GITHUB_PATH\"",
+              "shell": "bash"
+            },
+            {
+              "env": {
+                "input_install_dir": "${{ inputs.install-dir }}"
+              },
+              "if": "${{ runner.os == 'Windows' }}",
+              "run": "$install_dir = $ExecutionContext.InvokeCommand.ExpandString(\"${env:input_install_dir}\")\necho \"${install_dir}\" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append\n",
+              "shell": "pwsh"
+            }
+          ],
+          "using": "composite"
+        }
+      }
+    ],
+    "current": {
+      "398d4b0eeef1380460a10c8013a76f728fb906ac": "3.9.1"
+    },
+    "latest": "4.1.2",
+    "latestCommit": "6f9f17788090df1f26f669e9d70d6ae9567deba6",
+    "metadataDigest": "sha256:00b529b181cfb5f7a4c41ec9c2c6b5ebbce3f49a550dc889217d0f40d289435f; sha256:3cf685db7dc810b900a564c91e7adc13fbe8c37c2350d3876714bd474ff624b3",
+    "observedAt": "2026-10-09T19:27:04.342544+00:00",
+    "releasedAt": "2026-05-07T01:27:27+00:00",
+    "repo": "sigstore/cosign-installer"
+  }
+]

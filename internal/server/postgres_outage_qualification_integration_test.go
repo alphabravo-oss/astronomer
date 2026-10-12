@@ -43,7 +43,7 @@ const (
 	postgresOutageDatabaseEnv  = "ASTRONOMER_POSTGRES_OUTAGE_DATABASE_URL"
 	postgresOutageContainerEnv = "ASTRONOMER_POSTGRES_OUTAGE_CONTAINER"
 	postgresOutageGuardEnv     = "ASTRONOMER_POSTGRES_OUTAGE_DEDICATED"
-	postgresOutageLabel        = "astronomer.qualification=postgres-outage"
+	postgresOutageLabel        = "astronomer.qualification.role=postgres-outage"
 	postgresOutageSecret       = "POSTGRES-OUTAGE-SECRET-SENTINEL"
 )
 
@@ -61,7 +61,7 @@ func postgresOutageTypedFamily[T any](database *db.DB, name string) postgresOuta
 }
 
 // TestPostgresOutageQualification is intentionally opt-in. Its companion
-// script owns the labelled PostgreSQL 16 container that this test stops and
+// script owns the labelled PostgreSQL17/18 container that this test stops and
 // restarts while the production pool and mutation adapters stay alive.
 func TestPostgresOutageQualification(t *testing.T) {
 	databaseURL := os.Getenv(postgresOutageDatabaseEnv)
@@ -88,8 +88,12 @@ func TestPostgresOutageQualification(t *testing.T) {
 	if err := database.Pool().QueryRow(ctx, `SHOW server_version`).Scan(&postgresVersion); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(postgresVersion, "16.") {
-		t.Fatalf("PostgreSQL version = %q, want 16.x", postgresVersion)
+	major := os.Getenv("POSTGRES_QUALIFICATION_MAJOR")
+	if major != "17" && major != "18" {
+		t.Fatal("qualification requires an explicit owned PostgreSQL17/18 lane")
+	}
+	if !strings.HasPrefix(postgresVersion, major+".") {
+		t.Fatalf("PostgreSQL version = %q, want %s.x", postgresVersion, major)
 	}
 
 	families := postgresOutageFamilies(database)
@@ -260,6 +264,10 @@ func assertProductionPostgresOutageInventory(t *testing.T, families []postgresOu
 	wired := make(map[string]struct{}, len(matches))
 	for _, match := range matches {
 		name := strings.ReplaceAll(match[1], "deliveryhandler.", "delivery.")
+		if name == "handler.UserPreferencesMutationTx" {
+			// Reflection reports the defining package for this exported type alias.
+			name = reflect.TypeOf((*handler.UserPreferencesMutationTx)(nil)).Elem().String()
+		}
 		if !strings.Contains(name, ".") {
 			name = "server." + name
 		}
@@ -874,9 +882,9 @@ func postgresOutageMarkerKey(phase, family string) string {
 
 func assertPostgresOutageContainer(t *testing.T, container string) {
 	t.Helper()
-	command := exec.Command("docker", "inspect", "--format", `{{index .Config.Labels "astronomer.qualification"}}`, container)
+	command := exec.Command("docker", "inspect", "--format", `{{index .Config.Labels "astronomer.qualification"}}|{{index .Config.Labels "astronomer.qualification.role"}}`, container)
 	output, err := command.Output()
-	if err != nil || strings.TrimSpace(string(output)) != "postgres-outage" {
+	if err != nil || strings.TrimSpace(string(output)) != "disposable-runtime|postgres-outage" {
 		t.Fatalf("dedicated PostgreSQL outage container guard failed")
 	}
 }
@@ -909,4 +917,8 @@ func waitForPostgresOutageRecovery(t *testing.T, ctx context.Context, database *
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("PostgreSQL did not recover within 20 seconds: %v", lastErr)
+}
+
+func TestPostgresOutageInventoryTracksProductionAliases(t *testing.T) {
+	assertProductionPostgresOutageInventory(t, postgresOutageFamilies(nil))
 }

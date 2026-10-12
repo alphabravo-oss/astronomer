@@ -63,7 +63,9 @@ test("delivery target picks a late bundle and advances past ineligible versions"
             {
               id: offset ? "ready-version" : "pending-version",
               version: offset ? "2" : "1",
-              state: offset ? "ready" : "pending",
+              renderer: "kustomize",
+              renderer_spec: { kind: "kustomize" },
+              state: offset ? "ready" : "resolving",
               verification_status: offset ? "verified" : "pending",
             },
           ],

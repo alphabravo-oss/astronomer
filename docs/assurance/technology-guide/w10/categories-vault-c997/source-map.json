@@ -1,0 +1,166 @@
+{
+  "sourceCommit": "c997325932b3a0e982177bee126aa9ea276b7b91",
+  "baseCommit": "08173c5308639c3c1c4ccab75271c89120c2f508",
+  "files": [
+    {
+      "path": "docs/architecture/complexity-baseline.json",
+      "sha256": "e1935891644310c453662dba792bc4fea16cee079f263f6e1e22afdbeb37fd5d",
+      "size": 7226
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/category-and-phase-owners.md",
+      "sha256": "5877a0b714289c1b0bdb761b7e0b8e0b94edeacd11c631f9f92869dde8861ada",
+      "size": 4243
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/vault-owner-contract.md",
+      "sha256": "4941c85ea06f98664c7062854582214b4c335c2596eecf1c5abedcb8dadc87cb",
+      "size": 4440
+    },
+    {
+      "path": "docs/vault-integration.md",
+      "sha256": "4e8a355b8387b1fe0e70c993ee3fb98eadb2019995ab4413948ed2a6e63b02f8",
+      "size": 5820
+    },
+    {
+      "path": "internal/agent/state_metric_categories_test.go",
+      "sha256": "f11f32de9eeba686c6ee49a7c97fb22a5fa6e8031219b8cf59efe7c10fbfe4ec",
+      "size": 3213
+    },
+    {
+      "path": "internal/agent/state_subscriber.go",
+      "sha256": "5cd327a4ac85479b4be44c58bf4b17a0576cba1ec5f94d2ed2474402c46dc7c5",
+      "size": 39363
+    },
+    {
+      "path": "internal/handler/vault.go",
+      "sha256": "c21d82de90bf649993ad329c97115c5ea1216caa96f6b9f4d83b5da301565f12",
+      "size": 30097
+    },
+    {
+      "path": "internal/handler/vault_health.go",
+      "sha256": "59cf84f90b2ae0c909b0bed99155cb2dcddfcd40fcb34f205d7fa1765c4db50a",
+      "size": 2620
+    },
+    {
+      "path": "internal/handler/vault_probe.go",
+      "sha256": "52f181d2fda8f61e3a1673ded13a30e96c85f9d66171eca883662af60716eb1f",
+      "size": 3299
+    },
+    {
+      "path": "internal/observability/metric_categories.go",
+      "sha256": "7851ec566bf81a7ef14cce804f09c6a8bdf11d2f2f5ce8621764c9c2bb28211c",
+      "size": 1349
+    },
+    {
+      "path": "internal/observability/metric_categories_contract_test.go",
+      "sha256": "a5e5cc60ebeae9d28fa966c1e7cbb967293c42054e4b4287eee2f40c3d3572d0",
+      "size": 1675
+    },
+    {
+      "path": "internal/observability/owner_metrics_health_test.go",
+      "sha256": "b7350a8e933d1c93a71990d38a4b9f4507f33377d29d65eb256d3badf71ca764",
+      "size": 1554
+    },
+    {
+      "path": "internal/observability/registration_metric_owners.go",
+      "sha256": "daa068c36d62dc105bdc0f8a1e79eb18f9a701abba685525ce6cb81c7450d94e",
+      "size": 4126
+    },
+    {
+      "path": "internal/observability/registration_metric_owners_test.go",
+      "sha256": "cbf9622d3c5010c9208b351b66fe7858aed6ce23e580420fd3537f0b087dcb37",
+      "size": 4346
+    },
+    {
+      "path": "internal/observability/registration_metric_snapshot.go",
+      "sha256": "9aa530d5d8426561943a20c50e355378612aae8056ba405b594d4d87364395f0",
+      "size": 4320
+    },
+    {
+      "path": "internal/observability/registration_metric_snapshot_test.go",
+      "sha256": "708bdbe4dc7c2fd9d22f9085eac5809a3e60ab0534bcbff634cc2707ae4a5043",
+      "size": 5685
+    },
+    {
+      "path": "internal/observability/registration_metrics.go",
+      "sha256": "88c9379a5d9849f2b6a499bf8b74b31bc6a942589be319252f132d7750391ee2",
+      "size": 2639
+    },
+    {
+      "path": "internal/observability/vault_metric_owners.go",
+      "sha256": "b64c732dac224b9076a912530ce6e64d430e441559b25f169ab0156725b503c0",
+      "size": 5642
+    },
+    {
+      "path": "internal/observability/vault_metric_owners_test.go",
+      "sha256": "af468c132628067c48c51607fef8eb8fd6d1b28cc7f8e36c338bb04f8c7c0760",
+      "size": 6039
+    },
+    {
+      "path": "internal/observability/vault_metrics.go",
+      "sha256": "ed7fea602a7d2022d2a4d2d3fb9996cb68a901e742315ea4034f704bfbd2c182",
+      "size": 2785
+    },
+    {
+      "path": "internal/observability/vault_metrics_health.go",
+      "sha256": "7b5076b715a61773c75b5d960263829d5994727b9180f0719f74bb62daf42a63",
+      "size": 1222
+    },
+    {
+      "path": "internal/registration/transaction.go",
+      "sha256": "09cc8a9e86852a2a807558bd00e1fcf67833e612db363e9b0c83f129ecf4853b",
+      "size": 4431
+    },
+    {
+      "path": "internal/registration/transaction_metrics_test.go",
+      "sha256": "402de93fa1a9ff97cd5b3f4b66b7f4083a44fa5e65015a5427781b207e242829",
+      "size": 1131
+    },
+    {
+      "path": "internal/server/app_runtime_services.go",
+      "sha256": "01370bb75f0206a26fda83018c865ee3bd9d750c29a46cce3902bce6e06a888a",
+      "size": 5934
+    },
+    {
+      "path": "internal/server/registration_metrics_snapshot.go",
+      "sha256": "daf8d497452b9ce2fbba900681065307bc8a4020dbdbab373f0f671fc35ad545",
+      "size": 3157
+    },
+    {
+      "path": "internal/server/registration_metrics_snapshot_test.go",
+      "sha256": "e13a3828e725d1335b563f4bffa033f1e6df7ba17186d6dbec6c76552cae1c2d",
+      "size": 5654
+    },
+    {
+      "path": "internal/server/vault_metrics_snapshot.go",
+      "sha256": "4553f4a906a26709d3b40cb0c88a2b24b7ba10ca7bac0ef90c47eba760aa8ddd",
+      "size": 3014
+    },
+    {
+      "path": "internal/server/vault_metrics_snapshot_test.go",
+      "sha256": "06ae25306c2e30b148a26ca643aa3762dbb91d664cd295f87030c66fe0ab0499",
+      "size": 3240
+    },
+    {
+      "path": "internal/server/vault_observer.go",
+      "sha256": "23fb637247d6c5ce5ac1ddb912b74d618497b576f8d4d79655dbd91a2cca9230",
+      "size": 4526
+    },
+    {
+      "path": "internal/server/vault_observer_lifetime_test.go",
+      "sha256": "877818b269c7cda674e957df30c5a07ceac896b050c3c86c4833e1d3d29e7d9b",
+      "size": 4304
+    },
+    {
+      "path": "internal/tunnel/handler.go",
+      "sha256": "569b7b1569309c7d8f8795ad5298824d092c6d4ab92406d6aa149f679afbf391",
+      "size": 35594
+    },
+    {
+      "path": "internal/vault/resolver.go",
+      "sha256": "9a1bed01a6fb440bcfd4cf2e2f01ed97214a7361ab98fccc7c467cbe920b313e",
+      "size": 18402
+    }
+  ]
+}

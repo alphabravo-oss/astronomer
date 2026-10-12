@@ -20,7 +20,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -247,24 +246,6 @@ func validateNamespace(ns string) error {
 // Template CRUD
 // ────────────────────────────────────────────────────────────────────────
 
-// ListTemplates handles GET /api/v1/admin/network-policy-templates/.
-func (h *NetworkPolicyHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
-	items, err := h.queries.ListNetworkPolicyTemplates(r.Context(), sqlc.ListNetworkPolicyTemplatesParams{
-		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryOffset(r)),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list network policy templates")
-		return
-	}
-	total, _ := h.queries.CountNetworkPolicyTemplates(r.Context())
-	resp := make([]NetworkPolicyTemplateResponse, 0, len(items))
-	for _, t := range items {
-		resp = append(resp, networkPolicyTemplateToResponse(t))
-	}
-	paging.Write(w, resp, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(resp)))
-}
-
 // GetTemplate handles GET /api/v1/admin/network-policy-templates/{id}/.
 func (h *NetworkPolicyHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -286,7 +267,7 @@ func (h *NetworkPolicyHandler) GetTemplate(w http.ResponseWriter, r *http.Reques
 // bootstrap from a builtin slug.
 func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var req CreateNetworkPolicyTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -384,7 +365,7 @@ func (h *NetworkPolicyHandler) UpdateTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req CreateNetworkPolicyTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -521,7 +502,7 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 		return
 	}
 	var req ApplyNetworkPolicyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

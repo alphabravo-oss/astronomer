@@ -22,6 +22,7 @@ import (
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -60,13 +61,14 @@ type Provisioner struct {
 	previewer    Previewer
 	planner      Planner
 	registration Registration
+	catalog      CatalogLoader
 }
 
-func NewProvisioner(pool *pgxpool.Pool, previewer Previewer, planner Planner, registration Registration) (*Provisioner, error) {
-	if pool == nil || previewer == nil || planner == nil || registration == nil {
+func NewProvisioner(pool *pgxpool.Pool, previewer Previewer, planner Planner, registration Registration, catalog CatalogLoader) (*Provisioner, error) {
+	if pool == nil || previewer == nil || planner == nil || registration == nil || catalog == nil {
 		return nil, errors.New("built-in delivery provisioner dependencies are required")
 	}
-	return &Provisioner{pool: pool, previewer: previewer, planner: planner, registration: registration}, nil
+	return &Provisioner{pool: pool, previewer: previewer, planner: planner, registration: registration, catalog: catalog}, nil
 }
 
 type registrationState struct {
@@ -89,6 +91,7 @@ type sourceIdentity struct {
 	id   uuid.UUID
 	name string
 	url  string
+	kind model.SourceType
 }
 
 // Reconcile is called after an authenticated delivery status commit. Errors do
@@ -104,7 +107,7 @@ func (p *Provisioner) Reconcile(ctx context.Context, clusterID uuid.UUID) error 
 	if !state.shouldReconcile() {
 		return nil
 	}
-	catalog, err := builtinbundles.Load()
+	catalog, err := p.loadCatalog(ctx)
 	if err != nil {
 		return err
 	}
@@ -145,22 +148,14 @@ func (p *Provisioner) Reconcile(ctx context.Context, clusterID uuid.UUID) error 
 }
 
 func (p *Provisioner) loadRegistrationState(ctx context.Context, clusterID uuid.UUID) (registrationState, error) {
-	var state registrationState
-	err := p.pool.QueryRow(ctx, `
-		SELECT c.registration_phase, c.is_local,
-		       COALESCE(c.install_baseline, false),
-		       COALESCE(c.annotations ->> 'astronomer.io/image-scanning', '') = 'disabled',
-		       EXISTS (
-		           SELECT 1 FROM delivery_controller_inventory i
-		           WHERE i.cluster_id=c.id AND i.ready=true AND i.compatibility_status='compatible'
-		       ),
-		       (SELECT s.created_at FROM cluster_registration_steps s
-		        WHERE s.cluster_id=c.id AND s.step_name='delivery_retry_requested'
-		        ORDER BY s.created_at DESC,s.step_order DESC LIMIT 1)
-		FROM clusters c WHERE c.id=$1 AND c.decommissioned_at IS NULL`, clusterID).
-		Scan(&state.phase, &state.isLocal, &state.install, &state.scanningDisabled, &state.inventoryReady, &state.latestRetryTime)
+	row, err := sqlc.New(p.pool).GetBuiltinRegistrationState(ctx, clusterID)
 	if err != nil {
 		return registrationState{}, fmt.Errorf("load built-in registration state: %w", err)
+	}
+	state := registrationState{phase: registration.Phase(row.RegistrationPhase), isLocal: row.IsLocal,
+		install: row.InstallBaseline, scanningDisabled: row.ScanningDisabled, inventoryReady: row.InventoryReady}
+	if row.LatestRetryFound {
+		state.latestRetryTime = &row.LatestRetryTime
 	}
 	return state, nil
 }
@@ -187,6 +182,7 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 		return nil, fmt.Errorf("acquire built-in delivery connection: %w", err)
 	}
 	locked := false
+	session := sqlc.New(conn)
 	defer func() {
 		if !locked {
 			conn.Release()
@@ -194,10 +190,7 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		var unlocked bool
-		unlockErr := conn.QueryRow(cleanupCtx,
-			`SELECT pg_advisory_unlock(hashtextextended('astronomer-builtins:' || $1::text, 0))`, clusterID).
-			Scan(&unlocked)
+		unlocked, unlockErr := session.UnlockBuiltinAssetsSession(cleanupCtx, clusterID.String())
 		if unlockErr == nil && unlocked {
 			conn.Release()
 			return
@@ -209,7 +202,7 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 	// PostgreSQL fixes a serializable snapshot at the first statement; waiting
 	// for this lock inside the transaction would leave queued reconcilers with
 	// stale snapshots and force avoidable serialization retries.
-	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended('astronomer-builtins:' || $1::text, 0))`, clusterID); err != nil {
+	if err := session.LockBuiltinAssetsSession(ctx, clusterID.String()); err != nil {
 		return nil, fmt.Errorf("lock built-in delivery: %w", err)
 	}
 	locked = true
@@ -218,25 +211,23 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 		return nil, fmt.Errorf("begin built-in delivery transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	q := sqlc.New(tx)
 
 	projectID := stableID("project", clusterID.String())
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO projects (id,name,display_name,description,cluster_id,namespaces,resource_quota,managed_by)
-		VALUES ($1,$2,'Astronomer System','Flux-managed platform components',$3,'[]','{}','system')
-		ON CONFLICT (id) DO NOTHING`, projectID, systemProjectName, clusterID); err != nil {
+	if err := q.EnsureBuiltinSystemProject(ctx, sqlc.EnsureBuiltinSystemProjectParams{
+		ID: projectID, Name: systemProjectName, ClusterID: clusterID,
+	}); err != nil {
 		return nil, fmt.Errorf("ensure built-in project: %w", err)
 	}
-	var actualCluster uuid.UUID
-	var actualProjectName, managedBy string
-	if err := tx.QueryRow(ctx, `SELECT cluster_id,name,managed_by FROM projects WHERE id=$1`, projectID).
-		Scan(&actualCluster, &actualProjectName, &managedBy); err != nil || actualCluster != clusterID || actualProjectName != systemProjectName || managedBy != "system" {
+	project, err := q.GetBuiltinSystemProjectIdentity(ctx, projectID)
+	if err != nil || project.ClusterID != clusterID || project.Name != systemProjectName || project.ManagedBy != "system" {
 		return nil, errors.New("built-in project identity conflict")
 	}
 
-	trust := model.TrustPolicy{AllowUnsigned: true}
+	trust := catalogTrustPolicy(catalog)
 	trustJSON, _ := json.Marshal(trust)
 	for _, source := range sources {
-		if err := ensureCatalogSource(ctx, tx, projectID, source, trust, trustJSON); err != nil {
+		if err := ensureCatalogSource(ctx, q, projectID, source, trust, trustJSON); err != nil {
 			return nil, err
 		}
 	}
@@ -250,7 +241,7 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 		if !ok {
 			return nil, fmt.Errorf("built-in component %s has no planned source identity", component.Slug)
 		}
-		target, err := ensureComponent(ctx, tx, projectID, clusterID, source, catalog.Release, component, trust)
+		target, err := ensureComponent(ctx, q, projectID, clusterID, source, catalog.Release, component, trust, catalog.DistributionIdentity, catalog.VerificationIdentity)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +270,7 @@ func planCatalogSources(catalog builtinbundles.Catalog, projectID uuid.UUID) ([]
 		if !component.DefaultEnabled {
 			continue
 		}
-		source, err := catalogSourceIdentity(projectID, component.Source.URL)
+		source, err := catalogSourceIdentityForComponent(projectID, component, catalog.DistributionIdentity)
 		if err != nil {
 			return nil, nil, fmt.Errorf("plan built-in source for %s: %w", component.Slug, err)
 		}
@@ -318,41 +309,39 @@ func catalogSourceIdentity(projectID uuid.UUID, rawURL string) (sourceIdentity, 
 	if normalized != rawURL {
 		return sourceIdentity{}, fmt.Errorf("source URL %q is not canonical (want %q)", rawURL, normalized)
 	}
+	return sourceIdentityFromCanonical(projectID, normalized), nil
+}
+
+func sourceIdentityFromCanonical(projectID uuid.UUID, normalized string) sourceIdentity {
 	if normalized == systemSourceURL {
 		return sourceIdentity{
 			id: stableID("source", projectID.String(), systemSourceName), name: systemSourceName, url: normalized,
-		}, nil
+		}
 	}
 	digest := sha256.Sum256([]byte(normalized))
 	name := fmt.Sprintf("astronomer-builtins-source-%x", digest[:8])
-	return sourceIdentity{id: stableID("source", projectID.String(), normalized), name: name, url: normalized}, nil
+	return sourceIdentity{id: stableID("source", projectID.String(), normalized), name: name, url: normalized}
 }
 
-func ensureCatalogSource(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, source sourceIdentity, trust model.TrustPolicy, trustJSON []byte) error {
+func ensureCatalogSource(ctx context.Context, q builtinSourceQueries, projectID uuid.UUID, source sourceIdentity, trust model.TrustPolicy, trustJSON []byte) error {
 	definition := model.Source{
-		ID: source.id, ProjectID: projectID, Name: source.name, Description: systemSourceDescription,
-		Type: model.SourceHelmHTTP, URL: source.url, AuthMode: model.AuthNone, Trust: trust,
+		ID: source.id, ProjectID: projectID, Name: source.name, Description: sourceDescription(source),
+		Type: sourceType(source), URL: source.url, AuthMode: model.AuthNone, Trust: trust,
 	}
 	if err := definition.Validate(); err != nil {
 		return fmt.Errorf("validate built-in source %s: %w", source.name, err)
 	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO delivery_sources (
-			id,project_id,name,description,source_type,url,auth_mode,trust_policy,status,last_resolved_at
-		) VALUES ($1,$2,$3,$4,'helm_http',$5,'none',$6,'ready',now())
-		ON CONFLICT (id) DO NOTHING`, source.id, projectID, source.name,
-		systemSourceDescription, source.url, trustJSON); err != nil {
+	if err := q.EnsureBuiltinCatalogSource(ctx, sqlc.EnsureBuiltinCatalogSourceParams{
+		ID: source.id, ProjectID: projectID, Name: source.name, Description: sourceDescription(source),
+		SourceType: string(sourceType(source)), Url: source.url, TrustPolicy: trustJSON,
+	}); err != nil {
 		return fmt.Errorf("ensure built-in source %s: %w", source.name, err)
 	}
-	var matches bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (
-		SELECT 1 FROM delivery_sources
-		WHERE id=$1 AND project_id=$2 AND name=$3 AND description=$4
-		  AND source_type='helm_http' AND url=$5 AND auth_mode='none'
-		  AND credential_encrypted='' AND credential_key_version=0 AND credential_epoch=0
-		  AND ca_bundle_encrypted='' AND proxy_ref='' AND trust_policy=$6::jsonb
-		  AND status='ready' AND last_error_code=''
-	)`, source.id, projectID, source.name, systemSourceDescription, source.url, trustJSON).Scan(&matches); err != nil {
+	matches, err := q.BuiltinCatalogSourceMatches(ctx, sqlc.BuiltinCatalogSourceMatchesParams{
+		ID: source.id, ProjectID: projectID, Name: source.name, Description: sourceDescription(source),
+		SourceType: string(sourceType(source)), Url: source.url, TrustPolicy: trustJSON,
+	})
+	if err != nil {
 		return fmt.Errorf("verify built-in source %s: %w", source.name, err)
 	}
 	if !matches {
@@ -361,108 +350,43 @@ func ensureCatalogSource(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, so
 	return nil
 }
 
-func ensureComponent(ctx context.Context, tx pgx.Tx, projectID, clusterID uuid.UUID, source sourceIdentity, release string, component builtinbundles.Component, trust model.TrustPolicy) (targetIdentity, error) {
+func ensureComponent(ctx context.Context, q builtinComponentQueries, projectID, clusterID uuid.UUID, source sourceIdentity, release string, component builtinbundles.Component, trust model.TrustPolicy, distributionIdentity, verificationIdentity string) (targetIdentity, error) {
 	bundleID := stableID("bundle", projectID.String(), component.Slug)
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO component_bundles (id,project_id,name,description)
-		VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING`,
-		bundleID, projectID, "astronomer-builtins-"+component.Slug, component.Description); err != nil {
+	if err := q.EnsureBuiltinComponentBundle(ctx, sqlc.EnsureBuiltinComponentBundleParams{
+		ID: bundleID, ProjectID: projectID, Name: "astronomer-builtins-" + component.Slug, Description: component.Description,
+	}); err != nil {
 		return targetIdentity{}, fmt.Errorf("ensure built-in bundle %s: %w", component.Slug, err)
 	}
-	var bundleProject uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT project_id FROM component_bundles WHERE id=$1`, bundleID).Scan(&bundleProject); err != nil || bundleProject != projectID {
+	bundleProject, err := q.GetBuiltinComponentBundleProject(ctx, bundleID)
+	if err != nil || bundleProject != projectID {
 		return targetIdentity{}, fmt.Errorf("built-in bundle %s identity conflict", component.Slug)
 	}
 
-	valuesJSON, err := json.Marshal(component.Values)
-	if err != nil {
-		return targetIdentity{}, fmt.Errorf("encode built-in values %s: %w", component.Slug, err)
-	}
-	reconciliation := model.ReconciliationPolicy{
-		Interval: model.Duration(5 * time.Minute), RetryInterval: model.Duration(30 * time.Second),
-		Timeout: model.Duration(10 * time.Minute), Prune: true, Wait: true, Drift: model.DriftRepair,
-	}
-	requirements := make([]model.CapabilityRequirement, 0, len(component.Requirements.Capabilities))
-	for _, capability := range component.Requirements.Capabilities {
-		requirements = append(requirements, model.CapabilityRequirement{Name: capability})
-	}
-	draft := model.BundleVersionDraft{
-		SourceID: source.id, RequestedRevision: component.Source.Version, Scope: model.ScopePlatform,
-		Renderer: model.RendererSpec{Kind: model.RendererHelm, Helm: &model.HelmSpec{
-			Chart: component.Source.Chart, ChartVersion: component.Source.Version,
-			ReleaseName: component.ReleaseName, TargetNamespace: component.TargetNamespace,
-			Values: valuesJSON, InstallRetries: 3, UpgradeRetries: 3,
-		}},
-		Reconciliation: reconciliation, RequiredCapabilities: requirements,
-	}
-	artifactDigest, err := model.ParseDigest(component.Source.ChartDigest)
+	compiled, err := compileComponentVersion(bundleID, source, release, component, trust, distributionIdentity, verificationIdentity)
 	if err != nil {
 		return targetIdentity{}, err
 	}
-	revision := model.ImmutableRevision{Kind: model.RevisionHelmChart, Value: component.Source.Version, ArtifactDigest: artifactDigest}
-	resolved, err := draft.Resolve(revision)
-	if err != nil {
-		return targetIdentity{}, fmt.Errorf("validate built-in component %s: %w", component.Slug, err)
-	}
-	specDigest, err := model.CanonicalDigest(struct {
-		Spec         model.BundleVersionSpec `json:"spec"`
-		Dependencies []uuid.UUID             `json:"dependency_bundle_ids"`
-	}{resolved, []uuid.UUID{}})
-	if err != nil {
-		return targetIdentity{}, err
-	}
-	resolvedSource := model.ResolvedSourceSpec{
-		SourceID: source.id, Type: model.SourceHelmHTTP,
-		URL: source.url, AuthMode: model.AuthNone,
-		Trust: trust, Revision: revision,
-	}
-	sourceJSON, _ := json.Marshal(resolvedSource)
-	rendererJSON, _ := json.Marshal(draft.Renderer)
-	reconciliationJSON, _ := json.Marshal(reconciliation)
-	requirementsJSON, _ := json.Marshal(requirements)
-	versionID := stableID("version", bundleID.String(), release, component.Source.Version, component.Source.ChartDigest)
-	versionLabel := strings.TrimPrefix(release, "v") + "+" + component.Source.Version
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO component_bundle_versions (
-			id,bundle_id,source_id,version,renderer,scope,requested_revision,resolved_revision,
-			artifact_digest,source_spec,renderer_spec,reconciliation_policy,health_policy,
-			requirements,dependency_bundle_ids,spec_digest,verification_status,
-			verification_identity,state
-		) VALUES ($1,$2,$3,$4,'helm','platform',$5,$5,$6,$7,$8,$9,'{}',$10,'[]',$11,'verified',$12,'ready')
-		ON CONFLICT (id) DO NOTHING`, versionID, bundleID, source.id, versionLabel,
-		component.Source.Version, component.Source.ChartDigest, sourceJSON, rendererJSON,
-		reconciliationJSON, requirementsJSON, specDigest.String(), "astronomer-release-catalog:"+release); err != nil {
+	if err := q.EnsureBuiltinComponentVersion(ctx, compiled); err != nil {
 		return targetIdentity{}, fmt.Errorf("ensure built-in version %s: %w", component.Slug, err)
 	}
-	var actualBundle uuid.UUID
-	var actualDigest, actualState string
-	if err := tx.QueryRow(ctx, `SELECT bundle_id,spec_digest,state FROM component_bundle_versions WHERE id=$1`, versionID).
-		Scan(&actualBundle, &actualDigest, &actualState); err != nil || actualBundle != bundleID || actualDigest != specDigest.String() || actualState != "ready" {
+	version, err := q.GetBuiltinComponentVersionIdentity(ctx, compiled.ID)
+	if err != nil || version.BundleID != bundleID || version.SpecDigest != compiled.SpecDigest || version.State != "ready" {
 		return targetIdentity{}, fmt.Errorf("built-in version %s identity conflict", component.Slug)
 	}
 
 	placementJSON, _ := json.Marshal(model.Placement{ProjectIDs: []uuid.UUID{projectID}, ClusterIDs: []uuid.UUID{clusterID}})
 	rolloutPolicyJSON := json.RawMessage(`{"approval_required":false}`)
 	targetID := stableID("target", clusterID.String(), component.Slug)
-	var generation int64
-	if err := tx.QueryRow(ctx, `
-		INSERT INTO delivery_targets (
-			id,project_id,name,description,bundle_version_id,placement,rollout_policy,
-			reconciliation_policy,maintenance_window_policy,suspended
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'{}',false)
-		ON CONFLICT (id) DO UPDATE SET
-			bundle_version_id=EXCLUDED.bundle_version_id,
-			placement=EXCLUDED.placement,
-			rollout_policy=EXCLUDED.rollout_policy,
-			reconciliation_policy=EXCLUDED.reconciliation_policy,
-			generation=delivery_targets.generation + CASE
-				WHEN delivery_targets.bundle_version_id<>EXCLUDED.bundle_version_id THEN 1 ELSE 0 END,
-			resource_version=delivery_targets.resource_version + CASE
-				WHEN delivery_targets.bundle_version_id<>EXCLUDED.bundle_version_id THEN 1 ELSE 0 END,
-			updated_at=CASE WHEN delivery_targets.bundle_version_id<>EXCLUDED.bundle_version_id THEN now() ELSE delivery_targets.updated_at END
-		RETURNING generation`, targetID, projectID, "astronomer-builtins-"+component.Slug,
-		component.Description, versionID, placementJSON, rolloutPolicyJSON, reconciliationJSON).Scan(&generation); err != nil {
+	generation, err := q.EnsureBuiltinComponentTarget(ctx, sqlc.EnsureBuiltinComponentTargetParams{
+		ID: targetID, ProjectID: projectID, Name: "astronomer-builtins-" + component.Slug,
+		Description: component.Description, BundleVersionID: compiled.ID, Placement: placementJSON,
+		RolloutPolicy: rolloutPolicyJSON, ReconciliationPolicy: compiled.ReconciliationPolicy,
+	})
+	if err != nil {
 		return targetIdentity{}, fmt.Errorf("ensure built-in target %s: %w", component.Slug, err)
+	}
+	if generation < 1 {
+		return targetIdentity{}, fmt.Errorf("built-in target %s generation is invalid", component.Slug)
 	}
 	return targetIdentity{id: targetID, generation: uint64(generation), slug: component.Slug, release: release}, nil
 }
@@ -478,28 +402,22 @@ func retryableTransactionError(err error) bool {
 func (p *Provisioner) observeTargets(ctx context.Context, clusterID uuid.UUID, targets []targetIdentity, retryRequestedAt *time.Time) (complete bool, code string, failed bool, err error) {
 	ready := 0
 	for _, target := range targets {
-		var rolloutState string
-		var rolloutCreatedAt time.Time
-		rolloutErr := p.pool.QueryRow(ctx, `
-			SELECT state,created_at FROM delivery_rollouts
-			WHERE target_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1`, target.id).
-			Scan(&rolloutState, &rolloutCreatedAt)
+		rolloutRow, rolloutErr := sqlc.New(p.pool).GetBuiltinLatestTargetRollout(ctx, target.id)
 		if rolloutErr != nil && !errors.Is(rolloutErr, pgx.ErrNoRows) {
 			return false, "", false, rolloutErr
 		}
-		var phase, errorCode string
-		deploymentErr := p.pool.QueryRow(ctx, `
-			SELECT phase,last_error_code FROM cluster_deployments
-			WHERE target_id=$1 AND cluster_id=$2`, target.id, clusterID).Scan(&phase, &errorCode)
+		deployment, deploymentErr := sqlc.New(p.pool).GetBuiltinTargetDeployment(ctx, sqlc.GetBuiltinTargetDeploymentParams{
+			TargetID: target.id, ClusterID: clusterID,
+		})
 		if deploymentErr != nil && !errors.Is(deploymentErr, pgx.ErrNoRows) {
 			return false, "", false, deploymentErr
 		}
 		observation := evaluateTargetObservation(
-			rolloutState,
+			rolloutRow.State,
 			rolloutErr == nil,
-			retryAfter(retryRequestedAt, rolloutCreatedAt),
-			phase,
-			errorCode,
+			retryAfter(retryRequestedAt, rolloutRow.CreatedAt),
+			deployment.Phase,
+			deployment.LastErrorCode,
 			deploymentErr == nil,
 		)
 		if observation.ready {
@@ -550,22 +468,16 @@ func evaluateTargetObservation(rolloutState string, rolloutFound, retryRequested
 }
 
 func (p *Provisioner) ensureRollout(ctx context.Context, target targetIdentity, retryRequestedAt *time.Time) error {
-	var state string
-	var count int
-	var createdAt time.Time
-	err := p.pool.QueryRow(ctx, `
-		SELECT state, count(*) OVER ()::integer, created_at
-		FROM delivery_rollouts WHERE target_id=$1
-		ORDER BY created_at DESC,id DESC LIMIT 1`, target.id).Scan(&state, &count, &createdAt)
+	row, err := sqlc.New(p.pool).GetBuiltinRolloutAttempt(ctx, target.id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
 	if err == nil {
-		switch state {
+		switch row.State {
 		case "resolving", "awaiting_approval", "queued", "progressing", "paused", "rolling_back", "succeeded":
 			return nil
 		}
-		if !retryAfter(retryRequestedAt, createdAt) {
+		if !retryAfter(retryRequestedAt, row.CreatedAt) {
 			return nil
 		}
 	}
@@ -577,8 +489,8 @@ func (p *Provisioner) ensureRollout(ctx context.Context, target targetIdentity, 
 		return fmt.Errorf("built-in target selected %d clusters", result.SelectedCount)
 	}
 	key := "builtins:" + target.release + ":" + target.slug
-	if count > 0 {
-		key = fmt.Sprintf("%s:retry-%d", key, count)
+	if row.AttemptCount > 0 {
+		key = fmt.Sprintf("%s:retry-%d", key, row.AttemptCount)
 	}
 	strategy := model.RolloutStrategy{
 		Type: model.StrategyAllAtOnce, MaxConcurrent: 1,

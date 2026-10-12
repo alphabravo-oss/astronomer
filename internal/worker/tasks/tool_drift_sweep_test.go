@@ -162,3 +162,15 @@ func TestRunToolDriftSweepReturnsPersistenceFailure(t *testing.T) {
 		t.Fatalf("runToolDriftSweep error = %v, want persistence failure", err)
 	}
 }
+
+func TestChartDriftDoesNotNarrowLiveRevision(t *testing.T) {
+	for _, tc := range []struct {
+		revision int
+		drift    bool
+	}{{10, false}, {11, true}, {2147483648, true}, {4294967306, true}} {
+		drift, _, ok := chartDrift(context.Background(), &fakeDriftHelm{status: &protocol.HelmResultPayload{Status: "deployed", Revision: tc.revision}}, sqlc.InstalledChart{Revision: 10})
+		if !ok || drift != tc.drift {
+			t.Fatalf("revision=%d drift=%t ok=%t", tc.revision, drift, ok)
+		}
+	}
+}

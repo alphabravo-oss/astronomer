@@ -31,13 +31,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/registry"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // chartArchiveMaxBytes caps the tarball size we accept. kube-prom-stack
@@ -268,7 +267,7 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 
 	// SEC-R03: pre-filter + dial-time guard so malicious chart URLs in a
 	// repo index cannot SSRF loopback/private/metadata.
-	if err := httpclient.GuardPublicHost(target); err != nil {
+	if err := h.guardCatalogURL(ctx, target); err != nil {
 		return nil, fmt.Errorf("chart URL blocked: %w", err)
 	}
 
@@ -291,7 +290,7 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 		h.applyRepoIndexAuth(req, repo)
 	}
 
-	client := httpclient.SafeClient(h.effectiveChartHydrationTimeout())
+	client := h.catalogClient(h.effectiveChartHydrationTimeout(), catalog.MaxOCIResponseBytes)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -306,6 +305,10 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 }
 
 func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.HelmRepository, chart sqlc.HelmChart, version sqlc.HelmChartVersion) ([]byte, error) {
+	if err := h.guardCatalogURL(ctx, strings.Replace(repo.Url, "oci://", "https://", 1)); err != nil {
+		return nil, fmt.Errorf("OCI chart source blocked")
+	}
+	ctx = h.catalogContext(ctx)
 	cfg, err := h.resolveOCIAuthConfig(repo)
 	if err != nil {
 		return nil, err
@@ -322,10 +325,10 @@ func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.Hel
 		registry.PullOptIgnoreMissingProv(true),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("oci pull %s: %w", ref, err)
+		return nil, fmt.Errorf("OCI chart pull failed")
 	}
 	if pulled == nil || pulled.Chart == nil || len(pulled.Chart.Data) == 0 {
-		return nil, fmt.Errorf("oci pull returned empty chart for %s", ref)
+		return nil, fmt.Errorf("OCI chart pull returned empty archive")
 	}
 	return pulled.Chart.Data, nil
 }

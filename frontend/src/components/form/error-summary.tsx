@@ -26,8 +26,10 @@ export function errorMessages(errors: readonly unknown[]): string[] {
 /** Place inside form.AppForm. Validation and server failures stay visible after submission. */
 export function FormErrorSummary({
   serverError,
+  serverFieldErrors = [],
 }: {
   serverError?: string | null;
+  serverFieldErrors?: readonly { name: string; message: string }[];
 }) {
   const form = useFormContext();
   const errors = useStore(form.store, (state) => state.errors);
@@ -36,30 +38,39 @@ export function FormErrorSummary({
   const summary = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const previousAttempt = useRef(attempts);
-  const fieldErrors = Object.entries(fields).flatMap(([name, meta]) =>
-    errorMessages(
-      meta &&
-        typeof meta === "object" &&
-        "errors" in meta &&
-        Array.isArray(meta.errors)
-        ? meta.errors
-        : [],
-    ).map((message) => ({ name, message })),
-  );
+  const fieldErrors = [
+    ...serverFieldErrors,
+    ...Object.entries(fields).flatMap(([name, meta]) =>
+      errorMessages(
+        meta &&
+          typeof meta === "object" &&
+          "errors" in meta &&
+          Array.isArray(meta.errors)
+          ? meta.errors
+          : [],
+      ).map((message) => ({ name, message })),
+    ),
+  ];
   const fieldMessages = new Set(fieldErrors.map(({ message }) => message));
   const messages = errorMessages([...errors, serverError]).filter(
     (message) => !fieldMessages.has(message),
   );
   const visible =
     (attempts > 0 && (messages.length > 0 || fieldErrors.length > 0)) ||
-    !!serverError;
+    !!serverError ||
+    serverFieldErrors.length > 0;
 
   useEffect(() => {
-    if (visible && (attempts !== previousAttempt.current || serverError)) {
+    if (
+      visible &&
+      (attempts !== previousAttempt.current ||
+        serverError ||
+        serverFieldErrors.length > 0)
+    ) {
       summary.current?.focus();
       previousAttempt.current = attempts;
     }
-  }, [attempts, serverError, visible]);
+  }, [attempts, serverError, serverFieldErrors.length, visible]);
 
   if (!visible) return null;
   const focusField = (name: string) => {

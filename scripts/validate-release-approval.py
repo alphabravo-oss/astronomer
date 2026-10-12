@@ -11,7 +11,7 @@ from pathlib import Path
 
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
 COMMIT = re.compile(r"[a-f0-9]{40}\Z")
-TAG = re.compile(r"v1\.[0-9]+\.[0-9]+\Z")
+TAG = re.compile(r"v[1-9][0-9]*\.[0-9]+\.[0-9]+\Z")
 RUN_ID = re.compile(r"[1-9][0-9]*\Z")
 PROFILES = {"estate-100", "estate-500", "estate-1000", "estate-1000-soak"}
 ACCESSIBILITY_MATRIX = {

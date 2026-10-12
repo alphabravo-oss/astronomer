@@ -60,12 +60,16 @@ func (h *MonitoringHandler) RunReconciler(ctx context.Context) {
 }
 
 func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.queries == nil {
 		paging.Write(w, []any{}, paging.Exact(0, queryLimit(r, 50), queryOffset(r), 0))
 		return
 	}
-	limit := int32(queryLimit(r, 50))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 50)
+	offset := queryOffset32(r)
 	arg := sqlc.ListMonitoringOperationsParams{
 		Limit:  limit,
 		Offset: offset,
@@ -261,13 +265,17 @@ func enqueueSharedMonitoringOperationWith[Req any](ctx context.Context, h *Monit
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
+	attempts, err := h.resolveMaxRetryAttempts(backend)
+	if err != nil {
+		return sqlc.MonitoringOperation{}, err
+	}
 	payload, err := json.Marshal(monitoringOperationEnvelope{
 		ClusterID:                clusterID,
 		Request:                  rawReq,
 		Values:                   values,
 		SecretSpec:               secretSpec,
 		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, rollbackOverride),
-		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
+		ResolvedMaxRetryAttempts: attempts,
 	})
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err

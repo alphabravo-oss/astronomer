@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/httpserver"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -713,15 +715,15 @@ func (hr *HealthReporter) ServeHealth(ctx context.Context, addr string) {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
-	}()
-
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		hr.log.Error("health server error", "error", err)
+		return
+	}
 	hr.log.Info("starting health server", "addr", addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := httpserver.Serve(ctx, srv, listener, 5*time.Second, func(err error) {
+		hr.log.Warn("health server shutdown failed", "error", err)
+	}); err != nil {
 		hr.log.Error("health server error", "error", err)
 	}
 }

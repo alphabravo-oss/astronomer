@@ -61,7 +61,7 @@ export function SharedMonitoringStacksPage() {
 
   const sizerQuery = useQuery({
     queryKey: queryKeys.monitoringStack.sizer,
-    queryFn: getMonitoringSizer,
+    queryFn: ({ signal }) => getMonitoringSizer(signal),
     enabled: read.allowed && showLoki,
   });
 

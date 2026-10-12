@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "lane": "live-chromium",
+  "sourceCommit": "1a87c98452a6d2a02614299c68f94a1002f866cd",
+  "sourceBefore": {
+    "schema_version": 2,
+    "source_file_count": 6164,
+    "source_tree_sha256": "cab138f15925023b7d10cef58e75026fedde9eb1350caaec98997904b8d20e80"
+  },
+  "sourceAfter": {
+    "schema_version": 2,
+    "source_file_count": 6164,
+    "source_tree_sha256": "cab138f15925023b7d10cef58e75026fedde9eb1350caaec98997904b8d20e80"
+  },
+  "sourceStable": true,
+  "command": [
+    "bash",
+    "scripts/test-live-browser.sh"
+  ],
+  "laneEnvironment": {
+    "LIVE_BROWSER_ENGINE": "chromium"
+  },
+  "startedAt": "2026-10-09T23:30:48.414954+00:00",
+  "completedAt": "2026-10-09T23:38:22.914388+00:00",
+  "durationSeconds": 454.499434,
+  "exitCode": 1,
+  "status": "fail",
+  "runnerLogSHA256": "3e76eb6ddee58c6a85eec2e6b43e0c98874c691fe6400681e6ace5648d137dcc",
+  "scope": "Source-owned disposable lane only; excludes external qualification and universal support/SLA claims."
+}

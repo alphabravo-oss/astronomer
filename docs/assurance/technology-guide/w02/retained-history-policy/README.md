@@ -1,0 +1,15 @@
+# Exact retained historical secret-finding policy
+
+This policy retains every finding and accepts only the 3184 immutable sites statically reviewed from the original historical report. The controls expire on 2026-10-16 and do not imply a human release approval. New commits, paths, columns, fingerprints, changed source, wrong proof spans, unavailable evidence, scanner drift, partial collections, and expiry fail closed. No Gitleaks rule, path, UUID, or digest exclusion was added.
+
+The verifier binds the compressed and raw original report, site proofs, all 3184 exact matched spans and captured values, the prior 38-record column supplement, scanner source bytes, root review files, and typed producer sources. A public value elsewhere on the same line cannot qualify another token. All nine classes have real disposable-Git fixtures; the 17 fixture parents passed in the source proposal. The registry loader and builder separately verified all 3184 static bindings. [Source bindings](source-bindings.json) index the exact applied files and external proposal, including retained earlier failures.
+
+Current collection provenance and the fresh current history scan remain open. This commit does not wire the policy into a release gate, qualify newly introduced matches, or claim current source-security acceptance. The CLI requires explicit report, collection, manifest, registry, evidence-root, rule-config, repository, scope, and output paths. Its output omits matched values and keeps otherwise valid findings unaccepted if policy evidence is unavailable.
+
+The scanner excerpts under `evidence-bundle/scanner-source` are evidence-only copies, not runtime dependencies or executable policy authority. They document exact Gitleaks 8.30.1 regex, newline trimming and location calculation, and go-gitdiff 0.9.1 fragment construction. Both upstream projects use the MIT license; exact notices are retained under `evidence-bundle/licenses`. Primary sources are [Gitleaks v8.30.1](https://github.com/gitleaks/gitleaks/tree/v8.30.1) and [go-gitdiff v0.9.1](https://github.com/gitleaks/go-gitdiff/tree/v0.9.1). The original fixture source and artifact digests remain anchored to immutable commit `ab95e1d78a707bb35f4ba451de2940fcd67874d7`. Current portable fixtures default to the byte-bound rule configuration in this evidence bundle; an explicit fixture-only path must contain the same bytes. Current collector and fixture stage bindings are recorded separately and do not renew finding or scanner authority.
+
+Immutable evidence JSON and compressed artifacts preserve their reviewed bytes. Only the new prose and source-binding index are formatted.
+
+The scanner source excerpts use `.go.txt` filenames so Go package discovery treats them as evidence only. Their original source paths and byte digests remain bound by the manifest.
+
+The canonical collector is now source-applied, with actual source/HEAD/ref/tool/report provenance and fatal capacity checks. It remains unqualified on a fresh current collection and is not wired into the release workflow. New or missing historical sites still fail the unchanged verifier.

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
 )
@@ -28,6 +27,7 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	metric := captureClusterSnapshotMetric(r.Context(), h.queries, clusterID)
 	bsls, err := listVeleroBSLs(r.Context(), h.requester, clusterID.String(), defaultVeleroNamespace)
 	if err != nil {
 		// Hard failure (cluster unreachable). Surface as 200 with
@@ -40,7 +40,7 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 			Namespace: defaultVeleroNamespace,
 			Reason:    err.Error(),
 		}
-		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "unreachable")...).Set(0)
+		metric.VeleroStatus(r.Context(), "unreachable")
 		RespondJSON(w, http.StatusOK, out)
 		return
 	}
@@ -50,7 +50,7 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 			Namespace: defaultVeleroNamespace,
 			Reason:    "no BackupStorageLocation CRDs found",
 		}
-		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "missing")...).Set(0)
+		metric.VeleroStatus(r.Context(), "missing")
 		RespondJSON(w, http.StatusOK, out)
 		return
 	}
@@ -71,9 +71,9 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 		StorageLocations: summaries,
 	}
 	if anyReady {
-		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "ready")...).Set(1)
+		metric.VeleroStatus(r.Context(), "ready")
 	} else {
-		veleroInstallStatus.WithLabelValues(observability.MetricValues(clusterID.String(), "unavailable")...).Set(0)
+		metric.VeleroStatus(r.Context(), "unavailable")
 	}
 	RespondJSON(w, http.StatusOK, out)
 }

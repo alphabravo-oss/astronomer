@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "kind": "SupplierMetadataDiagnosisBindings",
+  "files": {
+    "build-capacity.log": {
+      "sha256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "size": 81
+    },
+    "build.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "driver.py.txt": {
+      "sha256": "4602aa631bd6dd153bac3e36c01e95229a2e8c7c36088f16c32a990fcc6bf103",
+      "size": 8415
+    },
+    "final-capacity.log": {
+      "sha256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "size": 81
+    },
+    "original-receipt.json": {
+      "sha256": "f39ccc322656c7bd580e0f63895a25321a2e171b1338734f1490d8599daef854",
+      "size": 17108
+    },
+    "original-transfer.log": {
+      "sha256": "ade33f182c11c5ac0008afe961bd3255de81b60b57772268ff3960caafa4fb76",
+      "size": 1719
+    },
+    "receipt.json": {
+      "sha256": "020bb141a37e7d94f7f64dd8c72479853b1d23fe3d33ca2e4b11f9c22f7103d5",
+      "size": 19036
+    },
+    "runner.go.txt": {
+      "sha256": "d685b0bf1980d95740eabb7e489f8cb64698b49c58907484f895b41e03e2e143",
+      "size": 11176
+    },
+    "transfer-capacity.log": {
+      "sha256": "89f701971476da285ce5a6ce119a6ae2453eb80a1aa03cfe348c27316f512f19",
+      "size": 81
+    },
+    "transfer.log": {
+      "sha256": "abd70927b9efa2786415bbecee5022019198ce0ae00403085f0f95354e7fc7f2",
+      "size": 2925
+    },
+    "trivy-database-manifest-4.json": {
+      "sha256": "361d77189ec82c0b39f7c0fad4d2dc7f1aa4dfd48c24511e27ebe1520f677875",
+      "size": 616
+    },
+    "trivy-java-database-manifest-4.json": {
+      "sha256": "7657995935bf8d94bf1b06252d4c62538a751e96633c54613bfdf292eea68a54",
+      "size": 624
+    }
+  }
+}

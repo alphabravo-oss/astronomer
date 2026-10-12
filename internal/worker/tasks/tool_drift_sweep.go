@@ -175,7 +175,7 @@ func chartDrift(ctx context.Context, helm HelmStatusProber, c sqlc.InstalledChar
 	if status.Status != "deployed" {
 		return true, fmt.Sprintf("helm release status %q (expected \"deployed\")", status.Status), true
 	}
-	if int32(status.Revision) > c.Revision {
+	if int64(status.Revision) > int64(c.Revision) {
 		return true, fmt.Sprintf("helm revision %d ahead of recorded revision %d (out-of-band upgrade)", status.Revision, c.Revision), true
 	}
 	return false, "", true

@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -245,7 +246,10 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 	var req createControlPlaneSnapshotRequest
 	// Body is optional — an empty POST triggers a snapshot with defaults.
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		if err := decodeV1JSONBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			return
+		}
 	}
 
 	name := strings.TrimSpace(req.Name)
@@ -326,6 +330,10 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 // via ?limit= (default 50, max 200) and ?offset=. The DB is the source
 // of truth — we never re-poll the member cluster on list.
 func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

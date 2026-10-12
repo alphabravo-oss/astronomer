@@ -1,0 +1,13 @@
+=== RUN   TestPostgresSystemReleaseBootstrapIdempotencyAndDraft
+--- PASS: TestPostgresSystemReleaseBootstrapIdempotencyAndDraft (0.04s)
+=== RUN   TestPostgresSystemReleaseBootstrapImmutableAndRevoked
+--- PASS: TestPostgresSystemReleaseBootstrapImmutableAndRevoked (0.04s)
+=== RUN   TestPostgresSystemReleaseBootstrapRollbackAfterInsert
+--- PASS: TestPostgresSystemReleaseBootstrapRollbackAfterInsert (0.04s)
+=== RUN   TestPostgresSystemReleaseBootstrapSameTransactionLock
+--- PASS: TestPostgresSystemReleaseBootstrapSameTransactionLock (0.05s)
+=== RUN   TestPostgresSystemReleaseBootstrapConcurrentFirstCreate
+    bootstrap_postgres_test.go:224: baseline concurrent first insert: one committed creator, one exact SQLSTATE40001; explicit retry reads the same release
+--- PASS: TestPostgresSystemReleaseBootstrapConcurrentFirstCreate (0.06s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease	0.250s

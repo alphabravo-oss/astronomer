@@ -50,8 +50,10 @@ function mapGroupMapping(wire: GroupMappingWire): GroupMappingView {
 // Group Mappings — API funcs
 // ============================================================
 
-export async function listGroupMappings(): Promise<GroupMappingView[]> {
-  const response = await getAdminGroupMappings();
+export async function listGroupMappings(
+  signal?: AbortSignal,
+): Promise<GroupMappingView[]> {
+  const response = await getAdminGroupMappings({ signal });
   return response.data.map(mapGroupMapping);
 }
 

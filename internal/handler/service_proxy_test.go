@@ -30,7 +30,16 @@ func (r *serviceProxyTestRequester) Do(_ context.Context, _, _, path string, _ [
 }
 
 type serviceProxyTestTools struct {
-	tools []sqlc.ClusterTool
+	tools     []sqlc.ClusterTool
+	namespace string
+}
+
+func (q serviceProxyTestTools) GetInstalledChartByClusterAndTool(_ context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
+	namespace := q.namespace
+	if namespace == "" {
+		namespace = "observability"
+	}
+	return sqlc.InstalledChart{ClusterID: arg.ClusterID, Namespace: namespace}, nil
 }
 
 func (q serviceProxyTestTools) ListEnabledTools(context.Context) ([]sqlc.ClusterTool, error) {
@@ -65,6 +74,25 @@ func TestServiceProxyAllowsEnabledToolService(t *testing.T) {
 	wantPath := "/api/v1/namespaces/observability/services/http:grafana:3000/proxy/dashboards?orgId=1"
 	if requester.path != wantPath {
 		t.Fatalf("path = %q, want %q", requester.path, wantPath)
+	}
+}
+
+func TestServiceProxyRejectsEnabledServiceInUninstalledNamespace(t *testing.T) {
+	requester := &serviceProxyTestRequester{}
+	h := NewServiceProxyHandler(requester)
+	h.SetToolQuerier(serviceProxyTestTools{namespace: "custom-installed", tools: []sqlc.ClusterTool{{ServiceName: "grafana", ServicePort: pgtype.Int4{Int32: 3000, Valid: true}}}})
+	for _, namespace := range []string{"attacker", "observability", "custom-installed"} {
+		requester.path = ""
+		r := httptest.NewRequest("GET", "/clusters/"+serviceProxyClusterID+"/proxy/service/"+namespace+"/grafana:3000/", nil)
+		w := httptest.NewRecorder()
+		serviceProxyTestRouter(h).ServeHTTP(w, r)
+		if namespace == "custom-installed" {
+			if w.Code != 204 {
+				t.Fatal("custom installed namespace blocked")
+			}
+		} else if w.Code != 403 || requester.path != "" {
+			t.Fatal("namespace substitution reached tunnel")
+		}
 	}
 }
 
@@ -158,7 +186,7 @@ func TestServiceProxySanitizesResponseHeaders(t *testing.T) {
 func TestServiceProxyAllowsEnabledSubService(t *testing.T) {
 	requester := &serviceProxyTestRequester{}
 	h := NewServiceProxyHandler(requester)
-	h.SetToolQuerier(serviceProxyTestTools{tools: []sqlc.ClusterTool{{
+	h.SetToolQuerier(serviceProxyTestTools{namespace: "monitoring", tools: []sqlc.ClusterTool{{
 		SubServices: []byte(`[{"service":"prometheus-operated","port":9090}]`),
 	}}})
 	router := serviceProxyTestRouter(h)

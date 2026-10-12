@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,7 +39,7 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		Namespace       string      `json:"velero_namespace"`
 		Spec            RestoreSpec `json:"spec"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

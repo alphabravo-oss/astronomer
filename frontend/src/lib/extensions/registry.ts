@@ -89,7 +89,7 @@ export function useEnabledExtensions() {
   const enabled = flags.data?.["feature.extensions"] === true;
   return useQuery({
     queryKey: queryKeys.extensions.mounts,
-    queryFn: () => extensionsApi.getExtensionMounts(),
+    queryFn: ({ signal }) => extensionsApi.getExtensionMounts({ signal }),
     enabled,
     // Mounts change rarely (admin install/enable/disable); avoid refetch churn.
     staleTime: 60_000,

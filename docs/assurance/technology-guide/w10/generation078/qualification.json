@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "status": "SCOPED_GENERATION_PASS_RUNTIME_PENDING",
+  "canonicalGenerationSourceCommit": "96b568aaef696fb576d60c1a4ed3ac3cff5e6d0e",
+  "runs": [
+    {
+      "group": "genuine-before",
+      "sourceCommit": "a6e39ac7f032530810af02e91effed09cc6d08b0",
+      "exitCode": 1,
+      "receiptSHA256": "sha256:87aef6933b281e4a6fdd5285e4a048a2fed93c100a394f3c5a53d6586b792f4d",
+      "resultCount": 2,
+      "numericGuardCount": 33,
+      "heldGroupsDrained": true,
+      "sourceStable": true,
+      "expectedBeforeObserved": true,
+      "changedPaths": []
+    },
+    {
+      "group": "first-generation-red",
+      "sourceCommit": "4429c9810c5272c2f548d50443208c102230a044",
+      "exitCode": 1,
+      "receiptSHA256": "sha256:51941f7254a11185c5a16e0cd1fcb804e02660dba351b8e0d73aabd872946767",
+      "resultCount": 4,
+      "numericGuardCount": 14,
+      "heldGroupsDrained": true,
+      "sourceStable": false,
+      "expectedBeforeObserved": null,
+      "changedPaths": []
+    },
+    {
+      "group": "schema-generation-red",
+      "sourceCommit": "fd87ce9fb899e113b81f3267c3802d396ea4da64",
+      "exitCode": 1,
+      "receiptSHA256": "sha256:d28a0bb12d970b9cc2c9b75059a8656f11ef637f532fc9368f26107ba1aabc32",
+      "resultCount": 4,
+      "numericGuardCount": 14,
+      "heldGroupsDrained": true,
+      "sourceStable": true,
+      "expectedBeforeObserved": null,
+      "changedPaths": []
+    },
+    {
+      "group": "canonical-generation-pass",
+      "sourceCommit": "96b568aaef696fb576d60c1a4ed3ac3cff5e6d0e",
+      "exitCode": 0,
+      "receiptSHA256": "sha256:fd0f0bd664dd59ebed7643b14030c7bab037ca811c2d1ffda791c3a19334a100",
+      "resultCount": 4,
+      "numericGuardCount": 14,
+      "heldGroupsDrained": true,
+      "sourceStable": true,
+      "expectedBeforeObserved": null,
+      "changedPaths": [
+        "deploy/chart/files/release-compatibility.json",
+        "docs/architecture/compatibility.md"
+      ]
+    }
+  ],
+  "limits": [
+    "Only canonical SQLC and release compatibility generation is qualified; no product compilation, unit/race or live PostgreSQL claim.",
+    "Four genuine original BEFORE failures demonstrate legacy ownership/category behavior, not a green product result.",
+    "The first generator failed compatibility values and extension file-mode preservation; the second failed two remaining chart-schema constants. Original nonzero exits and every retained original remain immutable.",
+    "Existing compatibility minimum1, reversible floor66, historical Kubernetes/PG/browser declarations remain unchanged by this schema78 slice; selected support-matrix qualification is separate."
+  ]
+}

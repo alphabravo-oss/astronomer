@@ -1,0 +1,443 @@
+{
+  "catalog_source": "afd3af678a0c7ab70a1d03b526b6b1b1f6a96135",
+  "consumer_source": "b82a6bdd254011ed1323b8bb904a91d38e0346b8",
+  "environment_source": "4e6d27a1fd2b8320864161017d2c59e077692311",
+  "scope": "Two canonical private producer outputs with complete deterministic file graph; actual signed synthetic-key OCI consumer and zero-write negatives. No registry TLS, keyless trust, GitHub publication, database or customer deployment.",
+  "steps": [
+    {
+      "name": "python-version",
+      "argv": [
+        "/tmp/w15-private-typing-environment-4e6d27a-run1/typing-environment/bin/python",
+        "--version"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.132
+      },
+      "source_stable": true,
+      "elapsed_seconds": 3.180370055139065,
+      "log_sha256": "8d4f04b10a8a6c0cf7aec26d237d8a830221b19fee177b0c39f0362e65d9fba6"
+    },
+    {
+      "name": "go-version",
+      "argv": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "version"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.148
+      },
+      "source_stable": true,
+      "elapsed_seconds": 3.0812861351296306,
+      "log_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376"
+    },
+    {
+      "name": "producer-0",
+      "argv": [
+        "/tmp/w15-private-typing-environment-4e6d27a-run1/typing-environment/bin/python",
+        "-B",
+        "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/produce.py",
+        "/root/astronomer-all/astronomer-catalog-032-w15",
+        "/tmp/w15-catalog-producer-consumer-afd3af6-run2/producer-0"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.997
+      },
+      "source_stable": true,
+      "elapsed_seconds": 4.014500501099974,
+      "log_sha256": "f96b4656e331f11f18b74b037dadbe09abb2d05583fe462b6dc3967413408732"
+    },
+    {
+      "name": "producer-1",
+      "argv": [
+        "/tmp/w15-private-typing-environment-4e6d27a-run1/typing-environment/bin/python",
+        "-B",
+        "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/produce.py",
+        "/root/astronomer-all/astronomer-catalog-032-w15",
+        "/tmp/w15-catalog-producer-consumer-afd3af6-run2/producer-1"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 0.907
+      },
+      "source_stable": true,
+      "elapsed_seconds": 3.899413710925728,
+      "log_sha256": "f96b4656e331f11f18b74b037dadbe09abb2d05583fe462b6dc3967413408732"
+    },
+    {
+      "name": "consumer-race",
+      "argv": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "test",
+        "-race",
+        "-json",
+        "-count=1",
+        "-tags",
+        "catalogproducerinterop",
+        "-run",
+        "^TestApplicationCatalogActualProducerSignedOCIConsumer$",
+        "./internal/catalog"
+      ],
+      "source_before": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "source_after": {
+        "catalog": {
+          "schema_version": 2,
+          "source_file_count": 75,
+          "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+        },
+        "consumer": {
+          "schema_version": 2,
+          "source_file_count": 9087,
+          "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+        }
+      },
+      "final_guard_pass": true,
+      "outcome": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 16.049
+      },
+      "source_stable": true,
+      "elapsed_seconds": 19.125874522607774,
+      "log_sha256": "8aac880392c60dd805fa018105f257df464caa4af7c3fee71ae76d6a6bced911"
+    }
+  ],
+  "qualified": true,
+  "source_before": {
+    "catalog": {
+      "schema_version": 2,
+      "source_file_count": 75,
+      "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+    },
+    "consumer": {
+      "schema_version": 2,
+      "source_file_count": 9087,
+      "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+    }
+  },
+  "environment_binding": {
+    "files": 5210,
+    "bytes": 137972863,
+    "sha256": "b5e5c668b9110a0fb432381430ebd8aefa6631b51f6e1367a7d4897066070bff",
+    "external_interpreter": "/tmp/w15-bootstrap-e3c1964-run1/tools/python/python/bin/python3.15",
+    "external_interpreter_sha256": "aac3ade3f7d90fbf63e3ea0c46120a0cfbd159e1e503dde04721979507a1548b"
+  },
+  "private_environment_receipt_sha256": "28629fd83b6d4c7be478fca4c32f61ed6d1206f263c566bbfd7cb3b5fad610c7",
+  "safe_go_environment": {
+    "GOTOOLCHAIN": "go1.27.2",
+    "GOWORK": "off",
+    "GOMAXPROCS": "4",
+    "GOFLAGS": "-p=2 -mod=readonly",
+    "GOFIPS140": "off"
+  },
+  "producer_graph": {
+    "applications": 21,
+    "files": {
+      "catalog.canonical.json": {
+        "bytes": 22173,
+        "sha256": "9f2730a19c42edc49dc86ab374caa5962bace21d7d9a6089db8b61c70c5ead08"
+      },
+      "compatibility-summary.json": {
+        "bytes": 225,
+        "sha256": "ad440df5b94309e889a2c58bd9821d791e4589ee813db20bd4d50869639b6198"
+      },
+      "dependencies.json": {
+        "bytes": 383,
+        "sha256": "004ab2288f54c73a9807e7b42db7960c83c6bedb49051277fcd60c28f8de32ba"
+      },
+      "entries/cert-manager.json": {
+        "bytes": 846,
+        "sha256": "0cee788831cc6f9c70f48161ddb373faf248c5a439196d58884677dc482b6602"
+      },
+      "entries/cloudnative-pg.json": {
+        "bytes": 1026,
+        "sha256": "c4c2a17bd020cebc080fdf4dc1d36122f38182e2a7c708d2b9271f5398f40883"
+      },
+      "entries/constellation.json": {
+        "bytes": 1453,
+        "sha256": "4fbb5e594fef6199c8fbde1dd0420b1ea79c1a5f4e8bf62c13b7aeed1daf1a5d"
+      },
+      "entries/external-dns.json": {
+        "bytes": 1036,
+        "sha256": "380bb9a2ab2e51307bc9d931ec54a39eaafccf5e5165b8ce769eaebd0a4991d1"
+      },
+      "entries/external-secrets.json": {
+        "bytes": 1065,
+        "sha256": "f22993326eacf77bdb294b03df623db50960c66073d8a657f9ce2c664e69a136"
+      },
+      "entries/fluent-bit.json": {
+        "bytes": 913,
+        "sha256": "def0bb4d065ea527f406c0d25dcbe9dccae3d6ca40dd99e1559905f0f87933a5"
+      },
+      "entries/gatekeeper.json": {
+        "bytes": 980,
+        "sha256": "a21f66fac03a35bf86b98043eda5ad66bcbb0cd0800b21145053fcecad3b0471"
+      },
+      "entries/grafana.json": {
+        "bytes": 855,
+        "sha256": "18378e1e006adbb28c6e2d8f650cd7b3f12cc685a37f345f45c01ea299153e9e"
+      },
+      "entries/ingress-nginx.json": {
+        "bytes": 829,
+        "sha256": "9d179545c2c2c424fe7bd7228d60f29d5b26e4ac3dc1326f7dae10fcd80ced59"
+      },
+      "entries/keda.json": {
+        "bytes": 897,
+        "sha256": "63dcff5468bd6aa97e26d65dc70c97f809e0f0b3696e5e40ec50118b1002741a"
+      },
+      "entries/kube-prometheus-stack.json": {
+        "bytes": 986,
+        "sha256": "4e096e000a3af11857327f0197db1a2317342beef7114fe4cf7f1ebceacdddf5"
+      },
+      "entries/kube-state-metrics.json": {
+        "bytes": 924,
+        "sha256": "07e04ed0bca8a27f49b69dc5fa628f6d2805bb3ce54ff4b7b58c82de14581a5c"
+      },
+      "entries/kyverno.json": {
+        "bytes": 948,
+        "sha256": "f52983ed09fb9346e13263f91d4140df31a9c1702bce3516c075ca869c0db26f"
+      },
+      "entries/loki.json": {
+        "bytes": 822,
+        "sha256": "8c5830a699c0dbff04a05afcbe524486400676738272be43ee43e9108c808dd0"
+      },
+      "entries/longhorn.json": {
+        "bytes": 981,
+        "sha256": "19192a349be2c02786d7295c5d40bca0bdd101b368dccf2a204aedae667297eb"
+      },
+      "entries/metrics-server.json": {
+        "bytes": 917,
+        "sha256": "c2d789c3c71d0746cca907f2c8b3b3c9071220b6fb22638729fdf3f40a12e212"
+      },
+      "entries/opentelemetry-collector.json": {
+        "bytes": 1031,
+        "sha256": "2854090325499b894e044f596fcda9e8c4546e8532d41520a600b3633846a977"
+      },
+      "entries/prometheus-node-exporter.json": {
+        "bytes": 909,
+        "sha256": "66f3e20fe8198dc07a649e71edd3605d3a5393752df14ae124422a9ea2aeab66"
+      },
+      "entries/tempo.json": {
+        "bytes": 976,
+        "sha256": "8f4793a6c969646077a46fd08c78723964cd13695eec395374d69d425ca65adc"
+      },
+      "entries/trivy-operator.json": {
+        "bytes": 883,
+        "sha256": "337b9edbd1887eada2f0a7cd2b043831a451a94f798e567e84451907e254763c"
+      },
+      "entries/velero.json": {
+        "bytes": 1001,
+        "sha256": "450c79b96289fbd317a1563ba412fb82c440210672d5fd6e2fa8e319923ac9fa"
+      },
+      "images.txt": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "release-manifest.json": {
+        "bytes": 5315,
+        "sha256": "9ca9e459549bd8c2bbc608234b167fff64745db60bf9a034317a35d8ee7d64b5"
+      },
+      "revocations.json": {
+        "bytes": 83,
+        "sha256": "e73d58af372f0958d6ffbc8ff277396d13a1f211267a63e317b7fe2102e1ed1d"
+      },
+      "static/catalog.json": {
+        "bytes": 22173,
+        "sha256": "9f2730a19c42edc49dc86ab374caa5962bace21d7d9a6089db8b61c70c5ead08"
+      },
+      "static/revocations.json": {
+        "bytes": 83,
+        "sha256": "e73d58af372f0958d6ffbc8ff277396d13a1f211267a63e317b7fe2102e1ed1d"
+      },
+      "static/schemas/catalog-entry-v1.schema.json": {
+        "bytes": 6709,
+        "sha256": "6ae9675d34c08b123e9e0c805abfddb7a05e1a9626710ab71e47ed34e0fbe02f"
+      },
+      "static/schemas/catalog-entry-version-v1.schema.json": {
+        "bytes": 2006,
+        "sha256": "2152df26c606b3bb685a83fefca2454bc10a4c6e36db339f530cadc85ba69844"
+      },
+      "static/schemas/catalog-index-v1.schema.json": {
+        "bytes": 1597,
+        "sha256": "011360fb118e5844530ae37649a555a4b7cd8067c2087f4ce20b5fa90e800dd6"
+      },
+      "static/schemas/presentation-v1.schema.json": {
+        "bytes": 889,
+        "sha256": "696f4a024b0ffba043cb660fc96c6083388f2900676e4b824e42edfab1e81e3d"
+      },
+      "static/schemas/revocations-v1.schema.json": {
+        "bytes": 1048,
+        "sha256": "0a4c8c40388dc07545702bc2967674407484618174e0816374572b162f48c4dc"
+      }
+    },
+    "repositories": 17
+  },
+  "consumer_events": {
+    "parents_pass": 1,
+    "children_pass": 11,
+    "named_pass": 12,
+    "package_pass": 1,
+    "skips": 0
+  },
+  "source_after": {
+    "catalog": {
+      "schema_version": 2,
+      "source_file_count": 75,
+      "source_tree_sha256": "124ed4b786281116a4e159b21ef74bbb94246bc61dbb61b9679e43187551337d"
+    },
+    "consumer": {
+      "schema_version": 2,
+      "source_file_count": 9087,
+      "source_tree_sha256": "d478442c5a9a11798e8911991e47bf3ec9d1554fa2e117b555a45aad4e7ea5c0"
+    }
+  },
+  "source_stable": true,
+  "runner_final_guard_pass": true
+}

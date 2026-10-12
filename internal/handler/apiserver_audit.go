@@ -164,7 +164,7 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxIngestBody)
 	var req ingestApiserverAuditRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		if _, ok := err.(*http.MaxBytesError); ok {
 			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.ValidationError, "Request body too large")
 			return
@@ -253,19 +253,23 @@ func (h *ApiserverAuditHandler) PersistAuditEvents(ctx context.Context, clusterI
 
 // List handles GET /api/v1/clusters/{cluster_id}/apiserver-audit/.
 func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
 	}
 
-	limit := int32(queryLimitMax(r, 50, 500))
+	limit := queryLimitMax32(r, 50, 500)
 	if limit < 1 {
 		limit = 50
 	}
 	if limit > 500 {
 		limit = 500
 	}
-	offset := int32(queryOffset(r))
+	offset := queryOffset32(r)
 	if offset < 0 {
 		offset = 0
 	}

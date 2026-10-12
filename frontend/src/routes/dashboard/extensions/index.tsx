@@ -199,7 +199,7 @@ function ExtensionsPage() {
 
   const extensionsQuery = useQuery({
     queryKey: queryKeys.extensions.list,
-    queryFn: listExtensions,
+    queryFn: ({ signal }) => listExtensions({ signal }),
   });
   const { data, isLoading } = extensionsQuery;
 

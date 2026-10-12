@@ -1,10 +1,22 @@
 # Advisor plans
 
-This directory now has one active execution authority. Earlier audits and plans
-are preserved under [`archive/`](./archive/) with a closeout ledger and residual
-mapping.
+The current technology-guide and latest-stable modernization program is
+[Plan 032](./032-technology-guide-alignment-and-latest-stable-master-plan.md).
+It preserves CNPG and Astronomer's product architecture, reconciles existing
+work, and separates compatible v1 improvements from preparation for v2.
+Earlier release and UI programs retain their scoped authority and evidence;
+their status rows below are historical until rechecked against current source.
+Earlier audits and plans are preserved under [`archive/`](./archive/) with a
+closeout ledger and residual mapping. Release gates follow the current machine
+contract and explicitly approved release-specific exceptions.
 
 ## Active plans
+
+| Current modernization plan | Priority | Status | Next gate |
+| --- | --- | --- | --- |
+| [032 — Technology guide alignment and latest stable](./032-technology-guide-alignment-and-latest-stable-master-plan.md) | P0–P2 · whole-product modernization | **IN PROGRESS** on `implement/032-technology-guide` | W00/W05/W06/W09 scoped completion reviewed; selected current toolchains, fixed SQL and signed delivery slices integrated. Actual current/previous PostgreSQL matrix, CNPG18 pool failover and historical-key physical restore pass with explicit synthetic-sample limits. Remaining security, disconnected freshness, pagination, observability, Helm, architecture, runners, catalog and whole candidate qualification continue. [Evidence/task status](./032-evidence/README.md). |
+
+### Retained programs and historical status
 
 | Plan                                                                                                                     | Priority                      | Status                                                                                                                                                                                                                                                                                                                                                                                                              | Next gate                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

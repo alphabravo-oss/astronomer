@@ -82,19 +82,13 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 		return charlie.ValidatedOnboarding{}, false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, charlie.MaxOnboardingPackageBytes*2)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
 	var request charlieOnboardingRequest
-	if err := decoder.Decode(&request); err != nil {
+	if err := decodeStrictJSONBody(r, &request); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Onboarding request exceeds the maximum size")
 			return charlie.ValidatedOnboarding{}, false
 		}
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
-		return charlie.ValidatedOnboarding{}, false
-	}
-	if err := ensureJSONEOF(decoder); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
 		return charlie.ValidatedOnboarding{}, false
 	}

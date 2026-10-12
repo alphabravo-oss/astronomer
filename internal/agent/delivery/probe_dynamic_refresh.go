@@ -86,6 +86,9 @@ func (p *ClusterProbe) readDynamicInventory(ctx context.Context, now time.Time) 
 		component, ok := kind.project(list, projectedAt)
 		if ok {
 			result.components = append(result.components, withObservation(component, observed))
+		} else {
+			// A successful LIST does not prove that its numeric projection is usable.
+			result.components = append(result.components, availabilityComponent(kind.gvr.Resource, kind.name, protocol.DeliveryObservation{State: protocol.ObservationUnavailable}))
 		}
 		// A certificate expiring before the usual refresh must not remain healthy
 		// until that refresh. Its public notAfter limits this projection's lifetime.

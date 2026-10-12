@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useAppForm, useStore } from "@/lib/form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { ActionButton } from "@/components/ui/action-button";
 import { Eye, EyeOff, Lock, XCircle } from "lucide-react";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { BareButton } from "@/components/form/bare-button";
 
-const PASSWORD_SENTINEL = "<set>";
+import { registryDefaults, PASSWORD_SENTINEL } from "./-registry-form";
 
 function PasswordToggle({
   shown,
@@ -59,6 +59,7 @@ export function RegistryDialog({
 
   const [showPassword, setShowPassword] = useState(false);
 
+  const [serverError, setServerError] = useState<string>();
   const create = useMutation({
     mutationFn: (body: CreateRegistryRequest) =>
       createClusterRegistry(clusterId, body),
@@ -67,6 +68,7 @@ export function RegistryDialog({
         queryKey: queryKeys.clusterPages.registries(clusterId),
       });
       toastSuccess("Registry added");
+      setServerError(undefined);
       onClose();
     },
     onError: (e: Error) => toastApiError("Create failed", e),
@@ -79,59 +81,53 @@ export function RegistryDialog({
         queryKey: queryKeys.clusterPages.registries(clusterId),
       });
       toastSuccess("Registry updated");
+      setServerError(undefined);
       onClose();
     },
     onError: (e: Error) => toastApiError("Update failed", e),
   });
 
   const loading = create.isPending || update.isPending;
-  const submitError = create.error ?? update.error;
 
   const form = useAppForm({
-    defaultValues: {
-      registryUrl: existing?.registryUrl || "",
-      username: existing?.username || "",
-      // Edit seeds the sentinel — the password is only sent when the user
-      // actually types a new one (round-trip variant, unchanged).
-      password: isEdit ? PASSWORD_SENTINEL : "",
-      selectedNs: (existing?.namespaces || []) as string[],
-      secretName: existing?.secretName || "",
-      injectDefaultSa: existing?.injectDefaultSa ?? false,
+    defaultValues: registryDefaults(existing),
+    validators: {
+      onSubmit: ({ value }) =>
+        !value.registryUrl || !value.username
+          ? "Registry URL and username are required"
+          : !isEdit && !value.password
+            ? "Password is required"
+            : undefined,
     },
-    onSubmit: ({ value }) => {
-      // Old imperative checks, ported 1:1 (same messages, same order).
-      if (!value.registryUrl || !value.username) {
-        toastError("Registry URL and username are required");
-        return;
-      }
-      // The old `passwordTouched` flag maps onto the field's isDirty meta
-      // (D14: survives across renders; this form never resets mid-session).
-      const passwordTouched = form.getFieldMeta("password")?.isDirty ?? false;
-      if (isEdit) {
-        const body: UpdateRegistryRequest = {
-          registry_url: value.registryUrl,
-          username: value.username,
-          namespaces: value.selectedNs,
-          secret_name: value.secretName || undefined,
-          inject_default_sa: value.injectDefaultSa,
-        };
-        if (passwordTouched && value.password !== PASSWORD_SENTINEL) {
-          body.password = value.password;
+    onSubmit: async ({ value }) => {
+      try {
+        // The old `passwordTouched` flag maps onto the field's isDirty meta
+        // (D14: survives across renders; this form never resets mid-session).
+        const passwordTouched = form.getFieldMeta("password")?.isDirty ?? false;
+        if (isEdit) {
+          const body: UpdateRegistryRequest = {
+            registry_url: value.registryUrl,
+            username: value.username,
+            namespaces: value.selectedNs,
+            secret_name: value.secretName || undefined,
+            inject_default_sa: value.injectDefaultSa,
+          };
+          if (passwordTouched && value.password !== PASSWORD_SENTINEL) {
+            body.password = value.password;
+          }
+          await update.mutateAsync(body);
+        } else {
+          await create.mutateAsync({
+            registry_url: value.registryUrl,
+            username: value.username,
+            password: value.password,
+            namespaces: value.selectedNs,
+            secret_name: value.secretName || undefined,
+            inject_default_sa: value.injectDefaultSa,
+          });
         }
-        update.mutate(body);
-      } else {
-        if (!value.password) {
-          toastError("Password is required");
-          return;
-        }
-        create.mutate({
-          registry_url: value.registryUrl,
-          username: value.username,
-          password: value.password,
-          namespaces: value.selectedNs,
-          secret_name: value.secretName || undefined,
-          inject_default_sa: value.injectDefaultSa,
-        });
+      } catch (error) {
+        setServerError(extractApiErrorMessage(error) ?? "Unable to save");
       }
     },
   });
@@ -145,13 +141,15 @@ export function RegistryDialog({
   return (
     <Modal
       title={isEdit ? `Edit ${existing.registryUrl}` : "Add registry"}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       icon={<Lock className="h-4 w-4" />}
       onClose={onClose}
     >
       <form.AppForm>
-        <form.FormErrorSummary
-          serverError={submitError ? extractApiErrorMessage(submitError) : null}
-        />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
       <div className="space-y-1.5">
         <label
@@ -290,7 +288,6 @@ export function RegistryDialog({
 
       <ModalFooter
         onCancel={onClose}
-        onSubmit={() => void form.handleSubmit()}
         loading={loading}
         submitLabel={isEdit ? "Save" : "Add registry"}
       />
@@ -387,15 +384,18 @@ function Modal({
   icon,
   onClose,
   children,
+  onSubmit,
 }: {
   title: string;
   icon?: React.ReactNode;
   onClose: () => void;
   children: React.ReactNode;
+  onSubmit?: React.FormEventHandler<HTMLFormElement>;
 }) {
   return (
     <ModalShell
       title={title}
+      onSubmit={onSubmit}
       onClose={onClose}
       size="md"
       titleIcon={
@@ -413,12 +413,10 @@ function Modal({
 
 function ModalFooter({
   onCancel,
-  onSubmit,
   loading,
   submitLabel,
 }: {
   onCancel: () => void;
-  onSubmit: () => void;
   loading?: boolean;
   submitLabel: string;
 }) {
@@ -429,7 +427,7 @@ function ModalFooter({
           Cancel
         </ActionButton>
         <ActionButton
-          onClick={onSubmit}
+          type="submit"
           disabled={loading}
           intent="primary"
           loading={loading}

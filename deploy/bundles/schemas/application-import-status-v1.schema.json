@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "application-import-status-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verification",
+    "inventory",
+    "runtime_qualification"
+  ],
+  "properties": {
+    "verification": {
+      "const": "verified"
+    },
+    "inventory": {
+      "const": "complete_for_reviewed_profiles"
+    },
+    "runtime_qualification": {
+      "const": "unavailable_until_signed_local_OCI_catalog_and_child_subjects_qualified"
+    }
+  }
+}

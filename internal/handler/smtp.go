@@ -2,10 +2,10 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -248,7 +248,7 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req smtpSettingsUpdate
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -261,7 +261,11 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merged := h.mergeUpdate(existing, req)
+	merged, err := h.mergeUpdate(existing, req)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
 	if vErr := h.validate(merged); vErr != "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
 		return
@@ -358,7 +362,15 @@ type rawSettings struct {
 	TimeoutSeconds int32
 }
 
-func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUpdate) rawSettings {
+func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUpdate) (rawSettings, error) {
+	// Disabled settings may be staged outside the enabled SMTP limits, but
+	// every supplied integer must retain its value in the database column.
+	if req.Port != nil && (*req.Port < math.MinInt32 || *req.Port > math.MaxInt32) {
+		return rawSettings{}, errors.New("port must fit a signed 32-bit integer")
+	}
+	if req.TimeoutSeconds != nil && (*req.TimeoutSeconds < math.MinInt32 || *req.TimeoutSeconds > math.MaxInt32) {
+		return rawSettings{}, errors.New("timeout_seconds must fit a signed 32-bit integer")
+	}
 	out := rawSettings{
 		Enabled:        existing.Enabled,
 		Host:           existing.Host,
@@ -416,7 +428,7 @@ func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUp
 	if req.TimeoutSeconds != nil {
 		out.TimeoutSeconds = int32(*req.TimeoutSeconds)
 	}
-	return out
+	return out, nil
 }
 
 // validate returns "" on success or a single-sentence error message
@@ -564,6 +576,10 @@ type emailListItem struct {
 // List handles GET /api/v1/admin/emails/. Paginated; default 50 per
 // page, max 200.
 func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if err := h.requireSuperuser(r); err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return
@@ -571,8 +587,8 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit, offset := queryLimitOffset(r, 50)
 
 	rows, err := h.queries.ListEmailMessages(r.Context(), sqlc.ListEmailMessagesParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read email messages")

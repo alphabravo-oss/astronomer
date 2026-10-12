@@ -1,0 +1,778 @@
+{
+  "schemaVersion": 1,
+  "status": "SCOPED_CURRENT_DRIVER203_PASS",
+  "sourceCommit": "f7e685579094a90a3184a8fc6dcc4ed91b205c70",
+  "portableIndexSHA256": "sha256:5c658797717e604e5034c12f255a17bf8a32df99c4431d083813f6b75f4d4b29",
+  "historicalQualification": {
+    "schemaVersion": 1,
+    "status": "SCOPED_CORRECTED84_PASS",
+    "sourceCommit": "0b79d78fe7c27b7dc9dff24eeb4ba61b8e8a07ec",
+    "portableIndexSHA256": "sha256:b56eb6c2c049f3d3c36c51455c7674f4700418adbe36773a472151cad57916f0",
+    "historicalCore": {
+      "sourceCommit": "ece59583d37a43afaa1c0ccd5683f3f011e50ebb",
+      "parents": 33,
+      "terminals": 79,
+      "scope": "Earlier process/upgrade/private checkpoint core only"
+    },
+    "runs": [
+      {
+        "sourceCommit": "7c9d92370e86f8306a5a1e6970de2b1240ca7532",
+        "originalReceiptSHA256": "sha256:f93bfc02c360e1b9bd2fd507013fe40a4c58b2a21f33bb23c8b7214635987e4e",
+        "originalExitCode": 1,
+        "sourceStable": true,
+        "expectedParents": 84,
+        "terminalParents": 54,
+        "caseCounts": {
+          "pass": 153,
+          "fail": 2,
+          "skip": 0
+        },
+        "packageTerminals": [
+          {
+            "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+            "action": "fail"
+          },
+          {
+            "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+            "action": "pass"
+          },
+          {
+            "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+            "action": "pass"
+          }
+        ],
+        "actualGoVersion": "go version go1.27.2 linux/amd64",
+        "results": [
+          {
+            "name": "go-version",
+            "exitCode": 0,
+            "drained": true
+          },
+          {
+            "name": "focused-tests",
+            "exitCode": 1,
+            "drained": true
+          }
+        ],
+        "guardCount": 9,
+        "status": "ORIGINAL_DIGEST_PANIC_TRUNCATED_FAIL"
+      },
+      {
+        "sourceCommit": "0b79d78fe7c27b7dc9dff24eeb4ba61b8e8a07ec",
+        "originalReceiptSHA256": "sha256:3cc6db8e3d2558f92b7662a618f1c0c4e91003b03d8df6248380bd3b7130d2b4",
+        "originalExitCode": 0,
+        "sourceStable": true,
+        "expectedParents": 84,
+        "terminalParents": 84,
+        "caseCounts": {
+          "pass": 228,
+          "fail": 0,
+          "skip": 0
+        },
+        "packageTerminals": [
+          {
+            "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+            "action": "pass"
+          },
+          {
+            "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+            "action": "pass"
+          },
+          {
+            "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+            "action": "pass"
+          }
+        ],
+        "actualGoVersion": "go version go1.27.2 linux/amd64",
+        "results": [
+          {
+            "name": "go-version",
+            "exitCode": 0,
+            "drained": true
+          },
+          {
+            "name": "focused-tests",
+            "exitCode": 0,
+            "drained": true
+          },
+          {
+            "name": "consumer-vet",
+            "exitCode": 0,
+            "drained": true
+          }
+        ],
+        "guardCount": 13,
+        "status": "SCOPED84_PASS"
+      }
+    ],
+    "sourceOnlyAfterQualification": {
+      "observerCommit": "eae2212b6bb662f8b9652fef9d1dc394164a311f",
+      "recoveryCommit": "439848c5c901ea8de398844f5764c0674024f15e",
+      "status": "UNCOMPILED_UNRUN"
+    },
+    "limits": [
+      "The original54-parent155-terminal digest panic is retained with its failed exit; vet unrun in that failed stage",
+      "Corrected84parents228cases3packages allPASS without skips; three-consumer vet passed on frozen0b79 only",
+      "No actual Helm/kubectl/PostgreSQL/cluster/release mutation, archive readability or upgrade rollback credit",
+      "Observer/private Helm recovery/new offline metadata verifier/current-main composition not qualified by these historical results",
+      "Complete signer/chart/archive/seven image checks, checksum/compatibility/PG/key gates, full Driver/public schema-v1 evidence/wrapper/disposable rehearsal remain open"
+    ]
+  },
+  "runs": [
+    {
+      "sourceCommit": "7c9d92370e86f8306a5a1e6970de2b1240ca7532",
+      "originalReceiptSHA256": "sha256:f93bfc02c360e1b9bd2fd507013fe40a4c58b2a21f33bb23c8b7214635987e4e",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "expectedParents": 84,
+      "terminalParents": 54,
+      "caseCounts": {
+        "pass": 153,
+        "fail": 2,
+        "skip": 0
+      },
+      "packageTerminals": [
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+          "action": "fail"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+          "action": "pass"
+        }
+      ],
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 1,
+          "drained": true
+        }
+      ],
+      "guardCount": 9,
+      "status": "ORIGINAL_DIGEST_PANIC_TRUNCATED_FAIL"
+    },
+    {
+      "sourceCommit": "0b79d78fe7c27b7dc9dff24eeb4ba61b8e8a07ec",
+      "originalReceiptSHA256": "sha256:3cc6db8e3d2558f92b7662a618f1c0c4e91003b03d8df6248380bd3b7130d2b4",
+      "originalExitCode": 0,
+      "sourceStable": true,
+      "expectedParents": 84,
+      "terminalParents": 84,
+      "caseCounts": {
+        "pass": 228,
+        "fail": 0,
+        "skip": 0
+      },
+      "packageTerminals": [
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+          "action": "pass"
+        }
+      ],
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true
+        }
+      ],
+      "guardCount": 13,
+      "status": "SCOPED84_PASS"
+    },
+    {
+      "name": "w14-current-a4c15087",
+      "sourceCommit": "a4c1508733505b67e49b22827b0c47da82b2654b",
+      "originalReceiptSHA256": "sha256:c35f6a90a8eb888614776336fb744d42928f04ab76aa9985d8e157ba28b81bc4",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 10,
+      "artifactCount": 14,
+      "contracts": {
+        "ops-tests": {
+          "expectedParentCount": 93,
+          "terminalParentCount": 93,
+          "terminalCaseCount": 266,
+          "caseCounts": {
+            "pass": 263,
+            "fail": 3,
+            "skip": 0
+          },
+          "terminalPackages": [
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+              "action": "fail"
+            }
+          ],
+          "passed": false
+        }
+      },
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "ops-tests",
+          "exitCode": 1,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "current ops93/full resolver parent/child/no-skip contract failed"
+      }
+    },
+    {
+      "name": "w14-current-60cd8ce0",
+      "sourceCommit": "60cd8ce0adb0a5231fdb6e08ba7fbdb111880c64",
+      "originalReceiptSHA256": "sha256:33bd3391a9d5bb977e240395a3174509f97356017a5fa78a25383438017b71dc",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 29,
+      "artifactCount": 37,
+      "contracts": {
+        "ops-tests": {
+          "expectedParentCount": 93,
+          "terminalParentCount": 93,
+          "terminalCaseCount": 266,
+          "caseCounts": {
+            "pass": 266,
+            "fail": 0,
+            "skip": 0
+          },
+          "terminalPackages": [
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+              "action": "pass"
+            }
+          ],
+          "passed": true
+        },
+        "resolver-tests": {
+          "expectedParentCount": 53,
+          "terminalParentCount": 53,
+          "terminalCaseCount": 179,
+          "caseCounts": {
+            "pass": 179,
+            "fail": 0,
+            "skip": 0
+          },
+          "terminalPackages": [
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/resolver",
+              "action": "pass"
+            }
+          ],
+          "passed": true
+        }
+      },
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "ops-tests",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "resolver-tests",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "json-inventory",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "json-validation",
+          "exitCode": 1,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "json-validation did not complete"
+      }
+    },
+    {
+      "name": "w14-current-60cd8ce0-static-completion",
+      "sourceCommit": "60cd8ce0adb0a5231fdb6e08ba7fbdb111880c64",
+      "originalReceiptSHA256": "sha256:c9b743264fbaf8b8fcf89f5bed60bf5b2b0ed4118a9605d05179d8cd5ddbf4ea",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": null,
+      "guardCount": 11,
+      "artifactCount": 16,
+      "contracts": {},
+      "results": [
+        {
+          "name": "json-validation",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "dependency-boundaries",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "complexity",
+          "exitCode": 1,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "complexity did not complete"
+      }
+    },
+    {
+      "name": "w14-worker-owner-2b1ba15b",
+      "sourceCommit": "2b1ba15b70399f3a3b692d4ff9ae6c8d5bb9fa21",
+      "originalReceiptSHA256": "sha256:ad33f6402fa6a14cfbea27264a56f7aa052d78c9ac41369e38cc7f0f5b82c80e",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": null,
+      "guardCount": 5,
+      "artifactCount": 8,
+      "contracts": {},
+      "results": [
+        {
+          "name": "sql-inventory",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "all SQL candidate identities/counts differ"
+      }
+    },
+    {
+      "name": "w14-worker-current-7ba978d5",
+      "sourceCommit": "7ba978d5d7a8f92e238384f20706577e9925a890",
+      "originalReceiptSHA256": "sha256:0692760b1eba57667b5c3af113048ad1354dc543320980a93a15b67c8ea4b4d2",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 14,
+      "artifactCount": 21,
+      "contracts": {},
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "worker-tests",
+          "exitCode": -15,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "default capacity numeric type/status differs"
+      }
+    },
+    {
+      "name": "w14-worker-current-7ba978d5-after-capacity-run2",
+      "sourceCommit": "7ba978d5d7a8f92e238384f20706577e9925a890",
+      "originalReceiptSHA256": "sha256:779e573cde56019dbda158640225edfbc390e014085740add38d27b6eb258168",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 12,
+      "artifactCount": 19,
+      "contracts": {},
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "worker-tests",
+          "exitCode": -15,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "default capacity numeric type/status differs"
+      }
+    },
+    {
+      "name": "w14-driver-e4443fbf",
+      "sourceCommit": "e4443fbf99283078c268d0e0010f24a3b8a93e5d",
+      "originalReceiptSHA256": "sha256:ece204d47b2dd8ec61263826987c01799557ecbbbab86f97dd01f0d51e1e9546",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 8,
+      "artifactCount": 14,
+      "contracts": {},
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "ops-tests",
+          "exitCode": 1,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "JSONDecodeError",
+        "message": "Expecting value: line 1 column 1 (char 0)"
+      }
+    },
+    {
+      "name": "w14-driver-module-e4443fbf",
+      "sourceCommit": "e4443fbf99283078c268d0e0010f24a3b8a93e5d",
+      "originalReceiptSHA256": "sha256:efd7f1cd51c9ef4139d3961e7133480fe21254c75099cfdee6877d1a0292b76f",
+      "originalExitCode": 0,
+      "sourceStable": null,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 8,
+      "artifactCount": 19,
+      "contracts": {},
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "go-mod-tidy",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": null
+    },
+    {
+      "name": "w14-driver-7aad8e73",
+      "sourceCommit": "7aad8e736f4e3ed22f3e140b8b87a47f8095d1a0",
+      "originalReceiptSHA256": "sha256:f46cc574ea513ceeafd107d96c0bf4c22fe7e16aa32276b186d660dbeddf40aa",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 31,
+      "artifactCount": 37,
+      "contracts": {
+        "ops-tests": {
+          "expectedParentCount": 149,
+          "terminalParentCount": 149,
+          "terminalCaseCount": 444,
+          "caseCounts": {
+            "pass": 440,
+            "fail": 4,
+            "skip": 0
+          },
+          "terminalPackages": [
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+              "action": "fail"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/cmd/worker",
+              "action": "pass"
+            }
+          ],
+          "passed": false
+        }
+      },
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "ops-tests",
+          "exitCode": 1,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": {
+        "type": "RuntimeError",
+        "message": "current Driver ops/full resolver parent/child/no-skip contract failed"
+      }
+    },
+    {
+      "name": "w14-driver-f7e68557",
+      "sourceCommit": "f7e685579094a90a3184a8fc6dcc4ed91b205c70",
+      "originalReceiptSHA256": "sha256:87fb853518df02af27952cae12669418f5bbc314c5123f8427efc22b1c65a1eb",
+      "originalExitCode": 0,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "guardCount": 52,
+      "artifactCount": 66,
+      "contracts": {
+        "ops-tests": {
+          "expectedParentCount": 150,
+          "terminalParentCount": 150,
+          "terminalCaseCount": 1265,
+          "caseCounts": {
+            "pass": 1265,
+            "fail": 0,
+            "skip": 0
+          },
+          "terminalPackages": [
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/cmd/worker",
+              "action": "pass"
+            },
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+              "action": "pass"
+            }
+          ],
+          "passed": true
+        },
+        "resolver-tests": {
+          "expectedParentCount": 53,
+          "terminalParentCount": 53,
+          "terminalCaseCount": 179,
+          "caseCounts": {
+            "pass": 179,
+            "fail": 0,
+            "skip": 0
+          },
+          "terminalPackages": [
+            {
+              "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/resolver",
+              "action": "pass"
+            }
+          ],
+          "passed": true
+        }
+      },
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "ops-tests",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "resolver-tests",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "sql-inventory",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "sql-validation",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "json-inventory",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "json-validation",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "dependency-boundaries",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "complexity",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "exception": null
+    }
+  ],
+  "currentScope": {
+    "parents": 203,
+    "terminals": 1444,
+    "pass": 1444,
+    "fail": 0,
+    "skip": 0,
+    "opsWorkerParents": 150,
+    "opsWorkerTerminals": 1265,
+    "resolverParents": 53,
+    "resolverTerminals": 179,
+    "vetConsumers": 5,
+    "heldDrainedGroups": 10,
+    "rawArtifacts": 66,
+    "defaultFatalGuardRecords": 52,
+    "sqlCandidates": 897,
+    "sqlOwners": 182,
+    "legacyDeleteAllowanceCeiling": 294,
+    "jsonRequestRows": 189,
+    "jsonStorageRows": 205,
+    "jsonSites": 1173,
+    "dependencyRules": 17,
+    "complexityFileCeilings": 41,
+    "complexityFunctionCeilings": 64
+  },
+  "limits": [
+    "Current frozen f7e203 parents/1444 terminals across five packages passed under race without skipped cases; five-consumer vet and current SQL/JSON/boundary/complexity checks passed. All earlier receipts and failed exits remain losslessly retained.",
+    "Historical93ops/53resolver race/vet passed on60cd, but its JSON command and inherited worker complexity checks failed separately. Earlier worker-only capacity attempts reached zero test events; current f7e worker package passed with its three parents.",
+    "The e444202 attempt reached zero test events because a direct module requirement was missing. Public isolated tidy confirmed only distribution/reference v0.6.0 direct requirement; the exact one-line closure was applied at7aad. The genuine7aad202 attempt failed four test parents; f7e quotes the strict YAML fixture and preserves real gzip/tar cancellation identity without partial publication.",
+    "Local synthetic trusted roots and genuine offline signature/OCI/proxy fixtures prove scoped cryptographic policy and constructor/failure cancellation behavior; they do not prove GitHub publication provenance or successful official CLI execution.",
+    "No actual Helm/kubectl/PostgreSQL upgrade, archive restore, cluster mutation, disposable replacement/resume, successful complete Invocation.Run, external database compatibility, public schema-v1 publication, wrapper parity or live upgrade/rollback rehearsal is qualified by these runs.",
+    "Later current-main additive composition and source stages retain these historical source identities; no whole W14/W10/W12 or combined release-candidate qualification is claimed."
+  ]
+}

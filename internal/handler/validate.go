@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -13,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
@@ -77,6 +76,11 @@ type fieldError struct {
 // and writes nothing.
 func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bool {
 	if err := decodeStrictJSONBody(r, out); err != nil {
+		var schemaErr *jsoncontract.Error
+		if errors.As(err, &schemaErr) && (schemaErr.Field == "source_matchers" || schemaErr.Field == "target_matchers" || schemaErr.Field == "equal_labels") {
+			writeJSONFieldErrors(w, r, []fieldError{{Field: schemaErr.Field, Rule: schemaErr.Category, Message: "Invalid " + schemaErr.Field}})
+			return false
+		}
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return false
 	}
@@ -92,24 +96,13 @@ func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bo
 // Unknown fields and trailing JSON are rejected so misspelled or retired
 // request fields cannot be silently ignored.
 func decodeStrictJSONBody(r *http.Request, out any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(out); err != nil {
-		return err
-	}
-	return ensureJSONEOF(decoder)
+	return jsoncontract.DecodeRequest(r, out, jsoncontract.ExactProduct)
 }
 
-func ensureJSONEOF(decoder *json.Decoder) error {
-	var extra any
-	err := decoder.Decode(&extra)
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err == nil {
-		return errors.New("request body must contain exactly one JSON value")
-	}
-	return err
+// decodeV1JSONBody is the explicit adapter for historically additive v1 DTOs.
+// It preserves extra properties while imposing the same size/document bound.
+func decodeV1JSONBody(r *http.Request, out any) error {
+	return jsoncontract.DecodeRequest(r, out, jsoncontract.AdditiveV1)
 }
 
 // writeValidationError renders a validator.ValidationErrors as the uniform 422
@@ -131,6 +124,10 @@ func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 		})
 	}
 
+	writeJSONFieldErrors(w, r, fields)
+}
+
+func writeJSONFieldErrors(w http.ResponseWriter, r *http.Request, fields []fieldError) {
 	errObj := map[string]any{
 		"code":    apierror.ValidationError,
 		"message": "Request failed validation",

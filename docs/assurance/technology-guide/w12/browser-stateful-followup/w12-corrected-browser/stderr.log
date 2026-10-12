@@ -1,0 +1,2 @@
+npm notice run astronomer-frontend@1.2.1 npx
+npm notice run 'playwright' test --config playwright.components.config.ts --workers=1 --retries=0 --reporter=json

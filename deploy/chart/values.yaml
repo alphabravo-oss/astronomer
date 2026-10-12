@@ -88,23 +88,23 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
 
 # =============================================================================
@@ -143,7 +143,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
@@ -442,6 +442,10 @@ redis:
   sentinel:
     replicas: 3
     sentinels: 3
+    # Sentinel coordinates failover; it does not hold the data set.
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 256Mi}
     masterName: astronomer
     quorum: 2
     downAfterMilliseconds: 5000
@@ -538,7 +542,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # Read-only upgrade admission for external databases. Empty databases are
@@ -547,7 +551,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 71
+    targetVersion: 81
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -678,6 +682,17 @@ delivery:
         certificateIdentity: ""
         oidcIssuer: "https://token.actions.githubusercontent.com"
 
+  # Operator authority is independent of signed artifact locations.
+  distribution:
+    destinationPolicy:
+      restricted: false
+      origins: []
+    # Public signed metadata only; private signing keys never enter Helm values.
+    mirrorEndorsement:
+      plan: ""
+      signature: ""
+      keyRef: ""
+
   sourceResolution:
     workerConcurrency: 8
     maxArtifactBytes: 536870912
@@ -700,7 +715,7 @@ delivery:
     # Optional Secret whose keys are <trust-policy key_ref>.pub for Cosign
     # key verification, <key_ref>.asc for armored OpenPGP, and
     # trusted_root.json for offline keyless (Fulcio + Rekor) verification.
-    # It is mounted read-only only in resolver workers and is never exposed
+    # It is mounted read-only in the server and resolver workers and is never exposed
     # through the API.
     trustKeys:
       existingSecret: ""
@@ -874,6 +889,11 @@ bootstrap:
 # TLS — single source of truth, consumed by both gateway.* and ingress.*.
 # Mirrors Rancher's ingress.tls.source model.
 # =============================================================================
+# Each downstream tool/cluster gets a deterministic hostname under this suffix.
+# Set wildcard DNS and TLS before enabling; empty leaves UI launch unavailable.
+toolUI:
+  domain: ""
+
 tls:
   # Mode selector:
   #   none        — no TLS (HTTP only). Fine for local dev.
@@ -905,6 +925,11 @@ tls:
     # otherwise ingress.className. Set explicitly when the ACME HTTP-01
     # solver should use a different class than the public listener.
     ingressClassName: ""
+    # Optional DNS-01. Required for toolUI.domain with Let's Encrypt.
+    # Create this Secret separately; never put the token in Helm values.
+    cloudflare:
+      apiTokenSecretName: ""
+      apiTokenSecretKey: api-token
 
   # When true, fail helm install/upgrade if cert-manager CRDs are missing
   # and the selected mode needs them. Default true. Set to false if you
@@ -1142,6 +1167,12 @@ managementBackup:
       name: ""
       key: "credentials"
   s3:
+    destinationPolicy:
+      restricted: false
+      origins: []
+    ca:
+      existingSecret: ""
+      key: ca.crt
     # Required when enabled=true.
     bucket: ""
     region: "us-east-1"
@@ -1202,7 +1233,7 @@ managementBackup:
   # air-gapped.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1311,7 +1342,7 @@ managementRestoreDrill:
   # as managementBackup so the drill can run wherever the backup runs.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry

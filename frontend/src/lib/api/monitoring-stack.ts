@@ -1,3 +1,15 @@
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/openapi.generated";
+type MonitoringOperation = OpenAPIComponents["schemas"]["MonitoringOperation"];
+export type { MonitoringOperation };
+import { requireMonitoringData as requireData } from "./monitoring-data";
+export {
+  previewClusterStack,
+  previewSharedThanos,
+  previewSharedAlertmanager,
+  previewSharedGrafana,
+  previewSharedLoki,
+  previewStack,
+} from "./monitoring-stack-previews";
 /**
  * Generated monitoring-stack lifecycle boundary for cluster Prometheus and
  * the shared Thanos, Alertmanager, Grafana, and Loki families.
@@ -42,15 +54,9 @@
  */
 import * as generated from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
-import type {
-  MonitoringOperation,
-  MonitoringSizerResponse,
-  MonitoringStackPreview,
-  OpenAPIComponents,
-} from "@/types/openapi.generated";
+import type { MonitoringSizerResponse } from "@/types/openapi.generated";
 
 export type {
-  MonitoringOperation,
   MonitoringOperationEvent,
   MonitoringSizerResponse,
   MonitoringSizerVerdict,
@@ -58,13 +64,6 @@ export type {
 } from "@/types/openapi.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
-
-function requireData<T>(response: { data?: T }, operation: string): T {
-  if (response.data === undefined) {
-    throw new Error(`${operation} returned no data payload`);
-  }
-  return response.data;
-}
 
 // ─────────────────────────────────────────────────────────────────────
 // Operation queue
@@ -216,25 +215,14 @@ export type SharedLokiStatus = Schemas["MonitoringStackStatus"];
 
 export async function getClusterStackStatus(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ClusterStackStatus> {
   return requireData(
     await generated.getClustersByIdMonitoringStackStatus({
+      signal,
       path: { id: clusterId },
     }),
     "getClusterStackStatus",
-  );
-}
-
-export async function previewClusterStack(
-  clusterId: string,
-  body: ClusterStackRequest = {},
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postClustersByIdMonitoringStackPreview({
-      path: { id: clusterId },
-      body,
-    }),
-    "previewClusterStack",
   );
 }
 
@@ -300,19 +288,12 @@ export async function uninstallClusterStack(
 //  plus the clusters:write token-scope backstop on every mutation)
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedThanosStatus(): Promise<SharedThanosStatus> {
+export async function getSharedThanosStatus(
+  signal?: AbortSignal,
+): Promise<SharedThanosStatus> {
   return requireData(
-    await generated.getSettingsMonitoringThanosStatus(),
+    await generated.getSettingsMonitoringThanosStatus({ signal }),
     "getSharedThanosStatus",
-  );
-}
-
-export async function previewSharedThanos(
-  body: SharedThanosRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringThanosPreview({ body }),
-    "previewSharedThanos",
   );
 }
 
@@ -374,19 +355,12 @@ export async function uninstallSharedThanos(
 // Shared Alertmanager — /settings/monitoring/alertmanager/*
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedAlertmanagerStatus(): Promise<SharedAlertmanagerStatus> {
+export async function getSharedAlertmanagerStatus(
+  signal?: AbortSignal,
+): Promise<SharedAlertmanagerStatus> {
   return requireData(
-    await generated.getSettingsMonitoringAlertmanagerStatus(),
+    await generated.getSettingsMonitoringAlertmanagerStatus({ signal }),
     "getSharedAlertmanagerStatus",
-  );
-}
-
-export async function previewSharedAlertmanager(
-  body: SharedAlertmanagerRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringAlertmanagerPreview({ body }),
-    "previewSharedAlertmanager",
   );
 }
 
@@ -443,19 +417,12 @@ export async function uninstallSharedAlertmanager(
 // Grafana is available only through the authenticated same-origin proxy.
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedGrafanaStatus(): Promise<SharedGrafanaStatus> {
+export async function getSharedGrafanaStatus(
+  signal?: AbortSignal,
+): Promise<SharedGrafanaStatus> {
   return requireData(
-    await generated.getSettingsMonitoringGrafanaStatus(),
+    await generated.getSettingsMonitoringGrafanaStatus({ signal }),
     "getSharedGrafanaStatus",
-  );
-}
-
-export async function previewSharedGrafana(
-  body: SharedGrafanaRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringGrafanaPreview({ body }),
-    "previewSharedGrafana",
   );
 }
 
@@ -507,9 +474,11 @@ export async function uninstallSharedGrafana(
   );
 }
 
-export async function getMonitoringSizer(): Promise<MonitoringSizerResponse> {
+export async function getMonitoringSizer(
+  signal?: AbortSignal,
+): Promise<MonitoringSizerResponse> {
   return requireData(
-    await generated.getSettingsMonitoringSizer(),
+    await generated.getSettingsMonitoringSizer({ signal }),
     "getMonitoringSizer",
   );
 }
@@ -519,19 +488,12 @@ export async function getMonitoringSizer(): Promise<MonitoringSizerResponse> {
 // Feature-gated: feature.hosted_loki must be exactly true. ClusterIP only.
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedLokiStatus(): Promise<SharedLokiStatus> {
+export async function getSharedLokiStatus(
+  signal?: AbortSignal,
+): Promise<SharedLokiStatus> {
   return requireData(
-    await generated.getSettingsMonitoringLokiStatus(),
+    await generated.getSettingsMonitoringLokiStatus({ signal }),
     "getSharedLokiStatus",
-  );
-}
-
-export async function previewSharedLoki(
-  body: SharedLokiRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringLokiPreview({ body }),
-    "previewSharedLoki",
   );
 }
 
@@ -587,43 +549,11 @@ export async function uninstallSharedLoki(
 // Operations queue — /settings/monitoring/operations/*
 // ─────────────────────────────────────────────────────────────────────
 
-export interface MonitoringOperationListParams {
-  targetType?: MonitoringOperationTargetType;
-  targetKey?: string;
-  status?: MonitoringOperationStatus;
-  limit?: number;
-  offset?: number;
-}
-
-/**
- * Newest first (ORDER BY created_at DESC), RBAC-filtered in Go — a caller
- * without monitoring:read on a target simply does not see its rows.
- *
- * This is what makes adopt-on-load possible: filtering by
- * (targetType, targetKey) and taking the newest row tells the UI whether work
- * is already in flight for this stack, whether the current user started it or
- * not. The `status` filter accepts ONE value, so callers that want "pending or
- * running" ask unfiltered and inspect the newest row instead of issuing two
- * requests.
- */
-export async function listMonitoringOperations(
-  params?: MonitoringOperationListParams,
-): Promise<MonitoringOperation[]> {
-  const response = await generated.getSettingsMonitoringOperations({
-    query: params,
-  });
-  return response.data ?? [];
-}
-
-/** Detail — the only endpoint that returns the operation's stage events. */
-export async function getMonitoringOperation(
-  id: string,
-): Promise<MonitoringOperation> {
-  return requireData(
-    await generated.getSettingsMonitoringOperationsById({ path: { id } }),
-    "getMonitoringOperation",
-  );
-}
+export {
+  listMonitoringOperations,
+  getMonitoringOperation,
+  type MonitoringOperationListParams,
+} from "./monitoring-operation-reads";
 
 /**
  * Re-enqueues a failed or superseded operation IN PLACE: same row, same id,
@@ -716,36 +646,19 @@ export function stackTargetLabel(target: MonitoringStackTarget): string {
 
 export async function getStackStatus(
   target: MonitoringStackTarget,
+  signal?: AbortSignal,
 ): Promise<MonitoringStackStatusBase> {
   switch (target.kind) {
     case "cluster":
-      return getClusterStackStatus(target.clusterId);
+      return getClusterStackStatus(target.clusterId, signal);
     case "thanos":
-      return getSharedThanosStatus();
+      return getSharedThanosStatus(signal);
     case "alertmanager":
-      return getSharedAlertmanagerStatus();
+      return getSharedAlertmanagerStatus(signal);
     case "grafana":
-      return getSharedGrafanaStatus();
+      return getSharedGrafanaStatus(signal);
     case "loki":
-      return getSharedLokiStatus();
-  }
-}
-
-export async function previewStack(
-  target: MonitoringStackTarget,
-  body: MonitoringStackRequestBody,
-): Promise<MonitoringStackPreview> {
-  switch (target.kind) {
-    case "cluster":
-      return previewClusterStack(target.clusterId, body as ClusterStackRequest);
-    case "thanos":
-      return previewSharedThanos(body as SharedThanosRequest);
-    case "alertmanager":
-      return previewSharedAlertmanager(body as SharedAlertmanagerRequest);
-    case "grafana":
-      return previewSharedGrafana(body as SharedGrafanaRequest);
-    case "loki":
-      return previewSharedLoki(body as SharedLokiRequest);
+      return getSharedLokiStatus(signal);
   }
 }
 

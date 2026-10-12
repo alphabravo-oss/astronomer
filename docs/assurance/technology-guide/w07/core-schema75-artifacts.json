@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "regression_source": "5238f597",
+  "fix_sources": ["b9f831b1", "4cf6d97c"],
+  "scope": "Frozen handler sources; unrelated canonical API and SDK drafts were present and are not qualified by these receipts. Whole-tree governance and paired consumer gates remain pending.",
+  "artifacts": [
+    {
+      "path": "opt-in-legacy-parser-before.log",
+      "bytes": 2270,
+      "sha256": "36cd47685fb2019dbdd539882c5ebd681093ac8ccfa0284cd520606e8b0eb4c1"
+    },
+    {
+      "path": "project-materialization-before.log",
+      "bytes": 635,
+      "sha256": "d563e9de113e5d312cac934e61aeface142cc78e9f73dbc6a3034f8ff3467d66"
+    },
+    {
+      "path": "control-plane-filter-plans-before-opt-in.log",
+      "bytes": 27359,
+      "sha256": "33c172c177f2d1aabea2eb01fcedaee5e7c7d59a94946edf48c3dbca9cb65865"
+    },
+    {
+      "path": "core-regressions-before-receipt.json",
+      "bytes": 1455,
+      "sha256": "0a2824d1b8e86797421fd84e2a4874a5a09f3c4254f8f2a0c32a7a15786887f8"
+    },
+    {
+      "path": "opt-in-legacy-parser-after.log",
+      "bytes": 2105,
+      "sha256": "79cf69346f8fb75a8809c0a44f6b6e1c0021967132799d08522ba73a5caf0483"
+    },
+    {
+      "path": "core17-schema75.log",
+      "bytes": 43087,
+      "sha256": "edd3c71eebc0ee87e9465495446672f6c9fb7fc7b6a4e955ff8bc61f273c3e93"
+    },
+    {
+      "path": "core18-schema75-race.log",
+      "bytes": 41154,
+      "sha256": "75df63894b4af1cb2f94e451475f50502f61f50954817031bf7d5e61c8f5c198"
+    },
+    {
+      "path": "core-schema75-receipt.json",
+      "bytes": 1155,
+      "sha256": "09923c7103e55af49c839a7ef58def996c906b4dabc049362bb20ff4a02ffa41"
+    },
+    {
+      "path": "control-plane-migrations75-receipt.json",
+      "bytes": 795,
+      "sha256": "9cf1e0ad5e0f6139b4d1c391883245c3056ff33a86646986e079dfeccc02e28b"
+    },
+    {
+      "path": "control-plane-migrator17.log",
+      "bytes": 284,
+      "sha256": "529d8a2422cdbbcb53f3382de95ce6f19d633d16e56582c1271b6051af525036"
+    },
+    {
+      "path": "control-plane-migrator18.log",
+      "bytes": 284,
+      "sha256": "c9bf73f80b1ec520cf05025ffa9aad5caf4419c7dc7b2725ccef6cf0304fe2fa"
+    }
+  ]
+}

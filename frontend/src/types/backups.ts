@@ -1,3 +1,5 @@
+import type { CategoryValue } from "./categories.generated";
+
 // --- Backup Types ---
 
 export type BackupStorageType = "s3" | "gcs" | "azure" | "minio";
@@ -17,7 +19,7 @@ export interface BackupStorageConfig {
 
 export type BackupType = "full" | "database" | "config";
 
-export type BackupStatus = "pending" | "in_progress" | "completed" | "failed";
+export type BackupStatus = CategoryValue<"BackupKnownStatus"> | "unknown";
 
 export interface Backup {
   id: string;

@@ -115,7 +115,7 @@ import { settingsKeys } from "./query-keys";
 export function usePlatformSettings() {
   return useQuery({
     queryKey: settingsKeys.platform,
-    queryFn: () => listPlatformSettings(),
+    queryFn: ({ signal }) => listPlatformSettings(signal),
   });
 }
 
@@ -142,7 +142,7 @@ export function useSavePlatformSettings() {
 export function useSmtpConfig() {
   return useQuery({
     queryKey: settingsKeys.smtp,
-    queryFn: () => getSmtpConfig(),
+    queryFn: ({ signal }) => getSmtpConfig(signal),
   });
 }
 
@@ -296,14 +296,14 @@ export function useRetryWebhookDelivery(webhookId: string) {
 export function useQuotaPlans() {
   return useQuery({
     queryKey: settingsKeys.quotas,
-    queryFn: () => listQuotaPlans(),
+    queryFn: ({ signal }) => listQuotaPlans(signal),
   });
 }
 
 export function useQuotaPlan(name: string | undefined) {
   return useQuery({
     queryKey: settingsKeys.quota(name ?? ""),
-    queryFn: () => getQuotaPlan(name as string),
+    queryFn: ({ signal }) => getQuotaPlan(name as string, signal),
     enabled: !!name,
   });
 }
@@ -360,7 +360,7 @@ export function useDeleteQuotaPlan() {
 export function useQuotaUsage() {
   return useQuery({
     queryKey: settingsKeys.quotaUsage,
-    queryFn: () => getQuotaUsage(),
+    queryFn: ({ signal }) => getQuotaUsage(signal),
     // Usage shifts every time a project / cluster CRUD lands. Modest staleness
     // keeps the page snappy without hammering the backend.
     staleTime: 30 * 1000,
@@ -374,7 +374,7 @@ export function useQuotaUsage() {
 export function useGroupMappings() {
   return useQuery({
     queryKey: settingsKeys.groupMappings,
-    queryFn: () => listGroupMappings(),
+    queryFn: ({ signal }) => listGroupMappings(signal),
   });
 }
 
@@ -538,14 +538,14 @@ export const managementBackupSubmittedMessage =
 export function useGitOpsSources() {
   return useQuery({
     queryKey: settingsKeys.gitopsSources,
-    queryFn: () => listGitOpsSources(),
+    queryFn: ({ signal }) => listGitOpsSources(signal),
   });
 }
 
 export function useGitOpsSource(id: string | undefined) {
   return useQuery({
     queryKey: settingsKeys.gitopsSource(id ?? ""),
-    queryFn: () => getGitOpsSource(id!),
+    queryFn: ({ signal }) => getGitOpsSource(id!, signal),
     enabled: !!id,
   });
 }
@@ -553,7 +553,7 @@ export function useGitOpsSource(id: string | undefined) {
 export function useGitOpsSourceClusters(id: string | undefined) {
   return useQuery({
     queryKey: settingsKeys.gitopsClusters(id ?? ""),
-    queryFn: () => listGitOpsSourceClusters(id!),
+    queryFn: ({ signal }) => listGitOpsSourceClusters(id!, signal),
     enabled: !!id,
   });
 }

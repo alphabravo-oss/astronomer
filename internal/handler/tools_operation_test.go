@@ -564,3 +564,13 @@ func TestToolEnqueueOperationUsesIdempotencyKey(t *testing.T) {
 
 var _ HelmRequester = (*toolHelmStub)(nil)
 var _ = pgtype.Text{}
+
+func TestAdoptReleaseRejectsOverflowBeforePersistence(t *testing.T) {
+	for _, revision := range []int{2147483648, 4294967297, -2147483649} {
+		q := newToolQueryRecorder(uuid.New())
+		err := adoptExistingToolRelease(context.Background(), q, q.clusterID, toolReleaseExecution{}, &protocol.HelmResultPayload{Revision: revision})
+		if err == nil || len(q.created) != 0 || len(q.adopted) != 0 {
+			t.Fatalf("revision=%d err=%v writes=%d/%d", revision, err, len(q.created), len(q.adopted))
+		}
+	}
+}

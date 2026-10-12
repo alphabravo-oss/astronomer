@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -16,8 +15,12 @@ import (
 
 // ListRules handles GET /api/v1/alerting/rules/.
 func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	var clusterID pgtype.UUID
 	if v := r.URL.Query().Get("clusterId"); v != "" {
@@ -154,7 +157,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateAlertRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

@@ -1,0 +1,15 @@
+{
+  "cluster_uid": "2f83aaff-dbbf-40ef-8880-542225fec0b4",
+  "namespace_owner": "plan032-20261009",
+  "service_uid": "debb98e4-3427-4a3f-8166-55b3343e39f5",
+  "selector": {
+    "cnpg.io/cluster": "plan032-postgres",
+    "cnpg.io/instanceRole": "primary"
+  },
+  "primary": "plan032-postgres-1",
+  "primary_uid": "54c4d313-d4fe-4280-b7b4-cd29bf2654ff",
+  "server_version_num": 170011,
+  "database": "plan032_w07_cursor17",
+  "database_owner": "astronomer",
+  "private_reference": "/tmp/w07-cnpg/database17-corrected.json"
+}

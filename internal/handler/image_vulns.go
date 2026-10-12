@@ -60,9 +60,10 @@ type imageVulnRunTxFunc func(context.Context, func(ImageVulnMutationTx) error) e
 // — when nil the rescan path short-circuits, every read path still
 // works against the local DB.
 type ImageVulnHandler struct {
-	queries ImageVulnQuerier
-	k8s     K8sRequester
-	runTx   imageVulnRunTxFunc
+	queries        ImageVulnQuerier
+	k8s            K8sRequester
+	runTx          imageVulnRunTxFunc
+	databaseStatus ImageDatabaseStatusReader
 }
 
 // NewImageVulnHandler constructs the handler. log defaults to slog's
@@ -109,15 +110,19 @@ func (h *ImageVulnHandler) ClusterSummary(w http.ResponseWriter, r *http.Request
 // ClusterTopImages handles GET /api/v1/clusters/{cluster_id}/vulnerabilities/images/.
 // Optional ?namespace=foo filter; pagination via ?limit=&offset=.
 func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 20))
+	limit := queryLimit32(r, 20)
 	if limit <= 0 || limit > 200 {
 		limit = 20
 	}
-	offset := int32(queryOffset(r))
+	offset := queryOffset32(r)
 	if offset < 0 {
 		offset = 0
 	}
@@ -156,6 +161,10 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 // ClusterReportDetail handles GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/.
 // Returns the report row + a paginated, severity-filterable CVE list.
 func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -178,11 +187,11 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 		return
 	}
 	severity := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("severity")))
-	limit := int32(queryLimit(r, 50))
+	limit := queryLimit32(r, 50)
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	offset := int32(queryOffset(r))
+	offset := queryOffset32(r)
 	if offset < 0 {
 		offset = 0
 	}
@@ -318,7 +327,7 @@ func (h *ImageVulnHandler) FleetSummary(w http.ResponseWriter, r *http.Request) 
 // FleetTopClusters handles GET /api/v1/security/vulnerabilities/top-clusters/.
 // Returns the N worst clusters by critical+high.
 func (h *ImageVulnHandler) FleetTopClusters(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 10))
+	limit := queryLimit32(r, 10)
 	if limit <= 0 || limit > 100 {
 		limit = 10
 	}

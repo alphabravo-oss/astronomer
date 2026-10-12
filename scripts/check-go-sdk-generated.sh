@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-version="${OAPI_CODEGEN_VERSION:-v2.5.0}"
+version="${OAPI_CODEGEN_VERSION:-v2.5.1}"
 temporary="$(mktemp -d)"
 trap 'rm -rf -- "$temporary"' EXIT
 

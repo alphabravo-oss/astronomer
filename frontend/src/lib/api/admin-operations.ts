@@ -15,7 +15,7 @@ import {
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
 import { mapPage } from "@/lib/api/pagination";
 import type { PaginatedResponse } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 export interface QueueSummary {
   name: string;
@@ -61,10 +61,14 @@ export interface TaskOutboxEntry {
   updated_at?: string;
 }
 
-export async function listQueues(signal?: AbortSignal): Promise<QueueSummary[]> {
+export async function listQueues(
+  signal?: AbortSignal,
+): Promise<QueueSummary[]> {
   const response = await getAdminQueues({ signal });
   const data = response.data as QueueSummary[] | undefined;
-  return Array.isArray(data) ? data : [];
+  if (!Array.isArray(data))
+    throw new Error("Queue inspection response is unavailable");
+  return data;
 }
 
 export async function listDLQ(
@@ -74,6 +78,30 @@ export async function listDLQ(
   const fallback = { queue, dlq: [], count: 0 };
   const response = await getAdminQueuesByQueueDlq({ path: { queue }, signal });
   return (response.data as typeof fallback | undefined) ?? fallback;
+}
+
+// Explicit native paging keeps the existing unpaged adapter and SDK layouts.
+export async function listDLQPage(
+  queue: string,
+  page: number,
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<DLQEntry>> {
+  const response = await getAdminQueuesByQueueDlq({
+    path: { queue },
+    query: { page },
+    signal,
+  });
+  if (
+    !response.data ||
+    !Array.isArray(response.data.dlq) ||
+    !response.pagination
+  ) {
+    throw new Error("DLQ paging response is unavailable");
+  }
+  return mapPage(
+    { data: response.data.dlq, pagination: response.pagination },
+    (item) => item,
+  );
 }
 
 export type AdminQueueOperation =
@@ -119,9 +147,10 @@ export async function getDLQOperation(
 export async function listTaskOutbox(
   status: TaskOutboxStatus | "" = "dead",
   signal?: AbortSignal,
+  offset = 0,
 ): Promise<PaginatedResponse<TaskOutboxEntry>> {
   const response = await getAdminTaskOutbox({
-    query: { status: status || undefined, limit: 100 },
+    query: { status: status || undefined, limit: 100, offset },
     signal,
   });
   return mapPage(

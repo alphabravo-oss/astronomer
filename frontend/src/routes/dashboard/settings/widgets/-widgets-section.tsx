@@ -1,3 +1,4 @@
+import { FormShell } from "@/components/ui/form-shell";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -46,7 +47,13 @@ export function WidgetsSection({ admin }: { admin: WidgetsAdmin }) {
       </div>
 
       {editing ? (
-        <div className="border border-border rounded-lg p-4 bg-card space-y-3">
+        <FormShell
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!form.store.state.isSubmitting) void form.handleSubmit();
+          }}
+          className="border border-border rounded-lg p-4 bg-card space-y-3"
+        >
           <form.AppForm>
             <form.FormErrorSummary serverError={error} />
           </form.AppForm>
@@ -166,7 +173,7 @@ export function WidgetsSection({ admin }: { admin: WidgetsAdmin }) {
           </label>
           <div className="flex gap-2">
             <ActionButton
-              onClick={() => void form.handleSubmit()}
+              type="submit"
               disabled={saving}
               loading={saving}
               intent="primary"
@@ -179,7 +186,7 @@ export function WidgetsSection({ admin }: { admin: WidgetsAdmin }) {
               Cancel
             </ActionButton>
           </div>
-        </div>
+        </FormShell>
       ) : null}
 
       {loading ? (

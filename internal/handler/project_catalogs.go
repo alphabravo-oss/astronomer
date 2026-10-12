@@ -282,7 +282,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req CreateProjectCatalogRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -522,6 +522,10 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // Requires the project to have visibility on the catalog (own, subscribed,
 // or globally public). Foreign-private catalogs return 403.
 func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	projectID, ok := parseProjectID(w, r)
 	if !ok {
 		return
@@ -546,8 +550,8 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	}
 	charts, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
 		RepositoryID: catalogID,
-		Limit:        int32(queryLimit(r, 100)),
-		Offset:       int32(queryOffset(r)),
+		Limit:        queryLimit32(r, 100),
+		Offset:       queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")

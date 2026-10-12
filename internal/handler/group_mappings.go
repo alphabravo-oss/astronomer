@@ -145,13 +145,16 @@ func toGroupMappingResponse(row sqlc.IdentityGroupMapping) GroupMappingResponse 
 
 // List handles GET /api/v1/admin/group-mappings/.
 func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}
-	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListGroupMappings(r.Context(), sqlc.ListGroupMappingsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to list group mappings")
@@ -199,7 +202,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req GroupMappingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
 		return
 	}

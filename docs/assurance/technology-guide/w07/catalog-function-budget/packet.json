@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "source": "ea24c5a547daf7209805751fdde4842395b5cae0",
+  "source_dirty_before": "",
+  "source_dirty_after": "",
+  "scope": "Catalog empty-state extraction; focused existing fixtures/type/lint, not a whole W07 or browser qualification",
+  "actual_tests": {
+    "files": 5,
+    "passed": 25,
+    "failed": 0,
+    "pending": 0
+  },
+  "production_bindings": {
+    "frontend/src/routes/dashboard/catalog/index.tsx": "3bef3c399bfb1eed5011c9bd655b6e5827110ed40e2b3a83d1302daf2ab71016",
+    "frontend/src/routes/dashboard/catalog/-chart-empty-state.tsx": "e9bdbbdb1346e668acdc9abdafb43d18b5153a6cbb3ba2b6b8c2156bf602a5d2"
+  },
+  "artifacts": [
+    {
+      "path": "receipt.json",
+      "sha256": "46126215b1ebaccc870d51683e200e77646adec717e6e86a0e1f10f75105207a"
+    },
+    {
+      "path": "catalog-fixtures.log",
+      "sha256": "6919cdb1d3e5fd3e785094572064ea50525a88a2e1b04ffb579597cd3dfa86ea"
+    },
+    {
+      "path": "catalog-test-report.json",
+      "sha256": "71ca49cdd3e6c6141dad08fe88f619bcaa01ba941b098d389f540369214e3775"
+    },
+    {
+      "path": "type-check.log",
+      "sha256": "74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67"
+    },
+    {
+      "path": "scoped-lint.log",
+      "sha256": "d2a81ad8280221cebfc8e615237e1c5fc73fcf587b00efb399b39922d4ea8acf"
+    }
+  ]
+}

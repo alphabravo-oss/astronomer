@@ -36,7 +36,7 @@ func splitOCIURL(repoURL string) (host, path string, err error) { return catalog
 
 // fetchAndIngestOCIRepo is the OCI counterpart to fetchAndIngestRepoIndex.
 func (h *CatalogHandler) fetchAndIngestOCIRepo(ctx context.Context, repo sqlc.HelmRepository) (chartCount, versionCount int, err error) {
-	return catalog.IngestOCIRepo(ctx, h.queries, repo, h.decryptor(), h.log)
+	return catalog.IngestOCIRepo(h.catalogContext(ctx), h.queries, repo, h.decryptor(), h.log)
 }
 
 // applyRepoIndexAuth sets the Authorization header on an index.yaml (or

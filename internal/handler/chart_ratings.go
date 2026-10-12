@@ -19,7 +19,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -303,7 +302,7 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 	}
 
 	var body createOrUpdateRatingRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Body must be valid JSON")
 		return
 	}
@@ -399,13 +398,17 @@ func findExistingRatingForUpdate(ctx context.Context, q ChartRatingMutationTx, u
 
 // ListRatings handles GET /charts/{chart_id}/ratings/.
 func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -506,7 +509,7 @@ func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var body createOrUpdateRatingRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Body must be valid JSON")
 		return
 	}

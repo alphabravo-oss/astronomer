@@ -11,7 +11,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -84,11 +83,11 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		// echoes the upstream status/error back, so reject probes aimed at
 		// loopback / RFC-1918 / link-local (incl. the 169.254.169.254 metadata
 		// endpoint) before any request leaves the process.
-		if err := httpclient.GuardPublicHost(pingURL); err != nil {
+		if err := h.guardCatalogURL(r.Context(), pingURL); err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
 			return
 		}
-		client := httpclient.SafeClient(10 * time.Second)
+		client := h.catalogClient(10*time.Second, catalog.MaxIndexBytes)
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, pingURL, nil)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
@@ -126,11 +125,11 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 	url := strings.TrimRight(repo.Url, "/") + "/index.yaml"
 	// SSRF backstop (see the OCI branch above): block probes at non-public
 	// hosts before dialing.
-	if err := httpclient.GuardPublicHost(url); err != nil {
+	if err := h.guardCatalogURL(r.Context(), url); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
 		return
 	}
-	client := httpclient.SafeClient(10 * time.Second)
+	client := h.catalogClient(10*time.Second, catalog.MaxIndexBytes)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())

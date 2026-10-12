@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "frozenSource": "3c405b964fcd81911154a9a21579c5d95fc66f3e",
+  "originalFixtureSource": "3122535f0c7a525ab579b5ff8cd91355da31c2d9",
+  "integratedCommits": [
+    "25732b07",
+    "89751629",
+    "27674c1d"
+  ],
+  "sourceReview": "Complete218-line test, two-line constraint fix, complete runner/summarizer/README read. Production pgx statement cache retained; eight execution deltas and exact existing statement EXPLAIN EXECUTE measured.",
+  "verifiedExternalOriginals": 15,
+  "verifiedFrozenSourceBindings": 10,
+  "verifiedProjectionBindings": 3,
+  "independentlyReconstructedFromOriginalEvents": [
+    "all108 plans including actual loops/rows removed/buffers/elapsed/planning values",
+    "all108 eight-execution counters and forced generic/custom exact selected deltas",
+    "both28 named terminal PASS, zero FAIL/SKIP",
+    "14 fatal guards each20GiB/20% minimum satisfied"
+  ],
+  "laneCounts": [
+    {
+      "major": 17,
+      "namedPass": 28,
+      "plans": 54,
+      "counters": 54,
+      "maxExamined": 100000
+    },
+    {
+      "major": 18,
+      "namedPass": 28,
+      "plans": 54,
+      "counters": 54,
+      "maxExamined": 100000
+    }
+  ],
+  "actualHandlerVet": {
+    "exit": 0,
+    "seconds": 5.22174334526062
+  },
+  "retainedFailures": [
+    "3122535f repeatedactive condition uniqueness fixture fails named parent before costmeasurement",
+    "old17 reference points to18 preflight rejection",
+    "initial private libpq connection invocation fails; transcribedpreflightnotes explicitly distinguished from original logs"
+  ],
+  "conclusion": "Characterization passes but selective cost requirement FAILS: sparse controller scans about20k, absent/generic combined scans up to100k. Query/index remediation required.",
+  "runnerLimits": [
+    "Retained successful runner lacks bounded outer timeout/process-group and final receipt cleanup on error. Futurequalification runner must fix; completed original results are preserved.",
+    "Source receipt records unchanged clean Git source, not a whole-source content fingerprint. Ten actual relevant frozen source bindings separately verified."
+  ],
+  "scope": "Synthetic100k rollback-transaction query characterization only, no schema/index changes, universal201-row or fleet-capacity claim."
+}

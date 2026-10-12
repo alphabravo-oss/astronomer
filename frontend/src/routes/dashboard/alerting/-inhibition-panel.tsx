@@ -19,6 +19,10 @@ import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { AlertInhibition, InhibitionMatcher } from "@/types";
+import {
+  apiValidationFields,
+  type ServerFieldError,
+} from "@/lib/api/validation-fields";
 import { toInhibitionWriteRequest } from "@/lib/api/alerting-inhibitions";
 import {
   useInhibitions,
@@ -207,11 +211,13 @@ interface DraftMatcher {
 }
 
 function MatcherEditor({
+  name,
   title,
   hint,
   matchers,
   onChange,
 }: {
+  name: string;
   title: string;
   hint: string;
   matchers: DraftMatcher[];
@@ -224,7 +230,7 @@ function MatcherEditor({
   });
 
   const add = () => {
-    if (!draft.label || !draft.value) return;
+    if (!draft.label.trim()) return;
     onChange([...matchers, draft]);
     setDraft({ label: "", value: "", isRegex: false });
   };
@@ -239,12 +245,15 @@ function MatcherEditor({
       </div>
       <div className="flex gap-2">
         <Input
+          name={name}
+          aria-label={`${title} label`}
           value={draft.label}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
           placeholder="Label name"
           className="h-8 flex-1 font-mono text-xs w-auto"
         />
         <Input
+          aria-label={`${title} value`}
           value={draft.value}
           onChange={(e) => setDraft((d) => ({ ...d, value: e.target.value }))}
           placeholder="Value"
@@ -267,7 +276,7 @@ function MatcherEditor({
           type="button"
           size="icon"
           onClick={add}
-          disabled={!draft.label || !draft.value}
+          disabled={!draft.label.trim()}
           icon={<Plus className="h-3.5 w-3.5" />}
           tooltip="Add matcher"
         />
@@ -309,6 +318,10 @@ function InhibitionModal({
   const update = useUpdateInhibition();
   const isEdit = !!inhibition;
 
+  const [serverError, setServerError] = useState<string>();
+  const [serverFieldErrors, setServerFieldErrors] = useState<
+    ServerFieldError[]
+  >([]);
   const form = useAppForm({
     defaultValues: {
       name: inhibition?.name ?? "",
@@ -335,9 +348,27 @@ function InhibitionModal({
         } else {
           await create.mutateAsync(body);
         }
+        setServerError(undefined);
+        setServerFieldErrors([]);
         onClose();
-      } catch {
-        /* mutation toasts on error */
+      } catch (error) {
+        setServerError(
+          "Unable to save the inhibition rule. Review the fields and try again.",
+        );
+        setServerFieldErrors(
+          apiValidationFields(error, {
+            name: { name: "name", label: "Name" },
+            source_matchers: {
+              name: "sourceMatchers",
+              label: "Source matchers",
+            },
+            target_matchers: {
+              name: "targetMatchers",
+              label: "Target matchers",
+            },
+            equal_labels: { name: "equalInput", label: "Equal labels" },
+          }),
+        );
       }
     },
   });
@@ -353,6 +384,10 @@ function InhibitionModal({
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title={isEdit ? "Edit Inhibition Rule" : "Create Inhibition Rule"}
       onClose={onClose}
       size="md"
@@ -362,7 +397,7 @@ function InhibitionModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={!canSave}
             loading={isPending}
           >
@@ -372,6 +407,12 @@ function InhibitionModal({
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={serverError}
+          serverFieldErrors={serverFieldErrors}
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -382,6 +423,7 @@ function InhibitionModal({
         <form.Field name="name">
           {(field) => (
             <Input
+              name={field.name}
               id="field-128ab69a-358"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -393,6 +435,7 @@ function InhibitionModal({
       </div>
 
       <MatcherEditor
+        name="sourceMatchers"
         title="Source matchers"
         hint="A firing alert matching these is the SOURCE that suppresses targets."
         matchers={sourceMatchers}
@@ -400,6 +443,7 @@ function InhibitionModal({
       />
 
       <MatcherEditor
+        name="targetMatchers"
         title="Target matchers"
         hint="Firing alerts matching these are SUPPRESSED while a source fires."
         matchers={targetMatchers}
@@ -419,6 +463,7 @@ function InhibitionModal({
         <form.Field name="equalInput">
           {(field) => (
             <Input
+              name={field.name}
               id="field-128ab69a-386"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -438,6 +483,7 @@ function InhibitionModal({
         <form.Field name="enabled">
           {(field) => (
             <Input
+              name={field.name}
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}

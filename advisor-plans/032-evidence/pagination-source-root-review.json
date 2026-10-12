@@ -1,0 +1,93 @@
+{
+  "observedAt": "2026-10-09T23:26:51.888295+00:00",
+  "integrationHead": "bd2518962cd471d64ab850c7f2cc17f87eec9817",
+  "status": "partial-source-pass",
+  "reviewedExecutorCommits": [
+    "eca459ddba8e5040004cc5171e8dfefbf9456619",
+    "e241cdce64f0dace17560439af6b7ed90b269eeb",
+    "e761cf87095450aed7afe330d3248eb72da4468d",
+    "dcb7a5d5f44e18584846786bd074668a9e89000c",
+    "02b7f33a0483fe0ce39c0a5d2f41f3d48f67e051"
+  ],
+  "legacyParentsPassed": 75,
+  "gates": [
+    {
+      "argv": [
+        "go",
+        "test",
+        "./internal/handler",
+        "./internal/pagination",
+        "-run",
+        "Pagination|Cursor|Catalog|LegacyOffset",
+        "-count=1",
+        "-v"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-e241cdce-gates/0.log",
+      "frozenSource": "e241cdce",
+      "retainedLog": "root-pagination-reviewed/e241cdce-0.log",
+      "sha256": "7eef4ef2d4e58af767096d67236944c5ca55b3b0406c87cdbf2999b5e5a37bd6"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "./internal/handler",
+        "./internal/pagination"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-e241cdce-gates/1.log",
+      "frozenSource": "e241cdce",
+      "retainedLog": "root-pagination-reviewed/e241cdce-1.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-complexity-budget.mjs"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-e241cdce-gates/2.log",
+      "frozenSource": "e241cdce",
+      "retainedLog": "root-pagination-reviewed/e241cdce-2.log",
+      "sha256": "515ec2d8d56e70d426f2ccbdaffd3880c99495caa73999013d27676ad5387611"
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./internal/pagination",
+        "-count=1",
+        "-v"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-02b7f33a-gates/0.log",
+      "frozenSource": "02b7f33a",
+      "retainedLog": "root-pagination-reviewed/02b7f33a-0.log",
+      "sha256": "dea39ff6741b35944d516b32803e10eb6d93d5d667bb54b4eda8cd5a3896114a"
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "./internal/handler",
+        "-run",
+        "^TestClusterLegacyOffsetIsBoundedBeforeSQL$",
+        "-count=1",
+        "-v"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-02b7f33a-gates/1.log",
+      "frozenSource": "02b7f33a",
+      "retainedLog": "root-pagination-reviewed/02b7f33a-1.log",
+      "sha256": "6f1a3e3612637b4cf69a3669c6a2b072c3eabaca16a3b982d85748e0cf148bef"
+    }
+  ],
+  "review": "All source/test hunks reviewed; exact legacy guards execute before work at88 direct producers. Signed cursor authority is injected, domain-separated, rotating and bounded; closed legacy wire fields preserved. Honest range hints do not imply unsupported cursor availability. Existing old cluster cursor behavior remains.",
+  "limits": [
+    "Canonical signed codec is integrated; first catalog/control-plane producers, real deep PostgreSQL traversal, measured concurrent indexes and paired API/SDK/frontend consumers are pending.",
+    "Current combined SQL/JSON/code-health metadata drift remains known and is assigned to W07 owner refresh after producer freeze.",
+    "W07 as a whole remains IN PROGRESS."
+  ]
+}

@@ -18,8 +18,12 @@ import (
 
 // ListChannels handles GET /api/v1/alerting/channels/.
 func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	channels, err := h.queries.ListNotificationChannels(r.Context(), sqlc.ListNotificationChannelsParams{
 		Limit:  limit,
@@ -129,7 +133,7 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req CreateChannelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

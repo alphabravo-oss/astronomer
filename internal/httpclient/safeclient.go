@@ -123,6 +123,12 @@ type responseLimitTransport struct {
 	maximum int64
 }
 
+func (t *responseLimitTransport) CloseIdleConnections() {
+	if transport, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		transport.CloseIdleConnections()
+	}
+}
+
 func (t *responseLimitTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	response, err := t.base.RoundTrip(request)
 	if err != nil {

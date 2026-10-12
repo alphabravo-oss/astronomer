@@ -34,6 +34,17 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 		return true, 0
 	}
 
+	if args[0] == "database-update-export" {
+		return true, handleDatabaseExportCommand(args[1:], stdout, stderr)
+	}
+	if args[0] == "database-update-import" {
+		return true, handleDatabaseImportCommand(args[1:], stdout, stderr)
+	}
+
+	if args[0] == "database-update-publish" {
+		return true, handleDatabasePublicationCommand(args[1:], stdout, stderr)
+	}
+
 	if args[0] == "grafana-proxy" {
 		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_PUBLIC_PATH"), os.Getenv("GRAFANA_PROXY_KEY"))
 		if err == nil {
@@ -88,7 +99,7 @@ func main() {
 	default:
 		level = slog.LevelInfo
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
 	observability.WithEvent(logger, "server_starting").Info("starting astronomer server",

@@ -38,6 +38,12 @@ func (f *fakeAuditOutboxQuerier) DeliverAuditOutbox(_ context.Context, arg sqlc.
 		return sqlc.DeliverAuditOutboxRow{}, f.deliverErr
 	}
 	row := f.rows[0]
+	for _, candidate := range f.rows {
+		if candidate.ID == arg.OutboxID {
+			row = candidate
+			break
+		}
+	}
 	return sqlc.DeliverAuditOutboxRow{
 		ID: row.ID, EventCreatedAt: row.EventCreatedAt, Action: row.Action,
 		ResourceType: row.ResourceType, Detail: row.Detail, ActionClass: row.ActionClass,
@@ -111,5 +117,21 @@ func TestAuditOutboxBackoffCaps(t *testing.T) {
 	}
 	if got := auditOutboxBackoff(99); got != 256*time.Second {
 		t.Fatalf("backoff(99) = %s", got)
+	}
+}
+
+func TestDispatchAuditOutboxCorruptDetailContinuesValidRows(t *testing.T) {
+	for _, raw := range []string{`null`, `[]`, `{"private-fixture"`, `{} {}`} {
+		t.Run(raw, func(t *testing.T) {
+			corrupt, valid := auditOutboxTestRow(), auditOutboxTestRow()
+			corrupt.Detail = []byte(raw)
+			q := &fakeAuditOutboxQuerier{rows: []sqlc.AuditOutbox{corrupt, valid}}
+			if err := DispatchAuditOutboxOnce(t.Context(), AuditOutboxDispatchDeps{Queries: q}); err != nil {
+				t.Fatal(err)
+			}
+			if len(q.deliverArgs) != 1 || len(q.failedArgs) != 1 || q.deliverArgs[0].OutboxID != valid.ID || q.failedArgs[0].OutboxID != corrupt.ID {
+				t.Fatalf("invalid audit detail delivered or valid row lost: delivered=%d failed=%d", len(q.deliverArgs), len(q.failedArgs))
+			}
+		})
 	}
 }

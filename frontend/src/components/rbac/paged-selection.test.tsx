@@ -139,21 +139,27 @@ it("sends user search to the server and resets pagination", async () => {
   await screen.findByText("Late user");
   fireEvent.click(screen.getByRole("button", { name: "Next page" }));
   await waitFor(() =>
-    expect(getUsers).toHaveBeenLastCalledWith({
-      page: 2,
-      pageSize: 25,
-      search: "",
-    }),
+    expect(getUsers).toHaveBeenLastCalledWith(
+      {
+        page: 2,
+        pageSize: 25,
+        search: "",
+      },
+      expect.any(AbortSignal),
+    ),
   );
   fireEvent.change(screen.getByPlaceholderText("Search users..."), {
     target: { value: "beyond-200" },
   });
   await waitFor(() =>
-    expect(getUsers).toHaveBeenLastCalledWith({
-      page: 1,
-      pageSize: 25,
-      search: "beyond-200",
-    }),
+    expect(getUsers).toHaveBeenLastCalledWith(
+      {
+        page: 1,
+        pageSize: 25,
+        search: "beyond-200",
+      },
+      expect.any(AbortSignal),
+    ),
   );
 });
 
@@ -193,10 +199,13 @@ it("pages backup storage and selects a later configuration", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "Select Archive" }),
   );
-  expect(b2ListStorageLocations).toHaveBeenLastCalledWith({
-    page: 2,
-    page_size: 25,
-  });
+  expect(b2ListStorageLocations).toHaveBeenLastCalledWith(
+    {
+      page: 2,
+      page_size: 25,
+    },
+    expect.any(AbortSignal),
+  );
   expect(change).toHaveBeenCalledWith("storage-late");
 });
 

@@ -203,15 +203,17 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 
 // ListHistory handles GET /api/v1/admin/backup-drill/history/.
 func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}
 
-	limit, offset := queryLimitOffset(r, 20)
-
 	rows, err := h.queries.ListBackupDrillResults(r.Context(), sqlc.ListBackupDrillResultsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())

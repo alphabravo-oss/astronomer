@@ -293,17 +293,23 @@ describe("useMonitoringOperationTracker", () => {
     );
     await tick();
 
-    expect(listOperations).toHaveBeenCalledWith({
-      targetType: "cluster_stack",
-      targetKey: "cluster-1",
-      limit: 5,
-    });
+    expect(listOperations).toHaveBeenCalledWith(
+      {
+        targetType: "cluster_stack",
+        targetKey: "cluster-1",
+        limit: 5,
+      },
+      expect.any(AbortSignal),
+    );
     expect(result.current.operation?.id).toBe("op-adopted");
     expect(result.current.isActive).toBe(true);
     // The screen must disable its action buttons rather than enqueue a second
     // operation that would supersede this one.
     expect(result.current.isBusy).toBe(true);
-    expect(getOperation).toHaveBeenCalledWith("op-adopted");
+    expect(getOperation).toHaveBeenCalledWith(
+      "op-adopted",
+      expect.any(AbortSignal),
+    );
   });
 
   it("shows the newest terminal operation on load without treating it as in flight", async () => {

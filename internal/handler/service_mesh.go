@@ -365,6 +365,8 @@ func (h *ServiceMeshHandler) Inventory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), meshListTimeout)
+	defer cancel()
 	for _, def := range istioInventoryResources {
 		resource := ServiceMeshInventoryResource{
 			Kind:       def.Kind,
@@ -372,10 +374,13 @@ func (h *ServiceMeshHandler) Inventory(w http.ResponseWriter, r *http.Request) {
 			Plural:     def.Plural,
 			Items:      []ServiceMeshInventoryItem{},
 		}
-		items, notice := h.listMeshInventoryItems(r.Context(), clusterID, def)
+		items, notice := h.listMeshInventoryItems(ctx, clusterID, def)
 		resource.Items = items
 		resource.Count = len(items)
 		resource.Notice = notice
+		if strings.Contains(notice, "incomplete") {
+			out.Notice = "inventory incomplete; totals include only complete resource lists"
+		}
 		out.Resources = append(out.Resources, resource)
 		out.TotalCount += resource.Count
 	}
@@ -430,36 +435,28 @@ func (h *ServiceMeshHandler) istioMTLSRows(ctx context.Context, clusterID uuid.U
 	if h.requester == nil {
 		return []MTLSBreakdownNS{}, "PeerAuthentication mirror is not wired; aggregate-only view"
 	}
-	resp, err := h.requester.Do(ctx, clusterID.String(), http.MethodGet,
-		"/apis/security.istio.io/v1beta1/peerauthentications", nil, requestHeaders(""))
-	if err != nil || resp == nil || resp.StatusCode == http.StatusNotFound {
-		return []MTLSBreakdownNS{}, "PeerAuthentication CRD not installed or unreachable; aggregate-only view"
+	ctx, cancel := context.WithTimeout(ctx, meshListTimeout)
+	defer cancel()
+	type item struct {
+		Metadata struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+		Spec struct {
+			MTLS struct {
+				Mode string `json:"mode"`
+			} `json:"mtls"`
+		} `json:"spec"`
 	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return []MTLSBreakdownNS{}, "PeerAuthentication list failed; aggregate-only view"
+	items, err := collectMeshPages[item](ctx, h.requester, clusterID, "/apis/security.istio.io/v1beta1/peerauthentications")
+	if errors.Is(err, errMeshResourceAbsent) {
+		return []MTLSBreakdownNS{}, "PeerAuthentication CRD not installed; aggregate-only view"
 	}
-	body, err := decodeResponseBody(resp)
 	if err != nil {
-		return []MTLSBreakdownNS{}, "PeerAuthentication response was not decodable; aggregate-only view"
-	}
-	var envelope struct {
-		Items []struct {
-			Metadata struct {
-				Namespace string `json:"namespace"`
-			} `json:"metadata"`
-			Spec struct {
-				MTLS struct {
-					Mode string `json:"mode"`
-				} `json:"mtls"`
-			} `json:"spec"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return []MTLSBreakdownNS{}, "PeerAuthentication payload was not parseable; aggregate-only view"
+		return []MTLSBreakdownNS{}, "PeerAuthentication list incomplete; aggregate-only view"
 	}
 	// Group by namespace; pick the strictest mode per namespace.
 	byNS := map[string]*MTLSBreakdownNS{}
-	for _, it := range envelope.Items {
+	for _, it := range items {
 		ns := it.Metadata.Namespace
 		mode := it.Spec.MTLS.Mode
 		if mode == "" {
@@ -577,36 +574,24 @@ func inventoryTotal(resources []ServiceMeshInventoryResource) int {
 }
 
 func (h *ServiceMeshHandler) listMeshInventoryItems(ctx context.Context, clusterID uuid.UUID, def serviceMeshResourceDef) ([]ServiceMeshInventoryItem, string) {
-	resp, err := h.requester.Do(ctx, clusterID.String(), http.MethodGet, def.Path, nil, requestHeaders(""))
-	if err != nil || resp == nil {
-		return []ServiceMeshInventoryItem{}, "resource list unavailable through the agent tunnel"
+	type item struct {
+		Metadata struct {
+			Name              string            `json:"name"`
+			Namespace         string            `json:"namespace"`
+			Labels            map[string]string `json:"labels"`
+			Annotations       map[string]string `json:"annotations"`
+			CreationTimestamp *time.Time        `json:"creationTimestamp"`
+		} `json:"metadata"`
 	}
-	if resp.StatusCode == http.StatusNotFound {
+	objects, err := collectMeshPages[item](ctx, h.requester, clusterID, def.Path)
+	if errors.Is(err, errMeshResourceAbsent) {
 		return []ServiceMeshInventoryItem{}, "CRD not installed"
 	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return []ServiceMeshInventoryItem{}, fmt.Sprintf("list failed with Kubernetes status %d", resp.StatusCode)
-	}
-	body, err := decodeResponseBody(resp)
 	if err != nil {
-		return []ServiceMeshInventoryItem{}, "resource list response was not decodable"
+		return []ServiceMeshInventoryItem{}, "resource list incomplete through the agent tunnel"
 	}
-	var envelope struct {
-		Items []struct {
-			Metadata struct {
-				Name              string            `json:"name"`
-				Namespace         string            `json:"namespace"`
-				Labels            map[string]string `json:"labels"`
-				Annotations       map[string]string `json:"annotations"`
-				CreationTimestamp *time.Time        `json:"creationTimestamp"`
-			} `json:"metadata"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return []ServiceMeshInventoryItem{}, "resource list payload was not parseable"
-	}
-	items := make([]ServiceMeshInventoryItem, 0, len(envelope.Items))
-	for _, it := range envelope.Items {
+	items := make([]ServiceMeshInventoryItem, 0, len(objects))
+	for _, it := range objects {
 		managedBy, readOnly, reason := meshOwnership(it.Metadata.Labels, it.Metadata.Annotations)
 		items = append(items, ServiceMeshInventoryItem{
 			Name:        it.Metadata.Name,

@@ -18,8 +18,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/repo/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
@@ -131,7 +131,7 @@ func HandleCatalogSync(ctx context.Context, t *asynq.Task) error {
 					continue
 				}
 				failed++
-				failures = append(failures, fmt.Errorf("%s (%s): %w", repoRecord.Name, repoRecord.Url, err))
+				failures = append(failures, fmt.Errorf("repository %s (%s): catalog fetch failed", repoRecord.Name, repoRecord.ID))
 				recordRepositorySyncFailure(ctx, repoRecord, err)
 				continue
 			}
@@ -192,6 +192,7 @@ var errRepoTypeUnsupported = errors.New("repository type has no sync implementat
 // from the operator-triggered Sync button only, so an OCI catalog refreshed
 // exactly as often as somebody clicked it.
 func syncOneRepository(ctx context.Context, repoRecord sqlc.HelmRepository) error {
+	ctx = catalogOperationContext(ctx)
 	switch {
 	case catalog.IsOCIRepo(repoRecord):
 		// KNOWN GAP — OCI is create-only: IngestOCIRepo contains no delete,
@@ -263,7 +264,14 @@ const maxRepositorySyncErrorLen = 1000
 // All three are best-effort: failing to report a failure must never abort the
 // remaining repositories, which is the whole point of the change.
 func recordRepositorySyncFailure(ctx context.Context, repoRecord sqlc.HelmRepository, cause error) {
-	msg := cause.Error()
+	msg := "catalog repository synchronization failed"
+	var status *catalogFetchStatusError
+	if errors.As(cause, &status) {
+		msg = status.Error()
+	}
+	if errors.Is(cause, errRepoTypeUnsupported) {
+		msg = cause.Error()
+	}
 	if len(msg) > maxRepositorySyncErrorLen {
 		// Cut on a byte boundary, then drop the partial trailing rune —
 		// Postgres rejects invalid UTF-8 in a TEXT column, and refusing to
@@ -273,7 +281,7 @@ func recordRepositorySyncFailure(ctx context.Context, repoRecord sqlc.HelmReposi
 	}
 	slog.WarnContext(ctx, "catalog repository sync failed",
 		"repository", repoRecord.Name,
-		"url", repoRecord.Url,
+		"repository_id", repoRecord.ID,
 		"repo_type", repoRecord.RepoType,
 		"error", msg,
 	)
@@ -287,9 +295,9 @@ func recordRepositorySyncFailure(ctx context.Context, repoRecord sqlc.HelmReposi
 		}
 	}
 	detail, err := json.Marshal(map[string]any{
-		"url":       repoRecord.Url,
-		"repo_type": repoRecord.RepoType,
-		"error":     msg,
+		"repository_id": repoRecord.ID,
+		"repo_type":     repoRecord.RepoType,
+		"error":         msg,
 	})
 	if err != nil {
 		return
@@ -313,7 +321,7 @@ func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL str
 	// server-side, so refuse loopback/internal/metadata targets. GuardPublicHost
 	// is the cheap pre-check; the caller passes a SafeClient whose dialer
 	// re-validates the connected IP to close the DNS-rebinding window.
-	if err := httpclient.GuardPublicHost(indexURL); err != nil {
+	if err := guardCatalogFetch(ctx, indexURL); err != nil {
 		return nil, fmt.Errorf("catalog repository host is not a permitted public address")
 	}
 	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, indexURL, nil)
@@ -325,7 +333,7 @@ func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL str
 	// with a 401 forever while its Sync button works, which reads as "the
 	// scheduler is broken" rather than "the scheduler never authenticated".
 	catalog.ApplyIndexAuth(req, repoRecord, runtimeDependencies(ctx).CatalogDecryptor, runtimeLogger(ctx))
-	resp, err := client.Do(req)
+	resp, err := catalogFetchClient(ctx, client).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +341,7 @@ func fetchRepositoryIndex(ctx context.Context, client *http.Client, indexURL str
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("catalog repository %s returned status %d", repoRecord.Url, resp.StatusCode)
+		return nil, &catalogFetchStatusError{status: resp.StatusCode}
 	}
 	return decodeIndex(resp)
 }
@@ -561,7 +569,7 @@ func fetchChartAssets(ctx context.Context, repoRecord sqlc.HelmRepository, urls 
 	defer cancel()
 	// SSRF guard on the operator/DB-supplied chart URL (same rationale as the
 	// index fetch): pre-check the host, dial through the rebind-safe client.
-	if err := httpclient.GuardPublicHost(chartURL); err != nil {
+	if err := guardCatalogFetch(ctx, chartURL); err != nil {
 		return "", emptySchema, ""
 	}
 	req, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, chartURL, nil)
@@ -580,13 +588,13 @@ func fetchChartAssets(ctx context.Context, repoRecord sqlc.HelmRepository, urls 
 	if catalog.SameHost(repoRecord.Url, chartURL) {
 		catalog.ApplyIndexAuth(req, repoRecord, runtimeDependencies(ctx).CatalogDecryptor, runtimeLogger(ctx))
 	}
-	resp, err := httpclient.SafeClient(catalogFetchTimeout).Do(req)
+	resp, err := catalogFetchClient(ctx, httpclient.SafeClient(catalogFetchTimeout)).Do(req)
 	if err != nil {
 		return "", emptySchema, ""
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= http.StatusBadRequest {
-		slog.WarnContext(ctx, "catalog chart fetch failed", "url", chartURL, "status", resp.StatusCode)
+		slog.WarnContext(ctx, "catalog chart fetch failed", "repository_id", repoRecord.ID, "status", resp.StatusCode)
 		return "", emptySchema, ""
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20)) // 64MiB ceiling
@@ -595,7 +603,7 @@ func fetchChartAssets(ctx context.Context, repoRecord sqlc.HelmRepository, urls 
 	}
 	loaded, err := loader.LoadArchive(bytes.NewReader(body))
 	if err != nil {
-		slog.WarnContext(ctx, "catalog chart parse failed", "url", chartURL, "error", err)
+		slog.WarnContext(ctx, "catalog chart parse failed", "repository_id", repoRecord.ID, "blocked_category", "chart_archive")
 		return "", emptySchema, ""
 	}
 	schema := emptySchema

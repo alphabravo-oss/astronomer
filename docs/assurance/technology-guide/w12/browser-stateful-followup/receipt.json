@@ -1,0 +1,555 @@
+{
+  "schemaVersion": 1,
+  "sourceCommits": {
+    "firstBrowser": "8c5bd39d",
+    "correctedBrowser": "d4738a0a",
+    "axeBrowserAndStandalone": "a898c6644a9ca1a7ca967d652fe9a1111cf11c8b",
+    "selectedOutagesAndMigrationNormalization": "e04a2171e5e71d3091a2acf5fc60ae45b75b5cd8"
+  },
+  "browserResults": {
+    "first": {
+      "passed": 46,
+      "failed": 3,
+      "skipped": 0,
+      "flaky": 0
+    },
+    "corrected": {
+      "passed": 49,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0
+    },
+    "axeExpanded": {
+      "passed": 63,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "workerCount": 1,
+      "retries": 0,
+      "projects": 7,
+      "engines": [
+        "chromium",
+        "firefox",
+        "webkit"
+      ]
+    }
+  },
+  "narrowFrontend": {
+    "type": "pass",
+    "lint": "pass",
+    "vitestFiles": 3,
+    "vitestTests": 63,
+    "scope": "Virtual-table behavior/depth and combobox."
+  },
+  "runtimeResults": {
+    "standalonePostgres17": "pass",
+    "standalonePostgres18": "pass",
+    "workerPostgres18": "pass",
+    "processRestartPostgres18": "pass",
+    "valkeyOutagePostgres18": "pass",
+    "postgresOutagePostgres18": "pass",
+    "migrationRoundtrip18And17": "pass"
+  },
+  "retainedFailures": [
+    "Firstbrowser46/49 with WebKitpage-errors/trace and Cancelactionability timeout.",
+    "Standaloneinitialvolumeownership initializer failed; next run exposed obsolete PG16 assertion.",
+    "Processrestart andValkeyoutage exposed obsoletePG16/Redis7 assertion; PostgreSQLoutage exposed lostfixture rolelabel.",
+    "Cross-major schema hash first differed:2250PG18native NOTNULL rows,0other additions/removals. Exact catalog text/diff retained; normalization preserves is_nullable and retains unvalidated/unenforced constraints."
+  ],
+  "limits": [
+    "No authenticated live-server journey, shipping Safari, physical devices or manual accessibility qualification is claimed by component receipts.",
+    "The animation-frame measurement publication adds approximately16ms potential latency/stale measurement tradeoff; it fixes the observed synchronous layout feedback and does not claim a performance optimization.",
+    "Standaloneprovider fault is distinct from CNPG; no wholeapplication RTO/RPO or productionmajor adoption is inferred.",
+    "These source-bound receipts are scoped to their original commits and cannot retroactively cover later builtin/systemrollout tests."
+  ],
+  "artifactManifest": [
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-axe-browser/playwright.json",
+      "sha256": "d9a86a294dca7cea1d7985c6609335b6eaef601b12a9be2e50f5a564dd30504d"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-axe-browser/stderr.log",
+      "sha256": "686f0b72f725feedb3e5e750adb697bdc0a528bdce444147ae734d4c54a0a841"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-browser-static/failover-unit.log",
+      "sha256": "761078788b1c7922a1e019745408cb86ac95d26a8ae431c7e719db6b90f8e4a0"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-browser-static/lint.log",
+      "sha256": "e49a7391e71418658500c86c4579aaa2eaf00c3d5ee2cee5216f76766c704adc"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-browser-static/type.log",
+      "sha256": "74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-browser-static/virtual-rows.log",
+      "sha256": "9ed9694418cbc1b0a40d2655068dbc91c718cdc5cfcf4e9f856943cdf068fd0c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-corrected-browser/playwright.json",
+      "sha256": "0732501f325f27dc51af449202107d8925a971bc9d37647b99c5d35ded4724cf"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-corrected-browser/stderr.log",
+      "sha256": "686f0b72f725feedb3e5e750adb697bdc0a528bdce444147ae734d4c54a0a841"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/failure-traces/modal-closing-a-pending-di-256fd-es-the-durable-save-request-webkit-desktop/error-context.md",
+      "sha256": "dfd1142e0ccf8b2deff4d86d643148fd7b3bd4da3173c5ced3b3615684594f91"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/failure-traces/modal-closing-a-pending-di-256fd-es-the-durable-save-request-webkit-desktop/trace.zip",
+      "sha256": "58303fae3763e74c25cedbb22344f018df9725f3dc0693acdb6733b5c6135dd8"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/failure-traces/table-focus-recovers-after-a-far-virtual-row-is-filtered-out-webkit-mobile/error-context.md",
+      "sha256": "887e9c3926dd7d6bcca0aa82d4cb733652dcd87555c09f7f0f658d07c1056359"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/failure-traces/table-focus-recovers-after-a-far-virtual-row-is-filtered-out-webkit-mobile/trace.zip",
+      "sha256": "e7911a949c6f9a5f755576b1cefe42e17b2185b9651710e99b3d2a0fe4ceb612"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/failure-traces/table-selection-preserves--166dd-uping-sorting-and-filtering-webkit-mobile/error-context.md",
+      "sha256": "4c6e860b7e71a5d0cccb655aed79ef2256aa419846ad42cc9b2ca0d293afbbd3"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/failure-traces/table-selection-preserves--166dd-uping-sorting-and-filtering-webkit-mobile/trace.zip",
+      "sha256": "943c131008b5f2730b2e7b06b42e9741806af396f89f343ce20a22cef7c76b91"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/playwright.json",
+      "sha256": "30d1b1e2d5dfc71e4b76b41a30005eaf9959a011b5f732178b6bb17bad687d38"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-followup-browser/stderr.log",
+      "sha256": "686f0b72f725feedb3e5e750adb697bdc0a528bdce444147ae734d4c54a0a841"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/catalog-17.txt",
+      "sha256": "779488d66aeb9cc728da34e8385feb07607ef4efe507eac272cc56bab668016e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/catalog-18.txt",
+      "sha256": "a115a428ad2b1de9ccf5714ca3bd4596f24d0983545da2638c920383bb5b4204"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/catalog.diff",
+      "sha256": "ab018c619fc12a3912aa86faeae3fe1ef151ceba48ffbc6b73e786564b0d6162"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/constraint-types-17.txt",
+      "sha256": "a738ff60b13eb7a6dad4ba136f4269056548866efb313a56f150814b41fbe2a0"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/constraint-types-18.txt",
+      "sha256": "d871bcd1ab24ba735e7c38ab4bbf67b0f2b3fd11045b85afaba044b03db98870"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/migrate-17.log",
+      "sha256": "df7cb05dcb3a2b2dcdd3d2bca4894091fac6464c8b37d1eb6d2f9550bd2315b3"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-catalog-difference/migrate-18.log",
+      "sha256": "da3e101df8f426da5e5a8383fd766d481f9f9cec625560e3c7b2a95064d89974"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg17/console.log",
+      "sha256": "94700ed2cf58711563509a5db4d0e4ec8573bee06cb031163a215d6777d35f6e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg17/evidence.json",
+      "sha256": "35a2cfd52dbd4d9a5ccf57821de75df470fea93ca5c88f47c71d38667dc89bea"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg17/go-test.json",
+      "sha256": "e0c6802a55f4f1701fd56ff8973a3f5a8a57923eadc17cfd780e527b1d7bf392"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg17/junit.xml",
+      "sha256": "8c8f9b27df434f6f670641ab0858aa33fdfede632627dae81844217c7b61db42"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg18/console.log",
+      "sha256": "46d69414ac7e5975e17291db5c6b414344873157e302500046686007e4a29d32"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg18/evidence.json",
+      "sha256": "3dd15734bc1be071c7d123c86716791c2e9499f3c2789eeabb97a624190cb58a"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg18/go-test.json",
+      "sha256": "9410da37ff2d50f122971772ffd19e2ae371425ced39c9e6552b08f0a62280bf"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized/migration-outbox-pg18/junit.xml",
+      "sha256": "3de5669aa1bf1b2b17d006edc85efbd9df1ec58d4b6d532478cf5d2cf3d37994"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations-normalized.log",
+      "sha256": "94cca1da61f214622ef8084266026a50818984d169b22c922b4d8895aac48142"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-migrations.log",
+      "sha256": "528dfa8bb27289f10a9fa1d27594972d9a4dc4b9d36f444aee25a12e27e3838b"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18/postgres-outage/console.log",
+      "sha256": "504aa49bc71413d5f79e29e027bcce4a4af044230cf7bf426af55a178520bf6f"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18/postgres-outage/evidence.json",
+      "sha256": "b0fe59d868284e449797aaade6c81f8ae53628a6cb60b7df3a5f63504a13d81c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18/postgres-outage/go-test.json",
+      "sha256": "34bcc293e666d521d52bc6f398dfe68fa83c09354d94797e3bd0369da6030d46"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18/postgres-outage/junit.xml",
+      "sha256": "212e17e31ec178600c0d9c2a677dff66f20160f1ecba5473937f29efe395623b"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18-selected/postgres-outage/console.log",
+      "sha256": "81d4830b7947ff030d3717621db149a34d059735078e6846cf0fe05510d99508"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18-selected/postgres-outage/evidence.json",
+      "sha256": "14e340b61141362a7dd60e3f5be5e29c7d852bd6ec15a95318dc1d880b2fa280"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18-selected/postgres-outage/go-test.json",
+      "sha256": "6c3de836d391e700a1874bab7ad52cadb2181716e57d3053da06f13f2bfbb331"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18-selected/postgres-outage/junit.xml",
+      "sha256": "640ded9fe01bf517d1ee1234b79d4f26c48bab72704bb207d6452eb90eb6fa01"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18-selected.log",
+      "sha256": "67b5b3117950112854440c3e1c75fdf4a7855ad838359ffee6d52530bd569e7d"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-postgres-outage-pg18.log",
+      "sha256": "79b3e04b5f2bcba599267983d1cc59afb6fa26d78e0b933c269398ffde7b7771"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18/process-restart/console.log",
+      "sha256": "d3a85cde6254e1f634c7e5d53b732bacdbb824aaf9e436cfda06b3b41feab59e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18/process-restart/evidence.json",
+      "sha256": "1deb71d1232a86017df491e8d5d1708fd7e3df757b1c790a3d7ceb7960837c09"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18/process-restart/go-test.json",
+      "sha256": "6830eb250bcb4b489ce6d817ff40cb2894ff23a677810ab525ab78f97e5529db"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18/process-restart/junit.xml",
+      "sha256": "5291da934d1ea8c71006bf2bd47065afa4e76f0d87121691306313bd1785feae"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18-corrected/process-restart/console.log",
+      "sha256": "92846fe58907d0d4900b58c029901bbab471ebfaddfabe52455ca2c398f95b42"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18-corrected/process-restart/evidence.json",
+      "sha256": "6f770dcb2692f816b8ecd856a3aeac1e9b2e84e1f7c2bc31e3d47c769959e96a"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18-corrected/process-restart/go-test.json",
+      "sha256": "2144303c5472c28a3d67fde4f76bc66be5097e3ca50d954268b54a79c9a49d4e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18-corrected/process-restart/junit.xml",
+      "sha256": "229765edab9265bcb3b3c32bc78f8d8b0e344fb4932919299de7d7c85a5c94d7"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18-corrected.log",
+      "sha256": "6b3f4a81d35940f9a4fc21fa5f5b6599d80113d7484475e167f25f578c33f17e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-process-restart-pg18.log",
+      "sha256": "14335f1ea809a20dca5a8da946a00faf5574c568865aa7634d64e9735dcccf9f"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18/valkey-outage/console.log",
+      "sha256": "39e2a5778675a47d8179a5090b8f1f771169238ac37dc5bd3eaba102a5d630bb"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18/valkey-outage/evidence.json",
+      "sha256": "96221f263502a08fe9da621b99f12e67252ade7726f894994093b1d053efab5c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18/valkey-outage/go-test.json",
+      "sha256": "f532d17a4aebc255e5040ecf88d7e730811f834e035edee41d8116f8089f2433"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18/valkey-outage/junit.xml",
+      "sha256": "ca2165ed80ee2a147b706acf2b5d8db89fd2b1a98cbc4e739e6a20dd1f7eeccb"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18-selected/valkey-outage/console.log",
+      "sha256": "157b47fd2ab6c5a7bcda100db58655418815c1a8861f8e4aca3a5962d1dc12b6"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18-selected/valkey-outage/evidence.json",
+      "sha256": "32a4367e3821fa66d822311cd78e3c348fde90bb1f87923ec1fd9abf0e206a74"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18-selected/valkey-outage/go-test.json",
+      "sha256": "39cb7594255cc0bc3e88d5e6fe4e0820463446ccc1c5cd869cc702c58f52c32a"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18-selected/valkey-outage/junit.xml",
+      "sha256": "e57cce82becb402cc98dd19127ff6db1d4b9c42174a873d0f8bdc93c5e9e2782"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18-selected.log",
+      "sha256": "c17b012e29f9f2d0d736a2fd1b1c344b9f18b3039746174bb37b5d9ee9b4582b"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-redis-outage-pg18.log",
+      "sha256": "f5acdc3a963ad374333b415e99efc31bdecc2ace7c8fdaff1b0e724bda38a7cb"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-runtime-assertion-unit.log",
+      "sha256": "2deac3d65740566ecc8f00bd4fafb39a094de7e69250e5c0b83878265b59d943"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/postgres-streaming-failover/console.log",
+      "sha256": "0fec954970211696cebb321ae52d95df780269457d8a02d768b75945b8e4a586"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/postgres-streaming-failover/evidence.json",
+      "sha256": "83bcbbd50063ce9151cdfcb24220519c38504c029d7559cbfc76bd64cecffe81"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/postgres-streaming-failover/go-test.json",
+      "sha256": "1c560e6668ba807f508b50970ded679369b3f3e4d832aabb5fc4440766d94ab2"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/postgres-streaming-failover/junit.xml",
+      "sha256": "daeb04332afd73bb28205c44cf1d09129cf6827b38048150fbed6f3002b24ad3"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/build-migrator.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/certification.log",
+      "sha256": "373f89962fbf4c896b2f7fc69f9e5b67c031cf577442df123b49d752d52b7c73"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/enable-synchronous-replication.log",
+      "sha256": "37ebba6f0e7d0a7ca7f58d6d64d58cc74ec9989439f3f24af1a273d0d3455b83"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/evidence.json",
+      "sha256": "711de57b599119ba1dac738e38ef44273e7fe3291d26195c319f00594085cb2a"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/migrations.log",
+      "sha256": "b98db706be7b4e778cffbb4d6c146fc3e2926d4fa275f6c5878abeedf0974fc3"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/pg-basebackup.log",
+      "sha256": "080a37b654ca808c788bc9fffd2ab2bdaf1308e7336e978560b5e1e6c9051044"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/postgres-primary-inspect.json",
+      "sha256": "d75013ab3785aef9779d71d88018e1959b7abf67fad6c94530685167c5643743"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/postgres-primary.log",
+      "sha256": "5a68c4ba3ad826f01c5432142671b792140d20c57d597762699553ad7516781b"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/postgres-replica-inspect.json",
+      "sha256": "1172344965aea2ff1518028a12e8fe6e45a4967e867293dfc844ee11dd604405"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected/topology/postgres-replica.log",
+      "sha256": "2f1ea67602423a0a5d3ed8d0c58000fd24a90743c196b9429eadf0a228a6530e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg17-selected.log",
+      "sha256": "514b6bbfff1ab9df1df794bbe728828f2496c0c8307d3b25d82d097ad653102e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/build-migrator.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/evidence.json",
+      "sha256": "d952fdebeed6d7605f18b6a283201dedf9c165d58397d051b5acc33ea7ebec93"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/migrations.log",
+      "sha256": "daa44ee6b7de73a99ffcb10265cb9e1b161af47b845f49cc13f9caa9e7e901a4"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/postgres-primary-inspect.json",
+      "sha256": "70315e2ea44b17be0c7c107e5b7db1091ffc56fda2b9ee06b3b3abff83438d75"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/postgres-primary.log",
+      "sha256": "fbc45418b4218261fe05af4a28ed32217e765e643317d6aa5b3fee38b78bc7e7"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/postgres-replica-inspect.json",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18/topology/postgres-replica.log",
+      "sha256": "6510e57f00ca3d92d5d3ddc4999990c9e321efb768e1837e15523bcdf4b3cd0e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/postgres-streaming-failover/console.log",
+      "sha256": "a6969759dd89590c9afc6a2c1a20431ec73386dd7a3ff0f979822144fa7ca671"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/postgres-streaming-failover/evidence.json",
+      "sha256": "3b3037f199c0953cf67ee1c2b3dcb7645bceb4c091f843786068c1a660917e3d"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/postgres-streaming-failover/go-test.json",
+      "sha256": "84255262342be4588fe9340f628a741cfd99fd73ebb89279ec2445fb153b4464"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/postgres-streaming-failover/junit.xml",
+      "sha256": "5af56244a71eb256a83065f81b2b4e198f1a946cd222d2cadd8f4ce56b5b8614"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/build-migrator.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/certification.log",
+      "sha256": "ba5fbe46b80c295aac9ce479d5ce8ff2bff3b25294a654a59dd259c16d1e8090"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/enable-synchronous-replication.log",
+      "sha256": "37ebba6f0e7d0a7ca7f58d6d64d58cc74ec9989439f3f24af1a273d0d3455b83"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/evidence.json",
+      "sha256": "e3e240ee590c1ac101c8b34cf88d3086933d363e339dc6938503af520f9d3aa3"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/migrations.log",
+      "sha256": "ac2084e69287b05e58e9229d5e2ee78c179e7f6b8a0676e212738f79adf50c77"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/pg-basebackup.log",
+      "sha256": "9bbd87655da08d02b549a2adf16f9bdcb2b374b0ca2084772d6e7b602e7fc67c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/postgres-primary-inspect.json",
+      "sha256": "7f004f56fc1edd5f0b74bd1f6114d5908b61cecd3823f8b97ab7699751a4d0cd"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/postgres-primary.log",
+      "sha256": "68e44b58db812c0ef4e597ecae93e45c74b727f35c345400437a764d0387288e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/postgres-replica-inspect.json",
+      "sha256": "ae0f0e41696f2265cc28cc0459d5cdc93086ce419b7b04275917dbe2a8b01c5c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected/topology/postgres-replica.log",
+      "sha256": "989e24e101079ed414ee8e764c3cfd95a3759553e7b561d0617ee023b5f3c6d2"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-corrected.log",
+      "sha256": "5a5435326f3c9b94c699b9655c6cc3a3fd0c6285c617f2e1cf8c87a022b62d9f"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/postgres-streaming-failover/console.log",
+      "sha256": "ece9a579f821eb0b3e74d4958986a32ec4987708fc76ef2f6d86fd93cf25ac65"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/postgres-streaming-failover/evidence.json",
+      "sha256": "25a171499cffeb33cbe2e12234a54986330ff5c3448c2984d97ddd2a0e8ca26c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/postgres-streaming-failover/go-test.json",
+      "sha256": "a74bb55fba67c15f549cc7771b40e26cd2e8a3c5686f1e6c1cc5ef8d0b1c66df"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/postgres-streaming-failover/junit.xml",
+      "sha256": "9991a6fc052eef523fabee34635969bfb4755206457528ffe9d5aaf094486223"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/build-migrator.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/certification.log",
+      "sha256": "04be066116c0df88f6873a1b4f86a2e558367ad8b9d7ea5526a88b749ef2bbc6"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/enable-synchronous-replication.log",
+      "sha256": "37ebba6f0e7d0a7ca7f58d6d64d58cc74ec9989439f3f24af1a273d0d3455b83"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/evidence.json",
+      "sha256": "7638724b3c9034e7004e15c7fd3abe4daf45fa6110861b32a65544dcaf63af0f"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/migrations.log",
+      "sha256": "f7d1e3c65e678c8da82021b63e09ce71e2fd342640f0c843921f5194f472f10c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/pg-basebackup.log",
+      "sha256": "9bbd87655da08d02b549a2adf16f9bdcb2b374b0ca2084772d6e7b602e7fc67c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/postgres-primary-inspect.json",
+      "sha256": "411444c80039c02c00dafdb614aa8f7d9bba12e835bb0e4ff19d5b244baea0ed"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/postgres-primary.log",
+      "sha256": "8cfa27a6e8ca8d5618697173265372c2b1ad1f01687c0d8f65444db251ec9445"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/postgres-replica-inspect.json",
+      "sha256": "ed8bba269fbdcfe11d4868201f1c659eb5f2915165711db4064b3941db70b5e0"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected/topology/postgres-replica.log",
+      "sha256": "7611fbd7587e2eb1906054ec63406b5e2362aadad5d6fe93f82ef120d705846c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18-selected.log",
+      "sha256": "be684be27208822734ade4acf0c4bc7756d7c5c35d8b8487ae59cd171ffd7144"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-streaming-pg18.log",
+      "sha256": "8fff4bd6c5655b2fa71a745384c24989b04bdd70db6b61a4365b41437ecdc285"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-worker-pg18/worker-runtime/console.log",
+      "sha256": "bd71aeff48f73bd7401e3cbf56d202074a0ecaf62ad438c7f84d9bc0de414f30"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-worker-pg18/worker-runtime/evidence.json",
+      "sha256": "39fb2c3af60ced9fd4c1276e338a30f2d60e6f61a94ac593d1ba72b3c6128708"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-worker-pg18/worker-runtime/go-test.json",
+      "sha256": "7d91d38646e60dee56fb940c0ca4afef2ed3ed96dda86b82e14735566de759d2"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-worker-pg18/worker-runtime/junit.xml",
+      "sha256": "3ddba49c9ef575af0aa9763d582f5266fcbd2943d5deac942c3495d9c1ce2dba"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/browser-stateful-followup/w12-worker-pg18.log",
+      "sha256": "eda1f49ce14c7d20c79890dc614648b7cb266db3fcc7cf9e6d5ae800e726abac"
+    }
+  ]
+}

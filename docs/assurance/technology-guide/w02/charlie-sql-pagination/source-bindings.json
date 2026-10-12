@@ -1,0 +1,152 @@
+[
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "internal/charlie/cluster_agent_capability_adapter.go",
+    "bytes": 10182,
+    "sha256": "c1e03117f8fd49c9bf80c7223b89ec15c078bbedd166f59f1ed2922ac30965c3"
+  },
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "internal/charlie/delivery_capability_adapter.go",
+    "bytes": 28154,
+    "sha256": "9f81d6d59d508a9e3b5be283a422012c663c4fa8e5cafb6942dae9998221a36a"
+  },
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "internal/charlie/operational_capability_adapter.go",
+    "bytes": 19824,
+    "sha256": "2f5655d45a439cc7a86dd61cced1fe4d51d76b898451976f871aaa5568d04f1d"
+  },
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "internal/charlie/work_pipeline_capability_adapter.go",
+    "bytes": 21234,
+    "sha256": "be82710ea94403ca671522771abed6d6da0613744aabf0a5427322de6902ea8e"
+  },
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "internal/charlie/sql_pagination_characterization_test.go",
+    "bytes": 2887,
+    "sha256": "14fa08307d997c6252f1996f1f28a24a52e0d63e691023713475ecec708d52e7"
+  },
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "internal/charlie/sql_pagination_families_test.go",
+    "bytes": 16614,
+    "sha256": "2adcf6dc59b6b55bb0b93b98cf54585d206ecd6f6541a5c2e93a6b6206b24902"
+  },
+  {
+    "commit": "32c58221ab039be31211a9942e942e1768eb5a40",
+    "path": "docs/data-governance/runtime-sql.json",
+    "bytes": 523096,
+    "sha256": "5bbebe55c121847962d3d28d7db68f495dba7c7e2aab577aca7eb2aca0eafb7a"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/cluster_agent_capability_adapter.go",
+    "bytes": 10249,
+    "sha256": "95dfd6af77f8e44797126e1a8a31bb7c50e07c8a7f1fcceda8894e623e932092"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/delivery_capability_adapter.go",
+    "bytes": 28556,
+    "sha256": "624b19c7f5e10f0d1a83bcbbd234fda94609ded36369ece35042b72c5f8e9085"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/operational_capability_adapter.go",
+    "bytes": 20025,
+    "sha256": "a3850352827c696aec5be9c038f17465fc0e05fb92b7c64b04bd6d0567cc8bc2"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/work_pipeline_capability_adapter.go",
+    "bytes": 21407,
+    "sha256": "993cc7c1f128eb5fa97ec6cdac8c926f915f57219c9da52efc249ca5082b97c1"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/sql_pagination.go",
+    "bytes": 513,
+    "sha256": "c7a1c77b6262d59aba30d200a2aa30d672a499e2a085b2690f36205b5c1f3a9b"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/sql_pagination_boundary_test.go",
+    "bytes": 1278,
+    "sha256": "6ea8006ac9de877a208774fb74ba7712a90dcf208faf5709d40f1e345422f4d9"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/sql_pagination_characterization_test.go",
+    "bytes": 2887,
+    "sha256": "14fa08307d997c6252f1996f1f28a24a52e0d63e691023713475ecec708d52e7"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "internal/charlie/sql_pagination_families_test.go",
+    "bytes": 16614,
+    "sha256": "2adcf6dc59b6b55bb0b93b98cf54585d206ecd6f6541a5c2e93a6b6206b24902"
+  },
+  {
+    "commit": "a1799b7828319305fa55ba87ebb038b6da6db237",
+    "path": "docs/data-governance/runtime-sql.json",
+    "bytes": 523096,
+    "sha256": "5bbebe55c121847962d3d28d7db68f495dba7c7e2aab577aca7eb2aca0eafb7a"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/cluster_agent_capability_adapter.go",
+    "bytes": 10249,
+    "sha256": "95dfd6af77f8e44797126e1a8a31bb7c50e07c8a7f1fcceda8894e623e932092"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/delivery_capability_adapter.go",
+    "bytes": 28556,
+    "sha256": "624b19c7f5e10f0d1a83bcbbd234fda94609ded36369ece35042b72c5f8e9085"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/operational_capability_adapter.go",
+    "bytes": 20025,
+    "sha256": "a3850352827c696aec5be9c038f17465fc0e05fb92b7c64b04bd6d0567cc8bc2"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/work_pipeline_capability_adapter.go",
+    "bytes": 21407,
+    "sha256": "993cc7c1f128eb5fa97ec6cdac8c926f915f57219c9da52efc249ca5082b97c1"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/sql_pagination.go",
+    "bytes": 513,
+    "sha256": "c7a1c77b6262d59aba30d200a2aa30d672a499e2a085b2690f36205b5c1f3a9b"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/sql_pagination_boundary_test.go",
+    "bytes": 1278,
+    "sha256": "6ea8006ac9de877a208774fb74ba7712a90dcf208faf5709d40f1e345422f4d9"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/sql_pagination_characterization_test.go",
+    "bytes": 2887,
+    "sha256": "14fa08307d997c6252f1996f1f28a24a52e0d63e691023713475ecec708d52e7"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "internal/charlie/sql_pagination_families_test.go",
+    "bytes": 16614,
+    "sha256": "2adcf6dc59b6b55bb0b93b98cf54585d206ecd6f6541a5c2e93a6b6206b24902"
+  },
+  {
+    "commit": "922e5689ec9e5540fbe39c0776427b0fd67eced3",
+    "path": "docs/data-governance/runtime-sql.json",
+    "bytes": 523096,
+    "sha256": "84bf339db4e79b91be16bdfa77a10953d7c78396013a01948ac9905fbdc8798e"
+  }
+]

@@ -31,6 +31,7 @@ export function DisableDialog({
     onError: (err: Error) => toastApiError("", err, "Could not disable 2FA"),
   });
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: { password: "", code: "" },
     validators: {
@@ -44,17 +45,27 @@ export function DisableDialog({
     onSubmit: async ({ value }) => {
       try {
         await mut.mutateAsync(value);
-      } catch {
-        // Mutation toasts on error.
+        setServerError(undefined);
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
   const { password, code } = useStore(form.store, (state) => state.values);
 
   return (
-    <ModalShell onClose={onClose} title="Disable two-factor authentication">
+    <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
+      onClose={onClose}
+      title="Disable two-factor authentication"
+    >
       <form.AppForm>
-        <form.FormErrorSummary serverError={mut.error?.message} />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
       <div className="space-y-4">
         <div className="flex items-start gap-3 p-3 rounded-md bg-status-warning/10 border border-status-warning/30">
@@ -126,7 +137,7 @@ export function DisableDialog({
             Cancel
           </ActionButton>
           <ActionButton
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={!password || code.length !== 6 || mut.isPending}
             loading={mut.isPending}
             intent="destructive"
@@ -156,6 +167,7 @@ export function RegenerateDialog({
       toastApiError("", err, "Could not regenerate codes"),
   });
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: { code: "" },
     validators: {
@@ -166,17 +178,27 @@ export function RegenerateDialog({
     onSubmit: async ({ value }) => {
       try {
         await mut.mutateAsync(value.code);
-      } catch {
-        // Mutation toasts on error.
+        setServerError(undefined);
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
   const code = useStore(form.store, (state) => state.values.code);
 
   return (
-    <ModalShell onClose={onClose} title="Regenerate recovery codes">
+    <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!codes && !form.store.state.isSubmitting) void form.handleSubmit();
+      }}
+      onClose={onClose}
+      title="Regenerate recovery codes"
+    >
       <form.AppForm>
-        <form.FormErrorSummary serverError={mut.error?.message} />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
       {codes ? (
         <RecoveryCodesBlock
@@ -205,7 +227,7 @@ export function RegenerateDialog({
               Cancel
             </ActionButton>
             <ActionButton
-              onClick={() => void form.handleSubmit()}
+              type="submit"
               disabled={code.length !== 6 || mut.isPending}
               loading={mut.isPending}
               intent="primary"

@@ -17,6 +17,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
@@ -27,15 +29,28 @@ import (
 // to the audit log. The audit writer is optional — nil-safe; the
 // metrics path stays live even without an audit destination.
 type vaultMetricsObserver struct {
-	audit audit.Querier
+	audit   audit.Querier
+	metrics *observability.VaultMetricLease
 }
 
 func newVaultMetricsObserver(audit audit.Querier) vaultMetricsObserver {
 	return vaultMetricsObserver{audit: audit}
 }
 
+func (o vaultMetricsObserver) BeginConnectionLookup() func(uuid.UUID, string) vault.Observer {
+	lookup := observability.BeginVaultMetricLookup()
+	return func(id uuid.UUID, name string) vault.Observer {
+		metrics := lookup.Bind(id, name)
+		return vaultMetricsObserver{audit: o.audit, metrics: &metrics}
+	}
+}
+
 func (o vaultMetricsObserver) OnResolved(ctx context.Context, connection string, ref vault.Reference, duration time.Duration) {
-	observability.RecordVaultResolve(connection, observability.VaultOutcomeSucceeded, duration.Seconds())
+	if o.metrics != nil {
+		o.metrics.RecordResolve(observability.VaultOutcomeSucceeded, duration.Seconds())
+	} else {
+		observability.RecordVaultResolve(connection, observability.VaultOutcomeSucceeded, duration.Seconds())
+	}
 	if o.audit == nil {
 		return
 	}
@@ -55,7 +70,11 @@ func (o vaultMetricsObserver) OnResolved(ctx context.Context, connection string,
 }
 
 func (o vaultMetricsObserver) OnFailed(ctx context.Context, connection string, ref vault.Reference, err error) {
-	observability.RecordVaultResolve(connection, observability.VaultOutcomeFailed, 0)
+	if o.metrics != nil {
+		o.metrics.RecordResolve(observability.VaultOutcomeFailed, 0)
+	} else {
+		observability.RecordVaultResolve(connection, observability.VaultOutcomeFailed, 0)
+	}
 	if o.audit == nil {
 		return
 	}
@@ -80,7 +99,11 @@ func (o vaultMetricsObserver) OnFailed(ctx context.Context, connection string, r
 }
 
 func (o vaultMetricsObserver) OnHealth(_ context.Context, connection string, ok bool) {
-	observability.RecordVaultHealth(connection, ok)
+	if o.metrics != nil {
+		o.metrics.RecordHealth(ok)
+	} else {
+		observability.RecordVaultHealth(connection, ok)
+	}
 }
 
 // vaultErrorClass maps the raw error into a coarse, secret-free

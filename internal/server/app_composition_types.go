@@ -7,6 +7,9 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	deliverydeployment "github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/provider"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	deliverystatus "github.com/alphabravocompany/astronomer-go/internal/delivery/status"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
@@ -14,6 +17,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
@@ -34,6 +38,12 @@ import (
 // Keeping the hand-off typed makes the production composition root reviewable
 // without hiding dependencies in globals or an untyped service locator.
 type productionComposition struct {
+	databaseAuthority                    *distribution.DatabaseAuthority
+	databaseRefreshOwner                 *provider.DatabaseRefreshOwner
+	databaseScanOwner                    *provider.DatabaseScanOwner
+	databaseScanMaterial                 *distribution.DatabaseJobMaterial
+	databaseScanPull                     *resolver.DatabaseJobPullCredential
+	cursorCodec                          *paging.CursorCodec
 	runtime                              *runtimeSupervisor
 	database                             *db.DB
 	queries                              *sqlc.Queries

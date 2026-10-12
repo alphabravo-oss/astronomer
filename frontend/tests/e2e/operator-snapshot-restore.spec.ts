@@ -42,6 +42,7 @@ function cluster(id: string, name: string) {
     name,
     display_name: name,
     status: "active",
+    registration_phase: "ready",
     provider: "generic",
     environment: "test",
     region: "local",

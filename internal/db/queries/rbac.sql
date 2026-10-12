@@ -166,7 +166,7 @@ SELECT * FROM project_role_bindings WHERE id = $1;
 SELECT * FROM project_role_bindings ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: ListProjectRoleBindingsByProject :many
-SELECT * FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
+SELECT * FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateProjectRoleBinding :one
 INSERT INTO project_role_bindings (user_id, "group", role_id, project_id)

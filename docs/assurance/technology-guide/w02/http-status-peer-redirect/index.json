@@ -1,0 +1,582 @@
+{
+  "schemaVersion": 1,
+  "scope": "Two production HTTP guard repairs; actual baseline and corrected race with original failures retained",
+  "sourceCommit": "27102246b69ee4fbd3f7d5ed1a06119ef02d8fb0",
+  "sourceOverlay": {
+    "internal/tunnel/proxy.go": {
+      "sha256": "e6bf777e8693776ba6b092e06be622cf5b2e2ed70de00450ed521a15f3b2fd3c",
+      "bytes": 25849,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/tunnel/peer_http.go": {
+      "sha256": "adf4e9bf437b3d69e55e4d37f51ac170c41c10c28d5711d55196ab519e3ffb7f",
+      "bytes": 404,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/tunnel/proxy_peer_redirect_test.go": {
+      "sha256": "18636a60c7a60565fa55b41dba45b0fe67c7ce23587615f59091e3e2f5a812a0",
+      "bytes": 2423,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/handler/k8s_requester.go": {
+      "sha256": "d0d38357a0007734a6389010e9dd24282f68c7d0979352891372b01fd0ef5546",
+      "bytes": 17830,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/handler/helm_requester.go": {
+      "sha256": "24a2c31ccaf1e9af438d76f7a6258d311d0dc3e759a356bfd3759b4c2bdf401f",
+      "bytes": 7193,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/handler/peer_redirect_test.go": {
+      "sha256": "f412603a8d2a01520ed1c40d5dac6e9c34e3da23a3c800f8eed9a20ad8297a2d",
+      "bytes": 2585,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/webhook/sender.go": {
+      "sha256": "97351369364bb720c698089b1edac2680d0952d786c3bac257cba66f3369f960",
+      "bytes": 13747,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/webhook/sender_status_bounds_test.go": {
+      "sha256": "56800bb6797fcfe0897626a904a55e2ec2615ea73cdd04e9d460bf2d46e6bb02",
+      "bytes": 1467,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/webhook/sender_http2_status_test.go": {
+      "sha256": "6c8d5d3d0f07aeaac3de573d225fb5a28b7d89c607be2c46652ef906326b2f0f",
+      "bytes": 3973,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/worker/tasks/webhook_dispatch.go": {
+      "sha256": "fe3a6f96e9e1fe1acc94d29b4c89a50502ed88e41e57cba0004fd7aae57ce6ed",
+      "bytes": 11636,
+      "mode": 420,
+      "kind": "regular"
+    },
+    "internal/worker/tasks/webhook_status_bounds_test.go": {
+      "sha256": "45a2176be706b80ed1838e78e42724e5129284164a6730447c5298631be2127e",
+      "bytes": 1785,
+      "mode": 420,
+      "kind": "regular"
+    }
+  },
+  "history": [
+    {
+      "role": "baseline",
+      "sourceCommit": "27102246b69ee4fbd3f7d5ed1a06119ef02d8fb0",
+      "terminals": {
+        "fail": 39
+      },
+      "originalQualified": true,
+      "logOutcomes": {
+        "launched": true,
+        "exitCode": 1,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 135.824
+      }
+    },
+    {
+      "role": "corrected-fixture-failure",
+      "sourceCommit": "27102246b69ee4fbd3f7d5ed1a06119ef02d8fb0",
+      "terminals": {
+        "pass": 69,
+        "fail": 3
+      },
+      "originalQualified": false,
+      "logOutcomes": {
+        "launched": true,
+        "exitCode": 1,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 254.621
+      }
+    },
+    {
+      "role": "corrected",
+      "sourceCommit": "27102246b69ee4fbd3f7d5ed1a06119ef02d8fb0",
+      "terminals": {
+        "pass": 72
+      },
+      "originalQualified": true,
+      "logOutcomes": {
+        "launched": true,
+        "exitCode": 0,
+        "reason": "",
+        "guardException": null,
+        "drained": true,
+        "cleanupActions": [],
+        "leaderHeldUntilDrain": true,
+        "liveDescendantsAfterDrain": [],
+        "seconds": 25.641
+      }
+    },
+    {
+      "role": "vet-and-original-complexity-failure",
+      "sourceCommit": "27102246b69ee4fbd3f7d5ed1a06119ef02d8fb0",
+      "terminals": {},
+      "originalQualified": false,
+      "logOutcomes": [
+        {
+          "label": "go-vet",
+          "command": [
+            "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+            "vet",
+            "./internal/...",
+            "./cmd/..."
+          ],
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "launched": true,
+          "exitCode": 0,
+          "reason": "",
+          "guardException": null,
+          "drained": true,
+          "cleanupActions": [],
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 41.055
+        },
+        {
+          "label": "complexity",
+          "command": [
+            "/root/.cache/astronomer-032/toolchains/node-v26.11.1-linux-x64/bin/node",
+            "scripts/check-complexity-budget.mjs"
+          ],
+          "sha256": "07df974249f7cde62081f142cc7111adff5b33a05c2ddc6931001fa6b7d2d159",
+          "launched": true,
+          "exitCode": 1,
+          "reason": "",
+          "guardException": null,
+          "drained": true,
+          "cleanupActions": [],
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.502
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "baseline-receipt.json.gz",
+      "sha256": "9875663c3560422bd12dfaafa51c4d627692397488a3d442a7793f153e8d5ca8",
+      "bytes": 1104275,
+      "originalSHA256": "1fb2fd342953c83f8d2323a4d8007e118897d5878897118bcee71fbd2ec5f086",
+      "originalBytes": 4775970
+    },
+    {
+      "path": "baseline-baseline.log.gz",
+      "sha256": "fd9959a418fd5d923eea369507f186dd1ee79370d6327364c6b3a5f519908d4b",
+      "bytes": 3832,
+      "originalSHA256": "6b8f1ceb0003a273b487618892b15282ce4cc4a29c6e0a603dd52534dd135275",
+      "originalBytes": 55445
+    },
+    {
+      "path": "corrected-fixture-failure-receipt.json.gz",
+      "sha256": "48fb8203c54f3b46d41ad7fc1db52944621ea75174ea0c7d44811b28cd95f2a5",
+      "bytes": 1104554,
+      "originalSHA256": "2bc60aa27d0b9ec6d4a947cd829dd5ef7d1b196a3954d16c2ff1d70036f6804a",
+      "originalBytes": 4784482
+    },
+    {
+      "path": "corrected-fixture-failure-corrected-race.log.gz",
+      "sha256": "eb9af4dbe2b992a48be8bdf3842538a25889361f40066c9f9d5e982f37d9c627",
+      "bytes": 5543,
+      "originalSHA256": "29a2c8c8c6409a1eeb470d8055683fa2ab1730f660af843de341534cab54c191",
+      "originalBytes": 76504
+    },
+    {
+      "path": "corrected-receipt.json.gz",
+      "sha256": "fc5b883b80908a45044312049ebf45746104092e90218f424899e0b94550539d",
+      "bytes": 1104469,
+      "originalSHA256": "f68752869a54dd66115accdc1f519f128ea314a9a3ef4f6e47fb8d18ea4d3255",
+      "originalBytes": 4767910
+    },
+    {
+      "path": "corrected-corrected-race.log.gz",
+      "sha256": "af9e841484a94e435d12cbb9357f4a8a58ffb25acbbaec17f7ad75476c251014",
+      "bytes": 5319,
+      "originalSHA256": "4712338763422087e74b044dc2160ce4fba9f220170ccf1301cb5ef58f42647d",
+      "originalBytes": 75845
+    },
+    {
+      "path": "vet-and-original-complexity-failure-receipt.json.gz",
+      "sha256": "28a357bbd1130c19c6cc89ebe98c9b5079ef3ce849b6757dc5c37c76ecb6fae8",
+      "bytes": 998,
+      "originalSHA256": "4e18ce21f50c2b1ac646f6bd66cc9a6f6beec2afb3fabe5f48ba3fec327bce98",
+      "originalBytes": 7038
+    },
+    {
+      "path": "vet-and-original-complexity-failure-complexity.log.gz",
+      "sha256": "fb760ed9f49cf88f919deae22935b11e1f816d3bbda57c62014363331303b606",
+      "bytes": 138,
+      "originalSHA256": "07df974249f7cde62081f142cc7111adff5b33a05c2ddc6931001fa6b7d2d159",
+      "originalBytes": 144
+    },
+    {
+      "path": "vet-and-original-complexity-failure-go-vet.log.gz",
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "bytes": 20,
+      "originalSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalBytes": 0
+    },
+    {
+      "path": "frontend-original-missing-dependencies-boundaries.log.gz",
+      "sha256": "5e16014347d800885f292f96f7fca57e1d7515655088629b7789ae538bac5540",
+      "bytes": 81,
+      "originalSHA256": "7f1fc8d56e3021de58cbe100822d9e170f2d0062d80f8445140114601f6ed9ad",
+      "originalBytes": 66
+    },
+    {
+      "path": "frontend-original-missing-dependencies-complexity.log.gz",
+      "sha256": "bb1ca800dd9b7ee4d1318b9e8362fe385608324b3b543b5c14bdb027699727ba",
+      "bytes": 102,
+      "originalSHA256": "c70b6fc6e678c5d6bb2a1bf8f51dbb336d946698013fb6e0be9553bb8a5d92c6",
+      "originalBytes": 101
+    },
+    {
+      "path": "frontend-original-missing-dependencies-docs.log.gz",
+      "sha256": "36d47ddd853ddf335830d402c9bf3b57aa3610c85b57f5dc9b6527b8e520bb29",
+      "bytes": 513,
+      "originalSHA256": "590ef2392fc28ce298ffada05369c332b47b03008294705b492e23a0c796729a",
+      "originalBytes": 1244
+    },
+    {
+      "path": "frontend-original-missing-dependencies-flakes.log.gz",
+      "sha256": "42203dfcbc3350e2eced058acfe716f8b7cb60969109c380f42f36f9194470a8",
+      "bytes": 75,
+      "originalSHA256": "e07d08bd1bf5d849a5e3a75f7a0806829ab32eb67bcd4e0b060da0cb3207ab94",
+      "originalBytes": 55
+    },
+    {
+      "path": "frontend-original-route-drift-boundaries.log.gz",
+      "sha256": "5e16014347d800885f292f96f7fca57e1d7515655088629b7789ae538bac5540",
+      "bytes": 81,
+      "originalSHA256": "7f1fc8d56e3021de58cbe100822d9e170f2d0062d80f8445140114601f6ed9ad",
+      "originalBytes": 66
+    },
+    {
+      "path": "frontend-original-route-drift-complexity.log.gz",
+      "sha256": "bb1ca800dd9b7ee4d1318b9e8362fe385608324b3b543b5c14bdb027699727ba",
+      "bytes": 102,
+      "originalSHA256": "c70b6fc6e678c5d6bb2a1bf8f51dbb336d946698013fb6e0be9553bb8a5d92c6",
+      "originalBytes": 101
+    },
+    {
+      "path": "frontend-original-route-drift-docs.log.gz",
+      "sha256": "6fe7a4ca1e40f5a7d9c57785374db30cb69dabebd7ecd3dbefe15a3b45187d5c",
+      "bytes": 263,
+      "originalSHA256": "601dea9fe111e171d3e9aec38eb9b997cdaf2208ff0f296ce95b317e42a26c63",
+      "originalBytes": 425
+    },
+    {
+      "path": "frontend-original-route-drift-flakes.log.gz",
+      "sha256": "42203dfcbc3350e2eced058acfe716f8b7cb60969109c380f42f36f9194470a8",
+      "bytes": 75,
+      "originalSHA256": "e07d08bd1bf5d849a5e3a75f7a0806829ab32eb67bcd4e0b060da0cb3207ab94",
+      "originalBytes": 55
+    },
+    {
+      "path": "frontend-original-route-drift-frontend-install.log.gz",
+      "sha256": "98df8a31a39b8d6c3b770c127786fdad07db84e0d89c2e66ea21c5b4999cc527",
+      "bytes": 385,
+      "originalSHA256": "2c88d2bf2e35ab30115714f12c6f3c4be95c09b1fb3a4ce9703d153b8c4aa3fb",
+      "originalBytes": 740
+    },
+    {
+      "path": "frontend-original-inline-key-frontend-install.log.gz",
+      "sha256": "411d5c9212f022a719928866d802347eedb434a0fafe78f00946076cab462926",
+      "bytes": 275,
+      "originalSHA256": "fdb1f4595f63c8ee5ee5681da2ad7b4b71b8285d8c91e5811637a34ac01c602c",
+      "originalBytes": 490
+    },
+    {
+      "path": "frontend-original-inline-key-frontend-lint.log.gz",
+      "sha256": "5407e56f711daf3ecec14d39035135afbc9a5f3059c0d0da0cfd9765775821b5",
+      "bytes": 256,
+      "originalSHA256": "e8eed9f5ae3c004ef0cfde4b3854dccf1cf07a40c2458bba23deaf27af272845",
+      "originalBytes": 361
+    },
+    {
+      "path": "frontend-original-inline-key-frontend-types.log.gz",
+      "sha256": "21961ca9c4c63a02c9a9a99ff2f4a78043271956d1e39802ebb0161a5fdf55af",
+      "bytes": 87,
+      "originalSHA256": "74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67",
+      "originalBytes": 80
+    },
+    {
+      "path": "frontend-corrected-receipt.json.gz",
+      "sha256": "754d3b19047239faca9727d7153030b75a0c2c3438ef1b4265cc0ecb169a9514",
+      "bytes": 1099520,
+      "originalSHA256": "a416d97bf826718eeeba3acf8ef9608afad0fa968e4a6d600923deb23c218854",
+      "originalBytes": 4282015
+    },
+    {
+      "path": "frontend-corrected-boundaries.log.gz",
+      "sha256": "27268bf105f3d07dc1ca2b623af3431c180e6b442c6b6b6acf016be341bf471a",
+      "bytes": 81,
+      "originalSHA256": "7f8d7aa86ad43a8420f6b931c5d658124c19decc1df48155d8dceffc54f89e34",
+      "originalBytes": 66
+    },
+    {
+      "path": "frontend-corrected-complexity.log.gz",
+      "sha256": "2c3aa6afb739c74318829a5d1c794f0e3d8f2e4a7346b386697ed2f1749efe02",
+      "bytes": 102,
+      "originalSHA256": "4979ab0103f6934c882d12343023ce353c80e72544ec11c035f34465fbf8cf9d",
+      "originalBytes": 101
+    },
+    {
+      "path": "frontend-corrected-docs.log.gz",
+      "sha256": "6055b4a1960fb1e0fa58bc0e202ac31b0f4140252cce4a0ac493cacf821d874e",
+      "bytes": 86,
+      "originalSHA256": "85ce7daac9ee18673a7ef33924d5cfd540b2d10402bc4d78d7792faac9869261",
+      "originalBytes": 73
+    },
+    {
+      "path": "frontend-corrected-flakes.log.gz",
+      "sha256": "42203dfcbc3350e2eced058acfe716f8b7cb60969109c380f42f36f9194470a8",
+      "bytes": 75,
+      "originalSHA256": "e07d08bd1bf5d849a5e3a75f7a0806829ab32eb67bcd4e0b060da0cb3207ab94",
+      "originalBytes": 55
+    },
+    {
+      "path": "frontend-corrected-frontend-lint.log.gz",
+      "sha256": "91b9f084353b1c0fb79951493a7496f78c0401f99dcf8f286dcd53b52688d80e",
+      "bytes": 101,
+      "originalSHA256": "e49a7391e71418658500c86c4579aaa2eaf00c3d5ee2cee5216f76766c704adc",
+      "originalBytes": 102
+    },
+    {
+      "path": "frontend-corrected-frontend-tests.log.gz",
+      "sha256": "3ab8433b29ad33ad20e8ad3f252bfb01500708ed3a2b7aff06a129e82f700670",
+      "bytes": 10198,
+      "originalSHA256": "1177e5a39f3fecb498dd783da6ec522218269e9c3802abc0f4204e30a0b96303",
+      "originalBytes": 94606
+    },
+    {
+      "path": "frontend-corrected-frontend-types.log.gz",
+      "sha256": "21961ca9c4c63a02c9a9a99ff2f4a78043271956d1e39802ebb0161a5fdf55af",
+      "bytes": 87,
+      "originalSHA256": "74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67",
+      "originalBytes": 80
+    },
+    {
+      "path": "canonical-route-generation-receipt.json.gz",
+      "sha256": "96cef49c85053b3e9ee9ee69accbc6a9b55a440d17771a65b3a4b3ff19bc979f",
+      "bytes": 1098381,
+      "originalSHA256": "551167d8ce66eb22a5ba571e2af04e7d5eaa4ec41a0de409b8185f7c7ad07f5a",
+      "originalBytes": 4245856
+    },
+    {
+      "path": "canonical-route-generation-routes-and-auth.log.gz",
+      "sha256": "c3a5e08d20ff5efb31fa0276f99bbbc32ca95ff4bf7f636bbdc11d86162e8a79",
+      "bytes": 56582,
+      "originalSHA256": "cb37f496a1916119dc58fa3137b562c404b34af914aa6ef9e4eb937f445cb76c",
+      "originalBytes": 748619
+    },
+    {
+      "path": "frontend-production-receipt.json.gz",
+      "sha256": "f428e2ad22335707fb80d23a386052f966ee6641ab0fcefb4e5d44307c6c9cdf",
+      "bytes": 1098300,
+      "originalSHA256": "732df36ab056481f154b763e324e737ebe73b3e5dfb071c2c2da6498e4cdf263",
+      "originalBytes": 4245589
+    },
+    {
+      "path": "frontend-production-bundle-budget.log.gz",
+      "sha256": "c6cc94885dc289e58a4519491b92b4c64116cd76d21391b99bdd99ebde8f99ea",
+      "bytes": 465,
+      "originalSHA256": "1d0aab38b74ccd4acd8a7dd29a193b4738494672d93b96b21668880c07215350",
+      "originalBytes": 813
+    },
+    {
+      "path": "frontend-production-production-build.log.gz",
+      "sha256": "12fef8f754ca9089a90f578af5d9752e6d58697c31d7f6c29b576ec843073e05",
+      "bytes": 9913,
+      "originalSHA256": "2cb83c44cac81da8ead69325ea4e3bbb7a7d4fe879dd7ca2b7fae74e8984e425",
+      "originalBytes": 48762
+    }
+  ],
+  "limits": [
+    "Baseline proxy 307/308 assertions were overstrict: streamed unreplayable body already prevents automatic follow.",
+    "First corrected race fails only those two assertions and their parent. Test-only successor preserves redirect response passthrough.",
+    "No whole-source security acceptance, PostgreSQL, integrated candidate, deployment or release qualification."
+  ],
+  "integrationChecks": [
+    {
+      "role": "frontend-original-missing-dependencies",
+      "receiptSHA256": "fa642d3cf4db1e97c693b92a6d76054c9eddcf84a96e908f77b6fe0150f9d8eb",
+      "passed": false,
+      "sourcePreserved": true,
+      "gates": [
+        {
+          "name": "complexity",
+          "exitCode": 0,
+          "seconds": 0.514
+        },
+        {
+          "name": "boundaries",
+          "exitCode": 0,
+          "seconds": 0.31
+        },
+        {
+          "name": "flakes",
+          "exitCode": 0,
+          "seconds": 0.161
+        },
+        {
+          "name": "docs",
+          "exitCode": 1,
+          "seconds": 0.265
+        }
+      ]
+    },
+    {
+      "role": "frontend-original-route-drift",
+      "receiptSHA256": "0debf1b34c28064ad5afb63fc4ae1988cfd1e0c51a66f18ff2101e690506bd34",
+      "passed": false,
+      "sourcePreserved": true,
+      "gates": [
+        {
+          "name": "complexity",
+          "exitCode": 0,
+          "seconds": 0.53
+        },
+        {
+          "name": "boundaries",
+          "exitCode": 0,
+          "seconds": 0.254
+        },
+        {
+          "name": "flakes",
+          "exitCode": 0,
+          "seconds": 0.155
+        },
+        {
+          "name": "frontend-install",
+          "exitCode": 0,
+          "seconds": 11.529
+        },
+        {
+          "name": "docs",
+          "exitCode": 1,
+          "seconds": 0.657
+        }
+      ]
+    },
+    {
+      "role": "frontend-original-inline-key",
+      "receiptSHA256": "314b7a4d3b41851810d3a1044a3a7b1c8c192f3613752eaa3adac8ab14474f26",
+      "passed": false,
+      "sourcePreserved": true,
+      "gates": [
+        {
+          "name": "frontend-install",
+          "exitCode": 0,
+          "seconds": 11.285
+        },
+        {
+          "name": "frontend-types",
+          "exitCode": 0,
+          "seconds": 42.162
+        },
+        {
+          "name": "frontend-lint",
+          "exitCode": 1,
+          "seconds": 43.489
+        }
+      ]
+    },
+    {
+      "role": "frontend-corrected",
+      "receiptSHA256": "a416d97bf826718eeeba3acf8ef9608afad0fa968e4a6d600923deb23c218854",
+      "passed": true,
+      "sourcePreserved": true,
+      "gates": [
+        {
+          "name": "complexity",
+          "exitCode": 0,
+          "seconds": 0.514
+        },
+        {
+          "name": "boundaries",
+          "exitCode": 0,
+          "seconds": 0.268
+        },
+        {
+          "name": "flakes",
+          "exitCode": 0,
+          "seconds": 0.166
+        },
+        {
+          "name": "docs",
+          "exitCode": 0,
+          "seconds": 1.317
+        },
+        {
+          "name": "frontend-types",
+          "exitCode": 0,
+          "seconds": 26.854
+        },
+        {
+          "name": "frontend-lint",
+          "exitCode": 0,
+          "seconds": 42.403
+        },
+        {
+          "name": "frontend-tests",
+          "exitCode": 0,
+          "seconds": 317.964
+        }
+      ]
+    },
+    {
+      "role": "canonical-route-generation",
+      "receiptSHA256": "551167d8ce66eb22a5ba571e2af04e7d5eaa4ec41a0de409b8185f7c7ad07f5a",
+      "passed": true,
+      "sourcePreserved": true,
+      "gates": [
+        {
+          "name": "routes-and-auth",
+          "exitCode": 0,
+          "seconds": 30.828
+        }
+      ]
+    },
+    {
+      "role": "frontend-production-build",
+      "receiptSHA256": "732df36ab056481f154b763e324e737ebe73b3e5dfb071c2c2da6498e4cdf263",
+      "passed": true,
+      "sourcePreserved": true,
+      "gates": [
+        {
+          "name": "production-build",
+          "exitCode": 0,
+          "seconds": 12.599
+        },
+        {
+          "name": "bundle-budget",
+          "exitCode": 0,
+          "seconds": 0.669
+        }
+      ]
+    }
+  ]
+}

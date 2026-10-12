@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAppForm } from "@/lib/form";
 import { Plus, X } from "lucide-react";
 import { useCreateAlertSilence } from "@/lib/hooks/alerting";
 import { ActionButton } from "@/components/ui/action-button";
@@ -35,21 +36,36 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
     });
   };
 
-  const handleSave = async () => {
-    try {
-      await createSilence.mutateAsync({
-        reason: form.reason,
-        duration: form.duration,
-        matchers: form.matchers,
-      });
-      onClose();
-    } catch {
-      // Error handled by mutation
-    }
-  };
+  const [serverError, setServerError] = useState<string>();
+  const submission = useAppForm({
+    defaultValues: {},
+    validators: {
+      onSubmit: () => (!form.reason.trim() ? "Reason is required" : undefined),
+    },
+    onSubmit: async () => {
+      try {
+        await createSilence.mutateAsync({
+          reason: form.reason,
+          duration: form.duration,
+          matchers: form.matchers,
+        });
+        setServerError(undefined);
+        onClose();
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
+      }
+    },
+  });
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!submission.store.state.isSubmitting)
+          void submission.handleSubmit();
+      }}
       title="Create Silence"
       onClose={onClose}
       size="md"
@@ -58,7 +74,7 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={handleSave}
+            type="submit"
             disabled={!form.reason}
             loading={createSilence.isPending}
           >
@@ -68,6 +84,9 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <submission.AppForm>
+        <submission.FormErrorSummary serverError={serverError} />
+      </submission.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -77,6 +96,7 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
         </label>
         <Input
           id="field-3687c503-72"
+          name="reason"
           value={form.reason}
           onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
           placeholder="Scheduled maintenance window"
@@ -127,6 +147,7 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
             onChange={(e) =>
               setForm((f) => ({ ...f, matcherValue: e.target.value }))
             }
+            aria-label="Matcher value"
             placeholder="Value"
             className="h-8 flex-1 font-mono text-xs w-auto"
           />

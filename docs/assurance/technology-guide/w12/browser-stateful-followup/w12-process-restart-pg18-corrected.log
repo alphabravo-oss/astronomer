@@ -1,0 +1,132 @@
+{"time":"2026-10-09T22:47:13.099212955Z","level":"INFO","msg":"database migration","detail":"1/u initial (736.563081ms)"}
+{"time":"2026-10-09T22:47:13.108589757Z","level":"INFO","msg":"database migration","detail":"2/u management_backup_destinations (745.899488ms)"}
+{"time":"2026-10-09T22:47:13.118137432Z","level":"INFO","msg":"database migration","detail":"3/u loki_ingest_tokens (755.363615ms)"}
+{"time":"2026-10-09T22:47:13.125270271Z","level":"INFO","msg":"database migration","detail":"4/u logging_outputs_is_system (762.727509ms)"}
+{"time":"2026-10-09T22:47:13.138075097Z","level":"INFO","msg":"database migration","detail":"5/u security_scan_lifecycle (775.458396ms)"}
+{"time":"2026-10-09T22:47:13.145817894Z","level":"INFO","msg":"database migration","detail":"6/u cluster_list_filter_indexes (783.193057ms)"}
+{"time":"2026-10-09T22:47:13.156191964Z","level":"INFO","msg":"database migration","detail":"7/u cluster_status_filter_index (793.549023ms)"}
+{"time":"2026-10-09T22:47:13.164622867Z","level":"INFO","msg":"database migration","detail":"8/u cluster_provider_filter_index (801.837417ms)"}
+{"time":"2026-10-09T22:47:13.172628649Z","level":"INFO","msg":"database migration","detail":"9/u cluster_environment_filter_index (809.835304ms)"}
+{"time":"2026-10-09T22:47:13.180307444Z","level":"INFO","msg":"database migration","detail":"10/u tool_operation_scope_index (817.509412ms)"}
+{"time":"2026-10-09T22:47:13.191166808Z","level":"INFO","msg":"database migration","detail":"11/u catalog_operation_scope_index (828.589932ms)"}
+{"time":"2026-10-09T22:47:13.199175205Z","level":"INFO","msg":"database migration","detail":"12/u logging_operation_scope_index (99.741455ms)"}
+{"time":"2026-10-09T22:47:13.207265115Z","level":"INFO","msg":"database migration","detail":"13/u installed_chart_scope_index (98.540424ms)"}
+{"time":"2026-10-09T22:47:13.215672373Z","level":"INFO","msg":"database migration","detail":"14/u anomaly_baseline_scope_index (97.437997ms)"}
+{"time":"2026-10-09T22:47:13.230122206Z","level":"INFO","msg":"database migration","detail":"15/u transactional_audit_outbox (104.780439ms)"}
+{"time":"2026-10-09T22:47:13.242515338Z","level":"INFO","msg":"database migration","detail":"16/u logging_saved_searches (104.292352ms)"}
+{"time":"2026-10-09T22:47:13.248935584Z","level":"INFO","msg":"database migration","detail":"17/u durable_audit_siem_fanout (102.997383ms)"}
+{"time":"2026-10-09T22:47:13.256426236Z","level":"INFO","msg":"database migration","detail":"18/u logging_pipeline_output_restrict (100.138492ms)"}
+{"time":"2026-10-09T22:47:13.265411322Z","level":"INFO","msg":"database migration","detail":"19/u gatekeeper_constraint_reconciliation (100.662589ms)"}
+{"time":"2026-10-09T22:47:13.274333609Z","level":"INFO","msg":"database migration","detail":"20/u admin_queue_operations (101.611775ms)"}
+{"time":"2026-10-09T22:47:13.283164815Z","level":"INFO","msg":"database migration","detail":"21/u management_backup_sagas (102.779284ms)"}
+{"time":"2026-10-09T22:47:13.295033529Z","level":"INFO","msg":"database migration","detail":"22/u resource_operations (103.30906ms)"}
+{"time":"2026-10-09T22:47:13.306170405Z","level":"INFO","msg":"database migration","detail":"23/u node_operations (106.873232ms)"}
+{"time":"2026-10-09T22:47:13.314681388Z","level":"INFO","msg":"database migration","detail":"24/u siem_test_operations (107.306245ms)"}
+{"time":"2026-10-09T22:47:13.326427682Z","level":"INFO","msg":"database migration","detail":"25/u dex_operations (110.641795ms)"}
+{"time":"2026-10-09T22:47:13.333271897Z","level":"INFO","msg":"database migration","detail":"26/u image_vulnerability_scanner_version_digest (103.02189ms)"}
+{"time":"2026-10-09T22:47:13.341683011Z","level":"INFO","msg":"database migration","detail":"27/u agent_connections_retention (99.023373ms)"}
+{"time":"2026-10-09T22:47:13.349742815Z","level":"INFO","msg":"database migration","detail":"28/u scim_token_lifecycle (100.697305ms)"}
+{"time":"2026-10-09T22:47:13.356255867Z","level":"INFO","msg":"database migration","detail":"29/u agent_connections_one_active (99.712841ms)"}
+{"time":"2026-10-09T22:47:13.38376193Z","level":"INFO","msg":"database migration","detail":"30/u audit_query_scale (118.264946ms)"}
+{"time":"2026-10-09T22:47:13.391204391Z","level":"INFO","msg":"database migration","detail":"31/u gitops_webhook_auth (116.74216ms)"}
+{"time":"2026-10-09T22:47:13.399832935Z","level":"INFO","msg":"database migration","detail":"32/u rbac_template_application_and_user_search (116.528899ms)"}
+{"time":"2026-10-09T22:47:13.409843241Z","level":"INFO","msg":"database migration","detail":"33/u user_preferences (114.728288ms)"}
+{"time":"2026-10-09T22:47:13.423670482Z","level":"INFO","msg":"database migration","detail":"34/u support_bundle_operations (117.349684ms)"}
+{"time":"2026-10-09T22:47:13.432192606Z","level":"INFO","msg":"database migration","detail":"35/u cluster_badges (117.450734ms)"}
+{"time":"2026-10-09T22:47:13.442344888Z","level":"INFO","msg":"database migration","detail":"36/u delivery_status_digest_runtime_generation (115.82326ms)"}
+{"time":"2026-10-09T22:47:13.449731746Z","level":"INFO","msg":"database migration","detail":"37/u cluster_agent_overrides (116.362014ms)"}
+{"time":"2026-10-09T22:47:13.458863186Z","level":"INFO","msg":"database migration","detail":"38/u delivery_target_overrides (117.080457ms)"}
+{"time":"2026-10-09T22:47:13.468785496Z","level":"INFO","msg":"database migration","detail":"39/u external_principals (118.942322ms)"}
+{"time":"2026-10-09T22:47:13.478535031Z","level":"INFO","msg":"database migration","detail":"40/u cluster_liveness (122.197401ms)"}
+{"time":"2026-10-09T22:47:13.486804158Z","level":"INFO","msg":"database migration","detail":"41/u project_resource_quota_allocations (102.928013ms)"}
+{"time":"2026-10-09T22:47:13.494185064Z","level":"INFO","msg":"database migration","detail":"42/u curated_cluster_tools (102.879881ms)"}
+{"time":"2026-10-09T22:47:13.502821684Z","level":"INFO","msg":"database migration","detail":"43/u tool_operation_execution_exclusivity (102.885382ms)"}
+{"time":"2026-10-09T22:47:13.5078771Z","level":"INFO","msg":"database migration","detail":"44/u istio_release_plan (97.917751ms)"}
+{"time":"2026-10-09T22:47:13.520296893Z","level":"INFO","msg":"database migration","detail":"45/u audit_export_operations (96.483732ms)"}
+{"time":"2026-10-09T22:47:13.530315934Z","level":"INFO","msg":"database migration","detail":"46/u tool_drift_leases (98.006368ms)"}
+{"time":"2026-10-09T22:47:13.551471232Z","level":"INFO","msg":"database migration","detail":"47/u refresh_session_families (109.02445ms)"}
+{"time":"2026-10-09T22:47:13.559162751Z","level":"INFO","msg":"database migration","detail":"48/u notification_delivery_identity (109.293648ms)"}
+{"time":"2026-10-09T22:47:13.588040296Z","level":"INFO","msg":"database migration","detail":"49/u durable_json_governance (129.068356ms)"}
+{"time":"2026-10-09T22:47:13.594694113Z","level":"INFO","msg":"database migration","detail":"50/u cluster_health_conditions_contract (125.767832ms)"}
+{"time":"2026-10-09T22:47:13.601590516Z","level":"INFO","msg":"database migration","detail":"51/u disable_invalid_dhi_catalog (122.894733ms)"}
+{"time":"2026-10-09T22:47:13.608122584Z","level":"INFO","msg":"database migration","detail":"52/u durable_json_contract_corrections (121.171007ms)"}
+{"time":"2026-10-09T22:47:13.624425646Z","level":"INFO","msg":"database migration","detail":"53/u application_catalog_v1 (130.118092ms)"}
+{"time":"2026-10-09T22:47:13.63233708Z","level":"INFO","msg":"database migration","detail":"54/u application_catalog_history_backfill (129.439424ms)"}
+{"time":"2026-10-09T22:47:13.639696485Z","level":"INFO","msg":"database migration","detail":"55/u installed_chart_project_ownership (131.749652ms)"}
+{"time":"2026-10-09T22:47:13.648521569Z","level":"INFO","msg":"database migration","detail":"56/u default_system_projects (128.137614ms)"}
+{"time":"2026-10-09T22:47:13.658814817Z","level":"INFO","msg":"database migration","detail":"57/u catalog_user_discovery (128.390247ms)"}
+{"time":"2026-10-09T22:47:13.665061256Z","level":"INFO","msg":"database migration","detail":"58/u delivery_system_component_inventory (113.462927ms)"}
+{"time":"2026-10-09T22:47:13.686816303Z","level":"INFO","msg":"database migration","detail":"59/u delivery_configuration_templates (127.505724ms)"}
+{"time":"2026-10-09T22:47:13.694924318Z","level":"INFO","msg":"database migration","detail":"60/u delivery_effective_configuration (106.749066ms)"}
+{"time":"2026-10-09T22:47:13.701811874Z","level":"INFO","msg":"database migration","detail":"61/u delivery_durable_json_governance (106.967479ms)"}
+{"time":"2026-10-09T22:47:13.707512767Z","level":"INFO","msg":"database migration","detail":"62/u charlie_delegation_function_search_path (105.795433ms)"}
+{"time":"2026-10-09T22:47:13.713916222Z","level":"INFO","msg":"database migration","detail":"63/u user_preferences_pinned_clusters (105.716714ms)"}
+{"time":"2026-10-09T22:47:13.720494205Z","level":"INFO","msg":"database migration","detail":"64/u user_preferences_display (96.000782ms)"}
+{"time":"2026-10-09T22:47:13.727453838Z","level":"INFO","msg":"database migration","detail":"65/u user_preferences_starred_types (95.033762ms)"}
+{"time":"2026-10-09T22:47:13.733621229Z","level":"INFO","msg":"database migration","detail":"66/u user_preferences_json_governance (93.833391ms)"}
+{"time":"2026-10-09T22:47:13.74378907Z","level":"INFO","msg":"database migration","detail":"67/u pin_cluster_tool_releases (94.574927ms)"}
+{"time":"2026-10-09T22:47:13.749369567Z","level":"INFO","msg":"database migration","detail":"68/u add_cis_operator_crd_release (90.443649ms)"}
+{"time":"2026-10-09T22:47:13.755399709Z","level":"INFO","msg":"database migration","detail":"69/u align_rancher_tool_dependencies (90.232003ms)"}
+{"time":"2026-10-09T22:47:13.760611962Z","level":"INFO","msg":"database migration","detail":"70/u enable_cert_manager_startup_check (73.683237ms)"}
+{"time":"2026-10-09T22:47:13.772306097Z","level":"INFO","msg":"database migration","detail":"71/u user_table_views (77.279256ms)"}
+{"time":"2026-10-09T22:47:13.780366731Z","level":"INFO","msg":"database migration","detail":"72/u durable_json_nested_validation (78.447356ms)"}
+=== RUN   TestProcessRestartQualification
+=== RUN   TestProcessRestartQualification/server_rolling_restart_preserves_tunnel_task_and_CIS_progress
+=== RUN   TestProcessRestartQualificationHelper
+asynq: pid=158461 2026/10/09 22:47:21.815864 INFO: Starting processing
+2026/10/09 22:47:21 INFO audit event recorded event=audit_recorded source=tunnel action=agent.connected resource_type=cluster resource_id=527329d2-1d28-4647-9a2e-bcc39d060d29
+2026/10/09 22:47:22 INFO worker job started task_id=6d502472-5594-4cb5-8b01-e6ded93f6d2c retry_count=0 max_retry=3 event=worker_job_started job=security:ingest_scan_results
+2026/10/09 22:47:22 INFO worker job completed task_id=6d502472-5594-4cb5-8b01-e6ded93f6d2c retry_count=0 max_retry=3 event=worker_job_completed job=security:ingest_scan_results status=success duration_ms=16
+asynq: pid=158461 2026/10/09 22:47:22.971192 INFO: Starting graceful shutdown
+asynq: pid=158461 2026/10/09 22:47:24.119829 INFO: Waiting for all workers to finish...
+asynq: pid=158461 2026/10/09 22:47:24.119848 INFO: All workers have finished
+asynq: pid=158461 2026/10/09 22:47:24.126835 INFO: Exiting
+--- PASS: TestProcessRestartQualificationHelper (2.31s)
+PASS
+    process_restart_qualification_integration_test.go:95: close replaced server connection: failed to close WebSocket: failed to read frame header: EOF
+=== RUN   TestProcessRestartQualificationHelper
+asynq: pid=159235 2026/10/09 22:47:24.182138 INFO: Starting processing
+2026/10/09 22:47:24 INFO audit event recorded event=audit_recorded source=tunnel action=agent.connected resource_type=cluster resource_id=527329d2-1d28-4647-9a2e-bcc39d060d29
+2026/10/09 22:47:24 INFO worker job started task_id=bbc3f633-a647-4dec-af95-0117e966019f retry_count=0 max_retry=3 event=worker_job_started job=security:ingest_scan_results
+2026/10/09 22:47:24 INFO worker job completed task_id=bbc3f633-a647-4dec-af95-0117e966019f retry_count=0 max_retry=3 event=worker_job_completed job=security:ingest_scan_results status=success duration_ms=9
+2026/10/09 22:47:24 INFO audit event recorded event=audit_recorded correlation_id=5c2457f9-6396-484e-8afa-cbb8958cecbb source=service action=security.scan.create resource_type=security_scan resource_id=c8223cc1-ae8c-4ddf-befb-b89a6ffbfad7
+asynq: pid=159235 2026/10/09 22:47:24.979746 INFO: Starting graceful shutdown
+asynq: pid=159235 2026/10/09 22:47:25.806102 INFO: Waiting for all workers to finish...
+asynq: pid=159235 2026/10/09 22:47:25.806120 INFO: All workers have finished
+asynq: pid=159235 2026/10/09 22:47:25.810682 INFO: Exiting
+--- PASS: TestProcessRestartQualificationHelper (1.63s)
+PASS
+--- PASS: TestProcessRestartQualification/server_rolling_restart_preserves_tunnel_task_and_CIS_progress (4.09s)
+=== RUN   TestProcessRestartQualification/worker_restart_preserves_committed_task_and_audit_intent
+=== RUN   TestProcessRestartQualificationHelper
+asynq: pid=159776 2026/10/09 22:47:25.871060 INFO: Starting processing
+asynq: pid=159776 2026/10/09 22:47:25.903800 INFO: Starting graceful shutdown
+asynq: pid=159776 2026/10/09 22:47:26.486726 INFO: Waiting for all workers to finish...
+asynq: pid=159776 2026/10/09 22:47:26.486762 INFO: All workers have finished
+asynq: pid=159776 2026/10/09 22:47:26.492009 INFO: Exiting
+--- PASS: TestProcessRestartQualificationHelper (0.62s)
+PASS
+=== RUN   TestProcessRestartQualificationHelper
+asynq: pid=159980 2026/10/09 22:47:26.556723 INFO: Starting processing
+2026/10/09 22:47:32 INFO worker job started task_id=restart-wakeup-audit:outbox_dispatch-8a161735-ae88-45dc-8434-7c7a78910da0 retry_count=0 max_retry=25 event=worker_job_started job=audit:outbox_dispatch
+2026/10/09 22:47:32 INFO worker job started task_id=restart-wakeup-task_outbox:dispatch-31971309-7b91-4837-a9ae-5870b53e9071 retry_count=0 max_retry=25 event=worker_job_started job=task_outbox:dispatch
+2026/10/09 22:47:32 INFO worker job completed task_id=restart-wakeup-task_outbox:dispatch-31971309-7b91-4837-a9ae-5870b53e9071 retry_count=0 max_retry=25 event=worker_job_completed job=task_outbox:dispatch status=success duration_ms=22
+2026/10/09 22:47:32 INFO audit event recorded event=audit_recorded correlation_id=7f0a9c28-6c10-4566-a898-6a653930e931 source=service action=qualification.worker_restart resource_type=restart_intent resource_id=13434987-40e7-4cbb-958b-65e07ba89859
+2026/10/09 22:47:32 INFO worker job completed task_id=restart-wakeup-audit:outbox_dispatch-8a161735-ae88-45dc-8434-7c7a78910da0 retry_count=0 max_retry=25 event=worker_job_completed job=audit:outbox_dispatch status=success duration_ms=28
+2026/10/09 22:47:34 INFO worker job started task_id=13434987-40e7-4cbb-958b-65e07ba89859 retry_count=0 max_retry=3 event=worker_job_started job=notification:send
+2026/10/09 22:47:34 INFO sending notification channel=webhook subject="Worker restart qualification" severity=info recipient_count=1
+2026/10/09 22:47:34 INFO notification delivery accepted channel=webhook subject="Worker restart qualification" delivery_id=""
+2026/10/09 22:47:34 INFO worker job completed task_id=13434987-40e7-4cbb-958b-65e07ba89859 retry_count=0 max_retry=3 event=worker_job_completed job=notification:send status=success duration_ms=0
+asynq: pid=159980 2026/10/09 22:47:34.728536 INFO: Starting graceful shutdown
+asynq: pid=159980 2026/10/09 22:47:35.574380 INFO: Waiting for all workers to finish...
+asynq: pid=159980 2026/10/09 22:47:35.574406 INFO: All workers have finished
+asynq: pid=159980 2026/10/09 22:47:35.579054 INFO: Exiting
+--- PASS: TestProcessRestartQualificationHelper (9.02s)
+PASS
+--- PASS: TestProcessRestartQualification/worker_restart_preserves_committed_task_and_audit_intent (9.77s)
+--- PASS: TestProcessRestartQualification (13.87s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker	13.922s
+
+DONE 3 tests in 13.923s
+qualification evidence: /root/.cache/astronomer-032/qualification/w12-process-restart-pg18-corrected/process-restart/evidence.json

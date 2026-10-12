@@ -1,0 +1,5 @@
+--- FAIL: TestDestinationClientClosesIdleConnectionsThroughBothWrappers (0.02s)
+    idle_connections_test.go:62: idle connection remained open behind wrappers: 1 dials
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/httpclient	0.029s
+FAIL

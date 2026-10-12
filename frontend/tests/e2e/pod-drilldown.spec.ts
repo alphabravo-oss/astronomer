@@ -50,6 +50,7 @@ const cluster = {
   displayName: "Cluster 01",
   description: "",
   status: "active",
+  registration_phase: "ready",
   health: {
     status: "active",
     lastCheck: new Date().toISOString(),

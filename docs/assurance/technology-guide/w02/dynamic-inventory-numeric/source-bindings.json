@@ -1,0 +1,110 @@
+[
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "go.mod",
+    "bytes": 12678,
+    "sha256": "b9c69c08057d7fbf4e1abb69f493eafe88c29a9d55c095e384b0fff64a68f001"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "go.sum",
+    "bytes": 79656,
+    "sha256": "de392ebf3f2f7c6eb759d98edc88a9f654d86cde301d672b4297f5d957e9780c"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "internal/agent/delivery/probe_dynamic_refresh.go",
+    "bytes": 5853,
+    "sha256": "9fb3ab5b0ce6921b85e1035a5c873a141c8885876f72c5449928bca6a112b995"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "internal/agent/delivery/system_inventory_dynamic.go",
+    "bytes": 10843,
+    "sha256": "1373f046ef46a561b33dd22306b1ed1591088be480d7180d1ff5d0e0d0c1fb2d"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "internal/agent/delivery/system_inventory_numeric_test.go",
+    "bytes": 6106,
+    "sha256": "c6411b2943eaf9690d0e9131505bd386a58baefdf262a4eef739c0e35bb921ae"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "internal/agent/delivery/inventory_test.go",
+    "bytes": 4605,
+    "sha256": "7dbdb638d8b5c68fbb20b70b529ce111ef4d4761449acff299cc09c08246779b"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "internal/agent/delivery/probe_refresh_test.go",
+    "bytes": 14744,
+    "sha256": "c92b651ddce4492d09460372f8ed5d56c57c103df06fbd4d2ebad1606d0beade"
+  },
+  {
+    "commit": "35bfb435b7235054be2a65475c2bc959c3ea3263",
+    "path": "pkg/protocol/delivery.go",
+    "bytes": 36672,
+    "sha256": "ea906a0871bede0eb057ddd22c9780b19119fce52a1cbb973d546c43d948b055"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "go.mod",
+    "bytes": 12678,
+    "sha256": "b9c69c08057d7fbf4e1abb69f493eafe88c29a9d55c095e384b0fff64a68f001"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "go.sum",
+    "bytes": 79656,
+    "sha256": "de392ebf3f2f7c6eb759d98edc88a9f654d86cde301d672b4297f5d957e9780c"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/probe_dynamic_refresh.go",
+    "bytes": 6114,
+    "sha256": "c2104b2346df122b9d20ace990f2d645473c95d903a04629f43ce0b4efb88dbc"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/system_inventory_dynamic.go",
+    "bytes": 11893,
+    "sha256": "4d3ced7b8c61e87b609b1d561ffdd626f8863e7ef63073bc1874dcdb7fc0ebf2"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/system_inventory_numeric_test.go",
+    "bytes": 6106,
+    "sha256": "c6411b2943eaf9690d0e9131505bd386a58baefdf262a4eef739c0e35bb921ae"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/system_inventory_numbers.go",
+    "bytes": 2337,
+    "sha256": "59f7f8a896e12e89b5ed90f2614f5cf4c1be5642828c1be784b7c2e59ce3292c"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/system_inventory_numbers_test.go",
+    "bytes": 2918,
+    "sha256": "b2f4e13cb028edae7240df15c81fbdd58f4e47eec54814fb2fb87c7c7023d27f"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/inventory_test.go",
+    "bytes": 4605,
+    "sha256": "7dbdb638d8b5c68fbb20b70b529ce111ef4d4761449acff299cc09c08246779b"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "internal/agent/delivery/probe_refresh_test.go",
+    "bytes": 14744,
+    "sha256": "c92b651ddce4492d09460372f8ed5d56c57c103df06fbd4d2ebad1606d0beade"
+  },
+  {
+    "commit": "58c1b51298fdf6faf5e187792668c3c10042c382",
+    "path": "pkg/protocol/delivery.go",
+    "bytes": 36672,
+    "sha256": "ea906a0871bede0eb057ddd22c9780b19119fce52a1cbb973d546c43d948b055"
+  }
+]

@@ -199,8 +199,12 @@ func (a *DeliveryCapabilityAdapter) sources(ctx context.Context, projectID uuid.
 		return nil, projectErr
 	}
 	page, size := pagination(args, 50)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	status := optionalPGText(args, "status")
-	rows, err := a.queries.ListDeliverySources(ctx, sqlc.ListDeliverySourcesParams{ProjectID: projectID, Status: status, QueryOffset: int32((page - 1) * size), QueryLimit: int32(size)})
+	rows, err := a.queries.ListDeliverySources(ctx, sqlc.ListDeliverySourcesParams{ProjectID: projectID, Status: status, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +239,11 @@ func (a *DeliveryCapabilityAdapter) bundles(ctx context.Context, projectID uuid.
 		return nil, projectErr
 	}
 	page, size := pagination(args, 50)
-	rows, err := a.queries.ListComponentBundles(ctx, sqlc.ListComponentBundlesParams{ProjectID: projectID, QueryOffset: int32((page - 1) * size), QueryLimit: int32(size)})
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.queries.ListComponentBundles(ctx, sqlc.ListComponentBundlesParams{ProjectID: projectID, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +271,11 @@ func (a *DeliveryCapabilityAdapter) bundleGet(ctx context.Context, projectID uui
 		return nil, err
 	}
 	page, size := pagination(args, 25)
-	rows, err := a.queries.ListComponentBundleVersions(ctx, sqlc.ListComponentBundleVersionsParams{BundleID: id, QueryOffset: int32((page - 1) * size), QueryLimit: int32(size)})
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.queries.ListComponentBundleVersions(ctx, sqlc.ListComponentBundleVersionsParams{BundleID: id, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +291,11 @@ func (a *DeliveryCapabilityAdapter) targets(ctx context.Context, projectID uuid.
 		return nil, projectErr
 	}
 	page, size := pagination(args, 50)
-	rows, err := a.queries.ListDeliveryTargets(ctx, sqlc.ListDeliveryTargetsParams{ProjectID: projectID, QueryOffset: int32((page - 1) * size), QueryLimit: int32(size)})
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.queries.ListDeliveryTargets(ctx, sqlc.ListDeliveryTargetsParams{ProjectID: projectID, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
 		return nil, err
 	}
@@ -317,8 +333,12 @@ func (a *DeliveryCapabilityAdapter) rollouts(ctx context.Context, projectID uuid
 		return nil, projectErr
 	}
 	page, size := pagination(args, 50)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	state := optionalPGText(args, "state")
-	rows, err := a.queries.ListDeliveryRollouts(ctx, sqlc.ListDeliveryRolloutsParams{ProjectID: projectID, State: state, QueryOffset: int32((page - 1) * size), QueryLimit: int32(size)})
+	rows, err := a.queries.ListDeliveryRollouts(ctx, sqlc.ListDeliveryRolloutsParams{ProjectID: projectID, State: state, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +381,10 @@ func (a *DeliveryCapabilityAdapter) deployments(ctx context.Context, projectID u
 		return nil, projectErr
 	}
 	page, size := pagination(args, 50)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	clusterID, err := optionalCapabilityUUID(args, "cluster_id")
 	if err != nil {
 		return nil, err
@@ -370,7 +394,7 @@ func (a *DeliveryCapabilityAdapter) deployments(ctx context.Context, projectID u
 		cluster = pgtype.UUID{Bytes: clusterID, Valid: true}
 	}
 	phase := optionalPGText(args, "phase")
-	rows, err := a.queries.ListClusterDeployments(ctx, sqlc.ListClusterDeploymentsParams{ProjectID: projectID, ClusterID: cluster, Phase: phase, QueryOffset: int32((page - 1) * size), QueryLimit: int32(size)})
+	rows, err := a.queries.ListClusterDeployments(ctx, sqlc.ListClusterDeploymentsParams{ProjectID: projectID, ClusterID: cluster, Phase: phase, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
 		return nil, err
 	}

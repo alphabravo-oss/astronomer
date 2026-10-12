@@ -23,9 +23,8 @@ type grafanaAuthenticatedRequester interface {
 	DoWithGrafanaAuth(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, auth protocol.GrafanaProxyAuth) (*protocol.K8sResponsePayload, error)
 }
 
-// ProxyGrafana serves shared Grafana through Astronomer's authenticated origin.
-// The browser never learns the in-cluster Service address and no second public
-// hostname exists. Authorization is evaluated on every request, and scoped
+// ProxyGrafana is mounted only behind the isolated tool gateway.
+// Authorization is evaluated on every request, and scoped
 // users have datasource queries rewritten to their allowed cluster IDs before
 // the request enters the tunnel.
 func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request) {
@@ -105,13 +104,6 @@ func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	for key, value := range resp.Headers {
-		if strings.EqualFold(key, "Set-Cookie") {
-			copyGrafanaCookie(w.Header(), value)
-			continue
-		}
-	}
-
 	if isServiceProxyAuditMethod(r.Method) {
 		recordAudit(r, h.queries, "monitoring.grafana.proxy", "cluster", clusterID, service, map[string]any{
 			"namespace": namespace, "method": r.Method, "path": upstreamRequest.URL.Path,
@@ -126,9 +118,7 @@ func clusterGrafanaProxyPath(clusterID string) string {
 }
 
 func (h *MonitoringHandler) grafanaProxyAuth(r *http.Request, user *reqctx.User, email, role string, explore, admin bool, clusterIDs []string) (protocol.GrafanaProxyAuth, error) {
-	if cookie, err := r.Cookie(protocol.GrafanaProxyCookieName); err == nil && cookie.Value != "" {
-		return protocol.GrafanaProxyAuth{Cookie: cookie.Value}, nil
-	}
+
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
 		return protocol.GrafanaProxyAuth{}, err
@@ -148,15 +138,4 @@ func grafanaRequestHeaders(source http.Header) map[string]string {
 		}
 	}
 	return headers
-}
-
-func copyGrafanaCookie(headers http.Header, raw string) {
-	cookie, err := http.ParseSetCookie(raw)
-	if err != nil || cookie.Name != protocol.GrafanaProxyCookieName || cookie.Value == "" {
-		return
-	}
-	cookie.Path = sharedGrafanaProxyPath
-	cookie.HttpOnly = true
-	cookie.SameSite = http.SameSiteStrictMode
-	headers.Add("Set-Cookie", cookie.String())
 }

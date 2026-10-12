@@ -22,6 +22,10 @@ type clusterRestorePager interface {
 // Restore records belong to the target cluster. Source snapshot contents remain
 // behind the source cluster's own read gate, applied before pagination.
 func (h *ClusterSnapshotsHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -40,7 +44,7 @@ func (h *ClusterSnapshotsHandler) ListRestores(w http.ResponseWriter, r *http.Re
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
-	rows, err := pager.ListClusterRestoresPage(r.Context(), sqlc.ListClusterRestoresPageParams{TargetClusterID: clusterID, AllSources: all, SourceClusterIds: sources, QueryLimit: int32(limit), QueryOffset: int32(offset)})
+	rows, err := pager.ListClusterRestoresPage(r.Context(), sqlc.ListClusterRestoresPageParams{TargetClusterID: clusterID, AllSources: all, SourceClusterIds: sources, QueryLimit: queryLimit32(r, 50), QueryOffset: queryOffset32(r)})
 	if err != nil {
 		RespondRequestError(w, r, 500, apierror.ListError, "Failed to list restores")
 		return

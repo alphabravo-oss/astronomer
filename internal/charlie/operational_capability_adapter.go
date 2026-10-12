@@ -130,8 +130,12 @@ func (a *OperationalCapabilityAdapter) Execute(ctx context.Context, capability C
 
 func (a *OperationalCapabilityAdapter) catalogRepositories(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
 	page, size := pagination(arguments, 50)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := a.config.Queries.ListHelmRepositories(ctx, sqlc.ListHelmRepositoriesParams{
-		Limit: int32(size), Offset: int32((page - 1) * size),
+		Limit: limit, Offset: offset,
 	})
 	if err != nil {
 		return nil, err
@@ -388,7 +392,11 @@ func (a *OperationalCapabilityAdapter) observability(ctx context.Context, argume
 
 func (a *OperationalCapabilityAdapter) alerts(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
 	page, size := pagination(arguments, 50)
-	rows, err := a.config.Queries.ListAlertEventsFiltered(ctx, sqlc.ListAlertEventsFilteredParams{Limit: int32(size * 2), Offset: int32((page - 1) * size), Status: optionalPGText(arguments, "status"), Severity: optionalPGText(arguments, "severity")})
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := a.config.Queries.ListAlertEventsFiltered(ctx, sqlc.ListAlertEventsFilteredParams{Limit: limit * 2, Offset: offset, Status: optionalPGText(arguments, "status"), Severity: optionalPGText(arguments, "severity")})
 	if err != nil {
 		return nil, err
 	}
@@ -436,6 +444,10 @@ func (a *OperationalCapabilityAdapter) audit(ctx context.Context, arguments map[
 
 func (a *OperationalCapabilityAdapter) auditSearch(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
 	page, size := pagination(arguments, 50)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	filter := sqlc.AuditLogFilterParams{
 		ResourceType:  stringArgument(arguments, "resource_type"),
 		ResourceID:    stringArgument(arguments, "resource_id"),
@@ -446,8 +458,8 @@ func (a *OperationalCapabilityAdapter) auditSearch(ctx context.Context, argument
 		CorrelationID: stringArgument(arguments, "correlation_id"),
 		From:          sinceArgument(arguments, 24*time.Hour),
 		HasFrom:       true,
-		Limit:         int32(size),
-		Offset:        int32((page - 1) * size),
+		Limit:         limit,
+		Offset:        offset,
 	}
 	rows, err := a.config.Queries.ListAuditLogV1Filtered(ctx, filter)
 	if err != nil {

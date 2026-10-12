@@ -200,6 +200,12 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		h.log.Warn("invalid heartbeat payload", slog.String("error", err.Error()))
 		return
 	}
+	nodeCount, podCount, validCounts := agentInventoryCounts(payload.NodeCount, payload.PodCount)
+	if !validCounts {
+		h.log.Warn("invalid heartbeat inventory counts", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+
 	conditions, _ := json.Marshal(map[string]any{
 		"connected":                 true,
 		"degraded":                  len(payload.DegradedReasons) > 0,
@@ -220,11 +226,11 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		ClusterID:          clusterID,
 		AgentVersion:       payload.AgentVersion,
 		KubernetesVersion:  payload.KubernetesVersion,
-		NodeCount:          int32(payload.NodeCount),
+		NodeCount:          nodeCount,
 		Distribution:       payload.Distribution,
 		CpuUsagePercent:    payload.CPUUsagePercent,
 		MemoryUsagePercent: payload.MemoryUsagePercent,
-		PodCount:           int32(payload.PodCount),
+		PodCount:           podCount,
 		Conditions:         conditions,
 	})
 	cancel()
@@ -332,57 +338,6 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 	default:
 		h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "unsupported agent lifecycle operation type: "+op.OperationType)
 	}
-}
-
-func agentUpgradeConfiguration(spec json.RawMessage) (json.RawMessage, string) {
-	if len(spec) == 0 {
-		return nil, ""
-	}
-	var envelope struct {
-		Plan struct {
-			AgentOverrides      json.RawMessage `json:"agent_overrides"`
-			ConfigurationDigest string          `json:"configuration_digest"`
-		} `json:"plan"`
-	}
-	if err := json.Unmarshal(spec, &envelope); err != nil {
-		return nil, ""
-	}
-	return envelope.Plan.AgentOverrides, strings.TrimSpace(envelope.Plan.ConfigurationDigest)
-}
-
-// agentUpgradeRollbackImage pulls the rollback image out of the operation spec
-// persisted at queue time (internal/handler/cluster_agents.go writes the whole
-// upgrade plan under "plan"). It is best-effort: a spec that is absent, invalid
-// or from an older schema yields "", and the agent falls back to the image it
-// is currently running.
-func agentUpgradeRollbackImage(spec json.RawMessage) string {
-	if len(spec) == 0 {
-		return ""
-	}
-	var envelope struct {
-		Plan struct {
-			RollbackImage string `json:"rollback_image"`
-		} `json:"plan"`
-	}
-	if err := json.Unmarshal(spec, &envelope); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(envelope.Plan.RollbackImage)
-}
-
-func agentUpgradeTargetPullPolicy(spec json.RawMessage) string {
-	if len(spec) == 0 {
-		return ""
-	}
-	var envelope struct {
-		Plan struct {
-			TargetPullPolicy string `json:"target_pull_policy"`
-		} `json:"plan"`
-	}
-	if err := json.Unmarshal(spec, &envelope); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(envelope.Plan.TargetPullPolicy)
 }
 
 func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Message) {
@@ -540,6 +495,12 @@ func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
 		return
 	}
 
+	nodeCount, podCount, validCounts := agentInventoryCounts(payload.ClusterNodeCount, payload.ClusterPodCount)
+	if !validCounts {
+		h.log.Warn("invalid metrics inventory counts", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+
 	conditions, _ := json.Marshal(map[string]any{
 		"connected":         true,
 		"source":            "agent-metrics",
@@ -550,8 +511,8 @@ func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
 		ClusterID:          clusterID,
 		CpuUsagePercent:    payload.ClusterCPUUsage,
 		MemoryUsagePercent: payload.ClusterMemoryUsage,
-		PodCount:           int32(payload.ClusterPodCount),
-		NodeCount:          int32(payload.ClusterNodeCount),
+		PodCount:           podCount,
+		NodeCount:          nodeCount,
 		Conditions:         conditions,
 	}); err != nil {
 		h.log.Warn("failed to upsert cluster health from metrics", slog.String("error", err.Error()))
@@ -667,7 +628,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 		)
 		return
 	}
-	tunnelStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(payload.Kind)...).Inc()
+	tunnelStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(observability.StateMetricKind(payload.Kind))...).Inc()
 	h.log.Debug("received MsgStateUpdate",
 		slog.String("cluster_id", conn.ClusterID),
 		slog.String("kind", payload.Kind),
@@ -678,7 +639,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	limiter := h.stateLimiter()
 	key := fmt.Sprintf("%s|%s", conn.ClusterID, stateUpdateKey(payload))
 	if !limiter.allow(key) {
-		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", payload.Kind)...).Inc()
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", observability.StateMetricKind(payload.Kind))...).Inc()
 		h.log.Debug("MsgStateUpdate rate-limited", slog.String("key", key))
 		return
 	}
@@ -687,7 +648,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	p := h.publisher
 	h.mu.RUnlock()
 	if p == nil {
-		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("no_publisher", payload.Kind)...).Inc()
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("no_publisher", observability.StateMetricKind(payload.Kind))...).Inc()
 		h.log.Warn("MsgStateUpdate received but no publisher set")
 		return
 	}
@@ -705,7 +666,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 		"name":             payload.Name,
 		"resource_version": payload.ResourceVersion,
 	})
-	tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("published", payload.Kind)...).Inc()
+	tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("published", observability.StateMetricKind(payload.Kind))...).Inc()
 }
 
 func stateUpdateKey(payload protocol.StateUpdatePayload) string {

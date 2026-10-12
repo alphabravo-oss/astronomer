@@ -21,6 +21,10 @@ import (
 )
 
 func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -147,7 +151,7 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Replicas int32 `json:"replicas"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -229,6 +233,10 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.WorkloadError, "workload store not configured")
 		return
@@ -237,10 +245,9 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 	// hostile ?limit=2000000000 can't materialize the whole operations table,
 	// and ?limit=2147483648 can't overflow int32 into a negative LIMIT that
 	// Postgres rejects. Mirrors audit/smtp/webhooks/maintenance handlers.
-	limit, offset := queryLimitOffset(r, 50)
 	arg := sqlc.ListWorkloadOperationsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}

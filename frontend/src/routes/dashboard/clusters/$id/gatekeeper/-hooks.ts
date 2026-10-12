@@ -19,7 +19,7 @@ import { queryKeys } from "@/lib/query-keys";
 export function useGatekeeperConstraints(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.gatekeeperConstraints(clusterId),
-    queryFn: () => listGatekeeperConstraints(clusterId),
+    queryFn: ({ signal }) => listGatekeeperConstraints(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: (query) =>
       query.state.data?.some(

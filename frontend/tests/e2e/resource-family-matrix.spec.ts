@@ -241,6 +241,7 @@ async function mockApi(page: Page, family: ResourceFamily) {
           name: CLUSTER_ID,
           displayName: "Resource Matrix",
           status: "active",
+          registration_phase: "ready",
           health: { status: "active", components: [] },
           labels: {},
           annotations: {},

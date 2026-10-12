@@ -172,13 +172,17 @@ type ClusterMirroredLimitRangeDTO struct {
 
 // ListIngressClasses serves GET /clusters/{cluster_id}/ingress-classes/.
 func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
 	}
-	limit, offset := queryLimitOffset(r, 50)
+	limit, offset := queryLimit32(r, 50), queryOffset32(r)
 	rows, err := h.queries.ListMirroredIngressClasses(r.Context(), sqlc.ListMirroredIngressClassesParams{
-		ClusterID: cid, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
@@ -208,13 +212,17 @@ func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *h
 
 // ListGatewayClasses serves GET /clusters/{cluster_id}/gateway-classes/.
 func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
 	}
-	limit, offset := queryLimitOffset(r, 50)
+	limit, offset := queryLimit32(r, 50), queryOffset32(r)
 	rows, err := h.queries.ListMirroredGatewayClasses(r.Context(), sqlc.ListMirroredGatewayClassesParams{
-		ClusterID: cid, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
@@ -246,18 +254,22 @@ func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *h
 // ListNetworkPolicies serves GET /clusters/{cluster_id}/network-policies/.
 // Honors ?namespace= for namespace-scoped narrowing.
 func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
 	}
 	ns := strings.TrimSpace(r.URL.Query().Get("namespace"))
-	limit, offset := queryLimitOffset(r, 50)
+	limit, offset := queryLimit32(r, 50), queryOffset32(r)
 	var rows []sqlc.MirroredNetworkPolicy
 	var total int64
 	var err error
 	if ns != "" {
 		rows, err = h.queries.ListMirroredNetworkPoliciesByNamespace(r.Context(), sqlc.ListMirroredNetworkPoliciesByNamespaceParams{
-			ClusterID: cid, Namespace: ns, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterID: cid, Namespace: ns, QueryLimit: limit, QueryOffset: offset,
 		})
 		if err == nil {
 			total, err = h.queries.CountMirroredNetworkPoliciesByNamespace(r.Context(), sqlc.CountMirroredNetworkPoliciesByNamespaceParams{
@@ -266,7 +278,7 @@ func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *
 		}
 	} else {
 		rows, err = h.queries.ListMirroredNetworkPolicies(r.Context(), sqlc.ListMirroredNetworkPoliciesParams{
-			ClusterID: cid, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 		})
 		if err == nil {
 			total, err = h.queries.CountMirroredNetworkPolicies(r.Context(), cid)
@@ -299,18 +311,22 @@ func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *
 // ListResourceQuotas serves GET /clusters/{cluster_id}/resource-quotas/.
 // Honors ?namespace=.
 func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
 	}
 	ns := strings.TrimSpace(r.URL.Query().Get("namespace"))
-	limit, offset := queryLimitOffset(r, 50)
+	limit, offset := queryLimit32(r, 50), queryOffset32(r)
 	var rows []sqlc.MirroredResourceQuota
 	var total int64
 	var err error
 	if ns != "" {
 		rows, err = h.queries.ListMirroredResourceQuotasByNamespace(r.Context(), sqlc.ListMirroredResourceQuotasByNamespaceParams{
-			ClusterID: cid, Namespace: ns, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterID: cid, Namespace: ns, QueryLimit: limit, QueryOffset: offset,
 		})
 		if err == nil {
 			total, err = h.queries.CountMirroredResourceQuotasByNamespace(r.Context(), sqlc.CountMirroredResourceQuotasByNamespaceParams{
@@ -319,7 +335,7 @@ func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *h
 		}
 	} else {
 		rows, err = h.queries.ListMirroredResourceQuotas(r.Context(), sqlc.ListMirroredResourceQuotasParams{
-			ClusterID: cid, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 		})
 		if err == nil {
 			total, err = h.queries.CountMirroredResourceQuotas(r.Context(), cid)
@@ -350,18 +366,22 @@ func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *h
 // ListLimitRanges serves GET /clusters/{cluster_id}/limit-ranges/. Honors
 // ?namespace=.
 func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
 	}
 	ns := strings.TrimSpace(r.URL.Query().Get("namespace"))
-	limit, offset := queryLimitOffset(r, 50)
+	limit, offset := queryLimit32(r, 50), queryOffset32(r)
 	var rows []sqlc.MirroredLimitRange
 	var total int64
 	var err error
 	if ns != "" {
 		rows, err = h.queries.ListMirroredLimitRangesByNamespace(r.Context(), sqlc.ListMirroredLimitRangesByNamespaceParams{
-			ClusterID: cid, Namespace: ns, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterID: cid, Namespace: ns, QueryLimit: limit, QueryOffset: offset,
 		})
 		if err == nil {
 			total, err = h.queries.CountMirroredLimitRangesByNamespace(r.Context(), sqlc.CountMirroredLimitRangesByNamespaceParams{
@@ -370,7 +390,7 @@ func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http
 		}
 	} else {
 		rows, err = h.queries.ListMirroredLimitRanges(r.Context(), sqlc.ListMirroredLimitRangesParams{
-			ClusterID: cid, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 		})
 		if err == nil {
 			total, err = h.queries.CountMirroredLimitRanges(r.Context(), cid)

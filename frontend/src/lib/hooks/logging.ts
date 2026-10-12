@@ -75,7 +75,8 @@ export function useCreateLoggingOutput() {
 export function useLoggingAttachStatus(clusterId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.logging.attachStatus(clusterId ?? ""),
-    queryFn: () => getLoggingAttachStatus(clusterId as string),
+    queryFn: ({ signal }) =>
+      getLoggingAttachStatus(clusterId as string, signal),
     enabled: Boolean(clusterId),
   });
 }
@@ -164,7 +165,7 @@ export function useLoggingOperations(params?: {
 export function useLoggingOperation(id: string) {
   return useQuery<LoggingOperation>({
     queryKey: queryKeys.logging.operation(id),
-    queryFn: () => getLoggingOperation(id),
+    queryFn: ({ signal }) => getLoggingOperation(id, signal),
     enabled: !!id,
     refetchInterval: liveFallback(5000),
   });

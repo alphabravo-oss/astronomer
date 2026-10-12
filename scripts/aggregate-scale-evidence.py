@@ -20,8 +20,8 @@ def main() -> None:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--source-run-id", required=True)
     args = parser.parse_args()
-    if not __import__("re").fullmatch(r"v1\.[0-9]+\.[0-9]+", args.target_version):
-        raise SystemExit("target version must be an exact v1 tag")
+    if not __import__("re").fullmatch(r"v[1-9][0-9]*\.[0-9]+\.[0-9]+", args.target_version):
+        raise SystemExit("target version must be an exact release tag")
     if not __import__("re").fullmatch(r"[a-f0-9]{40}", args.source_commit) or not __import__("re").fullmatch(r"[1-9][0-9]*", args.source_run_id):
         raise SystemExit("aggregate source commit/run identity is invalid")
     manifests = sorted(args.input_dir.rglob("evidence-manifest.json"))

@@ -1,0 +1,3192 @@
+{
+  "schemaVersion": 1,
+  "scope": "All Git-tracked scripts/**/*.sh in the bound source checkout",
+  "limitations": [
+    "Category assignments are source inventory, not runtime qualification.",
+    "Environment names and signal line numbers are lexical observations, not an exhaustive shell parser or proof of safety.",
+    "Literal exits omit dynamic child status and trap behavior; priority runner contracts require explicit characterization.",
+    "The historical 65-script plan count is retained in the plan; this inventory binds the actual current source set."
+  ],
+  "scriptCount": 71,
+  "scripts": [
+    {
+      "path": "scripts/application-catalog-airgap.sh",
+      "sha256": "3030d7efa090579b530e952ff11b52e2dbb3bbde669d48dc81cf6105b33a30c8",
+      "lineCount": 6,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/astronomer-load-images.sh",
+      "sha256": "cb72ee2c782c56aff4d4908f999fce601ae05489bda356e8bb1cf11b475eaacc",
+      "lineCount": 6,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [
+          2,
+          3
+        ],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/astronomer-save-images.sh",
+      "sha256": "ee2eab48b1b98ade66110b26107a6baf428102f68c779993bc07aac02d25069b",
+      "lineCount": 6,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [
+          3
+        ],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/build-builtin-bundles.sh",
+      "sha256": "8279c2ea7543bd99f0eff0da3284d4b64e7fea9c571f24fc4799b174972e1e20",
+      "lineCount": 94,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "BUNDLE_CATALOG"
+      ],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          51
+        ],
+        "private_material": [],
+        "process_ownership": [
+          51
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          21,
+          25,
+          32,
+          35,
+          71,
+          73,
+          76,
+          80,
+          87,
+          88,
+          93
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          72
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/build-flux-distribution-artifact.sh",
+      "sha256": "ebdf910c439b6fd5c116e8656cbe40c9b8af97f2f2a0246822690df6983b0a20",
+      "lineCount": 60,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          35
+        ],
+        "private_material": [],
+        "process_ownership": [
+          35
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          12,
+          46,
+          48,
+          51,
+          55,
+          59
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          47
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/build-gosec.sh",
+      "sha256": "fbd553ecd0860c99077bc11d6901cf3f9d4a413ffb9b4f0b6f966c90e3fccae7",
+      "lineCount": 18,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/build-gotestsum.sh",
+      "sha256": "2fe7f531e5a09106f994fb942e7b7ac631c7041d5d0906d8955f1b326ef6d08f",
+      "lineCount": 16,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          12
+        ],
+        "private_material": [],
+        "process_ownership": [
+          12
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-build-capacity.sh",
+      "sha256": "234bf4838a9537f65abe2bd2829b0f1b5e7991042ee92b1aa89de5cc8419fc15",
+      "lineCount": 108,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRONOMER_CAPACITY_PATH",
+        "ASTRONOMER_MIN_FREE_GIB",
+        "ASTRONOMER_MIN_FREE_PERCENT"
+      ],
+      "literalExitCodes": [
+        0,
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-charlie-contract-generated.sh",
+      "sha256": "3eb56b8d9b50de50bdf80567197599de06ecb5040f84c6c9e001c20d0f22b9a6",
+      "lineCount": 21,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "TMPDIR"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [
+          7
+        ],
+        "private_material": [],
+        "process_ownership": [
+          7
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          12
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-formatting.sh",
+      "sha256": "8bcde7c0265a1eb47b8f360336a3769ec599a30b576a10726442b27f13322e81",
+      "lineCount": 14,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-go-lint.sh",
+      "sha256": "4f8a35f46cd1b2e213eadd59e6af3ced97b432b402f642688fb287da4477de13",
+      "lineCount": 16,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "GOLANGCI_LINT_VERSION"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-go-sdk-generated.sh",
+      "sha256": "f8e1c18b1175dfee7471a5c4790c4917914e75f1eef3acd28fcd6166f0de7fcf",
+      "lineCount": 20,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "OAPI_CODEGEN_VERSION"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [
+          7
+        ],
+        "private_material": [],
+        "process_ownership": [
+          7
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-helm-inputs.sh",
+      "sha256": "bdb63ab5f4d0e648007b43a7efdb0807fa63cb1b542aa4df39913e65400d90ab",
+      "lineCount": 22,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-legacy-delivery-surface.sh",
+      "sha256": "8f5a0a05c467ffde5daa64162e23a2f80174e5ce155ee9951fbb2024e0567f3b",
+      "lineCount": 439,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [
+          342,
+          343
+        ],
+        "time_bounds": [
+          270,
+          290,
+          309,
+          317,
+          342,
+          343
+        ],
+        "rollback": [],
+        "evidence": [
+          4,
+          6,
+          78,
+          108,
+          109,
+          112,
+          423,
+          424,
+          428,
+          429
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          7
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-migrations-test.sh",
+      "sha256": "a444805ada865b47a92c89acfe0d3a4cefa795f862534928fd2889951107fa9c",
+      "lineCount": 64,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          7
+        ],
+        "private_material": [],
+        "process_ownership": [
+          8
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          33
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-migrations.sh",
+      "sha256": "b75476ee526096741df98c94e57305df2124cf91b1afd550654958d925f30287",
+      "lineCount": 143,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-sdk-v1-compatibility.sh",
+      "sha256": "fb7b790648593dceb920d308f185b3205e298b64d7f8d10c7858c31f9ce4071c",
+      "lineCount": 11,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "SDK_V1_BASELINE"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [
+          6
+        ],
+        "private_material": [],
+        "process_ownership": [
+          6
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-shell.sh",
+      "sha256": "8c295d141cc77d5f11ad2c229b73c9ff7d4015f9715d5b74043ba0bda902e0ac",
+      "lineCount": 22,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          14
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/check-sqlc-generated.sh",
+      "sha256": "dbf47f8d7a6acfecad92e7dcae9d867e6590d108c2a139f396cb686e989e1a4e",
+      "lineCount": 58,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "SQLC_VERSION"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          22
+        ],
+        "private_material": [],
+        "process_ownership": [
+          22
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/extract-images.sh",
+      "sha256": "c4d81bff6e4340cb069c3da96ba906039910a50e0048aec445ff56cef5fb07fe",
+      "lineCount": 173,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "BUNDLE_CATALOG",
+        "CHART_DIR",
+        "COMPATIBILITY_FILE"
+      ],
+      "literalExitCodes": [
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [
+          85,
+          87,
+          97,
+          98
+        ],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [
+          86
+        ],
+        "evidence": [
+          75
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/k3d-bootstrap.sh",
+      "sha256": "fe791204eb6398573755067b15762a4ce49caf9864fc5826c686fc4ac02eacbc",
+      "lineCount": 244,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "CLUSTER",
+        "ENCRYPTION_KEY",
+        "GW_API_VER",
+        "HOST",
+        "HTTP_PORT",
+        "IMG_REGISTRY",
+        "IMG_TAG",
+        "K3S_IMAGE",
+        "NAMESPACE",
+        "NGF_VERSION",
+        "SECRET_KEY",
+        "SERVER_URL",
+        "SKIP_BUILD",
+        "SKIP_PREREQS",
+        "VERSION"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          62
+        ],
+        "private_material": [
+          59,
+          60,
+          237
+        ],
+        "process_ownership": [
+          147,
+          162,
+          222
+        ],
+        "time_bounds": [
+          162,
+          224
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/k3d-decommission-matrix-test.sh",
+      "sha256": "2b4c5decc5801b0e440c7382446a75a92c903bde48bb340bdc45e315684f2897",
+      "lineCount": 109,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "AGENT_IMAGE",
+        "ASTRO_EMAIL",
+        "ASTRO_PASSWORD",
+        "ASTRO_URL",
+        "MAX_TILE",
+        "PGCTX",
+        "TOKEN",
+        "TOMBSTONE_TIMEOUT"
+      ],
+      "literalExitCodes": [
+        0,
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          6,
+          50,
+          68,
+          69
+        ],
+        "private_material": [
+          38,
+          39,
+          49,
+          52,
+          53,
+          56,
+          69
+        ],
+        "process_ownership": [
+          54
+        ],
+        "time_bounds": [
+          58,
+          73,
+          90,
+          105
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          18,
+          34,
+          53
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/k3d-version-matrix-test.sh",
+      "sha256": "ab2cb2b14792ee4a1bed1160a0312b3561017b4c373427942446417b9d195938",
+      "lineCount": 34,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "AGENT_IMAGE",
+        "ASTRO_EMAIL",
+        "ASTRO_PASSWORD",
+        "ASTRO_URL",
+        "K3S_IMAGE",
+        "LIVE_BROWSER_ARTIFACT_DIR",
+        "TMPDIR"
+      ],
+      "literalExitCodes": [
+        0,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          26,
+          27,
+          29,
+          32
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          2,
+          6
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/lib/docker-test-endpoint.sh",
+      "sha256": "3296a3541a227beca3033826dff46da62bde688c76d6c0b81acc4e3f02e3f145",
+      "lineCount": 45,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "DOCKER_TEST_BIND_HOST",
+        "DOCKER_TEST_CONNECT_HOST",
+        "LOCAL_CI_LOCAL"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/lib/flux-controller-readiness.sh",
+      "sha256": "97f6efc6adb4638d106afe2063ddb833f948362c776d8666662e4851aa332fa6",
+      "lineCount": 44,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [
+          13,
+          15,
+          20,
+          37,
+          40
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/lib/gatewayclass-readiness.sh",
+      "sha256": "4c52c9e33c3c917bf1c6626605384afd1cfea9664c2ad7d94ea7b638525ac6d1",
+      "lineCount": 84,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [
+          3
+        ],
+        "time_bounds": [
+          74
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/lib/qualification-runtime.sh",
+      "sha256": "ea7d5e1bf4d9b640075e24a74ccb344339fe2890946a3825fb52536ffe113744",
+      "lineCount": 77,
+      "category": "small_wrapper",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "POSTGRES_QUALIFICATION_MAJOR"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [
+          31,
+          38,
+          61,
+          64,
+          65
+        ],
+        "process_ownership": [],
+        "time_bounds": [
+          47,
+          54,
+          71,
+          73
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          2,
+          36,
+          63
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/migrate-roundtrip-smoke.sh",
+      "sha256": "ea90a2a2f6ffa246f86f7064b637d0482c95a283800741c1e92a5fc902810e27",
+      "lineCount": 156,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "DATABASE_URL"
+      ],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          40,
+          42,
+          148
+        ],
+        "private_material": [
+          89,
+          90,
+          93,
+          97
+        ],
+        "process_ownership": [
+          44
+        ],
+        "time_bounds": [],
+        "rollback": [
+          105
+        ],
+        "evidence": [],
+        "checkpoint_or_resume": [
+          105,
+          108
+        ],
+        "ownership_fence": [
+          3,
+          29
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/openapi-breaking-change.sh",
+      "sha256": "2ed5cd0e315df81a13472dbd463bdec39373835c472890dcd7d2b324b15433df",
+      "lineCount": 33,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "OPENAPI_BASELINE",
+        "TMPDIR",
+        "VERIFY_ARTIFACT_DIR"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          19,
+          25
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/package-charlie-knowledge.sh",
+      "sha256": "28635a1bc10029bf7524b094bb82b1e7cce58fa4259fb4861e832fd24a772b16",
+      "lineCount": 80,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "OUT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [
+          80
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/query-plan-certification.sh",
+      "sha256": "25490595ab898f355a8f72bd6209dd5c0cf9b6e990c0a6766af1d506ed99a737",
+      "lineCount": 143,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "CLUSTER_ROWS",
+        "OPERATION_ROWS",
+        "REPORT_DIR"
+      ],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          26,
+          32
+        ],
+        "private_material": [],
+        "process_ownership": [
+          28
+        ],
+        "time_bounds": [
+          35,
+          37
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/rehearse-release-candidate.sh",
+      "sha256": "5c6d4af6bb0a5d35e3e6cee6c67e7d04a3a4bf97c49300c2869adf479c77f741",
+      "lineCount": 137,
+      "category": "release_state_machine",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "GITHUB_RUN_ID",
+        "RC_DISPOSABLE_ACK",
+        "RC_EVIDENCE_OUTPUT",
+        "RC_METADATA_RUN_ID",
+        "RC_WEBHOOK_SINK",
+        "RELEASE_REPO"
+      ],
+      "literalExitCodes": [
+        1,
+        130,
+        143
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          22,
+          24
+        ],
+        "private_material": [
+          48,
+          100,
+          101,
+          102,
+          103,
+          108,
+          109,
+          111,
+          112
+        ],
+        "process_ownership": [
+          19,
+          20,
+          27,
+          28,
+          29,
+          56,
+          60,
+          83,
+          95,
+          97,
+          98,
+          111,
+          116,
+          119,
+          121,
+          122
+        ],
+        "time_bounds": [
+          60,
+          83,
+          96,
+          120,
+          125
+        ],
+        "rollback": [
+          2,
+          132
+        ],
+        "evidence": [
+          35,
+          43,
+          45,
+          105,
+          118,
+          128,
+          130,
+          132,
+          134,
+          135
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          2,
+          12,
+          13,
+          22,
+          57,
+          58,
+          59,
+          60,
+          72,
+          85,
+          86,
+          93,
+          94,
+          95,
+          100,
+          103,
+          105,
+          118,
+          119
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/release-upgrade-matrix.sh",
+      "sha256": "e0e6647259f8ee3e52ed24523998df08481d8209c28bc78cf4727f9a700a90e4",
+      "lineCount": 155,
+      "category": "release_state_machine",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          32,
+          52
+        ],
+        "private_material": [],
+        "process_ownership": [
+          34,
+          95,
+          97,
+          100,
+          101,
+          119,
+          130
+        ],
+        "time_bounds": [
+          56,
+          58,
+          121,
+          125
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/run-day2-drill-execution.sh",
+      "sha256": "c6e484227878503c339c6ca64b5e62f08b4c8fc90a712d71f44111ba23b0958b",
+      "lineCount": 105,
+      "category": "release_state_machine",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "DAY2_DRIVER_DIR",
+        "DAY2_DRIVER_MANIFEST_SHA256",
+        "DAY2_EXECUTION_ARTIFACT_DIR",
+        "GITHUB_RUN_ID",
+        "GITHUB_SHA",
+        "LOADTEST_ENVIRONMENT",
+        "LOADTEST_IMAGES",
+        "LOADTEST_PROFILE"
+      ],
+      "literalExitCodes": [
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          27
+        ],
+        "private_material": [],
+        "process_ownership": [
+          27
+        ],
+        "time_bounds": [],
+        "rollback": [
+          62,
+          71,
+          81
+        ],
+        "evidence": [
+          65,
+          77,
+          85,
+          87
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/safe-disk-cleanup.sh",
+      "sha256": "3142b8582290424becbea6d5e314a49ebe1ca48ee2052d1aca1e361c023fb384",
+      "lineCount": 147,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        0,
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          104
+        ],
+        "private_material": [],
+        "process_ownership": [
+          104,
+          110
+        ],
+        "time_bounds": [],
+        "rollback": [
+          3
+        ],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/smoke-fresh-cluster.sh",
+      "sha256": "ea8aca66f795caac94f42dd9b02246a56bd8fd7aeb342d000d58abbbda4189b5",
+      "lineCount": 506,
+      "category": "fixture_generator",
+      "priorityCharacterization": true,
+      "observedDefaultedEnvironmentNames": [
+        "AGENT_IMAGE",
+        "ASTRO_EMAIL",
+        "ASTRO_PASSWORD",
+        "ASTRO_URL",
+        "GITHUB_JOB",
+        "GITHUB_REF",
+        "GITHUB_REPOSITORY",
+        "GITHUB_RUN_ATTEMPT",
+        "GITHUB_RUN_ID",
+        "GITHUB_SHA",
+        "GITHUB_WORKFLOW",
+        "K3S_IMAGE",
+        "MGMT_CONTEXT",
+        "SHELL_IMAGE",
+        "SMOKE_CLUSTER",
+        "SMOKE_CLUSTER_ID",
+        "SMOKE_DELETE",
+        "SMOKE_EVIDENCE_FILE",
+        "SMOKE_KEEP",
+        "TIMEOUT_AGENT",
+        "TIMEOUT_API",
+        "TIMEOUT_BASELINE",
+        "TIMEOUT_SCANS",
+        "TOKEN"
+      ],
+      "literalExitCodes": [
+        1,
+        130,
+        143
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          125,
+          136,
+          145
+        ],
+        "private_material": [
+          23,
+          129,
+          130,
+          134,
+          154,
+          158,
+          159,
+          163,
+          210,
+          220,
+          222,
+          225,
+          229,
+          232
+        ],
+        "process_ownership": [
+          30,
+          31,
+          32,
+          33,
+          63,
+          64,
+          65,
+          289,
+          291,
+          309,
+          321,
+          375,
+          429,
+          432
+        ],
+        "time_bounds": [
+          184,
+          195,
+          217,
+          291,
+          299,
+          321,
+          351,
+          375,
+          401,
+          409,
+          411,
+          432,
+          442,
+          469
+        ],
+        "rollback": [],
+        "evidence": [
+          33,
+          34,
+          53,
+          59,
+          116,
+          429,
+          432,
+          447
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          26,
+          48,
+          88,
+          91,
+          242,
+          284,
+          326,
+          360,
+          375,
+          380,
+          404,
+          408,
+          410
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-flux-integration.sh",
+      "sha256": "c68fa69118b963ed76c7e4f298dbf91b81b2e39d3c87991d7d940e5d02bb62fa",
+      "lineCount": 446,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "FLUX_INTEGRATION_CLUSTER",
+        "FLUX_INTEGRATION_EVIDENCE_DIR",
+        "FLUX_INTEGRATION_EVIDENCE_MAX_MIB",
+        "FLUX_INTEGRATION_KEEP_CLUSTER",
+        "FLUX_INTEGRATION_READY_TIMEOUT",
+        "FLUX_INTEGRATION_SUSPEND_SECONDS",
+        "K3S_IMAGE",
+        "TMPDIR"
+      ],
+      "literalExitCodes": [
+        0,
+        1,
+        2,
+        130
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          120,
+          232,
+          242,
+          429,
+          430,
+          431,
+          438
+        ],
+        "private_material": [],
+        "process_ownership": [
+          219,
+          224,
+          225,
+          258,
+          259,
+          263,
+          317,
+          320,
+          340,
+          346,
+          430,
+          431,
+          440
+        ],
+        "time_bounds": [
+          83,
+          263,
+          272,
+          287,
+          318,
+          321,
+          340,
+          346,
+          396,
+          430,
+          431,
+          440
+        ],
+        "rollback": [],
+        "evidence": [
+          26,
+          30,
+          49,
+          50,
+          86,
+          87,
+          138,
+          142,
+          187,
+          252,
+          255
+        ],
+        "checkpoint_or_resume": [
+          30,
+          393
+        ],
+        "ownership_fence": [
+          2,
+          229,
+          231,
+          339
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-live-browser-matrix.sh",
+      "sha256": "ebed2d720b1a58a97eb2cc909347bf5b66ce3294e7b088c24819606310922c36",
+      "lineCount": 9,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "LIVE_BROWSER_ARTIFACT_DIR",
+        "TMPDIR"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          5,
+          7
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          2
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-live-browser.sh",
+      "sha256": "ded7d6c153e628c76efdc44153de1a33ab619078f9240fbce4d454873dcbee22",
+      "lineCount": 933,
+      "category": "fixture_generator",
+      "priorityCharacterization": true,
+      "observedDefaultedEnvironmentNames": [
+        "K3S_IMAGE",
+        "LIVE_BROWSER_ARTIFACT_DIR",
+        "LIVE_BROWSER_DIRECT_API_PORT",
+        "LIVE_BROWSER_ENGINE",
+        "LIVE_BROWSER_ENGINEERING",
+        "LIVE_BROWSER_FRONTEND_PORT",
+        "LIVE_BROWSER_PREVIEW_REF",
+        "LIVE_BROWSER_REUSE_BUILD_REF",
+        "LIVE_BROWSER_TRIVY_ENABLED",
+        "LOCAL_CI_LOCAL",
+        "TMPDIR"
+      ],
+      "literalExitCodes": [
+        0,
+        1,
+        2,
+        130
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          158,
+          182,
+          187,
+          194,
+          248,
+          249,
+          272,
+          278,
+          280,
+          499,
+          670,
+          695,
+          697,
+          879
+        ],
+        "private_material": [
+          526,
+          527,
+          552,
+          626,
+          627,
+          674,
+          684,
+          787,
+          798,
+          839,
+          852,
+          859,
+          860,
+          861,
+          864,
+          865,
+          868,
+          870,
+          874,
+          875
+        ],
+        "process_ownership": [
+          149,
+          159,
+          182,
+          187,
+          194,
+          203,
+          208,
+          245,
+          286,
+          287,
+          487,
+          614,
+          706,
+          736,
+          754,
+          756,
+          759,
+          783,
+          889,
+          891,
+          900,
+          902
+        ],
+        "time_bounds": [
+          167,
+          171,
+          176,
+          191,
+          204,
+          206,
+          292,
+          300,
+          302,
+          310,
+          318,
+          320,
+          466,
+          473,
+          476,
+          487,
+          504,
+          532,
+          550,
+          556,
+          559,
+          707,
+          711,
+          713,
+          742,
+          750,
+          754,
+          756,
+          758,
+          759,
+          762,
+          765,
+          770,
+          774,
+          889,
+          891,
+          900,
+          902
+        ],
+        "rollback": [
+          267,
+          899,
+          903,
+          905,
+          907,
+          927,
+          929,
+          930
+        ],
+        "evidence": [
+          55,
+          60,
+          256,
+          768,
+          777,
+          828,
+          923
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          2,
+          486,
+          524,
+          788,
+          798
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-postgres-failover-certification.sh",
+      "sha256": "fe5a4b1498fd2c8c8f042acd455a6889bf6505708466b8977053bbcbd9d57deb",
+      "lineCount": 280,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "GITHUB_REF",
+        "GITHUB_REPOSITORY",
+        "GITHUB_RUN_ATTEMPT",
+        "GITHUB_RUN_ID",
+        "GITHUB_WORKFLOW",
+        "POSTGRES_FAILOVER_ARTIFACT_DIR",
+        "POSTGRES_FAILOVER_CERTIFICATION_RACE",
+        "POSTGRES_FAILOVER_IMAGE",
+        "POSTGRES_FAILOVER_RPO_MAX_ROWS",
+        "POSTGRES_FAILOVER_RTO_MAX_SECONDS",
+        "TMPDIR"
+      ],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          98,
+          99,
+          101,
+          149,
+          152
+        ],
+        "private_material": [
+          22,
+          122,
+          138,
+          153,
+          166,
+          189
+        ],
+        "process_ownership": [
+          107
+        ],
+        "time_bounds": [
+          176,
+          185,
+          205,
+          213,
+          247
+        ],
+        "rollback": [
+          182
+        ],
+        "evidence": [
+          35,
+          40,
+          225,
+          252,
+          253,
+          256,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267,
+          268,
+          269,
+          270,
+          271,
+          272
+        ],
+        "checkpoint_or_resume": [
+          157
+        ],
+        "ownership_fence": [
+          83,
+          145
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-postgres-integration.sh",
+      "sha256": "2c6d36d32f6b7e8465b10e87d4d3a8ebb648d0bdd25d35a30ad6f03d763679ea",
+      "lineCount": 108,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "POSTGRES_INTEGRATION_RACE"
+      ],
+      "literalExitCodes": [
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          20,
+          21
+        ],
+        "private_material": [
+          18,
+          25,
+          28
+        ],
+        "process_ownership": [
+          23
+        ],
+        "time_bounds": [
+          105
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-postgres-outage-qualification.sh",
+      "sha256": "abb4fd80238ce380a66d4abae63d9acef1a9d8bcd5254169f98b239943ce6064",
+      "lineCount": 56,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "POSTGRES_OUTAGE_QUALIFICATION_RACE"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          18,
+          19,
+          35
+        ],
+        "private_material": [
+          14,
+          31,
+          44
+        ],
+        "process_ownership": [
+          21
+        ],
+        "time_bounds": [
+          28,
+          56
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-process-restart-qualification.sh",
+      "sha256": "5097fe6336a378da1c371868829345a8850670888a12a1c830208408364b504a",
+      "lineCount": 43,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "PROCESS_RESTART_QUALIFICATION_RACE"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          19,
+          20
+        ],
+        "private_material": [
+          15,
+          24,
+          25,
+          31,
+          32
+        ],
+        "process_ownership": [
+          22
+        ],
+        "time_bounds": [
+          43
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-redis-outage-recovery.sh",
+      "sha256": "5031ebd86946d438d6c05a3b334a2265c0145283865e220d709d3cd1c408b081",
+      "lineCount": 46,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "REDIS_OUTAGE_RECOVERY_RACE"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          19,
+          20
+        ],
+        "private_material": [
+          15,
+          24,
+          25,
+          31,
+          32
+        ],
+        "process_ownership": [
+          22
+        ],
+        "time_bounds": [
+          46
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-tunnel-queue-ha.sh",
+      "sha256": "9f324c62f83f0c65b15927a80a13f0703289c89f7965c6fb8a2e9e069116ce56",
+      "lineCount": 53,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          22,
+          26,
+          29
+        ],
+        "private_material": [],
+        "process_ownership": [
+          24
+        ],
+        "time_bounds": [
+          32,
+          35,
+          51
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          2,
+          3
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/test-worker-runtime-integration.sh",
+      "sha256": "7833f07b7ed7b3a4b7b0111c8b1d4996ae5be1888f2a442f5900c324afc52391",
+      "lineCount": 43,
+      "category": "fixture_generator",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "WORKER_INTEGRATION_RACE"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          19,
+          34
+        ],
+        "private_material": [
+          16,
+          23,
+          24,
+          30,
+          31
+        ],
+        "process_ownership": [
+          21,
+          34
+        ],
+        "time_bounds": [
+          43
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/testdata/qualification/postgres-entrypoint.sh",
+      "sha256": "2955bb93f54415fbe659d74ed11b3b60be60723d0e3929db23a0f0754119b73f",
+      "lineCount": 28,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "POSTGRES_DB",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_USER",
+        "QUALIFICATION_PGDATA",
+        "QUALIFICATION_POSTGRES_MAJOR"
+      ],
+      "literalExitCodes": [
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          21
+        ],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          5
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/check-build-capacity-test.sh",
+      "sha256": "cb6706394057b81b5d8455420e19e61a89e2706b45f3e4c77a64ca74962de746",
+      "lineCount": 40,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          8
+        ],
+        "private_material": [],
+        "process_ownership": [
+          8
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/check-legacy-delivery-surface_test.sh",
+      "sha256": "f636948d1483e4c2e5606f0f306a5d9f2bd5e8d3e9fa09e22238ca79445393cd",
+      "lineCount": 40,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          8
+        ],
+        "private_material": [],
+        "process_ownership": [
+          8
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          15,
+          16,
+          18,
+          20,
+          22,
+          23
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          35
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/flux-distribution_test.sh",
+      "sha256": "796ae56bce60f5e66863f9196c1e7e9f9488954321cbd8c873e223c195a73dce",
+      "lineCount": 10,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "FLUX_DISTRIBUTION_OFFLINE_ONLY"
+      ],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/flux-integration-harness-test.sh",
+      "sha256": "969d5412252b4f67264e2c64281429bf2bb811948b83ba6e8d1cc7d72f30ed61",
+      "lineCount": 33,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        99
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          8,
+          31
+        ],
+        "private_material": [],
+        "process_ownership": [
+          8
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/live-browser-runner-test.sh",
+      "sha256": "6612070fc483adce629c964ae1113c134ef0593fba691a6bdfc3c19777fba309",
+      "lineCount": 153,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          7,
+          91,
+          112
+        ],
+        "private_material": [
+          36,
+          72,
+          116
+        ],
+        "process_ownership": [
+          7
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          89
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          50,
+          109,
+          112,
+          113
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/postgres-failover-runner-test.sh",
+      "sha256": "2829356c771e7fca796af8bf09a490d701b607319f0ad8761ee3981961a9179f",
+      "lineCount": 38,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [],
+        "process_ownership": [],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          15
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/rc-rehearsal-harness-test.sh",
+      "sha256": "a00bf39f3aedff1323ef3a5d03e6028a6ff417851befdf1e99a660d36a626ed9",
+      "lineCount": 352,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "RC_HARNESS_BAD_RUN",
+        "RC_HARNESS_DUP_BACKUP",
+        "RC_HARNESS_DUP_EVIDENCE",
+        "RC_HARNESS_DUP_TARGET",
+        "RC_HARNESS_MISSING_RESTORED_SECRET",
+        "RC_HARNESS_NO_DISRUPTION",
+        "RC_HARNESS_PREEXISTING"
+      ],
+      "literalExitCodes": [
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          11,
+          12,
+          115,
+          265,
+          315,
+          347
+        ],
+        "private_material": [
+          144,
+          145,
+          220,
+          307,
+          310
+        ],
+        "process_ownership": [
+          15,
+          180,
+          234
+        ],
+        "time_bounds": [
+          235,
+          260
+        ],
+        "rollback": [
+          198,
+          242,
+          303,
+          333
+        ],
+        "evidence": [
+          4,
+          12,
+          89,
+          90,
+          92,
+          93,
+          265,
+          282,
+          284,
+          326,
+          332,
+          334,
+          335
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          307,
+          342,
+          346
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/release_artifacts_test.sh",
+      "sha256": "425ab1886d680143c1f083ebe4c36e6eac9918ef66f5c6b780988267d1590528",
+      "lineCount": 20,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [],
+      "signals": {
+        "destructive_cleanup": [
+          6
+        ],
+        "private_material": [],
+        "process_ownership": [
+          6
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          8,
+          9,
+          11
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/safe-disk-cleanup-test.sh",
+      "sha256": "12d1e67bda60887019d3a4e9d501894b25f102f81bb3bde27fd14993c734f6b5",
+      "lineCount": 55,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1,
+        9
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          8
+        ],
+        "private_material": [],
+        "process_ownership": [
+          8
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/tests/validate-live-delivery-test.sh",
+      "sha256": "b957b3ae20c17be0f8799b8d9d430b6ca3c51ad659afd1c53056fef8118bf414",
+      "lineCount": 176,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "KEEP_TEST_ARTIFACTS"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          11,
+          48,
+          73,
+          135,
+          137
+        ],
+        "private_material": [
+          71,
+          105,
+          106
+        ],
+        "process_ownership": [
+          14
+        ],
+        "time_bounds": [
+          126
+        ],
+        "rollback": [
+          35,
+          76,
+          88
+        ],
+        "evidence": [
+          113,
+          164,
+          167,
+          173,
+          174
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          44,
+          47,
+          48,
+          94,
+          95
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/update-flux-distribution.sh",
+      "sha256": "acf1203218ead74a841414b74093727a75943785106d8528ee2b61e8064cabf1",
+      "lineCount": 426,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "TMPDIR"
+      ],
+      "literalExitCodes": [
+        0,
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          69,
+          290,
+          291,
+          292,
+          293,
+          294,
+          295
+        ],
+        "private_material": [
+          202,
+          218,
+          220,
+          223
+        ],
+        "process_ownership": [
+          69
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          175
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/upgrade-release.sh",
+      "sha256": "734b75307bafbf712f36a25d88519fb30c1ce05f120c9d7ff062de7fac52065e",
+      "lineCount": 596,
+      "category": "release_state_machine",
+      "priorityCharacterization": true,
+      "observedDefaultedEnvironmentNames": [
+        "BACKUP_ROOT",
+        "CHART_REF",
+        "EXPECTED_KUBE_API_SERVER",
+        "EXTERNAL_DB_BACKUP_CONFIRMED",
+        "EXTERNAL_DB_SCHEMA_VERSION",
+        "HEALTH_PORT",
+        "KUBE_CONTEXT",
+        "MIN_BACKUP_FREE_KIB",
+        "MIN_READY_NODES",
+        "NAMESPACE",
+        "RC_DECRYPT_PROOF_WEBHOOK_ID",
+        "RC_REPLACE_DATABASE_FROM_BACKUP",
+        "RELEASE",
+        "RELEASE_ARTIFACT_DIR",
+        "RELEASE_REPO",
+        "SANITIZED_EVIDENCE_DIR",
+        "TIMEOUT"
+      ],
+      "literalExitCodes": [
+        0,
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          372,
+          532
+        ],
+        "private_material": [
+          23,
+          268,
+          466
+        ],
+        "process_ownership": [
+          496,
+          501,
+          515,
+          541,
+          576,
+          577,
+          578,
+          582,
+          583
+        ],
+        "time_bounds": [
+          24,
+          86,
+          458,
+          496,
+          525,
+          556,
+          581,
+          589
+        ],
+        "rollback": [
+          46,
+          134,
+          173,
+          175,
+          203,
+          294,
+          308,
+          342,
+          374,
+          403,
+          411,
+          412,
+          495,
+          505,
+          518,
+          520
+        ],
+        "evidence": [
+          32,
+          34,
+          93,
+          170,
+          187,
+          191,
+          192,
+          197,
+          202,
+          209,
+          210,
+          211,
+          212
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          4,
+          28,
+          42,
+          45,
+          111,
+          112,
+          115,
+          347,
+          535
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-b6.sh",
+      "sha256": "37e4ae67580bcc6e257a253ddc2e7526706d37218607caaeb85ead4ef5ae565a",
+      "lineCount": 105,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "CLUSTER_ID",
+        "EVENT_TIMEOUT",
+        "IMAGE",
+        "NAMESPACE",
+        "REMOTE_CONTEXT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          33
+        ],
+        "private_material": [
+          59,
+          60,
+          80
+        ],
+        "process_ownership": [
+          33,
+          36,
+          81,
+          95
+        ],
+        "time_bounds": [
+          48,
+          79,
+          83,
+          87,
+          92
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          33,
+          77,
+          84
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-cis.sh",
+      "sha256": "108a2cef3c921d383cfa4b62ccd4a3ba8af402cb3f0214ced63f75808ab02361",
+      "lineCount": 160,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "CLUSTER_ID",
+        "EVENT_TIMEOUT",
+        "REMOTE_CONTEXT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [
+          48,
+          49
+        ],
+        "process_ownership": [
+          3
+        ],
+        "time_bounds": [
+          77,
+          100,
+          114
+        ],
+        "rollback": [],
+        "evidence": [
+          154
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          70,
+          74,
+          77,
+          79,
+          128,
+          129,
+          138
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-delivery.sh",
+      "sha256": "13d8400face5a6ddd088092905ff2639244fd7d40424c2411858575f5129eb18",
+      "lineCount": 621,
+      "category": "runtime_operation",
+      "priorityCharacterization": true,
+      "observedDefaultedEnvironmentNames": [
+        "ALLOW_INSECURE_LOCALHOST",
+        "ASTRO_BIN",
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "DELIVERY_MATRIX_FILE",
+        "EVIDENCE_ROOT",
+        "LIVE_DELIVERY_CONFIRM",
+        "LIVE_DELIVERY_ENVIRONMENT",
+        "RUN_PREFIX",
+        "TMPDIR"
+      ],
+      "literalExitCodes": [
+        0,
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          20,
+          31,
+          337,
+          377,
+          440,
+          536,
+          538
+        ],
+        "private_material": [
+          7,
+          68,
+          149,
+          152,
+          156,
+          167,
+          182,
+          196,
+          351,
+          375,
+          406,
+          474,
+          482,
+          533,
+          534,
+          537
+        ],
+        "process_ownership": [
+          321,
+          563,
+          564,
+          565,
+          566
+        ],
+        "time_bounds": [
+          205,
+          276,
+          294,
+          515
+        ],
+        "rollback": [
+          6,
+          31,
+          380,
+          392
+        ],
+        "evidence": [
+          64,
+          68,
+          491,
+          551,
+          558,
+          621
+        ],
+        "checkpoint_or_resume": [
+          31
+        ],
+        "ownership_fence": [
+          18,
+          21,
+          60,
+          131,
+          404,
+          577,
+          579,
+          583,
+          601,
+          603,
+          604
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-dex-oidc.sh",
+      "sha256": "7e19d4f1d70a7cae3e221d17d4d8ef6c9a9c1ead05c2ca35617af5450843c8c6",
+      "lineCount": 274,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "KEYCLOAK_PORT",
+        "MGMT_CONTEXT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          34,
+          36,
+          145,
+          166
+        ],
+        "private_material": [
+          62,
+          63,
+          102,
+          114,
+          116,
+          117,
+          135,
+          179,
+          197,
+          244,
+          265,
+          266,
+          270
+        ],
+        "process_ownership": [
+          39
+        ],
+        "time_bounds": [
+          158,
+          204
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          3,
+          204
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-dex.sh",
+      "sha256": "b529dc69ea3b37e476b90bff3371af3c868830a36252665951ee886eb4b80333",
+      "lineCount": 179,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "MGMT_CONTEXT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          31,
+          71
+        ],
+        "private_material": [
+          58,
+          59,
+          83,
+          134
+        ],
+        "process_ownership": [
+          36
+        ],
+        "time_bounds": [
+          102
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          102,
+          105,
+          122,
+          125
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-generic-oidc.sh",
+      "sha256": "99d27f4d171b5c46ef47480f83a3e1e543e7e12008fc0383a0d0a7ea960ae651",
+      "lineCount": 246,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "KEYCLOAK_PORT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          37,
+          40,
+          42,
+          45,
+          141
+        ],
+        "private_material": [
+          71,
+          72,
+          98,
+          110,
+          112,
+          113,
+          131,
+          164,
+          221,
+          237,
+          238,
+          242
+        ],
+        "process_ownership": [
+          48
+        ],
+        "time_bounds": [
+          154
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          3
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-oci.sh",
+      "sha256": "69f7e722ac658199499dd5ded0f00eec37707641b5ffef3a17ec91635dc8c92b",
+      "lineCount": 268,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "CLUSTER_ID",
+        "EVENT_TIMEOUT",
+        "NAMESPACE",
+        "OCI_CHART",
+        "OCI_REPO_URL",
+        "OCI_VERSION",
+        "PROJECT_ID",
+        "RELEASE_NAME",
+        "REMOTE_CONTEXT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          4,
+          51,
+          65,
+          68
+        ],
+        "private_material": [
+          118,
+          119
+        ],
+        "process_ownership": [
+          70
+        ],
+        "time_bounds": [
+          82,
+          98,
+          254,
+          262
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          68,
+          255,
+          266
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-projects.sh",
+      "sha256": "1c2dd17015af22eedef93d864761859e882b29154c604790ec990548bb57715d",
+      "lineCount": 439,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "CLUSTER_ID",
+        "EVENT_TIMEOUT",
+        "REMOTE_CONTEXT"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          49,
+          55,
+          89,
+          100,
+          189,
+          192,
+          386,
+          413,
+          419
+        ],
+        "private_material": [
+          4,
+          113,
+          114,
+          205,
+          209,
+          274,
+          285,
+          329,
+          353,
+          373,
+          374,
+          437,
+          438
+        ],
+        "process_ownership": [
+          58
+        ],
+        "time_bounds": [
+          270,
+          278,
+          343,
+          358,
+          423,
+          429
+        ],
+        "rollback": [],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          55,
+          136,
+          215,
+          271,
+          272,
+          273,
+          274,
+          281,
+          282,
+          283,
+          284,
+          285,
+          286,
+          344,
+          346,
+          350,
+          351,
+          352,
+          353,
+          361,
+          365,
+          369,
+          373,
+          377,
+          381
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/validate-live-velero.sh",
+      "sha256": "e7d4076397a04785d974ff2b389ba8f93d4ad1ab611f2299d18cb32692ca6cc5",
+      "lineCount": 299,
+      "category": "runtime_operation",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "ASTRO_PASSWORD",
+        "ASTRO_USERNAME",
+        "AUTH_TOKEN",
+        "BASE_URL",
+        "CLUSTER_ID",
+        "EVENT_TIMEOUT",
+        "REMOTE_CONTEXT",
+        "VELERO_BACKUP_NAME",
+        "VELERO_RESTORE_NAME"
+      ],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          42,
+          43,
+          44,
+          45,
+          47
+        ],
+        "private_material": [
+          45,
+          73,
+          74,
+          190,
+          199
+        ],
+        "process_ownership": [
+          50
+        ],
+        "time_bounds": [
+          153,
+          177,
+          216,
+          222,
+          243,
+          253,
+          283,
+          293
+        ],
+        "rollback": [
+          2,
+          4,
+          43,
+          91,
+          278,
+          284,
+          289,
+          299
+        ],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          42,
+          43,
+          44,
+          45,
+          95,
+          153,
+          155,
+          165,
+          177,
+          179,
+          180,
+          217,
+          244,
+          259,
+          284,
+          296
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/verify-agent-identity-rbac.sh",
+      "sha256": "58adc482bbb52c6437d92af7dfad0defb1097809208d0e8c752a3f05109e7830",
+      "lineCount": 374,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [
+        "AGENT_IDENTITY_TEST_CONTEXT"
+      ],
+      "literalExitCodes": [
+        0,
+        1,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          44,
+          185,
+          360,
+          362,
+          364,
+          366
+        ],
+        "private_material": [
+          2,
+          4,
+          59,
+          60,
+          68,
+          79,
+          80,
+          99,
+          106,
+          112,
+          119,
+          126,
+          128,
+          134,
+          138,
+          139,
+          140,
+          148,
+          152,
+          160,
+          161,
+          164,
+          176,
+          180,
+          184,
+          204,
+          206,
+          212,
+          215,
+          221,
+          225,
+          237,
+          238,
+          245,
+          248,
+          250,
+          256,
+          259,
+          265,
+          276,
+          283,
+          289,
+          296,
+          303,
+          305,
+          311,
+          316,
+          324,
+          328,
+          341,
+          352,
+          353,
+          357,
+          361,
+          364,
+          365,
+          366,
+          368,
+          369,
+          370
+        ],
+        "process_ownership": [
+          45,
+          47
+        ],
+        "time_bounds": [
+          36
+        ],
+        "rollback": [
+          322
+        ],
+        "evidence": [],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          4,
+          7,
+          16,
+          25,
+          26,
+          36,
+          37,
+          44,
+          59,
+          70,
+          79,
+          89,
+          90,
+          91,
+          92,
+          95,
+          140,
+          148,
+          152,
+          165,
+          245,
+          246,
+          272,
+          316,
+          324,
+          328,
+          341,
+          366,
+          369
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/verify-enterprise.sh",
+      "sha256": "04578a1e0ff65eeb9094080c285dffd9f16ce9d8dbcd8a065b288957eca345a0",
+      "lineCount": 608,
+      "category": "developer_workflow",
+      "priorityCharacterization": true,
+      "observedDefaultedEnvironmentNames": [
+        "GITHUB_STEP_SUMMARY",
+        "NPM_AUDIT_LEVEL",
+        "SOURCE_COMMIT",
+        "SQLC_VERSION",
+        "TMPDIR",
+        "VERIFY_ARTIFACT_DIR"
+      ],
+      "literalExitCodes": [
+        0,
+        2
+      ],
+      "signals": {
+        "destructive_cleanup": [],
+        "private_material": [
+          526,
+          530,
+          531,
+          533,
+          559,
+          560
+        ],
+        "process_ownership": [
+          147,
+          574
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          45,
+          197,
+          245,
+          252,
+          343,
+          425,
+          608
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": [
+          505
+        ]
+      },
+      "runtimeCharacterization": "pending"
+    },
+    {
+      "path": "scripts/verify-flux-version.sh",
+      "sha256": "999ad13733281bae57c695de9ba2f01fa44acedc0bb9cca1dc6600111bc8ad86",
+      "lineCount": 208,
+      "category": "developer_workflow",
+      "priorityCharacterization": false,
+      "observedDefaultedEnvironmentNames": [],
+      "literalExitCodes": [
+        1
+      ],
+      "signals": {
+        "destructive_cleanup": [
+          31
+        ],
+        "private_material": [
+          168
+        ],
+        "process_ownership": [
+          31
+        ],
+        "time_bounds": [],
+        "rollback": [],
+        "evidence": [
+          70
+        ],
+        "checkpoint_or_resume": [],
+        "ownership_fence": []
+      },
+      "runtimeCharacterization": "pending"
+    }
+  ]
+}

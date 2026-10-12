@@ -1,0 +1,467 @@
+{
+  "schemaVersion": 1,
+  "status": "SCOPED_RUNTIME_OWNED_PG17_PG18_AND_COMBINED_COUNT_GENERATION_PASS",
+  "qualifiedRuntimeSourceCommit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
+  "runs": [
+    {
+      "group": "original-runtime-panic",
+      "sourceCommit": "13863f518cb00ae57dedf4fb9d7b45a3e065554a",
+      "receiptSHA256": "sha256:1510fbe23125db7412bce247281ad011a1d66236f20a23b530d02ed4194ecea6",
+      "exitCode": 1,
+      "sourceStable": true,
+      "goExecutableStable": true,
+      "contracts": {
+        "focused-tests": {
+          "expectedParentCount": 19,
+          "actualParentCount": 19,
+          "parentActionCounts": {
+            "pass": 19
+          },
+          "testTerminalCount": 19,
+          "testActionCounts": {
+            "pass": 19
+          },
+          "sourceBoundSkipReasonCount": 0,
+          "passed": true
+        },
+        "full-unit-tests": {
+          "expectedParentCount": 2341,
+          "actualParentCount": 2153,
+          "parentActionCounts": {
+            "pass": 2128,
+            "skip": 24,
+            "fail": 1
+          },
+          "testTerminalCount": 3448,
+          "testActionCounts": {
+            "pass": 3412,
+            "skip": 34,
+            "fail": 2
+          },
+          "sourceBoundSkipReasonCount": 34,
+          "passed": false
+        }
+      },
+      "guards": 120,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.138
+        },
+        {
+          "name": "full-inventory",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.243
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 82.212
+        },
+        {
+          "name": "full-unit-tests",
+          "exitCode": 1,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 238.993
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 270046168,
+        "available_kib": 69570792,
+        "available_gib": 66,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      }
+    },
+    {
+      "group": "corrected-runtime-pass",
+      "sourceCommit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
+      "receiptSHA256": "sha256:9a264ccee64ac81898f8e119de4b047801fdde295c3b29314ad772a3e00c9671",
+      "exitCode": 0,
+      "sourceStable": true,
+      "goExecutableStable": true,
+      "contracts": {
+        "focused-tests": {
+          "expectedParentCount": 19,
+          "actualParentCount": 19,
+          "parentActionCounts": {
+            "pass": 19
+          },
+          "testTerminalCount": 19,
+          "testActionCounts": {
+            "pass": 19
+          },
+          "sourceBoundSkipReasonCount": 0,
+          "passed": true
+        },
+        "full-unit-tests": {
+          "expectedParentCount": 2341,
+          "actualParentCount": 2341,
+          "parentActionCounts": {
+            "pass": 2309,
+            "skip": 32
+          },
+          "testTerminalCount": 4474,
+          "testActionCounts": {
+            "pass": 4432,
+            "skip": 42
+          },
+          "sourceBoundSkipReasonCount": 42,
+          "passed": true
+        }
+      },
+      "guards": 105,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.138
+        },
+        {
+          "name": "full-inventory",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 2.338
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 13.172
+        },
+        {
+          "name": "full-unit-tests",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 220.158
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 37.276
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 270076592,
+        "available_kib": 69540368,
+        "available_gib": 66,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      }
+    },
+    {
+      "group": "owned-postgres17-pass",
+      "sourceCommit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
+      "receiptSHA256": "sha256:f0d502e1b0224d903660c7f8a8a3031f3c1e60a5411a935da278aa4dca5c2168",
+      "exitCode": 0,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "actualGoSHA256": "sha256:548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+      "major": 17,
+      "schemaReadbacks": [
+        77,
+        78,
+        78,
+        78
+      ],
+      "parentCount": 3,
+      "testCounts": {
+        "pass": 7,
+        "fail": 0,
+        "skip": 0
+      },
+      "guards": 26,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.144
+        },
+        {
+          "name": "build-migrator",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.083
+        },
+        {
+          "name": "migrate-75-to-77",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.84
+        },
+        {
+          "name": "migrate-77-to-78",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.795
+        },
+        {
+          "name": "fresh-test-fence",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.803
+        },
+        {
+          "name": "postgres-generation-tests",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 11.261
+        },
+        {
+          "name": "final-readback",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.903
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 270483740,
+        "available_kib": 69133220,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      }
+    },
+    {
+      "group": "owned-postgres18-pass",
+      "sourceCommit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
+      "receiptSHA256": "sha256:4ea511180bfc34428133191f74c7ff1af0136af9740b0a24189c8032c9d0e60b",
+      "exitCode": 0,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "actualGoSHA256": "sha256:548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+      "major": 18,
+      "schemaReadbacks": [
+        77,
+        78,
+        78,
+        78
+      ],
+      "parentCount": 3,
+      "testCounts": {
+        "pass": 7,
+        "fail": 0,
+        "skip": 0
+      },
+      "guards": 26,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.134
+        },
+        {
+          "name": "build-migrator",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.612
+        },
+        {
+          "name": "migrate-75-to-77",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.652
+        },
+        {
+          "name": "migrate-77-to-78",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.836
+        },
+        {
+          "name": "fresh-test-fence",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.896
+        },
+        {
+          "name": "postgres-generation-tests",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 10.801
+        },
+        {
+          "name": "final-readback",
+          "exitCode": 0,
+          "drained": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 1.944
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 270503148,
+        "available_kib": 69113812,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      }
+    },
+    {
+      "group": "combined-capacity-stop",
+      "sourceCommit": "677176cfbf1d0d956d04e26ba904efae42f86420",
+      "receiptSHA256": "sha256:50af25ec06a417852759b62d3b5eed96748bef4aebca13983078a0ab10c0bdd4",
+      "exitCode": 1,
+      "sourceStable": true,
+      "partialParentCounts": {
+        "pass": 8
+      },
+      "requiredParentCount": 22,
+      "vetExecuted": false,
+      "guards": 18,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "reason": "",
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": -15,
+          "drained": true,
+          "reason": "guard-or-launch-failure",
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations-composition",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271712340,
+        "available_kib": 67904620,
+        "available_gib": 64,
+        "free_percent": 19,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": false
+      }
+    },
+    {
+      "group": "combined-current-main-pass",
+      "sourceCommit": "677176cfbf1d0d956d04e26ba904efae42f86420",
+      "receiptSHA256": "sha256:63f0e891842550d50d067891d9137458860355f84f51efcdad6f475c5d56a677",
+      "exitCode": 0,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "goExecutableStable": true,
+      "expectedParentCount": 22,
+      "actualParentCount": 22,
+      "testTerminalCounts": {
+        "pass": 40,
+        "fail": 0,
+        "skip": 0
+      },
+      "packageCount": 4,
+      "vetConsumers": [
+        "./internal/observability",
+        "./internal/handler",
+        "./internal/siem",
+        "./internal/worker/tasks",
+        "./internal/server",
+        "./cmd/server",
+        "./cmd/worker"
+      ],
+      "vetExitCode": 0,
+      "guards": 42,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.135
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 60.283
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 37.376
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations-composition",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 267923372,
+        "available_kib": 71693588,
+        "available_gib": 68,
+        "free_percent": 21,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      }
+    }
+  ],
+  "limits": [
+    "The historical generation078 packet remains unchanged; its claims describe generation only.",
+    "Original138 full lane genuinely panicked in a stale route-query fake and truncated server testing; consumer vet did not execute.",
+    "Corrected92 changes only two fake method signatures to the actual specialized query seam. All existing actual-route RBAC/sentinel/continuation assertions remain.",
+    "Corrected92 focused19parents PASS without skips. Full2341parents includes2309PASS32SKIP;4474terminals include4432PASS42 explicit source-bound skips. The separate owned PostgreSQL lanes each passed three parents/seven terminals without skips; these do not retroactively execute the full-unit skipped cases.",
+    "Consumer vet covers the five selected packages and cmd/server/cmd/worker. The separate combined 677 lane passed22 focused checked-count/generation parents and 40 terminals/four packages under race and all seven consumer vet. No whole repository/security-scanner/collector/live-Kubernetes/whole-product qualification.",
+    "Dedicated owned PostgreSQL17 and18 canonical75\u219277\u219278 migrations and three actual generation lifecycle/captured-callback/RR race parents per major passed without skips. Each dedicated database is now clean78; no blind75 recipe replay. The combined 677 checked-count/generation focused lane passed separately; these original 92 PostgreSQL receipts retain their original source identities.",
+    "Current-main677 combined 22-parent lane stopped on maintained capacity19% after only eight observability parents passed; other focused parents incomplete and seven-consumer vet unrun. Both owned groups were drained. Source677 remained frozen; the original failed run remains separate and unchanged. A reviewed output-only successor passed after exact closed archive recovery; thresholds and source were unchanged."
+  ],
+  "qualifiedCombinedSourceCommit": "677176cfbf1d0d956d04e26ba904efae42f86420"
+}

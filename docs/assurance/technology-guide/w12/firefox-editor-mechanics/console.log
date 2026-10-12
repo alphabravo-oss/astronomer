@@ -1,0 +1,69 @@
+[WebServer] (node:653507) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+
+Running 2 tests using 1 worker
+
+(node:653697) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/2] [scoped-firefox-editor] › frontend/.cache/monaco-input-characterization/editor.spec.ts:20:1 › original Firefox bulk insertion submits one synthetic document
+  1) [scoped-firefox-editor] › frontend/.cache/monaco-input-characterization/editor.spec.ts:20:1 › original Firefox bulk insertion submits one synthetic document 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: locator('#submitted')
+    Timeout: 10000ms
+    - Expected  - 0
+    + Received  + 2
+
+    + # live-browser apply fixture
+    + {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"live-config","namespace":"default","labels":{"fixture-stage":"applied"}},"data":{"message":"after-live-apply"}}
+      # live-browser apply fixture
+      {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"live-config","namespace":"default","labels":{"fixture-stage":"applied"}},"data":{"message":"after-live-apply"}}
+      ↵
+
+    Call log:
+      - Expect "toHaveText" locator('#submitted') with timeout 10000ms
+      - waiting for locator('#submitted')
+        24 × locator resolved to <pre id="submitted"># live-browser apply fixture↵{"apiVersion":"v1","…</pre>
+           - unexpected value "# live-browser apply fixture
+    {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"live-config","namespace":"default","labels":{"fixture-stage":"applied"}},"data":{"message":"after-live-apply"}}
+    # live-browser apply fixture
+    {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"live-config","namespace":"default","labels":{"fixture-stage":"applied"}},"data":{"message":"after-live-apply"}}
+    "
+
+
+      22 |   await page.keyboard.insertText(expected);
+      23 |   await page.getByRole("button", { name: "Dry run", exact: true }).click();
+    > 24 |   await expect(page.locator("#submitted")).toHaveText(expected);
+         |                                            ^
+      25 |   const submitted = await page.locator("#submitted").textContent();
+      26 |   expect(submitted?.match(/after-live-apply/g)?.length).toBe(1);
+      27 | });
+        at /root/astronomer-all/astronomer-032-firefox-fixture/frontend/.cache/monaco-input-characterization/editor.spec.ts:24:44
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+(node:654207) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[2/2] [scoped-firefox-editor] › frontend/.cache/monaco-input-characterization/editor.spec.ts:29:1 › native Firefox key events submit the exact synthetic manifest
+  1 failed
+    [scoped-firefox-editor] › frontend/.cache/monaco-input-characterization/editor.spec.ts:20:1 › original Firefox bulk insertion submits one synthetic document 
+  1 passed (23.9s)

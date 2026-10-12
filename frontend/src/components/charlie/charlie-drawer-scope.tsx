@@ -20,7 +20,7 @@ function ContextPicker({
   const [q, setQ] = useState("");
   const result = useQuery({
     queryKey: queryKeys.charlie.contextSearch(q),
-    queryFn: () => searchCharlieContext(q),
+    queryFn: ({ signal }) => searchCharlieContext(q, { signal }),
     enabled: open && (q.trim().length === 0 || q.trim().length >= 2),
     retry: false,
   });

@@ -4,7 +4,7 @@ The release workflow qualifies every image reachable from the signed release
 manifest: first-party workloads, chart runtime dependencies, Flux controllers,
 built-in bundle images, and containerized Charlie artifacts. Each exact digest
 must publish `linux/amd64` and `linux/arm64`, pass the fixed high/critical Trivy
-gate, and produce an SPDX SBOM. For tags other than v1.2.0 and v1.2.1, licenses must be in
+gate, and produce an SPDX SBOM. For tags other than v1.2.0, v1.2.1 and v2.0.0, licenses must be in
 `deploy/release/license-policy.json`. A waiver must name the exact image digest,
 category and finding IDs, approver, reason, and future expiry. Stale, duplicate,
 expired, mutable-reference, and unused waivers fail the release. A waiver with
@@ -24,7 +24,7 @@ then scans that archive without requiring GHCR package-read scope. Charlie's
 Sigstore bundles use Cosign's explicit new-bundle-format option and pinned
 workflow identity.
 
-For **v1.2.0 and v1.2.1 only**, release and recovery workflows automatically run the
+For **v1.2.0, v1.2.1 and v2.0.0 only**, release and recovery workflows automatically run the
 rehearsal below against v1.1.0 after all three clean-cluster Kubernetes checks
 pass. Promotion requires that job to succeed, verifies its signed evidence
 against the current producer run and original build run, and checks that both
@@ -63,3 +63,20 @@ missing, mismatched, unknown, or not-passed evidence fails before publication.
 The release owner explicitly extended the same waivers and qualification deferrals
 to v1.2.1 on 2026-10-08 after the unpublished v1.2.0 candidate failed startup.
 Signed v1.2.0 artifacts remain unchanged; v1.2.1 is built and qualified afresh.
+
+## Version 2.0.0 release-owner decision
+
+On 2026-10-11 the release owner explicitly requested v2.0.0 publication and
+carried forward the same cloud, scale, Rancher, human-accessibility and license
+qualification deferrals. The exact approved tag is recorded separately from
+historical tags in `deploy/release/publication-policy.json`; other future tags
+remain strict. Existing upstream vulnerability waivers are carried to this tag
+with their exact image digests, finding IDs and original 2026-11-06 expiry.
+Fresh scans, retained findings, SBOMs, signatures and automated Kubernetes and
+upgrade/backup/restore checks remain required. No clean vulnerability or license
+claim is made for waived findings. New unwaived findings still require disposition.
+
+Version 2.0.0 also requires source-bound signed toolchain resolution and signed
+upgrade-toolkit artifacts. These controls are not included in the deferrals.
+See [the major-version migration notes](upgrade-2.0.md) for local CNPG migration
+and the implementation and qualification limits.

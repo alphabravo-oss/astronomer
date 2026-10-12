@@ -1,0 +1,17 @@
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/tenant_identity
+    postgres_store_test.go:147: invalid frozen plan reached storage: error=insert frozen delivery rollout: unexpected durable write calls=1
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/plan_digest
+    postgres_store_test.go:147: invalid frozen plan reached storage: error=insert frozen delivery rollout: unexpected durable write calls=1
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/strategy
+    postgres_store_test.go:147: invalid frozen plan reached storage: error=insert frozen delivery rollout: unexpected durable write calls=1
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/cohort_membership
+    postgres_store_test.go:147: invalid frozen plan reached storage: error=insert frozen delivery rollout: unexpected durable write calls=1
+--- FAIL: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite (0.00s)
+    --- FAIL: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/tenant_identity (0.00s)
+    --- FAIL: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/plan_digest (0.00s)
+    --- FAIL: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/strategy (0.00s)
+    --- FAIL: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/cohort_membership (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	0.016s
+FAIL

@@ -2,6 +2,7 @@
 # Run the Playwright live project against disposable PostgreSQL/Redis and the
 # current server, worker, and frontend preview processes.
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -16,6 +17,13 @@ if [[ $# -ne 0 ]]; then
   echo "Usage: scripts/test-live-browser.sh [--validate-only]" >&2
   exit 2
 fi
+
+browser_engine="${LIVE_BROWSER_ENGINE:-chromium}"
+case "$browser_engine" in
+  chromium) browser_project=live ;;
+  firefox|webkit) browser_project="live-$browser_engine" ;;
+  *) echo 'test-live-browser: engine must be chromium, firefox or webkit' >&2; exit 2 ;;
+esac
 
 trivy_enabled="${LIVE_BROWSER_TRIVY_ENABLED:-0}"
 if [[ "$trivy_enabled" != 0 && "$trivy_enabled" != 1 ]]; then
@@ -39,10 +47,18 @@ if [[ ! -x frontend/node_modules/.bin/playwright ]]; then
   exit 2
 fi
 
+[[ -z "${K3S_IMAGE:-}" ]] || { echo 'test-live-browser: arbitrary Kubernetes image overrides are not allowed' >&2; exit 2; }
+qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"
+
 suffix="$$-$(date +%s)-$(openssl rand -hex 4)"
 artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-browser-$suffix}"
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
+bash scripts/check-build-capacity.sh --json >"$artifact_dir/capacity-before.json"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
+if [[ -n "${LIVE_BROWSER_REUSE_BUILD_REF:-}" ]]; then
+  python3 scripts/live-browser-build-reuse.py reuse \
+    --reference "$LIVE_BROWSER_REUSE_BUILD_REF" --artifact "$artifact_dir"
+fi
 if [[ "${LIVE_BROWSER_ENGINEERING:-0}" != "1" ]]; then
   cat >"$artifact_dir/engineering-not-run.json" <<'JSON'
 {"schema_version":"astronomer-browser-engineering/v1","scope":"engineering_browser_measurement","qualification":"not_evaluated","collection_status":"not_run","reason":"engineering_mode_disabled"}
@@ -52,9 +68,10 @@ fi
 postgres_container="astronomer-live-browser-pg-$suffix"
 redis_container="astronomer-live-browser-redis-$suffix"
 flux_fixture_container="astronomer-live-browser-flux-$suffix"
-flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.22-git-2.49.1"
+flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.24-git-2.54.0-r0"
 rustfs_fixture_image="astronomer-rustfs-fixture:$suffix"
 s3_client_image="astronomer-s3-client-fixture:$suffix"
+shell_fixture_image="astronomer-live-browser-shell:$suffix"
 postgres_user="live_browser"
 postgres_database="live_browser"
 postgres_credential="$(openssl rand -hex 24)"
@@ -69,6 +86,7 @@ worker_metrics_port=""
 server_pid=""
 worker_pid=""
 frontend_pid=""
+preview_ref_created=0
 fixture_pid=""
 flux_cluster="test-run-live-$((BASHPID % 1000000))-$(openssl rand -hex 2)"
 flux_kubeconfig="$artifact_dir/flux-kubeconfig"
@@ -251,6 +269,7 @@ cleanup() {
 		KUBECONFIG="$flux_kubeconfig" kubectl -n velero logs deployment/velero >"$artifact_dir/velero.log" 2>&1 || true
 		KUBECONFIG="$flux_kubeconfig" kubectl get events -A --sort-by=.metadata.creationTimestamp >"$artifact_dir/kubernetes-events.log" 2>&1 || true
 	fi
+  if [[ "$preview_ref_created" == 1 ]]; then rm -f -- "$LIVE_BROWSER_PREVIEW_REF"; fi
   stop_process "$frontend_pid"
   stop_process "$fixture_pid"
   stop_process "$worker_pid"
@@ -259,7 +278,7 @@ cleanup() {
 		k3d cluster delete "$flux_cluster" >/dev/null 2>&1 || true
 	fi
   docker rm -f "$postgres_container" "$redis_container" "$flux_fixture_container" >/dev/null 2>&1 || true
-	docker image rm "$s3_client_image" "$rustfs_fixture_image" >/dev/null 2>&1 || true
+	docker image rm "$s3_client_image" "$rustfs_fixture_image" "$shell_fixture_image" >/dev/null 2>&1 || true
   printf 'exit_status=%d\n' "$status" >"$artifact_dir/result.txt"
   echo "test-live-browser: artifacts: $artifact_dir"
   exit "$status"
@@ -309,7 +328,7 @@ assert_stack() {
   process_alive "$frontend_pid" || { echo "test-live-browser: frontend not alive ($phase)" >&2; return 1; }
   process_alive "$fixture_pid" || { echo "test-live-browser: agent fixture not alive ($phase)" >&2; return 1; }
   docker exec "$postgres_container" pg_isready -U "$postgres_user" -d "$postgres_database" >/dev/null
-  docker exec "$redis_container" redis-cli ping | grep -qx PONG
+  docker exec "$redis_container" valkey-cli ping | grep -qx PONG
 	curl -fsS --max-time 3 "http://127.0.0.1:$server_port/health/" >/dev/null
 	curl -fsS --max-time 3 "http://127.0.0.1:$server_metrics_port/metrics" >/dev/null
 	curl -fsS --max-time 3 "http://127.0.0.1:$worker_metrics_port/healthz" >/dev/null
@@ -335,20 +354,17 @@ while [[ "$server_metrics_port" == "$frontend_port" || "$worker_metrics_port" ==
 	worker_metrics_port="$(choose_port)"
 done
 
-docker run -d --rm --name "$postgres_container" \
-  -e POSTGRES_USER="$postgres_user" \
-  -e POSTGRES_PASSWORD="$postgres_credential" \
-  -e POSTGRES_DB="$postgres_database" \
-  -p "${DOCKER_TEST_BIND_HOST}::5432" postgres:16-alpine >/dev/null
-docker run -d --rm --name "$redis_container" \
-  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
-wait_container_ready "$postgres_container" pg_isready -U "$postgres_user" -d "$postgres_database"
-wait_container_ready "$redis_container" redis-cli ping
+# The same official immutable operands and extension preflight serve browser and Go lanes.
+. scripts/lib/qualification-runtime.sh
+qualification_postgres_run "$postgres_container" "$postgres_user" "$postgres_credential" "$postgres_database"
+qualification_valkey_run "$redis_container" "$postgres_credential"
+qualification_postgres_ready "$postgres_container" "$postgres_user" "$postgres_database"
+qualification_valkey_ready "$redis_container"
 
 postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR==1 {print $NF}')"
 redis_port="$(docker port "$redis_container" 6379/tcp | awk -F: 'NR==1 {print $NF}')"
 database_url="postgres://$postgres_user:$postgres_credential@${DOCKER_TEST_CONNECT_HOST}:$postgres_port/$postgres_database?sslmode=disable"
-redis_url="redis://${DOCKER_TEST_CONNECT_HOST}:$redis_port/0"
+redis_url="redis://:$postgres_credential@${DOCKER_TEST_CONNECT_HOST}:$redis_port/0"
 
 direct_api_host="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
 [[ -n "$direct_api_host" ]] || {
@@ -416,6 +432,13 @@ git -C "$artifact_dir/flux-worktree" commit -m "live browser Flux fixture" >/dev
 git_revision="$(git -C "$artifact_dir/flux-worktree" rev-parse HEAD)"
 git clone --bare "$artifact_dir/flux-worktree" "$flux_fixture_root/git/repository.git" >/dev/null
 git_digest="sha256:$(git -C "$artifact_dir/flux-worktree" archive HEAD | sha256sum | awk '{print $1}')"
+# The host client already passed the declared server-skew preflight. Build
+# the first-party shell with that exact official version for this fixture only.
+qualification_kubectl_version="$(kubectl version --client=true -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["clientVersion"]["gitVersion"])')"
+docker build --pull=false --build-arg "KUBECTL_VERSION=$qualification_kubectl_version" \
+  --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t "$shell_fixture_image" \
+  -f deploy/docker/Dockerfile.shell . >"$artifact_dir/build-shell.log" 2>&1
+docker image inspect "$shell_fixture_image" --format '{{.Id}}' >"$artifact_dir/shell-image-id.log"
 docker pull "$rustfs_image" >"$artifact_dir/pull-rustfs.log" 2>&1
 # k3d imports local image tags; the source bytes remain pinned above.
 docker tag "$rustfs_image" "$rustfs_fixture_image"
@@ -427,7 +450,9 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 	-keyout "$flux_tls_key" -out "$flux_tls_cert" >"$artifact_dir/flux-tls.log" 2>&1
 chmod 0600 "$flux_tls_key" "$flux_tls_cert"
 
-CGO_ENABLED=0 go build -trimpath -o "$artifact_dir/bin/flux-fixture-server" ./scripts/fixtures/flux/server >"$artifact_dir/build-flux-fixture.log" 2>&1
+if [[ -z "${LIVE_BROWSER_REUSE_BUILD_REF:-}" ]]; then
+  CGO_ENABLED=0 go build -trimpath -o "$artifact_dir/bin/flux-fixture-server" ./scripts/fixtures/flux/server >"$artifact_dir/build-flux-fixture.log" 2>&1
+fi
 docker build --pull=false -t "$flux_fixture_runtime_image" \
 	-f scripts/fixtures/flux/server/Dockerfile.runtime scripts/fixtures/flux/server \
 	>"$artifact_dir/build-flux-fixture-runtime.log"
@@ -454,7 +479,7 @@ GIT_SSL_CAINFO="$flux_tls_cert" git ls-remote \
 	"https://${DOCKER_TEST_CONNECT_HOST}:$flux_fixture_port/git/repository.git" refs/heads/main >/dev/null
 
 k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
-	--image "${K3S_IMAGE:-rancher/k3s:v1.35.0-k3s1}" \
+	--image "$qualification_k3s_image" \
 	--api-port "$direct_api_host:$direct_api_port" \
 	--k3s-arg '--disable=traefik@server:0' \
 	--k3s-arg "--tls-san=$direct_api_host@server:0" \
@@ -463,6 +488,9 @@ k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 flux_created=1
 k3d kubeconfig get "$flux_cluster" >"$flux_kubeconfig"
 chmod 0600 "$flux_kubeconfig"
+shell_platform="$(docker image inspect "$shell_fixture_image" --format '{{.Os}}/{{.Architecture}}')"
+docker save --platform "$shell_platform" "$shell_fixture_image" >"$artifact_dir/shell-fixture-image.tar"
+k3d image import "$artifact_dir/shell-fixture-image.tar" -c "$flux_cluster" >"$artifact_dir/import-shell.log" 2>&1
 # Export only this host platform: a pulled multi-platform index may reference
 # architectures Docker has not downloaded, which containerd cannot import.
 rustfs_platform="$(docker image inspect "$rustfs_fixture_image" --format '{{.Os}}/{{.Architecture}}')"
@@ -538,12 +566,14 @@ KUBECONFIG="$flux_kubeconfig" kubectl create namespace "$backup_namespace" >/dev
 KUBECONFIG="$flux_kubeconfig" kubectl -n "$backup_namespace" create configmap "$backup_configmap" \
 	--from-literal=message="$backup_message" >/dev/null
 
-echo "test-live-browser: building current migrator, server, worker, live agent fixture, and frontend"
-go build -trimpath -o "$artifact_dir/bin/migrator" ./cmd/migrator >"$artifact_dir/build-migrator.log" 2>&1
-go build -trimpath -o "$artifact_dir/bin/server" ./cmd/server >"$artifact_dir/build-server.log" 2>&1
-go build -trimpath -o "$artifact_dir/bin/worker" ./cmd/worker >"$artifact_dir/build-worker.log" 2>&1
-go build -trimpath -o "$artifact_dir/bin/live-browser-fixture" ./scripts/testdata/live-browser-fixture >"$artifact_dir/build-live-browser-fixture.log" 2>&1
-npm --prefix frontend run build >"$artifact_dir/frontend-build.log" 2>&1
+if [[ -z "${LIVE_BROWSER_REUSE_BUILD_REF:-}" ]]; then
+  echo "test-live-browser: building current migrator, server, worker, live agent fixture, and frontend"
+  go build -trimpath -o "$artifact_dir/bin/migrator" ./cmd/migrator >"$artifact_dir/build-migrator.log" 2>&1
+  go build -trimpath -o "$artifact_dir/bin/server" ./cmd/server >"$artifact_dir/build-server.log" 2>&1
+  go build -trimpath -o "$artifact_dir/bin/worker" ./cmd/worker >"$artifact_dir/build-worker.log" 2>&1
+  go build -trimpath -o "$artifact_dir/bin/live-browser-fixture" ./scripts/testdata/live-browser-fixture >"$artifact_dir/build-live-browser-fixture.log" 2>&1
+  npm --prefix frontend run build >"$artifact_dir/frontend-build.log" 2>&1
+fi
 
 "$artifact_dir/bin/live-browser-fixture" direct-rbac | \
 	KUBECONFIG="$flux_kubeconfig" kubectl apply -f - >"$artifact_dir/direct-reader-install.log"
@@ -568,6 +598,8 @@ runtime_env=(
   "ASTRONOMER_ENCRYPTION_KEY=$encryption_key"
   "ASTRONOMER_BOOTSTRAP_PASSWORD=$admin_password"
   "ENV=development"
+  "KUBECTL_SHELL_ENABLED=true"
+  "KUBECTL_SHELL_IMAGE=$shell_fixture_image"
   "DEBUG=true"
   "ALLOWED_HOSTS=127.0.0.1,localhost"
   "CORS_ALLOWED_ORIGINS=http://127.0.0.1:$frontend_port"
@@ -752,6 +784,23 @@ frontend_pid=$!
 wait_http_ready frontend "$frontend_pid" "http://127.0.0.1:$frontend_port/auth/login"
 assert_stack before-playwright
 
+# An optional private handoff lets the integration reviewer inspect this live
+# owned stack. It is outside retained/uploaded artifacts and removed at exit.
+if [[ -n "${LIVE_BROWSER_PREVIEW_REF:-}" ]]; then
+  LIVE_PREVIEW_PASSWORD="$admin_password" python3 - "$LIVE_BROWSER_PREVIEW_REF" "$artifact_dir" "$ROOT" "$frontend_port" <<'PYREF'
+import json, os, pathlib, sys
+path, artifacts, source, port = map(str, sys.argv[1:])
+p = pathlib.Path(path)
+if not p.is_absolute() or any(p.resolve() == q or q in p.resolve().parents for q in (pathlib.Path(artifacts).resolve(), pathlib.Path(source).resolve())):
+    raise SystemExit("preview reference must be absolute and outside source/artifacts")
+fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+with os.fdopen(fd, "w") as handle:
+    json.dump({"schemaVersion": 1, "scope": "owned synthetic live-browser fixture only", "url": "http://127.0.0.1:" + port, "email": "admin@astronomer.local", "password": os.environ["LIVE_PREVIEW_PASSWORD"]}, handle)
+    handle.write("\n")
+PYREF
+  preview_ref_created=1
+fi
+
 echo "test-live-browser: running Playwright live project"
 set +e
 (
@@ -777,7 +826,7 @@ set +e
   PLAYWRIGHT_REUSE_EXISTING_SERVER=1 \
   PLAYWRIGHT_OUTPUT_DIR="$artifact_dir/test-results" \
   PLAYWRIGHT_HTML_OUTPUT_DIR="$artifact_dir/playwright-report" \
-    npx playwright test --project=live
+    npx playwright test --project="$browser_project" --workers=1 --retries=0
 ) 2>&1 | tee "$artifact_dir/playwright.log"
 playwright_status=${PIPESTATUS[0]}
 set -e

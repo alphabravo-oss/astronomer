@@ -1,7 +1,7 @@
 // Cluster-registration wizard metrics (sprint 22 / migration 078).
 //
 //   - astronomer_cluster_registration_phase{cluster,phase}
-//     — 1 for the cluster's current phase, 0 for the others. Lets a
+//     — one series for the cluster's current phase. Lets a
 //     dashboard graph "how many clusters are stuck in awaiting_agent?".
 //   - astronomer_cluster_registration_duration_seconds{outcome,baseline}
 //     — observed when a cluster reaches ready or failed.
@@ -22,7 +22,7 @@ var (
 			Namespace: "astronomer",
 			Subsystem: "cluster_registration",
 			Name:      "phase",
-			Help:      "Current registration phase per cluster — 1 for the active phase, 0 for the others.",
+			Help:      "Current registration phase per cluster; only the active phase is retained.",
 		},
 		MetricLabels("cluster", "phase"),
 	)
@@ -52,19 +52,11 @@ type RegistrationMetricsHook struct{}
 // NewRegistrationMetricsHook returns the shared hook value.
 func NewRegistrationMetricsHook() *RegistrationMetricsHook { return &RegistrationMetricsHook{} }
 
-// RecordPhaseTransition zeroes the `from` series and sets the `to`
-// series to 1. Used so a stuck-in-awaiting_agent cluster lights up the
-// gauge for that one label combination only.
+// RecordPhaseTransition publishes the captured transition immediately. The
+// registration transaction buffer uses CapturePhaseTransition to defer it until
+// commit without allowing a late flush to recreate a retired owner.
 func (h *RegistrationMetricsHook) RecordPhaseTransition(clusterID, from, to string) {
-	if h == nil {
-		return
-	}
-	if from != "" {
-		clusterRegistrationPhase.WithLabelValues(MetricValues(clusterID, from)...).Set(0)
-	}
-	if to != "" {
-		clusterRegistrationPhase.WithLabelValues(MetricValues(clusterID, to)...).Set(1)
-	}
+	h.CapturePhaseTransition(clusterID, from, to)()
 }
 
 // RecordDuration emits the histogram observation when a cluster lands
@@ -74,5 +66,5 @@ func (h *RegistrationMetricsHook) RecordDuration(clusterID, outcome string, base
 		return
 	}
 	_ = clusterID // omitted from the histogram labels to keep cardinality bounded
-	clusterRegistrationDuration.WithLabelValues(MetricValues(outcome, strconv.FormatBool(baseline))...).Observe(seconds)
+	clusterRegistrationDuration.WithLabelValues(MetricValues(registrationOutcomeLabel(outcome), strconv.FormatBool(baseline))...).Observe(seconds)
 }

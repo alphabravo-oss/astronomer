@@ -1,0 +1,276 @@
+{
+  "observed_at": "2026-10-10T00:53:42.336431+00:00",
+  "scope": "Four authorized identical failed-browser artifact pairs. Every path, SHA, ownership and permission preserved; duplicate physical inodes replaced with hard links. No source or package mutation.",
+  "input_sha256": "0a6fd5b6cf92a29617eb37e5300a2557f9439fcae0714726dfebb5e2353d9b3e",
+  "source_before": {
+    "commit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+    "tracked_sha256": "f4a06e1f59f38a69aba31cf41c04c3e6e8a7ace4d6ac60cdf1f7da43eabdd3d0",
+    "status": ""
+  },
+  "source_after": {
+    "commit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+    "tracked_sha256": "f4a06e1f59f38a69aba31cf41c04c3e6e8a7ace4d6ac60cdf1f7da43eabdd3d0",
+    "status": ""
+  },
+  "pairs": [
+    {
+      "paths": [
+        "/root/.cache/astronomer-032/qualification/w12-frozen-1a87-live-chromium/browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/trace.zip",
+        "/root/.cache/astronomer-032/qualification/w12-frozen-1a87-live-chromium/browser/playwright-report/data/dd261545df7fe1050964d1c2bc16fccdfd744d83.zip"
+      ],
+      "before": [
+        {
+          "device": 2049,
+          "inode": 57676,
+          "bytes": 1382159,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589066042781137,
+          "ctime_ns": 1791589066042781137,
+          "links": 1,
+          "blocks": 2704,
+          "sha256": "338958bede270a2b250cd8d6911e1537c128b272198fbcdc306ef57966003a9d"
+        },
+        {
+          "device": 2049,
+          "inode": 55808,
+          "bytes": 1382159,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589092436979986,
+          "ctime_ns": 1791589092436979986,
+          "links": 1,
+          "blocks": 2704,
+          "sha256": "338958bede270a2b250cd8d6911e1537c128b272198fbcdc306ef57966003a9d"
+        }
+      ],
+      "after": [
+        {
+          "device": 2049,
+          "inode": 57676,
+          "bytes": 1382159,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589066042781137,
+          "ctime_ns": 1791593617510500716,
+          "links": 2,
+          "blocks": 2704,
+          "sha256": "338958bede270a2b250cd8d6911e1537c128b272198fbcdc306ef57966003a9d"
+        },
+        {
+          "device": 2049,
+          "inode": 57676,
+          "bytes": 1382159,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589066042781137,
+          "ctime_ns": 1791593617510500716,
+          "links": 2,
+          "blocks": 2704,
+          "sha256": "338958bede270a2b250cd8d6911e1537c128b272198fbcdc306ef57966003a9d"
+        }
+      ],
+      "open_references": [],
+      "all_paths_preserved": true
+    },
+    {
+      "paths": [
+        "/root/.cache/astronomer-032/qualification/w12-frozen-949c-live-chromium/browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/trace.zip",
+        "/root/.cache/astronomer-032/qualification/w12-frozen-949c-live-chromium/browser/playwright-report/data/a7757edf83c660d9327af6737cf51c9b2c27bf85.zip"
+      ],
+      "before": [
+        {
+          "device": 2049,
+          "inode": 180531,
+          "bytes": 190497012,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590342594473406,
+          "ctime_ns": 1791590342594473406,
+          "links": 1,
+          "blocks": 372080,
+          "sha256": "64fd0b4c4f7c64df221d39f4e9944834bd45b4eb2b1f8e21e374d932e5416df0"
+        },
+        {
+          "device": 2049,
+          "inode": 56210,
+          "bytes": 190497012,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590354856567949,
+          "ctime_ns": 1791590354856567949,
+          "links": 1,
+          "blocks": 372080,
+          "sha256": "64fd0b4c4f7c64df221d39f4e9944834bd45b4eb2b1f8e21e374d932e5416df0"
+        }
+      ],
+      "after": [
+        {
+          "device": 2049,
+          "inode": 180531,
+          "bytes": 190497012,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590342594473406,
+          "ctime_ns": 1791593619354514734,
+          "links": 2,
+          "blocks": 372080,
+          "sha256": "64fd0b4c4f7c64df221d39f4e9944834bd45b4eb2b1f8e21e374d932e5416df0"
+        },
+        {
+          "device": 2049,
+          "inode": 180531,
+          "bytes": 190497012,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590342594473406,
+          "ctime_ns": 1791593619354514734,
+          "links": 2,
+          "blocks": 372080,
+          "sha256": "64fd0b4c4f7c64df221d39f4e9944834bd45b4eb2b1f8e21e374d932e5416df0"
+        }
+      ],
+      "open_references": [],
+      "all_paths_preserved": true
+    },
+    {
+      "paths": [
+        "/root/.cache/astronomer-032/qualification/w12-frozen-949c-live-chromium/browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/video.webm",
+        "/root/.cache/astronomer-032/qualification/w12-frozen-949c-live-chromium/browser/playwright-report/data/b671c80a430dbda3a6c5938b6a9458e029430634.webm"
+      ],
+      "before": [
+        {
+          "device": 2049,
+          "inode": 180470,
+          "bytes": 3695025,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590329893375479,
+          "ctime_ns": 1791590329893375479,
+          "links": 1,
+          "blocks": 7224,
+          "sha256": "065a4d5944535446fc99d29ea7b93ef02cceb4308158f9713bdc5761ca336fff"
+        },
+        {
+          "device": 2049,
+          "inode": 56208,
+          "bytes": 3695025,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590354612566068,
+          "ctime_ns": 1791590354612566068,
+          "links": 1,
+          "blocks": 7224,
+          "sha256": "065a4d5944535446fc99d29ea7b93ef02cceb4308158f9713bdc5761ca336fff"
+        }
+      ],
+      "after": [
+        {
+          "device": 2049,
+          "inode": 180470,
+          "bytes": 3695025,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590329893375479,
+          "ctime_ns": 1791593620079520245,
+          "links": 2,
+          "blocks": 7224,
+          "sha256": "065a4d5944535446fc99d29ea7b93ef02cceb4308158f9713bdc5761ca336fff"
+        },
+        {
+          "device": 2049,
+          "inode": 180470,
+          "bytes": 3695025,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791590329893375479,
+          "ctime_ns": 1791593620079520245,
+          "links": 2,
+          "blocks": 7224,
+          "sha256": "065a4d5944535446fc99d29ea7b93ef02cceb4308158f9713bdc5761ca336fff"
+        }
+      ],
+      "open_references": [],
+      "all_paths_preserved": true
+    },
+    {
+      "paths": [
+        "/root/.cache/astronomer-032/qualification/w12-frozen-e141-live-chromium/browser/test-results/enterprise-journeys.live-t-cfa14--and-deletes-its-scoped-pod-live/trace.zip",
+        "/root/.cache/astronomer-032/qualification/w12-frozen-e141-live-chromium/browser/playwright-report/data/879a75277ffcaa1e9f1915268f42ce30b35230b6.zip"
+      ],
+      "before": [
+        {
+          "device": 2049,
+          "inode": 145622,
+          "bytes": 4645062,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589734986820857,
+          "ctime_ns": 1791589734986820857,
+          "links": 1,
+          "blocks": 9080,
+          "sha256": "19c01a258c54120c5f9eb7ae996a620d0697cb4d85248f16815b7b40a8aec12b"
+        },
+        {
+          "device": 2049,
+          "inode": 56015,
+          "bytes": 4645062,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589750536938009,
+          "ctime_ns": 1791589750536938009,
+          "links": 1,
+          "blocks": 9080,
+          "sha256": "19c01a258c54120c5f9eb7ae996a620d0697cb4d85248f16815b7b40a8aec12b"
+        }
+      ],
+      "after": [
+        {
+          "device": 2049,
+          "inode": 145622,
+          "bytes": 4645062,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589734986820857,
+          "ctime_ns": 1791593620288521834,
+          "links": 2,
+          "blocks": 9080,
+          "sha256": "19c01a258c54120c5f9eb7ae996a620d0697cb4d85248f16815b7b40a8aec12b"
+        },
+        {
+          "device": 2049,
+          "inode": 145622,
+          "bytes": 4645062,
+          "mode": 384,
+          "uid": 0,
+          "gid": 0,
+          "mtime_ns": 1791589734986820857,
+          "ctime_ns": 1791593620288521834,
+          "links": 2,
+          "blocks": 9080,
+          "sha256": "19c01a258c54120c5f9eb7ae996a620d0697cb4d85248f16815b7b40a8aec12b"
+        }
+      ],
+      "open_references": [],
+      "all_paths_preserved": true
+    }
+  ],
+  "logical_duplicate_bytes": 200219258,
+  "released_allocated_blocks_bytes": 200237056,
+  "metadata_note": "Hard links share keeper inode metadata. Original per-path mtime/ctime recorded here; logical paths and bytes remain retained."
+}

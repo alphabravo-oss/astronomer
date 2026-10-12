@@ -199,14 +199,18 @@ export async function getChartDefaultValues(
   };
 }
 
-export async function previewCatalogApplication(input: {
-  clusterId: string;
-  chartVersionId: string;
-  namespace: string;
-  valuesOverride: string;
-  operation: "install" | "upgrade";
-}): Promise<OpenAPIComponents["schemas"]["CatalogInstallationPreview"]> {
+export async function previewCatalogApplication(
+  input: {
+    clusterId: string;
+    chartVersionId: string;
+    namespace: string;
+    valuesOverride: string;
+    operation: "install" | "upgrade";
+  },
+  signal?: AbortSignal,
+): Promise<OpenAPIComponents["schemas"]["CatalogInstallationPreview"]> {
   const wire = await generated.postCatalogApplicationsPreview({
+    signal,
     body: {
       cluster_id: input.clusterId,
       chart_version_id: input.chartVersionId,

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -78,7 +76,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		VeleroName string `json:"velero_name,omitempty"`
 		Namespace  string `json:"velero_namespace,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -125,6 +123,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		remoteErr error
 		replay    bool
 	}
+	metric := captureClusterSnapshotMetric(r.Context(), h.queries, clusterID)
 	result, err := executeMutation(r, h.runTx,
 		func(q ClusterSnapshotMutationTx) (createSnapshotResult, error) {
 			existingID, replay, err := claimResourceOperation(r.Context(), q, "cluster_snapshots")
@@ -178,7 +177,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		return
 	}
 	row := result.row
-	clusterSnapshotsCreatedInFlight.WithLabelValues(observability.MetricValues(clusterID.String())...).Inc()
+	metric.Created(r.Context())
 	h.publishSnapshotChanged(clusterID, row.ID, "snapshot")
 	out := snapshotToResponse(row)
 	if result.remoteErr != nil {

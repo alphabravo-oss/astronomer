@@ -5,7 +5,7 @@
   "required": ["schema_version", "release_version", "release_manifest_sha256", "result", "generated_at", "entries", "waivers_sha256", "license_policy_sha256"],
   "properties": {
     "schema_version": {"const": 1},
-    "release_version": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "release_version": {"type": "string", "pattern": "^v[1-9][0-9]*\\.[0-9]+\\.[0-9]+$"},
     "release_manifest_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
     "result": {"const": "passed"},
     "generated_at": {"type": "string", "format": "date-time"},

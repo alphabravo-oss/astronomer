@@ -54,14 +54,14 @@ function ClusterServiceMeshPage() {
   const { data: cluster, isLoading: clusterLoading } = clusterQuery;
   const { data: detection, isLoading: detLoading } = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId),
-    queryFn: () => getServiceMeshDetection(clusterId),
+    queryFn: ({ signal }) => getServiceMeshDetection(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: liveFallback(60_000),
     refetchIntervalInBackground: false,
   });
   const { data: inventory, isLoading: inventoryLoading } = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId),
-    queryFn: () => getServiceMeshInventory(clusterId),
+    queryFn: ({ signal }) => getServiceMeshInventory(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: liveFallback(60_000),
     refetchIntervalInBackground: false,

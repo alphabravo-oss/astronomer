@@ -37,23 +37,34 @@ export async function getNamedResources<T>(
 
 // Storage
 
-export async function getPersistentVolumes(clusterId: string) {
+export async function getPersistentVolumes(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
   const res = await api.get<APIResponse<import("@/types").PersistentVolume[]>>(
     `/clusters/${clusterId}/resources/persistentvolumes`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getPersistentVolumeClaims(clusterId: string) {
+export async function getPersistentVolumeClaims(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
   const res = await api.get<
     APIResponse<import("@/types").PersistentVolumeClaim[]>
-  >(`/clusters/${clusterId}/resources/persistentvolumeclaims`);
+  >(`/clusters/${clusterId}/resources/persistentvolumeclaims`, { signal });
   return res.data.data;
 }
 
-export async function getStorageClasses(clusterId: string) {
+export async function getStorageClasses(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
   const res = await api.get<APIResponse<import("@/types").StorageClass[]>>(
     `/clusters/${clusterId}/resources/storageclasses`,
+    { signal },
   );
   return res.data.data;
 }
@@ -86,9 +97,10 @@ export async function deletePersistentVolume(clusterId: string, name: string) {
 
 // Core networking
 
-export async function getServices(clusterId: string) {
+export async function getServices(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").K8sService[]>>(
     `/clusters/${clusterId}/resources/services`,
+    { signal },
   );
   return res.data.data;
 }
@@ -114,9 +126,10 @@ export async function deleteService(
   );
 }
 
-export async function getIngresses(clusterId: string) {
+export async function getIngresses(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").Ingress[]>>(
     `/clusters/${clusterId}/resources/ingresses`,
+    { signal },
   );
   return res.data.data;
 }
@@ -142,9 +155,13 @@ export async function deleteIngress(
   );
 }
 
-export async function getNetworkPolicies(clusterId: string) {
+export async function getNetworkPolicies(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
   const res = await api.get<APIResponse<import("@/types").NetworkPolicy[]>>(
     `/clusters/${clusterId}/resources/networkpolicies`,
+    { signal },
   );
   return res.data.data;
 }
@@ -173,58 +190,72 @@ export async function deleteNetworkPolicy(
 // Gateway API list endpoints return UI-ready rows from the structured backend
 // resource handlers. Mutation callers use the generic K8s proxy helpers.
 
-export async function getGateways(clusterId: string) {
+export async function getGateways(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").Gateway[]>>(
     `/clusters/${clusterId}/resources/gateways`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getHTTPRoutes(clusterId: string) {
+export async function getHTTPRoutes(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").HTTPRoute[]>>(
     `/clusters/${clusterId}/resources/httproutes`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getGatewayClasses(clusterId: string) {
+export async function getGatewayClasses(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
   const res = await api.get<APIResponse<import("@/types").GatewayClass[]>>(
     `/clusters/${clusterId}/resources/gatewayclasses`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getGRPCRoutes(clusterId: string) {
+export async function getGRPCRoutes(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").GRPCRoute[]>>(
     `/clusters/${clusterId}/resources/grpcroutes`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getTLSRoutes(clusterId: string) {
+export async function getTLSRoutes(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").TLSRoute[]>>(
     `/clusters/${clusterId}/resources/tlsroutes`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getTCPRoutes(clusterId: string) {
+export async function getTCPRoutes(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").TCPRoute[]>>(
     `/clusters/${clusterId}/resources/tcproutes`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getUDPRoutes(clusterId: string) {
+export async function getUDPRoutes(clusterId: string, signal?: AbortSignal) {
   const res = await api.get<APIResponse<import("@/types").UDPRoute[]>>(
     `/clusters/${clusterId}/resources/udproutes`,
+    { signal },
   );
   return res.data.data;
 }
 
-export async function getReferenceGrants(clusterId: string) {
+export async function getReferenceGrants(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
   const res = await api.get<APIResponse<import("@/types").ReferenceGrant[]>>(
     `/clusters/${clusterId}/resources/referencegrants`,
+    { signal },
   );
   return res.data.data;
 }

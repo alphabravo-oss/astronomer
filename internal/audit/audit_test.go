@@ -5,12 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 type fakeWriter struct {
@@ -168,5 +173,64 @@ func TestRecordIncludesBeforeAfterAndTags(t *testing.T) {
 	tags := detail["tags"].(map[string]any)
 	if tags["scope"] != "global" {
 		t.Fatalf("tags.scope = %v, want global", tags["scope"])
+	}
+}
+
+type invalidEnvelopeBus struct{ calls int }
+
+func (b *invalidEnvelopeBus) Publish(string, any) { b.calls++ }
+
+func TestRecordInvalidEnvelopeReportsFailureWithoutDBOrBus(t *testing.T) {
+	var log bytes.Buffer
+	previousLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&log, nil)))
+	defer slog.SetDefault(previousLog)
+	busPublisherMu.RLock()
+	previousBus := busPublisher
+	busPublisherMu.RUnlock()
+	bus := &invalidEnvelopeBus{}
+	SetBusPublisher(bus)
+	defer SetBusPublisher(previousBus)
+	writer := &fakeWriter{}
+	event := Event{Action: "cluster.update", ResourceType: "cluster", ResourceID: "private-fixture", Detail: map[string]any{"value": make(chan string)}}
+	counter := auditWriteFailuresTotal.WithLabelValues(observability.MetricValues("sync")...)
+	before := testutil.ToFloat64(counter)
+	Record(t.Context(), writer, event)
+	if err := RecordMandatory(t.Context(), writer, event); !errors.Is(err, ErrMandatoryPersistenceUnavailable) {
+		t.Fatalf("mandatory path did not reject invalid envelope: %v", err)
+	}
+	if writer.last != nil || bus.calls != 0 {
+		t.Fatalf("invalid envelope reached database/bus: db=%t bus=%d", writer.last != nil, bus.calls)
+	}
+	if testutil.ToFloat64(counter) != before+2 {
+		t.Fatal("marshal failures missing from existing persistence failure metric")
+	}
+	if strings.Contains(log.String(), "private-fixture") || !strings.Contains(log.String(), "invalid_json") {
+		t.Fatal("diagnostic must contain category and no event content")
+	}
+}
+
+func TestRecordOversizedDetailRejectedBeforeDBOrBus(t *testing.T) {
+	previousLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer slog.SetDefault(previousLog)
+	writer := &fakeWriter{}
+	busPublisherMu.RLock()
+	previous := busPublisher
+	busPublisherMu.RUnlock()
+	bus := &invalidEnvelopeBus{}
+	SetBusPublisher(bus)
+	defer SetBusPublisher(previous)
+	event := Event{Action: "cluster.update", ResourceType: "cluster", ResourceID: "synthetic-size", Detail: map[string]any{"value": strings.Repeat("x", jsoncontract.MaxDocumentBytes)}}
+	Record(t.Context(), writer, event)
+	if err := RecordMandatory(t.Context(), writer, event); !errors.Is(err, ErrMandatoryPersistenceUnavailable) {
+		t.Errorf("oversized mandatory detail accepted: %v", err)
+	}
+	q := &outboxCapture{}
+	if _, err := RecordOutbox(t.Context(), q, event, "synthetic-size", OutboxOptions{}); !errors.Is(err, ErrInvalidOutbox) {
+		t.Errorf("oversized outbox detail accepted: %v", err)
+	}
+	if writer.last != nil || bus.calls != 0 || q.arg.Action != "" {
+		t.Errorf("oversized detail reached database/bus: db=%t bus=%d outbox=%t", writer.last != nil, bus.calls, q.arg.Action != "")
 	}
 }

@@ -29,8 +29,19 @@ spec:
     privateKeySecretRef:
       name: {{ printf "%s-acme-account" (include "astronomer.tls.issuerName" .) | quote }}
     solvers:
+      {{- if .Values.tls.letsEncrypt.cloudflare.apiTokenSecretName }}
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: {{ .Values.tls.letsEncrypt.cloudflare.apiTokenSecretName | quote }}
+              key: {{ .Values.tls.letsEncrypt.cloudflare.apiTokenSecretKey | quote }}
+      {{- else }}
+      {{- if .Values.toolUI.domain }}
+      {{- fail "toolUI.domain requires DNS-01 for Let's Encrypt: set tls.letsEncrypt.cloudflare.apiTokenSecretName or supply a wildcard certificate with tls.source=secret" }}
+      {{- end }}
       - http01:
           ingress:
             class: {{ include "astronomer.tls.solverIngressClass" . | quote }}
+      {{- end }}
   {{- end }}
 {{- end }}

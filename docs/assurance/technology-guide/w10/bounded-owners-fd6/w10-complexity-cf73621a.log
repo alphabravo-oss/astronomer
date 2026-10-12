@@ -1,0 +1,2 @@
+complexity budget failed (1 finding(s)):
+- internal/tunnel/server.go:HandleWebSocket: 326 lines is below stale ceiling 327; lower the ratchet baseline

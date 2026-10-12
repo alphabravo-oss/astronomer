@@ -5,6 +5,7 @@ vi.mock("@/lib/api/transport", () => ({ default: { request } }));
 
 import {
   executeOpenAPIOperationWithResponse,
+  getAuditExportsByIdDownload,
   getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy,
   getClustersById,
   postClusters,
@@ -13,7 +14,7 @@ import {
 describe("generated OpenAPI client", () => {
   beforeEach(() => {
     request.mockReset();
-    request.mockResolvedValue({ data: { data: { id: "cluster-1" } } });
+    request.mockResolvedValue({ status: 200, data: { data: { id: "cluster-1", status: "active", registration_phase: "ready" } } });
   });
 
   it("owns URL expansion, query/header parameters, cancellation, and raw wire mode", async () => {
@@ -37,6 +38,7 @@ describe("generated OpenAPI client", () => {
 
   it("sends the OpenAPI request body without casing transforms", async () => {
     const body = { name: "west-prod", display_name: "West production" };
+    request.mockResolvedValue({ status: 201, data: { data: { id: "cluster-1", status: "active", registration_phase: "ready" } } });
     await postClusters({ body });
 
     expect(request).toHaveBeenCalledWith(
@@ -49,7 +51,7 @@ describe("generated OpenAPI client", () => {
     );
   });
 
-  it("treats format: binary proxy schemas as blobs regardless of media wildcard", async () => {
+  it("reads console tool links as HTML launch documents", async () => {
     await getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy({
       path: {
         cluster_id: "cluster-1",
@@ -62,6 +64,18 @@ describe("generated OpenAPI client", () => {
       expect.objectContaining({
         method: "GET",
         url: "/api/v1/clusters/cluster-1/proxy/service/monitoring/grafana%3A3000/*",
+        responseType: "text",
+      }),
+    );
+  });
+
+  it("reads binary downloads as blobs even with a text media type", async () => {
+    await getAuditExportsByIdDownload({ path: { id: "export-1" } });
+
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        url: "/api/v1/audit/exports/export-1/download",
         responseType: "blob",
       }),
     );

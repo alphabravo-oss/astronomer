@@ -146,15 +146,20 @@ export function mapProjectEffectiveQuota(
   };
 }
 
-export async function listQuotaPlans(): Promise<QuotaPlanView[]> {
-  const page = await getAdminQuotaPlans({ query: { limit: 200 } });
+export async function listQuotaPlans(
+  signal?: AbortSignal,
+): Promise<QuotaPlanView[]> {
+  const page = await getAdminQuotaPlans({ signal, query: { limit: 200 } });
   return page.data.map(mapQuotaPlan);
 }
 
-export async function getQuotaPlan(name: string): Promise<QuotaPlanView> {
+export async function getQuotaPlan(
+  name: string,
+  signal?: AbortSignal,
+): Promise<QuotaPlanView> {
   return mapQuotaPlan(
     requireData(
-      await getAdminQuotaPlansByName({ path: { name } }),
+      await getAdminQuotaPlansByName({ signal, path: { name } }),
       "getQuotaPlan",
     ),
   );
@@ -182,23 +187,26 @@ export async function deleteQuotaPlan(name: string): Promise<void> {
   await deleteAdminQuotaPlansByName({ path: { name } });
 }
 
-export async function getQuotaUsage(): Promise<QuotaUsageSummary> {
+export async function getQuotaUsage(
+  signal?: AbortSignal,
+): Promise<QuotaUsageSummary> {
   return mapQuotaUsage(
-    requireData(await getAdminQuotaUsage(), "getQuotaUsage"),
+    requireData(await getAdminQuotaUsage({ signal }), "getQuotaUsage"),
   );
 }
 
 export async function getProjectEffectiveQuota(
   projectId: string,
+  signal?: AbortSignal,
 ): Promise<ProjectEffectiveQuotaView> {
   return mapProjectEffectiveQuota(
     requireData(
-      await getProjectsByIdQuota({ path: { id: projectId } }),
+      await getProjectsByIdQuota({ signal, path: { id: projectId } }),
       "getProjectEffectiveQuota",
     ),
   );
 }
 
-export async function getMyQuota() {
-  return requireData(await getAuthMeQuota(), "getMyQuota");
+export async function getMyQuota(signal?: AbortSignal) {
+  return requireData(await getAuthMeQuota({ signal }), "getMyQuota");
 }

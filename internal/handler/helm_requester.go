@@ -173,6 +173,7 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 // ResponseHeaderTimeout is generous for the same reason: the sibling may not
 // flush headers until the agent's first response frame arrives.
 var internalHelmForwardClient = &http.Client{
+	CheckRedirect: tunnel.RejectPeerRedirect,
 	Transport: &http.Transport{
 		MaxIdleConns:          16,
 		IdleConnTimeout:       60 * time.Second,

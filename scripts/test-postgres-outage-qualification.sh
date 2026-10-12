@@ -3,7 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-. scripts/lib/docker-test-endpoint.sh
+. scripts/lib/qualification-runtime.sh
 
 for tool in docker go openssl; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
@@ -25,15 +25,10 @@ trap cleanup EXIT
 # it needs an explicit host port. Retry a narrow randomized allocation instead
 # of weakening the test by rebuilding the pool against a new endpoint.
 postgres_port=""
-for attempt in $(seq 1 20); do
+for _ in $(seq 1 20); do
   port_seed="$(openssl rand -hex 2)"
   candidate_port=$((20000 + 16#$port_seed % 40000))
-  if docker run -d --name "$postgres_container" \
-    --label astronomer.qualification=postgres-outage \
-    -e POSTGRES_USER=postgres_outage \
-    -e POSTGRES_PASSWORD="$credential" \
-    -e POSTGRES_DB=postgres_outage \
-    -p "${DOCKER_TEST_BIND_HOST}:${candidate_port}:5432" pgvector/pgvector:pg16 >/dev/null 2>&1; then
+  if qualification_postgres_run "$postgres_container" postgres_outage "$credential" postgres_outage "$candidate_port" postgres-outage 2>/dev/null; then
     postgres_port="$candidate_port"
     break
   fi
@@ -44,16 +39,7 @@ if [[ -z "$postgres_port" ]]; then
   exit 1
 fi
 
-for attempt in $(seq 1 60); do
-  if docker exec "$postgres_container" pg_isready -U postgres_outage -d postgres_outage >/dev/null 2>&1; then
-    break
-  fi
-  if [[ "$attempt" == 60 ]]; then
-    docker logs "$postgres_container" >&2 || true
-    exit 1
-  fi
-  sleep 0.5
-done
+qualification_postgres_ready "$postgres_container" postgres_outage postgres_outage
 
 export ASTRONOMER_POSTGRES_OUTAGE_DATABASE_URL="postgres://postgres_outage:${credential}@${DOCKER_TEST_CONNECT_HOST}:${postgres_port}/postgres_outage?sslmode=disable"
 export ASTRONOMER_POSTGRES_OUTAGE_CONTAINER="$postgres_container"
@@ -66,5 +52,5 @@ race_args=()
 if [[ "${POSTGRES_OUTAGE_QUALIFICATION_RACE:-0}" == "1" ]]; then
   race_args=(-race)
 fi
-go test "${race_args[@]}" ./internal/server \
-  -run '^TestPostgresOutageQualification$' -count=1 -timeout=3m -v
+python3 scripts/qualification-go.py --name postgres-outage --expected TestPostgresOutageQualification -- \
+  "${race_args[@]}" -p=1 -count=1 -timeout=3m -run '^TestPostgresOutageQualification$' ./internal/server

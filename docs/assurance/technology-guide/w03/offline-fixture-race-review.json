@@ -1,0 +1,28 @@
+{
+  "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 go test -race ./internal/delivery/distribution ./deploy/bundles/cmd/distribution -count=1",
+  "frozen_source": "fa5d8f6c production unchanged; only the two bound test fixture files differ",
+  "live_disconnected_qualified": false,
+  "output": "ok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/distribution\t2.804s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t5.229s\n",
+  "package_done": false,
+  "production_vendor_publication_qualified": false,
+  "resolution": "All fixture map/counter reads and mutations synchronize through locked helpers; copied key/blob snapshots release locks before signer/network/verifier calls. Proxy counters and rejected-destination counters atomic. No tests quarantined or retried by policy.",
+  "result": "PASS",
+  "root_baseline_failure": {
+    "diagnostic": "DATA RACE in actual selected Cosign registry fixture; handler writes overlap direct test map reads",
+    "exit_code": 1,
+    "origin": "independent root immutable-source reproduction",
+    "qualification": "initial handler-only mutex was incomplete",
+    "result": "FAIL",
+    "retained_log": "offline-fixture-race-baseline.log",
+    "sha256": "104f3b305aa6baf52599e18bf8aa0098e2aeb22f8fdd34b890c5c80de055db6a",
+    "source_commit": "fa5d8f6c"
+  },
+  "schema_version": 1,
+  "slice": "owned-registry-fixture-race-review",
+  "source_base_commit": "fa5d8f6c",
+  "source_sha256": {
+    "deploy/bundles/cmd/distribution/publication_test.go": "4e640b4f96ade7f56982fdfc9650f808ce93c92d6695a112dc326086b18086cc",
+    "internal/delivery/distribution/verified_registry_test.go": "6eda90777d37f6c536dd4f3ddcad1b537308237f3f6ec67bf75713191df0ff88"
+  },
+  "work_package": "W03"
+}

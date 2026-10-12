@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -151,7 +150,7 @@ type createNativeRuleRequest struct {
 // Create authors a native rule. POST /native-rbac-rules/
 func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createNativeRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
 		return
 	}
@@ -240,6 +239,10 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // List returns rules, optionally filtered by ?userId=. GET /native-rbac-rules/
 func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if uid := strings.TrimSpace(r.URL.Query().Get("userId")); uid != "" {
 		userID, err := uuid.Parse(uid)
 		if err != nil {
@@ -248,7 +251,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		limit, offset := queryLimitOffset(r, 20)
 		rows, err := h.queries.ListNativeRBACRulesByUserPage(r.Context(), sqlc.ListNativeRBACRulesByUserPageParams{
-			UserID: userID, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			UserID: userID, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 		})
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")
@@ -263,7 +266,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 		paging.Write(w, items, paging.Exact(total, limit, offset, len(items)))
 		return
 	}
-	limit, offset := int32(queryLimitMax(r, 100, 500)), int32(queryOffset(r))
+	limit, offset := queryLimitMax32(r, 100, 500), queryOffset32(r)
 	rows, err := h.queries.ListNativeRBACRules(r.Context(), sqlc.ListNativeRBACRulesParams{Limit: limit, Offset: offset})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")

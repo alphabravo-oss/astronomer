@@ -1,0 +1,14 @@
+F.........
+======================================================================
+FAIL: test_boolean_is_not_schema_version (__main__.JSONGovernanceTests.test_boolean_is_not_schema_version)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/astronomer-all/astronomer-032-w09/scripts/check-json-governance-test.py", line 20, in test_boolean_is_not_schema_version
+    with self.assertRaisesRegex(ValueError,"schema_version"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.001s
+
+FAILED (failures=1)

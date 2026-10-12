@@ -87,13 +87,21 @@ export function toInhibitionWriteRequest(
   };
 }
 
-export async function listInhibitions(): Promise<AlertInhibition[]> {
-  const response = await getAdminAlertingInhibitions();
+export async function listInhibitions(
+  signal?: AbortSignal,
+): Promise<AlertInhibition[]> {
+  const response = await getAdminAlertingInhibitions({ signal });
   return response.data.map(mapInhibition);
 }
 
-export async function getInhibition(id: string): Promise<AlertInhibition> {
-  const response = await getAdminAlertingInhibitionsById({ path: { id } });
+export async function getInhibition(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AlertInhibition> {
+  const response = await getAdminAlertingInhibitionsById({
+    signal,
+    path: { id },
+  });
   return mapInhibition(response.data);
 }
 

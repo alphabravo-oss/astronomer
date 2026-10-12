@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "source_commit": "d4274b07edf5623c15546591751d641322116dac",
+  "observed_at": "2026-10-09T20:18:16.715911+00:00",
+  "database": "owned plan032_integration in CNPG17.11 three-instance synchronous cluster",
+  "cluster": "astro032-cnpg36-20261009",
+  "namespace": "plan032-recovery",
+  "cases": [
+    {
+      "name": "build",
+      "exit_code": 0,
+      "seconds": 0.953,
+      "log_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "migrate",
+      "exit_code": 0,
+      "seconds": 2.001,
+      "log_digest": "sha256:b710b77dc3ed0f99acc92d5ee5d89ac91dd474ed2448f9875bc31c4fa04f9e39"
+    },
+    {
+      "name": "tests",
+      "exit_code": 1,
+      "seconds": 84.222,
+      "log_digest": "sha256:e1e5627726ce4b11606559cd6817930e62e4b66e7cbd855a04af01bfbcc28193"
+    }
+  ],
+  "expected_tests": [
+    "TestCatalogSearchFiltersScopeBeforePaginationAndCounts",
+    "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders",
+    "TestCatalogOperationStatusReadsExactRolloutAndDeletion",
+    "TestClusterRestoreHistoryFiltersSourceBeforePagination",
+    "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted",
+    "TestUpsertCharlieAlertPolicyRevisionSemantics",
+    "TestCharlieAlertReconcileCandidatesRequireFindingScope",
+    "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings",
+    "TestAdminVisibilityQueriesAgainstMigratedPostgres",
+    "TestProvisionerPostgresMultiSourceAssets",
+    "TestPostgresPlanningTransactionAndHAFencing",
+    "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses",
+    "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease",
+    "TestRecordAgentHeartbeatAtomicWrite",
+    "TestDeactivateInactiveUsersPostgresSemantics",
+    "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily",
+    "TestTableViewsPostgresConcurrentCreatesRespectTheCap",
+    "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner",
+    "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault"
+  ],
+  "terminal": {
+    "TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch": "pass",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings": "fail",
+    "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders": "fail",
+    "TestCatalogSearchFiltersScopeBeforePaginationAndCounts": "fail",
+    "TestUpsertCharlieAlertPolicyRevisionSemantics": "fail",
+    "TestCharlieAlertReconcileCandidatesRequireFindingScope": "fail",
+    "TestClusterRestoreHistoryFiltersSourceBeforePagination": "fail",
+    "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore": "fail",
+    "TestRecordAgentHeartbeatAtomicWrite": "fail",
+    "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted": "fail",
+    "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily": "fail",
+    "TestDeactivateInactiveUsersPostgresSemantics": "fail",
+    "TestAdminVisibilityQueriesAgainstMigratedPostgres": "fail",
+    "TestProvisionerPostgresMultiSourceAssets": "fail",
+    "TestPostgresPlanningTransactionAndHAFencing": "fail",
+    "TestCatalogOperationStatusReadsExactRolloutAndDeletion": "fail",
+    "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses": "fail",
+    "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease": "fail",
+    "TestTableViewsPostgresConcurrentCreatesRespectTheCap": "fail",
+    "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner": "fail",
+    "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault": "fail"
+  },
+  "missing": [],
+  "not_passed": [
+    "TestAdminVisibilityQueriesAgainstMigratedPostgres",
+    "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders",
+    "TestCatalogOperationStatusReadsExactRolloutAndDeletion",
+    "TestCatalogSearchFiltersScopeBeforePaginationAndCounts",
+    "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses",
+    "TestCharlieAlertReconcileCandidatesRequireFindingScope",
+    "TestClusterRestoreHistoryFiltersSourceBeforePagination",
+    "TestDeactivateInactiveUsersPostgresSemantics",
+    "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore",
+    "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease",
+    "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings",
+    "TestPostgresPlanningTransactionAndHAFencing",
+    "TestProvisionerPostgresMultiSourceAssets",
+    "TestRecordAgentHeartbeatAtomicWrite",
+    "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily",
+    "TestTableViewsPostgresConcurrentCreatesRespectTheCap",
+    "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault",
+    "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner",
+    "TestUpsertCharlieAlertPolicyRevisionSemantics"
+  ],
+  "limits": [
+    "Connected previous-major integration characterization only.",
+    "No PostgreSQL18 adoption, failover under application writes, physical restore, encryption recovery, signed application candidate or disconnected qualification claimed."
+  ]
+}

@@ -1,4 +1,5 @@
 import { toolQueryKeys } from "./query-keys-tools";
+import { catalogControllerWindowKey } from "./query-keys-catalog-controller";
 import type { EffectivePermissionParams } from "@/lib/api/rbac";
 import type { ResourceType } from "@/lib/api/resources";
 
@@ -141,6 +142,8 @@ export const queryKeys = {
         severity,
         pageIndex,
       ] as const,
+    imageDatabaseStatus: (id: string, reportId: string) =>
+      ["image-database-status-v1", id, reportId] as const,
     imageVulnHistory: (id: string, hours: number) =>
       ["clusters", id, "image-vulns", "history", hours] as const,
     imageVulnReportHistory: (id: string, reportId: string) =>
@@ -494,6 +497,10 @@ export const queryKeys = {
     queues: ["admin", "queues"] as const,
     dlq: (queue: string) => ["admin", "queues", queue, "dlq"] as const,
     outbox: (status: string) => ["admin", "task-outbox", status] as const,
+    dlqPage: (queue: string, page: number) =>
+      ["admin", "queues", queue, "dlq", page] as const,
+    outboxPage: (status: string, offset: number) =>
+      ["admin", "task-outbox", status, offset] as const,
   },
   // F-05 — superuser security diagnostics.
   adminSecurity: {
@@ -548,6 +555,7 @@ export const queryKeys = {
     detail: (id: string) => ["projects", "detail", id] as const,
   },
   catalog: {
+    controllerWindow: catalogControllerWindowKey,
     release: (id: string) => ["catalog", "release", id] as const,
     releaseValues: (id: string) =>
       ["catalog", "release", id, "values"] as const,

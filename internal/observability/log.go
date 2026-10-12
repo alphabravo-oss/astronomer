@@ -103,7 +103,7 @@ func WithLogIdentifiers(log *slog.Logger, ids LogIdentifiers) *slog.Logger {
 	return WithOperationID(log, ids.OperationID)
 }
 
-// ExtractLogIdentifiers pulls the common low-cardinality identifiers from a
+// ExtractLogIdentifiers pulls the common log correlation identifiers from a
 // worker payload. It intentionally ignores arbitrary user_id fields because
 // those are often operation targets, not the actor.
 func ExtractLogIdentifiers(payload []byte) LogIdentifiers {

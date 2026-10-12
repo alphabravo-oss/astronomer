@@ -1,0 +1,17 @@
+pinned/authority-policy.json: OK
+pinned/bridge-service.json: OK
+pinned/bridge.openapi.yaml: OK
+pinned/conformance/product-adapter-conformance-v1.json: OK
+pinned/credential-route-matrix.json: OK
+pinned/live-qualification-scenarios-v1.json: OK
+pinned/schemas/alert-delivery-v1.schema.json: OK
+pinned/schemas/capability-v1.schema.json: OK
+pinned/schemas/connector-capability-v1.schema.json: OK
+pinned/schemas/finding-v1.schema.json: OK
+pinned/schemas/kubernetes-visibility-v1.schema.json: OK
+pinned/schemas/live-isolation-observation-v1.schema.json: OK
+pinned/schemas/onboarding-v1.schema.json: OK
+pinned/schemas/product-adapter-conformance-v1.schema.json: OK
+pinned/schemas/product-adapter-result-v1.schema.json: OK
+WARNING: You are using an OpenAPI 3.1.x specification, which is not yet supported by oapi-codegen (https://github.com/oapi-codegen/oapi-codegen/issues/373) and so some functionality may not be available. Until oapi-codegen supports OpenAPI 3.1, it is recommended to downgrade your spec to 3.0.x
+Charlie pinned contract and generated client are current

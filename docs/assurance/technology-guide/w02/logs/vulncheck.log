@@ -1,0 +1,155 @@
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+=== Symbol Results ===
+
+Vulnerability #1: GO-2026-6617
+    HTTP/2 server crash due to HPACK encoder race in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6617
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.58.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Example traces found:
+      #1: internal/vault/client.go:45:31: vault.DefaultClientFactory calls api.DefaultConfig, which calls http2.ConfigureTransport
+      #2: internal/agent/k8sproxy.go:188:37: agent.NewK8sProxyWithConfig calls rest.TransportFor, which eventually calls http2.ConfigureTransports
+      #3: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.ConnectionError.Error
+      #4: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.ErrCode.String
+      #5: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameHeader.String
+      #6: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameType.String
+      #7: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrame
+      #8: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameForHeader
+      #9: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameHeader
+      #10: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteContinuation
+      #11: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteGoAway
+      #12: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteHeaders
+      #13: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WritePing
+      #14: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteRSTStream
+      #15: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettings
+      #16: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettingsAck
+      #17: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteWindowUpdate
+      #18: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.SettingID.String
+      #19: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.SettingsFrame.ForeachSetting
+      #20: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.StreamError.Error
+      #21: internal/catalog/oci.go:320:25: catalog.catalogContextTransport.RoundTrip calls http2.transportConfig.RoundTrip, which calls http2.Transport.RoundTrip
+      #22: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.connError.Error
+      #23: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.duplicatePseudoHeaderError.Error
+      #24: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldNameError.Error
+      #25: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldValueError.Error
+      #26: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.pseudoHeaderError.Error
+
+Vulnerability #2: GO-2026-6612
+    Double flow control refund on HTTP/2 server streams in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6612
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.58.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Example traces found:
+      #1: internal/vault/client.go:45:31: vault.DefaultClientFactory calls api.DefaultConfig, which calls http2.ConfigureTransport
+      #2: internal/agent/k8sproxy.go:188:37: agent.NewK8sProxyWithConfig calls rest.TransportFor, which eventually calls http2.ConfigureTransports
+      #3: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.ConnectionError.Error
+      #4: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.ErrCode.String
+      #5: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameHeader.String
+      #6: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameType.String
+      #7: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrame
+      #8: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameForHeader
+      #9: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameHeader
+      #10: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteContinuation
+      #11: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteGoAway
+      #12: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteHeaders
+      #13: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WritePing
+      #14: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteRSTStream
+      #15: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettings
+      #16: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettingsAck
+      #17: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteWindowUpdate
+      #18: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.SettingID.String
+      #19: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.SettingsFrame.ForeachSetting
+      #20: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.StreamError.Error
+      #21: internal/catalog/oci.go:320:25: catalog.catalogContextTransport.RoundTrip calls http2.transportConfig.RoundTrip, which calls http2.Transport.RoundTrip
+      #22: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.connError.Error
+      #23: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.duplicatePseudoHeaderError.Error
+      #24: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldNameError.Error
+      #25: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldValueError.Error
+      #26: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.pseudoHeaderError.Error
+
+Vulnerability #3: GO-2026-6611
+    Excessive CPU consumption from repeated initial window changes in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6611
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.58.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Example traces found:
+      #1: internal/vault/client.go:45:31: vault.DefaultClientFactory calls api.DefaultConfig, which calls http2.ConfigureTransport
+      #2: internal/agent/k8sproxy.go:188:37: agent.NewK8sProxyWithConfig calls rest.TransportFor, which eventually calls http2.ConfigureTransports
+      #3: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.ConnectionError.Error
+      #4: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.ErrCode.String
+      #5: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameHeader.String
+      #6: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameType.String
+      #7: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrame
+      #8: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameForHeader
+      #9: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameHeader
+      #10: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteContinuation
+      #11: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteGoAway
+      #12: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteHeaders
+      #13: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WritePing
+      #14: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteRSTStream
+      #15: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettings
+      #16: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettingsAck
+      #17: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteWindowUpdate
+      #18: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.SettingID.String
+      #19: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.SettingsFrame.ForeachSetting
+      #20: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.StreamError.Error
+      #21: internal/catalog/oci.go:320:25: catalog.catalogContextTransport.RoundTrip calls http2.transportConfig.RoundTrip, which calls http2.Transport.RoundTrip
+      #22: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.connError.Error
+      #23: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.duplicatePseudoHeaderError.Error
+      #24: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldNameError.Error
+      #25: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldValueError.Error
+      #26: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.pseudoHeaderError.Error
+
+Vulnerability #4: GO-2026-6610
+    HTTP/2 transport accepts malformed framing-related headers in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6610
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.58.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Example traces found:
+      #1: internal/catalog/oci.go:320:25: catalog.catalogContextTransport.RoundTrip calls http2.transportConfig.RoundTrip, which calls http2.Transport.RoundTrip
+
+Vulnerability #5: GO-2026-6603
+    HTTP/2 server memory exhaustion due to Trailer headers in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6603
+  Module: golang.org/x/net
+    Found in: golang.org/x/net@v0.58.0
+    Fixed in: golang.org/x/net@v0.60.0
+    Example traces found:
+      #1: internal/vault/client.go:45:31: vault.DefaultClientFactory calls api.DefaultConfig, which calls http2.ConfigureTransport
+      #2: internal/agent/k8sproxy.go:188:37: agent.NewK8sProxyWithConfig calls rest.TransportFor, which eventually calls http2.ConfigureTransports
+      #3: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.ConnectionError.Error
+      #4: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.ErrCode.String
+      #5: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameHeader.String
+      #6: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.FrameType.String
+      #7: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrame
+      #8: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameForHeader
+      #9: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.ReadFrameHeader
+      #10: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteContinuation
+      #11: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteGoAway
+      #12: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteHeaders
+      #13: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WritePing
+      #14: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteRSTStream
+      #15: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettings
+      #16: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteSettingsAck
+      #17: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.Framer.WriteWindowUpdate
+      #18: internal/envconfig/viper.go:42:20: envconfig.Lookup calls viper.Viper.GetString, which eventually calls http2.SettingID.String
+      #19: internal/worker/worker.go:589:15: worker.Worker.Shutdown calls sync.Once.Do, which eventually calls http2.SettingsFrame.ForeachSetting
+      #20: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.StreamError.Error
+      #21: internal/catalog/oci.go:320:25: catalog.catalogContextTransport.RoundTrip calls http2.transportConfig.RoundTrip, which calls http2.Transport.RoundTrip
+      #22: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.connError.Error
+      #23: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.duplicatePseudoHeaderError.Error
+      #24: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldNameError.Error
+      #25: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.headerFieldValueError.Error
+      #26: internal/handler/vault.go:892:26: handler.LiveVaultProbe.Test calls http2.pseudoHeaderError.Error
+
+Your code is affected by 5 vulnerabilities from 1 module.
+This scan also found 0 vulnerabilities in packages you import and 1
+vulnerability in modules you require, but your code doesn't appear to call these
+vulnerabilities.
+Use '-show verbose' for more details.
+exit status 3
+make: *** [Makefile:148: vulncheck] Error 1

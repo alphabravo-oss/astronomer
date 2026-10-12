@@ -74,7 +74,7 @@ export function ClusterDetailPage() {
   // navigate two clicks deep.
   const vulnerabilityQuery = useQuery({
     queryKey: queryKeys.clusterPages.vulnerabilitySummary(clusterId),
-    queryFn: () => getImageVulnSummary(clusterId),
+    queryFn: ({ signal }) => getImageVulnSummary(clusterId, signal),
     enabled: !!clusterId,
     // `image_scan.changed` refreshes this while the stream is open.
     refetchInterval: liveFallback(5 * 60 * 1000),
@@ -89,7 +89,7 @@ export function ClusterDetailPage() {
   // Missing mesh detection renders an unknown state.
   const { data: meshDetection } = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshHeader(clusterId),
-    queryFn: () => getServiceMeshDetection(clusterId),
+    queryFn: ({ signal }) => getServiceMeshDetection(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: liveFallback(5 * 60 * 1000),
     refetchIntervalInBackground: false,

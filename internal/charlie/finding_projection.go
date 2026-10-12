@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
@@ -139,17 +140,9 @@ func (p *FindingProjection) RunOnce(ctx context.Context) error {
 }
 
 func (p *FindingProjection) applyUpsert(ctx context.Context, connection sqlc.CharlieConnection, mode Mode, change contract.FindingChange) error {
-	if change.Summary == nil || string(change.Summary.FindingId) != string(change.FindingId) || change.Summary.RepeatCount < 1 {
-		return fmt.Errorf("Charlie finding projection summary is invalid")
-	}
-	summary := BridgeFindingSummary{
-		FindingID: string(change.Summary.FindingId), SessionID: string(change.Summary.SessionId), InvestigationID: string(change.Summary.InvestigationId),
-		DeduplicationKey: change.Summary.DeduplicationKey, RepeatCount: int32(change.Summary.RepeatCount), Severity: string(change.Summary.Severity),
-		Status: string(change.Summary.Status), WorkflowState: string(change.Summary.WorkflowState), BlockCode: string(change.Summary.BlockCode),
-		UpdatedAt: change.Summary.UpdatedAt.UTC(), ResourceDigest: change.Summary.ResourceDigest, RecommendedCapability: change.Summary.RecommendedCapability,
-	}
-	if !validBridgeFindingSummary(summary) || !isLowerHexDigest(summary.ResourceDigest) || !bridgeFindingCapabilityPattern.MatchString(summary.RecommendedCapability) {
-		return fmt.Errorf("Charlie finding projection summary is invalid")
+	summary, err := projectedFindingSummary(change)
+	if err != nil {
+		return err
 	}
 	queries := sqlc.New(p.pool)
 	session, err := queries.GetCharlieSessionByCentralID(ctx, summary.SessionID)
@@ -186,6 +179,22 @@ func (p *FindingProjection) applyUpsert(ctx context.Context, connection sqlc.Cha
 			BlockCode: summary.BlockCode, RepeatCount: durable.RepeatCount})
 	}
 	return nil
+}
+
+func projectedFindingSummary(change contract.FindingChange) (BridgeFindingSummary, error) {
+	if change.Summary == nil || string(change.Summary.FindingId) != string(change.FindingId) || change.Summary.RepeatCount < 1 || change.Summary.RepeatCount > math.MaxInt32 {
+		return BridgeFindingSummary{}, fmt.Errorf("Charlie finding projection summary is invalid")
+	}
+	summary := BridgeFindingSummary{
+		FindingID: string(change.Summary.FindingId), SessionID: string(change.Summary.SessionId), InvestigationID: string(change.Summary.InvestigationId),
+		DeduplicationKey: change.Summary.DeduplicationKey, RepeatCount: int32(change.Summary.RepeatCount), Severity: string(change.Summary.Severity),
+		Status: string(change.Summary.Status), WorkflowState: string(change.Summary.WorkflowState), BlockCode: string(change.Summary.BlockCode),
+		UpdatedAt: change.Summary.UpdatedAt.UTC(), ResourceDigest: change.Summary.ResourceDigest, RecommendedCapability: change.Summary.RecommendedCapability,
+	}
+	if !validBridgeFindingSummary(summary) || !isLowerHexDigest(summary.ResourceDigest) || !bridgeFindingCapabilityPattern.MatchString(summary.RecommendedCapability) {
+		return BridgeFindingSummary{}, fmt.Errorf("Charlie finding projection summary is invalid")
+	}
+	return summary, nil
 }
 
 func findingProjectionResourceEligible(resources []sqlc.CharlieSessionResource, digest string) (sqlc.CharlieSessionResource, bool) {

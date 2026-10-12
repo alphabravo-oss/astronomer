@@ -27,6 +27,55 @@ id = "generic-api-key"
   paths = ['''^docs/rancher-astronomer-comparison\.md$''']
   regexes = ['''^<!-- api-contract-evidence: operations=[0-9]+ mounted_routes=[0-9]+/[0-9]+ request_bindings=[0-9]+ provisional_request_shapes=[0-9]+ actionable_202=[0-9]+ async_202_exceptions=[0-9]+ -->$''']
 
+  [[rules.allowlists]]
+  description = "Retained go version-m metadata contains the verified public Go module checksum for cloud authentication SDK"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/assurance/technology-guide/w02/scanner-provenance/build-metadata\.txt$''']
+  regexes = ['''^\s*dep\tcloud\.google\.com/go/auth\tv0\.23\.2\th1:[A-Za-z0-9+/]{43}=\s*$''']
+
+  [[rules.allowlists]]
+  description = "Retained evidence source maps and scanner proofs contain SHA-256 digests, not credential values"
+  condition = "AND"
+  regexTarget = "match"
+  paths = ['''^(?:docs/assurance/technology-guide/|advisor-plans/032-evidence/).+\.(?:json|jsonl)$''']
+  regexes = ['''^(?:[\w.-]+\.(?:go|json|yaml|yml|sql|md|py|log|mjs|sh|ts)|token_sha256)": "[0-9a-f]{64}"$''']
+
+  [[rules.allowlists]]
+  description = "Structured test logs label generated UUIDs as repository/task/cluster/operation/backend IDs"
+  condition = "AND"
+  regexTarget = "match"
+  paths = ['''^docs/assurance/technology-guide/.+\.(?:json|jsonl|log)$''']
+  regexes = ['''^(?:secret repository_id|cloud_credential task_id|api_token (?:cluster|operation)_id|credential missing backend_id)=[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?: |\\n)$''']
+
+  [[rules.allowlists]]
+  description = "Retained Go build metadata records public module checksums"
+  condition = "AND"
+  regexTarget = "match"
+  paths = ['''^(?:docs/assurance/technology-guide/|advisor-plans/032-evidence/).+\.(?:txt|log|json)$''']
+  regexes = ['''^(?:api|apiextensions-apiserver|apimachinery|apiserver|auth|oauth2)\tv[0-9.]+\th1:[A-Za-z0-9+/]{43}=$''']
+
+  [[rules.allowlists]]
+  description = "The literal target-key regression case is a CLI argument, not a credential"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^(?:docs/assurance/technology-guide/.+\.(?:json|jsonl)|scripts/security_history_git_test\.py)$''']
+  regexes = ['''^api_--limit=7_--offset=2$''']
+
+  [[rules.allowlists]]
+  description = "Valkey version negative fixtures deliberately use invalid version suffixes"
+  condition = "AND"
+  regexTarget = "match"
+  paths = ['''^scripts/tests/(?:toolchain_test|gitleaks_release_review_test)\.py$''']
+  regexes = ['''^valkey-test-runtime", "(?:9\.1\.20-alpine|[0-9.]+-(?:alpine-malicious|malicious))"$''']
+
+  [[rules.allowlists]]
+  description = "Four reviewed security regression fixture SHA-256 digests verified against retained source blobs"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^scripts/testdata/security-source-policy/index\.json$''']
+  regexes = ['''^(?:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe|72edc473b0bfed55efec81fbe1fafe8a0145bf38f91e0db39c1bbb1eb71ea001|ad2814b556194043e28301b44ffedcdca0dd4612084de7b4da1a7c9228db4dde|f3c0d36f4691c8a980da66786b279da4262624b95584c9ec0298939f3deb5fa2)$''']
+
 [[rules]]
 id = "private-key"
 
@@ -36,3 +85,27 @@ id = "private-key"
   regexTarget = "match"
   paths = ['''^frontend/src/components/resources/__tests__/guided-resource-access-sections\.test\.tsx$''']
   regexes = ['''expect\(manifest\)\.toMatchObject''']
+
+[[rules]]
+id = "sourcegraph-access-token"
+
+  [[rules.allowlists]]
+  description = "W00 inventory contains a public Git commit identity, not an access token"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/assurance/technology-guide/components\.json$''']
+  regexes = ['''^\s*"sourceCommit": "[0-9a-f]{40}",?\s*$''']
+
+  [[rules.allowlists]]
+  description = "W00 retains a literal verifier command with public commit and shell variable placeholder"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/assurance/technology-guide/components\.json$''']
+  regexes = ['''^\s*"input":\ "\-\-rancher\-commit\ [0-9a-f]{40}\ \-\-rancher\-image\-digest\ \\"\$RANCHER_IMAGE_DIGEST\\"\ \\\\",\s*$''']
+
+  [[rules.allowlists]]
+  description = "Exact public Git commit objects verified in the release-preparation history review; no token prefixes accepted"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^(?:docs/assurance/technology-guide/|advisor-plans/032-evidence/).+\.(?:json|jsonl)$''']
+  regexes = ['''^(?:01acf61a059843f5349ff4dec165f958fca7d463|02897f9c4ecf7d8f56a9652b3dff060e7b3d8c71|02b8ef07e0f264b4ec058bdd2b57bb5dfcbf5605|0b5008342bafd836d92af3b0c31fa6ada396c8ce|2d8f84acc93da1bd38500db2adf2d672b2d5d3dd|2fc870a9058866b53577f037317d5c220aa49ad6|365b618a098f6e94f78161f4885e3cdce10102ac|501fcde1537d56047cd00f14b2749b8c018f3d28|5851d8c175576db726cdea3021285d4b21d7aca5|5bb45c3bedc3466fe83a0f36cfd144827bf51cd5|5d650d142c312bc488ae8af70f7781f98e7dc858|5eb959400be3c890bb9a3015d05ff72565e8c356|5eca496c6f8340dbb4a7203b7137956f57ed7296|675c220ecfc6e018b55742972e2dbb7c52d118ee|6b6f08e68981b3991585d0f2044ae6c22552c4b4|779340de24d10ffa2f91e40bda074388d3349de8|788554d4fbcfaf054a54faa63350f44b8add0a7b|792256b67b6e71ba4280a35b0966dce66cfb3edd|7b044fb08fcf96a81de1b54307413b11c42b97a8|844ec9eb1901a67c8d492edd9d3ec6d7be08b939|87237fc99844bc1caf17e8ca537a6329a562a6b6|8b6b65cee98f70d6f5cf408d03a0aa37c89edbdd|8ef5c085ea49114545d028d4974fef8cd2c954f6|93c6a5d6da68eb4c307b05edea2743e9f80ec10f|9905ed718f49fe3ceec8bbbac8893f5815625109|9a64159df75bbdbd1e7ab9be683406ff026d2aa5|a5bdaa2e1930cdedb315c87c8ca554d34abb3a22|acd5c334cce1276157285cf06a77d340591af59d|ad81739b59770fcd5a001ae5a872ff4718cca595|b3aa0ded1d21c7d1cd7691ec6ff1a3095c54337d|b5ab131e206c0582e86a54ff3724f1c9fb3aba6d|b608897938fd2cb9f47c99221f08545a40b7cf87|c1e38042e68eac2dcd46dc0d37bb311a9e6b778e|c27ea81d9f0cec52bfbce8e68ab6492d9716aede|cd1849a43e869c295c272b4af3793dc3e039ab6b|d03f97e71663fead476a338705313c1d2c2dc369|d8ee95940197d25e568fddb1c221b433b7d13928|dc29c0c6fa2b2caeb4ed2d0948b18ff53c58679d|df5803bc8bf5905827c7e18c0009655bd3f72f9b|e604e5851606add86fcfcc9cbaef32cdf3e2ad10|fb49e442aa724c67dafdb8d529eeee86e6b4b9a7|ff7ea504887e44b9b840d48a0ff3f01a78a2b068)$''']

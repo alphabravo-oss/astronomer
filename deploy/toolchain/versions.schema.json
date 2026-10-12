@@ -1,0 +1,476 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "components": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^sha256:[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "platformDigests": {
+                  "additionalProperties": {
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "platforms": {
+                  "items": {
+                    "enum": [
+                      "linux/amd64",
+                      "linux/arm64",
+                      "darwin/amd64",
+                      "darwin/arm64",
+                      "windows/amd64"
+                    ]
+                  },
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "provenance": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "reference": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "verifiedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reference",
+                "digest",
+                "platforms",
+                "provenance",
+                "verifiedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "consumers": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "kind": {
+                  "enum": [
+                    "regex",
+                    "json"
+                  ]
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "selector": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "value": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "kind",
+                "selector",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "discovery": {
+            "additionalProperties": false,
+            "properties": {
+              "observedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "provenance": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "releasedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "stable": {
+                "const": true
+              },
+              "version": {
+                "pattern": "^(?:v|go)?[0-9]+(?:\\.[0-9]+){1,2}(?:[+.-][0-9A-Za-z.-]+)?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "version",
+              "releasedAt",
+              "observedAt",
+              "stable",
+              "provenance"
+            ],
+            "type": "object"
+          },
+          "ecosystem": {
+            "enum": [
+              "go",
+              "node",
+              "npm",
+              "gomod",
+              "github",
+              "image",
+              "chart",
+              "contract"
+            ]
+          },
+          "exception": {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "evidence": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "exitCondition": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "owner": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reviewBy": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason",
+              "owner",
+              "evidence",
+              "reviewBy",
+              "exitCondition",
+              "createdAt"
+            ],
+            "type": "object"
+          },
+          "executableArtifacts": {
+            "items": {
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "else": {
+                    "not": {
+                      "required": [
+                        "archiveMember"
+                      ]
+                    }
+                  },
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "tar.gz"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "archiveMember"
+                    ]
+                  }
+                }
+              ],
+              "properties": {
+                "archiveMember": {
+                  "pattern": "^(?:linux-(?:amd64|arm64)/helm|gh_[0-9]+\\.[0-9]+\\.[0-9]+_linux_(?:amd64|arm64)/bin/gh)$",
+                  "type": "string"
+                },
+                "digest": {
+                  "pattern": "^sha256:[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "binary",
+                    "tar.gz"
+                  ]
+                },
+                "name": {
+                  "pattern": "^[A-Za-z0-9._-]+$",
+                  "type": "string"
+                },
+                "platform": {
+                  "enum": [
+                    "linux/amd64",
+                    "linux/arm64"
+                  ]
+                },
+                "provenance": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "maximum": 536870912,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "url": {
+                  "pattern": "^https://[A-Za-z0-9.-]+/[^\\s?#]+$",
+                  "type": "string"
+                },
+                "verifiedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "version",
+                "name",
+                "platform",
+                "url",
+                "sizeBytes",
+                "digest",
+                "provenance",
+                "verifiedAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "platforms": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "qualification": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "selected": {
+            "pattern": "^(?:v|go)?[0-9]+(?:\\.[0-9]+){1,2}(?:[+.-][0-9A-Za-z.-]+)?$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceBindings": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^sha256:[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "digest"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "upstream": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "go",
+                  "node",
+                  "npm",
+                  "github",
+                  "gomod",
+                  "helm-index",
+                  "image",
+                  "contract",
+                  "alpine",
+                  "github-feed",
+                  "postgres",
+                  "git"
+                ]
+              },
+              "locator": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "url": {
+                "pattern": "^https://[A-Za-z0-9.-]+(?:/[^\\s]*)?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "url"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "ecosystem",
+          "owner",
+          "selected",
+          "upstream",
+          "discovery",
+          "platforms",
+          "artifacts",
+          "consumers",
+          "qualification"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "inventory": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "count": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "evidence": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reviewBy": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "managed",
+              "leased",
+              "fixture",
+              "release-identity"
+            ]
+          },
+          "value": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "workPackage": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "value",
+          "state",
+          "owner",
+          "workPackage",
+          "reason",
+          "count"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "discoveryCadence": {
+          "const": "daily"
+        },
+        "maxDiscoveryAgeDays": {
+          "maximum": 31,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "productionDiscovery": {
+          "const": false
+        },
+        "triageCadence": {
+          "const": "weekly"
+        }
+      },
+      "required": [
+        "maxDiscoveryAgeDays",
+        "triageCadence",
+        "discoveryCadence",
+        "productionDiscovery"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "policy",
+    "components",
+    "inventory"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T02:45:01.605075+00:00",
+  "fixtureCommit": "5444d9c8ed4eb7708dbe1f6835c1f3604b65ad5b",
+  "applicationCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+  "sourceStable": true,
+  "node": "26.11.1",
+  "npm": "12.2.0",
+  "playwright": "1.64.0",
+  "scope": "Actual controlled product YamlEditor and immutable original application Monaco assets, synthetic contents; no application backend, login, API mutation, assembled signed candidate or full-stack browser qualification.",
+  "workers": 1,
+  "retries": 0,
+  "result": {
+    "passed": 1,
+    "failed": 1,
+    "skipped": 0,
+    "flaky": 0,
+    "bulkInsertion": "FAIL: onDryRun received duplicate complete synthetic document",
+    "nativeKeyEvents": "PASS: onDryRun received exact JSON with one marker"
+  },
+  "initialSetupAttempt": {
+    "result": "FAIL before any collected test/browser execution: webServer cwd incorrectly resolved Vite CLI at repository root",
+    "collectedTests": 0,
+    "setupErrors": 1,
+    "guardFailure": "Guard failed19%; ad hoc shell did not stop before webserver startup. This orchestration error was disclosed. Corrected command uses set -euo pipefail and immediate fatal guard.",
+    "inputRetention": "Old configuration reconstructed from the exact recorded import/cwd delta; all six input hashes match original before.json, not a claim of contemporaneous old raw-config retention.",
+    "restrictedArtifacts": [
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/before.json",
+        "sha256": "8571b6b81b7bc57bc6fa336ed8f09e1c249efcacc964c06b16fcfd924880ef0a",
+        "size": 2053
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/console.log",
+        "sha256": "28e8df0021273a94dbf08be59eb1a4a282939332b84573da5d36571ea87dc499",
+        "size": 1087
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/diagnostic-inputs/characterize.mjs",
+        "sha256": "7dd8d10ac539460a074e1e8e02617789ce53aa0d18b1f24b1c2fe77f65195fda",
+        "size": 2578
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/diagnostic-inputs/editor.jsx",
+        "sha256": "134ec7b79cb3bf09dd0580fa5fe36ed01e20aba5b0386c68379601eb1535e428",
+        "size": 738
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/diagnostic-inputs/editor.spec.ts",
+        "sha256": "2201daa73ecef8e9e02dfb9fa26418b433990fa32a3fa968584170de747416be",
+        "size": 1706
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/diagnostic-inputs/index.html",
+        "sha256": "2add3fbd9cc941e64711ebda49bdb7ca092fad2a132b1ec68905533bacf40801",
+        "size": 212
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/diagnostic-inputs/playwright.config.ts",
+        "sha256": "bfb0613f0e9e9f76d43602819b8b4f0d3b06c69e8de471f88c41d4730b72d96d",
+        "size": 922
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/diagnostic-inputs/vite.config.mjs",
+        "sha256": "f71829bfd7af72a30e8645f014f6b791cd48aacde1f4be89731e535d60661f60",
+        "size": 656
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/report.json",
+        "sha256": "1eae79df98a59506dd3f1db1e41d9847a8c00c67a3a675ff04681cd1c8e55c4d",
+        "size": 3976
+      },
+      {
+        "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-5444d9c8/test-results/.last-run.json",
+        "sha256": "e22df5d0991eb28c09093b1e678b3fa8cd1fab48185d38e67cf79fb6e63ad5ea",
+        "size": 45
+      }
+    ]
+  },
+  "restrictedArtifacts": [
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/before.json",
+      "sha256": "66e73cf92d6dbef44e685e5a8959d7b6b843da20efe8309c8488bcb9385e366a",
+      "size": 1419
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/console.log",
+      "sha256": "92fba126bd241920f21ee15f760e848da62bbb43d28901bbfbc4a8e14e9dbd57",
+      "size": 4949
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/diagnostic-inputs/characterize.mjs",
+      "sha256": "7dd8d10ac539460a074e1e8e02617789ce53aa0d18b1f24b1c2fe77f65195fda",
+      "size": 2578
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/diagnostic-inputs/editor.jsx",
+      "sha256": "134ec7b79cb3bf09dd0580fa5fe36ed01e20aba5b0386c68379601eb1535e428",
+      "size": 738
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/diagnostic-inputs/editor.spec.ts",
+      "sha256": "2201daa73ecef8e9e02dfb9fa26418b433990fa32a3fa968584170de747416be",
+      "size": 1706
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/diagnostic-inputs/index.html",
+      "sha256": "2add3fbd9cc941e64711ebda49bdb7ca092fad2a132b1ec68905533bacf40801",
+      "size": 212
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/diagnostic-inputs/playwright.config.ts",
+      "sha256": "3168434ca60ca0cc6f12d22bc2115b6f60a6ffd1102c88be002ddc972595206d",
+      "size": 999
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/diagnostic-inputs/vite.config.mjs",
+      "sha256": "f71829bfd7af72a30e8645f014f6b791cd48aacde1f4be89731e535d60661f60",
+      "size": 656
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/exit-code.txt",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "size": 2
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/final-capacity.json",
+      "sha256": "1179d60ccfd0ec5c694989fa141dfcd19162cb996330a914183d93780b03724f",
+      "size": 204
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/prelaunch-capacity.json",
+      "sha256": "0d842bb007ed53714429a95c010343f1809a6f90dcbc327bca03bc6142890527",
+      "size": 204
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/report.json",
+      "sha256": "7cb48c1d6591d6227980c21d65dda0b2b2e179cb1a4a277fca787a07a31eea9e",
+      "size": 14785
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/.last-run.json",
+      "sha256": "5fd2c8f18ec83d0394cede8ce3e73658854164ae9f7863f0e0ac713c0645fb51",
+      "size": 96
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/error-context.md",
+      "sha256": "f19426fc32293c9572aea22b994c80d75228474d533fa67f588fb7f781fef0c4",
+      "size": 4165
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/test-failed-1.png",
+      "sha256": "733310427a1a48e58f6551182323ecd0c0d840c1fd69819179aac21dbeccb839",
+      "size": 73701
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/results/editor-original-Firefox-bu-0769e-mits-one-synthetic-document-scoped-firefox-editor/trace.zip",
+      "sha256": "a72e643692aa8dce19143097d7a58944a540e3f0607f0aeffd88151e9231014a",
+      "size": 2404757
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w12-monaco-mechanics-cwd-fixed-5444d9c8/source-after.json",
+      "sha256": "59ac63a6ed488c3ae736bed4f05c3fa05cabe53ab2ed4454eb8ea52075d28763",
+      "size": 139
+    }
+  ]
+}

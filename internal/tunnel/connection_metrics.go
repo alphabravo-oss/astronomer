@@ -70,45 +70,15 @@ func registerConnectionMetrics() {
 			agentLastSeenSecondsGauge,
 			agentMessagesTotal,
 			agentReconnectsTotal,
+			connectionMetricAdmissions,
+			connectionMetricObservations,
+			connectionMetricLastComplete,
 		)
 	})
 }
 
-// recordAgentReconnect counts one (re)connect for the given cluster. Hub
-// callers fire this whenever a fresh handshake replaces an existing
-// agent entry — that's the signal you want for "is this cluster
-// flapping" alerts.
-func recordAgentReconnect(clusterID string) {
-	registerConnectionMetrics()
-	agentReconnectsTotal.WithLabelValues(observability.MetricValues(clusterID)...).Inc()
-}
-
 func updateConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now time.Time) {
-	agentConnectionsGauge.Reset()
-	agentLastSeenSecondsGauge.Reset()
-	appendConnectionMetrics(rows, now)
-}
-
-func appendConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now time.Time) {
-	for _, row := range rows {
-		clusterID := row.ClusterID.String()
-		connected := 0.0
-		if row.Status == "connected" {
-			connected = 1.0
-		}
-		agentConnectionsGauge.WithLabelValues(observability.MetricValues(clusterID, row.ClusterName)...).Set(connected)
-
-		age := now.Sub(row.LastActivity).Seconds()
-		if age < 0 {
-			age = 0
-		}
-		agentLastSeenSecondsGauge.WithLabelValues(observability.MetricValues(clusterID, row.ClusterName)...).Set(age)
-	}
-}
-
-func recordAgentMessage(clusterID, direction string) {
-	registerConnectionMetrics()
-	agentMessagesTotal.WithLabelValues(observability.MetricValues(clusterID, direction)...).Inc()
+	publishConnectionMetrics(rows, now, connectionMetricsWatermark())
 }
 
 // StartConnectionMetricsReporter periodically republishes the DB-backed
@@ -128,28 +98,64 @@ func RunConnectionMetricsReporter(ctx context.Context, lister clusterConnectionS
 	if lister == nil {
 		return
 	}
+	RunConnectionMetricsCollector(ctx, func(ctx context.Context) ([]sqlc.ListClusterConnectionStatusRow, error) {
+		return collectConnectionMetricsPages(ctx, lister)
+	}, log)
+}
+
+func collectConnectionMetricsPages(ctx context.Context, lister clusterConnectionStatusLister) ([]sqlc.ListClusterConnectionStatusRow, error) {
+	var complete []sqlc.ListClusterConnectionStatusRow
+	for offset := int32(0); offset <= ConnectionMetricsMaxOwners; offset += ConnectionMetricsPageSize {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		rows, err := lister.ListClusterConnectionStatus(ctx, sqlc.ListClusterConnectionStatusParams{
+			QueryLimit: ConnectionMetricsPageSize, QueryOffset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		complete, err = AppendConnectionMetricsPage(complete, rows)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) < int(ConnectionMetricsPageSize) {
+			return complete, nil
+		}
+	}
+	return nil, ErrConnectionMetricsBudget
+}
+
+// RunConnectionMetricsCollector accepts a complete, consistent observation.
+// Production supplies a bounded read-only repeatable-read DB transaction so
+// concurrent row deletion cannot shift OFFSET pages and retire a current owner.
+func RunConnectionMetricsCollector(ctx context.Context, collect func(context.Context) ([]sqlc.ListClusterConnectionStatusRow, error), log *slog.Logger) {
+	if collect == nil {
+		return
+	}
 	registerConnectionMetrics()
 
 	record := func() {
-		const pageSize int32 = 500
 		now := time.Now().UTC()
-		agentConnectionsGauge.Reset()
-		agentLastSeenSecondsGauge.Reset()
-		for offset := int32(0); ; offset += pageSize {
-			rows, err := lister.ListClusterConnectionStatus(ctx, sqlc.ListClusterConnectionStatusParams{
-				QueryLimit: pageSize, QueryOffset: offset,
-			})
-			if err != nil {
-				if log != nil {
-					log.Warn("failed to collect agent connection metrics", "error", err, "offset", offset)
-				}
-				return
+		watermark := connectionMetricsWatermark()
+		complete, err := collect(ctx)
+		if err != nil {
+			recordConnectionMetricsFailure(err)
+			if log != nil {
+				log.Warn("failed to collect agent connection metrics", "error", err)
 			}
-			appendConnectionMetrics(rows, now)
-			if len(rows) < int(pageSize) {
-				break
-			}
+			return
 		}
+		// Failed or cancelled collections leave the previous complete observation
+		// untouched, including disconnected clusters and live counter history.
+		if err := ctx.Err(); err != nil {
+			recordConnectionMetricsFailure(err)
+			return
+		}
+		publishConnectionMetrics(complete, now, watermark)
 	}
 
 	record()

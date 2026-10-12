@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="29" failures="0" errors="0" time="65.844063">
+	<testsuite tests="11" failures="0" time="1.234000" name="github.com/alphabravocompany/astronomer-go/internal/server" timestamp="2026-10-10T03:09:15Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/success" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/begin" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/second-page" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/iterator" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/commit" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/cancel" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/cancel-in-query" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/oversized" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/exhausted" time="0.020000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries/exact-ceiling" time="0.020000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestConnectionMetricsSnapshotTransactionBoundaries" time="0.050000"></testcase>
+	</testsuite>
+	<testsuite tests="1" failures="0" time="1.131000" name="github.com/alphabravocompany/astronomer-go/internal/server/middleware" timestamp="2026-10-10T03:08:15Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server/middleware" name="TestMetricsBoundsUnrecognizedRequestMethodsWithoutChangingRequests" time="0.000000"></testcase>
+	</testsuite>
+	<testsuite tests="17" failures="0" time="1.363000" name="github.com/alphabravocompany/astronomer-go/internal/tunnel" timestamp="2026-10-10T03:08:10Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsLateCallbacksDoNotResurrectRemovedOwner" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsOlderCollectionPreservesNewAdmission" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsOlderCollectionPreservesExistingOwnerReadmission" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsRenameAndDisconnectKeepCurrentCounters" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsAdmissionBudgetAndAtomicPublication" time="0.240000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/empty" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/planned-extreme-lab" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/exact-ceiling-with-empty-sentinel" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/ceiling-plus-one" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/endless-full-pages" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/oversized-driver-page" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget/driver-ignores-cancellation" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCollectionBudget" time="0.030000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsIncompletePagePreservesSnapshot" time="0.000000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestConnectionMetricsCompleteSnapshotRetiresRemovedCounters" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestAgentConnectionsSurvivesDisconnect" time="0.010000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestRecordAgentReconnectIncrementsStormMetric" time="0.010000"></testcase>
+	</testsuite>
+</testsuites>

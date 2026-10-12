@@ -64,6 +64,7 @@ const statusClass: Record<ClusterStatus, string> = {
   error: "bg-status-error",
   disconnected: "bg-status-neutral",
   pending: "bg-status-info",
+  unsupported: "bg-status-neutral",
 };
 
 export function ClusterOption({ cluster }: { cluster: Cluster }) {

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -10,8 +9,12 @@ import (
 )
 
 func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	items, err := h.queries.ListGlobalRoles(r.Context(), sqlc.ListGlobalRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global roles")
@@ -74,7 +77,7 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req roleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -145,8 +148,12 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	items, err := h.queries.ListClusterRoles(r.Context(), sqlc.ListClusterRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster roles")
@@ -211,7 +218,7 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req roleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -271,8 +278,12 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	items, err := h.queries.ListProjectRoles(r.Context(), sqlc.ListProjectRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project roles")
@@ -337,7 +348,7 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req roleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

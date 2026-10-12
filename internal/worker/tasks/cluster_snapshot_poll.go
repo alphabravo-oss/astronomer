@@ -188,10 +188,12 @@ type VeleroRestoreStatusSnapshot struct {
 
 // ClusterSnapshotDeps wires all three workers in this file.
 type ClusterSnapshotDeps struct {
-	Queries ClusterSnapshotPollQuerier
-	Driver  VeleroSnapshotDriver
-	Log     *slog.Logger
-	Bus     *events.Bus
+	Queries           ClusterSnapshotPollQuerier
+	Driver            VeleroSnapshotDriver
+	Log               *slog.Logger
+	Bus               *events.Bus
+	CaptureMetrics    func(context.Context, uuid.UUID) SnapshotMetricRecorder
+	metricGaugeOwners *snapshotMetricGaugeOwners
 }
 
 // terminalSnapshotPhases is the set of Velero BackupStatus.Phase values
@@ -314,6 +316,7 @@ func (runtime ClusterSnapshotRuntime) HandleClusterSnapshotPoll(ctx context.Cont
 }
 
 func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) error {
+	observation := deps.snapshotMetricOwners().serial.Add(1)
 	rows, err := deps.Queries.ListPendingClusterSnapshots(ctx, snapshotPollBatchSize)
 	if err != nil {
 		logSnapshotErr(deps.Log, "list pending snapshots", err)
@@ -328,7 +331,7 @@ func pollSnapshots(ctx context.Context, deps ClusterSnapshotDeps) error {
 	for _, row := range rows {
 		inFlight[row.ClusterID.String()]++
 	}
-	updateInFlightSnapshotGauges(inFlight)
+	updateCapturedInFlightSnapshotGauges(ctx, deps, inFlight, observation)
 	var batchErr error
 	for _, row := range rows {
 		if err := pollOneSnapshot(ctx, deps, row); err != nil {
@@ -371,6 +374,7 @@ func updateInFlightSnapshotGauges(counts map[string]int) {
 }
 
 func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.ClusterSnapshot) error {
+	metric := captureSnapshotMetrics(ctx, deps, row.ClusterID)
 	status, err := deps.Driver.GetBackup(ctx, row.ClusterID.String(), row.VeleroNamespace, row.VeleroName)
 	if err != nil {
 		// Record the error on the row so the operator can see it via
@@ -415,6 +419,10 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		return nil
 	}
 
+	warnings, errorsCount, err := snapshotStatusCounts(status.Warnings, status.Errors)
+	if err != nil {
+		return err
+	}
 	nextPhase := status.Phase
 	if nextPhase == "" {
 		nextPhase = "New"
@@ -437,8 +445,8 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		Phase:          nextPhase,
 		StartTime:      st,
 		CompletionTime: ct,
-		WarningsCount:  int32(status.Warnings),
-		ErrorsCount:    int32(status.Errors),
+		WarningsCount:  warnings,
+		ErrorsCount:    errorsCount,
 		LastPollError:  status.ValidationError,
 	}); err != nil {
 		return fmt.Errorf("mark snapshot phase: %w", err)
@@ -449,7 +457,11 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		// Tests + the handler package own the metric registration —
 		// the worker calls into a thin shim so we don't pull in the
 		// prometheus client direct here.
-		recordSnapshotOutcome(row.ClusterID.String(), outcomeForPhase(nextPhase))
+		if metric != nil {
+			metric.Outcome(ctx, outcomeForPhase(nextPhase))
+		} else {
+			recordSnapshotOutcome(row.ClusterID.String(), outcomeForPhase(nextPhase))
+		}
 	}
 	if row.Phase != nextPhase {
 		events.PublishChanged(deps.Bus, "snapshot", row.ClusterID.String(), row.ID.String(), map[string]any{"kind": "snapshot"})
@@ -516,6 +528,10 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 		events.PublishChanged(deps.Bus, "snapshot", row.TargetClusterID.String(), row.ID.String(), map[string]any{"kind": "restore"})
 		return nil
 	}
+	warnings, errorsCount, err := snapshotStatusCounts(status.Warnings, status.Errors)
+	if err != nil {
+		return err
+	}
 	nextPhase := status.Phase
 	if nextPhase == "" {
 		nextPhase = "New"
@@ -533,8 +549,8 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 		Phase:          nextPhase,
 		StartTime:      st,
 		CompletionTime: ct,
-		WarningsCount:  int32(status.Warnings),
-		ErrorsCount:    int32(status.Errors),
+		WarningsCount:  warnings,
+		ErrorsCount:    errorsCount,
 		LastPollError:  status.ValidationError,
 	}); err != nil {
 		return err

@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "kind": "InlineOCIConfigQualificationBindings",
+  "files": {
+    "baseline/after.json": {
+      "sha256": "698cb1abfd6f48cb1fa5448499c3908765c9e6586ff7b3daba3878500baa21f5",
+      "size": 10846
+    },
+    "baseline/before.json": {
+      "sha256": "698cb1abfd6f48cb1fa5448499c3908765c9e6586ff7b3daba3878500baa21f5",
+      "size": 10846
+    },
+    "baseline/race.jsonl": {
+      "sha256": "496c04c6fe07214ac09eb5df58266dcdc1fe54ebd1675f0a9582c324b3020b79",
+      "size": 41275
+    },
+    "baseline/summary.json": {
+      "sha256": "82b12663ae8860ad935bb2e3f56bc88b2c87e4e4aee56fb7139b3bbe1c8bb79a",
+      "size": 524
+    },
+    "corrected/after.json": {
+      "sha256": "fc896632f1d3edbf3ae4fffb34e63a61c363d409b785b228ae89cc0fce84a0df",
+      "size": 11263
+    },
+    "corrected/before.json": {
+      "sha256": "fc896632f1d3edbf3ae4fffb34e63a61c363d409b785b228ae89cc0fce84a0df",
+      "size": 11263
+    },
+    "corrected/boundaries-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/boundaries.log": {
+      "sha256": "2cfb01d0d1c94c381c6b25c9fbf5fc6b8193be6b386ef7c51960a95824732822",
+      "size": 65
+    },
+    "corrected/complexity-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/complexity.log": {
+      "sha256": "ed567de6b7a3069c9fa9e5dc4bc908c29eb6852d8db2b060908933aeb95ca213",
+      "size": 101
+    },
+    "corrected/docs-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/docs.log": {
+      "sha256": "bbedd1d5a559c43dd412f0643ea04f1bf9624cb51e51c6678c6cc13756d58449",
+      "size": 562
+    },
+    "corrected/focused-race-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/focused-race.log": {
+      "sha256": "dc79a69d40b0041df74955730db0c1d395e18821a41bafc763400b0c24e25fed",
+      "size": 58757
+    },
+    "corrected/full-resolver-race-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/full-resolver-race.log": {
+      "sha256": "eb70bcdf9c79d2ac17cfd1d9ecdc69a3ec0a8683296d18ac5d168364a5dffc6f",
+      "size": 154014
+    },
+    "corrected/json-governance-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/json-governance.log": {
+      "sha256": "559dbd67379696a743b45bf156e87ff1973fc9d1c1a49bb1e77ce7267691bdb5",
+      "size": 153
+    },
+    "corrected/results.json": {
+      "sha256": "1e77bf5b4e26f60ad3cc330fc01b92c5cd17caa10f197e9d2bdcb785d2a12095",
+      "size": 3925
+    },
+    "corrected/vet-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "corrected/vet.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "driver.py.txt": {
+      "sha256": "c2ce36c56406fe89ac3f5fa0ed5eefd700f7a448e2af60dc25b70a91251f5d27",
+      "size": 3461
+    },
+    "observer/build-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "observer/build.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "observer/final-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "observer/receipt.json": {
+      "sha256": "d6ba4415c05d7b0fd5816d77b00a285a61b9d8c59de29c6c2a4fe18948f18d4a",
+      "size": 21533
+    },
+    "observer/runner.go.txt": {
+      "sha256": "d685b0bf1980d95740eabb7e489f8cb64698b49c58907484f895b41e03e2e143",
+      "size": 11176
+    },
+    "observer/transfer-capacity.log": {
+      "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5",
+      "size": 81
+    },
+    "observer/transfer.log": {
+      "sha256": "e25aba08111a523d02404562a40ec3d39da07d5c39c7fced1c7426f943deee70",
+      "size": 4514
+    },
+    "observer/trivy-database-manifest-4.json": {
+      "sha256": "361d77189ec82c0b39f7c0fad4d2dc7f1aa4dfd48c24511e27ebe1520f677875",
+      "size": 616
+    },
+    "observer/trivy-java-database-manifest-4.json": {
+      "sha256": "7657995935bf8d94bf1b06252d4c62538a751e96633c54613bfdf292eea68a54",
+      "size": 624
+    }
+  }
+}

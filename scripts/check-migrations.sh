@@ -43,7 +43,7 @@ import sys
 relation = r'[A-Za-z_][A-Za-z0-9_$\"]*(?:\.[A-Za-z_][A-Za-z0-9_$\"]*)?'
 patterns = [
     re.compile(
-        rf"\b(?:ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE(?:\s+TABLE)?)\s+"
+        rf"\b(?:ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE(?!\s+ON\b)(?:\s+TABLE)?)\s+"
         rf"(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?P<relation>{relation})",
         re.IGNORECASE,
     ),
@@ -56,6 +56,11 @@ patterns = [
         rf"\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?"
         rf"(?:IF\s+NOT\s+EXISTS\s+)?{relation}\s+ON\s+(?:ONLY\s+)?"
         rf"(?P<relation>{relation})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?TRIGGER\s+{relation}\s+"
+        rf"(?:BEFORE|AFTER|INSTEAD\s+OF)\b[^;]*?\bON\s+(?P<relation>{relation})",
         re.IGNORECASE,
     ),
 ]

@@ -1,3 +1,4 @@
+import type { OpenAPIReadComponents } from "@/types/openapi.generated";
 import { API_BASE } from "@/lib/env";
 import {
   abortCharlieSession as abortCharlieSessionOperation,
@@ -55,13 +56,7 @@ export type CharlieSession = {
   clientSessionId: string;
   intent: string;
   resourceScopeSummary: string;
-  state:
-    | "creating"
-    | "active"
-    | "waiting_approval"
-    | "completed"
-    | "aborted"
-    | "failed";
+  state: OpenAPIReadComponents["schemas"]["CharlieSessionMetadata"]["state"];
   visibility: "private" | "incident";
   centralRevision: number;
   source: "user" | "event";
@@ -93,7 +88,7 @@ export interface CharlieToolRun {
 export interface CharlieApproval {
   id: string;
   title: string;
-  state: "pending" | "approved" | "denied" | "expired";
+  state: OpenAPIReadComponents["schemas"]["CharlieApprovalSummary"]["state"];
   eligible: boolean;
   capability: string;
   target: string;
@@ -144,7 +139,7 @@ export interface CharlieFinding {
   id: string;
   title: string;
   severity: "low" | "medium" | "warning" | "high" | "critical";
-  state: "open" | "acknowledged" | "dismissed" | "resolved" | "expired";
+  state: OpenAPIReadComponents["schemas"]["CharlieFindingSummary"]["state"];
   affectedResource: CharlieResource;
   confidence?: number;
   reasonNoAction?: string;
@@ -156,15 +151,7 @@ export interface CharlieFinding {
   repeatCount?: number;
   createdAt?: string;
   updatedAt?: string;
-  workflowState:
-    | "approval_pending"
-    | "manual_remediation_required"
-    | "remediation_in_progress"
-    | "verification_pending"
-    | "resolved"
-    | "rejected"
-    | "dismissed"
-    | "expired";
+  workflowState: OpenAPIReadComponents["schemas"]["CharlieFindingSummary"]["workflow_state"];
   availableDecisions: Array<
     | "acknowledge"
     | "start_remediation"

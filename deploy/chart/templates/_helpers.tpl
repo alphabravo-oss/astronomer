@@ -12,7 +12,7 @@ immutable object in place. Helm owns and prunes the superseded object.
 */}}
 {{- define "astronomer.releaseManifestConfigMapName" -}}
 {{- $prefix := include "astronomer.fullname" . | trunc 29 | trimSuffix "-" -}}
-{{- printf "%s-release-manifest-%s" $prefix (sha256sum .Values.release.manifest | trunc 16) -}}
+{{- printf "%s-release-manifest-%s" $prefix (sha256sum (printf "%s\n%s\n%s\n%s" .Values.release.manifest .Values.release.mirrorMapping .Values.delivery.distribution.mirrorEndorsement.plan .Values.delivery.distribution.mirrorEndorsement.signature) | trunc 16) -}}
 {{- end -}}
 
 {{/*
@@ -394,6 +394,9 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 */}}
 {{- define "astronomer.tls.dnsNames" -}}
 {{- $names := list -}}
+{{- if .Values.toolUI.domain -}}
+{{- $names = append $names (printf "*.%s" .Values.toolUI.domain) -}}
+{{- end -}}
 {{- if .Values.gateway.enabled -}}
 {{- range .Values.gateway.hosts -}}
 {{- $names = append $names . -}}

@@ -82,9 +82,8 @@ for (const [routePath, pathItemRaw] of Object.entries(spec.paths ?? {})) {
       ? "blob"
       : responseMedia.some(
             (media) =>
-              media.includes("yaml") ||
-              media === "text/csv" ||
-              media === "text/plain",
+              media.startsWith("text/") ||
+              media.includes("yaml"),
           )
         ? "text"
         : "json";
@@ -114,7 +113,8 @@ const lines = [
   "",
   "import type { AxiosRequestConfig, AxiosResponseHeaders, RawAxiosResponseHeaders } from 'axios';",
   "import api from '@/lib/api/transport';",
-  "import type { OpenAPIOperationId, OpenAPIOperations } from '@/types/openapi.generated';",
+  "import { validateCategoricalResponse } from '@/lib/api/categorical-values';",
+  "import type { OpenAPIOperationId, OpenAPIOperations, OpenAPIReadOperations } from '@/types/openapi.generated';",
   "",
   "export interface OpenAPIRequestOptions {",
   "  signal?: AbortSignal;",
@@ -157,7 +157,7 @@ lines.push("");
 lines.push("export async function executeOpenAPIOperationWithResponse<K extends OpenAPIOperationId>(");
 lines.push("  operationId: K,");
 lines.push("  args: OpenAPIArguments<K>,");
-lines.push("): Promise<OpenAPIResponse<OpenAPIOperations[K]['response']>> {");
+lines.push("): Promise<OpenAPIResponse<OpenAPIReadOperations[K]['response']>> {");
 lines.push("  const metadata = operationMetadata[operationId];");
 lines.push(
   "  const values = args as OpenAPIRequestOptions & { path?: Record<string, unknown>; query?: Record<string, unknown>; headerParams?: Record<string, unknown>; body?: unknown };",
@@ -191,13 +191,14 @@ lines.push(
 );
 lines.push("  } as AxiosRequestConfig;");
 lines.push("  const response = await api.request(config);");
-lines.push("  return { data: response.data as OpenAPIOperations[K]['response'], headers: response.headers, status: response.status };");
+lines.push("  const checked = validateCategoricalResponse(operationId, response.status, response.data);");
+lines.push("  return { data: checked as OpenAPIReadOperations[K]['response'], headers: response.headers, status: response.status };");
 lines.push("}");
 lines.push("");
 lines.push("export async function executeOpenAPIOperation<K extends OpenAPIOperationId>(");
 lines.push("  operationId: K,");
 lines.push("  args: OpenAPIArguments<K>,");
-lines.push("): Promise<OpenAPIOperations[K]['response']> {");
+lines.push("): Promise<OpenAPIReadOperations[K]['response']> {");
 lines.push("  return (await executeOpenAPIOperationWithResponse(operationId, args)).data;");
 lines.push("}");
 lines.push("");

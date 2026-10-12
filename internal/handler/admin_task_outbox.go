@@ -75,6 +75,10 @@ type TaskOutboxResponse struct {
 
 // List handles GET /api/v1/admin/task-outbox/.
 func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}
@@ -83,11 +87,10 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStatus, "Invalid task outbox status")
 		return
 	}
-	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListTaskOutbox(r.Context(), sqlc.ListTaskOutboxParams{
 		Status: status,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
@@ -109,14 +112,17 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 // It is the status=dead slice of List, exposed as a dedicated path so operators
 // (and the runbook) have a stable URL for the DLQ without query-string fiddling.
 func (h *AdminTaskOutboxHandler) ListDead(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}
-	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListTaskOutbox(r.Context(), sqlc.ListTaskOutboxParams{
 		Status: "dead",
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())

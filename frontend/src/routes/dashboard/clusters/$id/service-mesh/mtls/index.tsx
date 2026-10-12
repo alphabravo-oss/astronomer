@@ -74,7 +74,7 @@ function ClusterServiceMeshMTLSPage() {
   const clusterQuery = useCluster(clusterId);
   const mtlsQuery = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshMtls(clusterId),
-    queryFn: () => getServiceMeshMTLS(clusterId),
+    queryFn: ({ signal }) => getServiceMeshMTLS(clusterId, signal),
     enabled: !!clusterId,
   });
 

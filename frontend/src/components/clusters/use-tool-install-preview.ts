@@ -10,12 +10,16 @@ export function useToolInstallPreview(
 ) {
   return useQuery({
     queryKey: queryKeys.tools.preview(slug, clusterId, preset, values),
-    queryFn: () =>
-      previewToolInstall(slug, {
-        cluster_id: clusterId,
-        preset,
-        values_override: values || undefined,
-      }),
+    queryFn: ({ signal }) =>
+      previewToolInstall(
+        slug,
+        {
+          cluster_id: clusterId,
+          preset,
+          values_override: values || undefined,
+        },
+        signal,
+      ),
     enabled,
   });
 }

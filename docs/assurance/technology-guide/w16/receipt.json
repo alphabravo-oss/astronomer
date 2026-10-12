@@ -1,0 +1,616 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T02:12:05.936603+00:00",
+  "baseline": {
+    "sourceCommit": "f3191eda25ce03616b59cb576927fd37e8fc007d",
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6734,
+      "source_tree_sha256": "b8e3085be0e091475edd76ad93b9354f87a6839fb56bf6fed9351e16c07adcee"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6734,
+      "source_tree_sha256": "b8e3085be0e091475edd76ad93b9354f87a6839fb56bf6fed9351e16c07adcee"
+    },
+    "sourceStable": true,
+    "observedAt": "2026-10-10T01:52:22.268489+00:00",
+    "command": [
+      "go",
+      "test",
+      "./cmd/keyrotate",
+      "-run",
+      "^(TestRotationRejectsIncompleteCiphertextPage|TestRewriteTargetsCoverAllEncryptedColumns|TestRotationDatabaseErrorLogsExcludeUntrustedContent)$",
+      "-count=1",
+      "-timeout=2m",
+      "-json"
+    ],
+    "exitCode": 1,
+    "cases": [
+      {
+        "name": "TestRewriteTargetsCoverAllEncryptedColumns",
+        "action": "fail"
+      },
+      {
+        "name": "TestRotationRejectsIncompleteCiphertextPage",
+        "action": "fail"
+      },
+      {
+        "name": "TestRotationDatabaseErrorLogsExcludeUntrustedContent",
+        "action": "fail"
+      }
+    ],
+    "logSHA256": "232a95c17204efd9bfd81f12448f35c0fc2bc029c51702fc53f512dd61d1fc49"
+  },
+  "baselineRegressionsAfter": {
+    "sourceCommit": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+    "cases": [
+      {
+        "name": "TestRewriteTargetsCoverAllEncryptedColumns",
+        "action": "pass"
+      },
+      {
+        "name": "TestRotationRejectsIncompleteCiphertextPage",
+        "action": "pass"
+      },
+      {
+        "name": "TestRotationDatabaseErrorLogsExcludeUntrustedContent",
+        "action": "pass"
+      }
+    ],
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceStable": true
+  },
+  "migration": {
+    "sourceCommit": "ac2f4d1287f48669adf6ccdbe87157fc7af2bad3",
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6736,
+      "source_tree_sha256": "134586b7c852e80bf1c1115b8003ace0abcafcee55c39be97fee69883b4715b6"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6736,
+      "source_tree_sha256": "134586b7c852e80bf1c1115b8003ace0abcafcee55c39be97fee69883b4715b6"
+    },
+    "sourceStable": true,
+    "database": "plan032_w16_rotation",
+    "serverMajor": 18,
+    "serverVersionNum": 180006,
+    "schemaVersion": 75,
+    "schemaDirty": false,
+    "reversibleSchemaFloor": 66,
+    "migrationExitCode": 0,
+    "command": [
+      "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/migrator",
+      "-path",
+      "internal/db/migrations",
+      "-database",
+      "postgres:///plan032_w16_rotation",
+      "up"
+    ],
+    "binarySHA256": "52bee977069f93303ac46ee2cfe4296bdfed6d58add7ee8f9eb907b5525da2e5",
+    "logSHA256": "08e819b31f6a02f8477076c3fafc3657bce8574d9fddff3de293f027fdfda15b",
+    "observedAt": "2026-10-10T01:59:47.527658+00:00",
+    "scope": "Exclusive synthetic rotation database only; no shared database, role, cluster, PVC or keys changed"
+  },
+  "retainedPostgresFailures": [
+    {
+      "sourceCommit": "ac2f4d1287f48669adf6ccdbe87157fc7af2bad3",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6736,
+        "source_tree_sha256": "134586b7c852e80bf1c1115b8003ace0abcafcee55c39be97fee69883b4715b6"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6736,
+        "source_tree_sha256": "134586b7c852e80bf1c1115b8003ace0abcafcee55c39be97fee69883b4715b6"
+      },
+      "sourceStable": true,
+      "exitCode": 1,
+      "parents": {
+        "expected": [
+          "TestPostgresRotationCASPreservesConcurrentWriter",
+          "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+          "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+          "TestPostgresRotationInterruptionResumesCommittedPages"
+        ],
+        "terminal": [
+          [
+            "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+            "pass"
+          ],
+          [
+            "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+            "pass"
+          ],
+          [
+            "TestPostgresRotationInterruptionResumesCommittedPages",
+            "fail"
+          ],
+          [
+            "TestPostgresRotationCASPreservesConcurrentWriter",
+            "pass"
+          ]
+        ],
+        "qualified": false
+      },
+      "receiptPath": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/postgres-race/receipt.json",
+      "receiptSHA256": "e29f769b2ee1aec151e8d5cd20e178f7a7b00590299db501efe8538d2021cb9f"
+    },
+    {
+      "sourceCommit": "9661806614fd931a706b1d9c1e1e5566e8c0e847",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6737,
+        "source_tree_sha256": "c832267051e573c8c4d618251f6034803424ea6fcc730fd12075160da533d2be"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6737,
+        "source_tree_sha256": "c832267051e573c8c4d618251f6034803424ea6fcc730fd12075160da533d2be"
+      },
+      "sourceStable": true,
+      "exitCode": 1,
+      "parents": {
+        "expected": [
+          "TestPostgresRotationCASPreservesConcurrentWriter",
+          "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+          "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+          "TestPostgresRotationInterruptionResumesCommittedPages"
+        ],
+        "terminal": [
+          [
+            "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+            "pass"
+          ],
+          [
+            "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+            "pass"
+          ],
+          [
+            "TestPostgresRotationInterruptionResumesCommittedPages",
+            "fail"
+          ],
+          [
+            "TestPostgresRotationCASPreservesConcurrentWriter",
+            "pass"
+          ]
+        ],
+        "qualified": false
+      },
+      "receiptPath": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation/postgres-race/receipt.json",
+      "receiptSHA256": "330da79fa5167d53b2b7ddd2ed9130115c6a10cddcd0580e4761430967b14be9"
+    },
+    {
+      "sourceCommit": "3ae7218ff6bd7b447cc7c0a29ce619a73266500b",
+      "sourceBefore": {
+        "schema_version": 2,
+        "source_file_count": 6737,
+        "source_tree_sha256": "56a8e002a2820e43b69ee87f58e534fe416686e8a9ab86b8791012c89af3832c"
+      },
+      "sourceAfter": {
+        "schema_version": 2,
+        "source_file_count": 6737,
+        "source_tree_sha256": "56a8e002a2820e43b69ee87f58e534fe416686e8a9ab86b8791012c89af3832c"
+      },
+      "sourceStable": true,
+      "exitCode": 1,
+      "parents": {
+        "expected": [
+          "TestPostgresRotationCASPreservesConcurrentWriter",
+          "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+          "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+          "TestPostgresRotationInterruptionResumesCommittedPages"
+        ],
+        "terminal": [
+          [
+            "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+            "pass"
+          ],
+          [
+            "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+            "pass"
+          ],
+          [
+            "TestPostgresRotationInterruptionResumesCommittedPages",
+            "fail"
+          ],
+          [
+            "TestPostgresRotationCASPreservesConcurrentWriter",
+            "pass"
+          ]
+        ],
+        "qualified": false
+      },
+      "receiptPath": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-operations/postgres-race/receipt.json",
+      "receiptSHA256": "d749798dbea33969b2e4546324e32006173de21ab6f283fcf158841719258ed4"
+    }
+  ],
+  "qualifiedPostgres": {
+    "sourceCommit": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceStable": true,
+    "command": [
+      "go",
+      "test",
+      "./cmd/keyrotate",
+      "-run",
+      "^TestPostgresRotation",
+      "-count=1",
+      "-timeout=2m",
+      "-json",
+      "-race"
+    ],
+    "exitCode": 0,
+    "parents": {
+      "expected": [
+        "TestPostgresRotationCASPreservesConcurrentWriter",
+        "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+        "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+        "TestPostgresRotationInterruptionResumesCommittedPages"
+      ],
+      "terminal": [
+        [
+          "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+          "pass"
+        ],
+        [
+          "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+          "pass"
+        ],
+        [
+          "TestPostgresRotationInterruptionResumesCommittedPages",
+          "pass"
+        ],
+        [
+          "TestPostgresRotationCASPreservesConcurrentWriter",
+          "pass"
+        ]
+      ],
+      "qualified": true
+    },
+    "logSHA256": "9c0664dd3a27d0e05a5ec1a16d52af9381fd46b9b1ff749ee4aabf27435d245c",
+    "completedAt": "2026-10-10T02:04:47.595126+00:00",
+    "scope": "Four real-DB rotation parents on exclusively owned DB; no whole application/FIPS qualification"
+  },
+  "cancellationObservations": [
+    "owned_postgres_test.go:315: server_cancel=false backend_pid=9386 active_after_client_result=true committed_after_server_completion=true expected_resume_rewrites=0 expected_resume_skips=2",
+    "owned_postgres_test.go:315: server_cancel=true backend_pid=9388 active_after_client_result=false committed_after_server_completion=false expected_resume_rewrites=1 expected_resume_skips=1"
+  ],
+  "fullPackage": {
+    "sourceCommit": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceStable": true,
+    "command": [
+      "go",
+      "test",
+      "./cmd/keyrotate",
+      "./internal/auth",
+      "./internal/credential",
+      "-race",
+      "-count=1",
+      "-timeout=2m",
+      "-json"
+    ],
+    "exitCode": 0,
+    "parentCount": 166,
+    "caseCount": 252,
+    "skipCount": 0,
+    "failCount": 0,
+    "packages": {
+      "github.com/alphabravocompany/astronomer-go/cmd/keyrotate": {
+        "pass": 27,
+        "parents": 22
+      },
+      "github.com/alphabravocompany/astronomer-go/internal/credential": {
+        "pass": 22,
+        "parents": 10
+      },
+      "github.com/alphabravocompany/astronomer-go/internal/auth": {
+        "pass": 203,
+        "parents": 134
+      }
+    },
+    "logSHA256": "ef884e4e3e0743e75cab3f4615e2e6bc246d2d053a5352feb35a8da80df7f863",
+    "receiptPath": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/full-package/receipt.json",
+    "receiptSHA256": "a53760005c6491c8d392c10c773fd0d9bc4c9c037180ec9437ae5322beda3b1c"
+  },
+  "vet": {
+    "command": [
+      "go",
+      "vet",
+      "./cmd/keyrotate",
+      "./internal/auth",
+      "./internal/credential",
+      "./scripts/fips-mode-probe",
+      "./scripts/crypto-inventory"
+    ],
+    "exitCode": 0,
+    "output": "empty",
+    "evidence": "Executed tool result in session; no independent raw vet log retained"
+  },
+  "spike": {
+    "sourceCommit": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6737,
+      "source_tree_sha256": "cb4daf572fb0860da9016779fcd1b1e69e48ffdf2239eaea4548d8f4cade1746"
+    },
+    "sourceStable": true,
+    "originalAssessmentReceiptSHA256": "02947a156e77358a84052ff6f7c20ac00d1c4938444ee851c19bb8297bcbf4a5",
+    "observedAt": "2026-10-10T02:07:14.115734+00:00",
+    "moduleSnapshot": "v1.0.0-c2097c7c",
+    "moduleSnapshotSHA256": "daf3614e0406f67ae6323c902db3f953a1effb199142362a039e7526dfb9368b",
+    "certifiedMappingSHA256": "f8490beaadbb82b77042ec034eceaf0b5f1502def824fb63e298c47a2c45fbd5",
+    "cases": [
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "identity",
+        "qualified": true,
+        "outputSHA256": "079c5a318d1be6ea821e5253f4d5a1d6626d26563702b470ce7879430299e4b9",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "aes-gcm",
+        "qualified": true,
+        "outputSHA256": "d113608026ad196b3703e6fe171e7a2cd54b598ea6c9b053d0c436b281ced1d2",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "fernet",
+        "qualified": true,
+        "outputSHA256": "2d7b567c96a7776b118629515736d3ae03b753ca96a0aa29f7927091d9480f2a",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "bcrypt",
+        "qualified": true,
+        "outputSHA256": "47d433e34440fbb1f246bfd2a837b7b60b208633db6cc512b5ca48e68d01bb7e",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "argon2",
+        "qualified": true,
+        "outputSHA256": "d337ff9d8cb17073c2430148a444539630fd1f7901f6a76635e12be2371f64de",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "aes-gcm-external-nonce",
+        "qualified": true,
+        "outputSHA256": "017d7184ca44976bcc7a8f2eb4dff30f86ec879cc50c02d107cfe06e428c87e6",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "off",
+        "snapshot": "off",
+        "runtime": "off",
+        "case": "unknown",
+        "qualified": true,
+        "outputSHA256": "be22a1c2f1906b694453736720b4f200a8c7bcca0f794d2d8740ecab8f7c424b",
+        "binarySHA256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "identity",
+        "qualified": true,
+        "outputSHA256": "5d70f8e40ae36e9df25203064dc577a596a9e68fd373974cdff94071381b4f82",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "aes-gcm",
+        "qualified": true,
+        "outputSHA256": "d97eb6c274758889a92183df0235b5dd5b202f06bd6b18911ac7f95603ebeb17",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "fernet",
+        "qualified": true,
+        "outputSHA256": "fe5860fe5400fa90ef9ca48b6ad8e4136108256dc35159ba72d92b6d71b86248",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "bcrypt",
+        "qualified": true,
+        "outputSHA256": "bebacb1641716d1ea07d072737aa6219b347e36607e7dea0a908b056c36b38b5",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "argon2",
+        "qualified": true,
+        "outputSHA256": "5142dc5d4a2dcad2ba014be6c1f5e9fc7aa6e89f29aa32155d18cdc530f7cdc8",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "aes-gcm-external-nonce",
+        "qualified": true,
+        "outputSHA256": "6d199a203ab076b51f28e910638ecc8edc46591ae712b1e94db89f521f5331d2",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "on",
+        "case": "unknown",
+        "qualified": true,
+        "outputSHA256": "fe0505749f48215b07033ec3021d7d768e86cec64131ba996a4a49eb19c5fddb",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "identity",
+        "qualified": true,
+        "outputSHA256": "5d70f8e40ae36e9df25203064dc577a596a9e68fd373974cdff94071381b4f82",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "aes-gcm",
+        "qualified": true,
+        "outputSHA256": "d97eb6c274758889a92183df0235b5dd5b202f06bd6b18911ac7f95603ebeb17",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "fernet",
+        "qualified": true,
+        "outputSHA256": "fe5860fe5400fa90ef9ca48b6ad8e4136108256dc35159ba72d92b6d71b86248",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "bcrypt",
+        "qualified": true,
+        "outputSHA256": "bebacb1641716d1ea07d072737aa6219b347e36607e7dea0a908b056c36b38b5",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "argon2",
+        "qualified": true,
+        "outputSHA256": "5142dc5d4a2dcad2ba014be6c1f5e9fc7aa6e89f29aa32155d18cdc530f7cdc8",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "aes-gcm-external-nonce",
+        "qualified": true,
+        "outputSHA256": "11085d8472f84a0ace332fdd4fa1a96901ee1daa2db747d8007c6c9aed7531fd",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      },
+      {
+        "selection": "v1.0.0",
+        "snapshot": "v1.0.0-c2097c7c",
+        "runtime": "only",
+        "case": "unknown",
+        "qualified": true,
+        "outputSHA256": "fe0505749f48215b07033ec3021d7d768e86cec64131ba996a4a49eb19c5fddb",
+        "binarySHA256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+      }
+    ],
+    "qualifiedCaseCount": 21,
+    "scope": "Re-evaluation of retained raw outputs using actual normalized compiler snapshot metadata; original validator expected short selection and failed all14 frozen-module cases. No raw output or receipt overwritten; no new runtime execution or product certification."
+  },
+  "sqlOwnership": {
+    "sites": 890,
+    "legacySiteCeiling": 294,
+    "changedOwnerFiles": [
+      "cmd/keyrotate/main.go"
+    ],
+    "changedScopeBindings": [
+      "QueryContext",
+      "ExecContext"
+    ],
+    "sqlCallIdentitiesUnchanged": true,
+    "buildersUnchanged": true,
+    "addedPlainCiphertextTarget": "management_backup_destinations.encrypted_credentials",
+    "deleteTargets": [
+      "charlie_finding_resources",
+      "charlie_trigger_rules",
+      "chart_ratings",
+      "cloud_credential_materializations",
+      "cluster_service_mesh",
+      "global_role_bindings",
+      "image_vulnerability_report_snapshots",
+      "notification_templates",
+      "read_audit_policies"
+    ]
+  },
+  "historicalEvidence": [
+    {
+      "path": "advisor-plans/032-evidence/fips-on-auth.json",
+      "sha256": "349d1aae891b042ab370ea35ec66189bddbc15b257ab2364c5c72d8f37e8cf8b",
+      "scope": "Historical07c9 exploratory Go native-on ordinary crypto tests; not current whole application qualification"
+    },
+    {
+      "path": "advisor-plans/032-evidence/fips-only-auth.json",
+      "sha256": "dc0b6be3018e88f32eb38b969dd57d45b57fbcb1ca51945023e379decac78ded",
+      "scope": "Historical07c9 only-mode pre-test Redis Lua SHA1 startup failure; direct library spike is intentionally distinct"
+    },
+    {
+      "path": "advisor-plans/032-evidence/cnpg18-physical-key-restore.json",
+      "sha256": "459ae4754bee5a5c908e6e69fb69d5b75bbce6f5dc57fdbd0bc13c4bbed7dffe",
+      "scope": "Prior source/schema72 physical restore, production credential readers and separately recovered historical/current keys; not relabelled current schema75"
+    }
+  ],
+  "scope": "Scoped ordinary v1 crypto/rotation qualification, source and external boundary inventory; no FIPS/FedRAMP certification or optional FIPS release artifact"
+}

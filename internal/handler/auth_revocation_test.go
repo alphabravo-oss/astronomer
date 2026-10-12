@@ -101,7 +101,7 @@ func TestLogout_RevokesJTI(t *testing.T) {
 		t.Fatalf("Reason = %q, want user_logout", rev.revoked[0].Reason)
 	}
 	for _, name := range []string{auth.SessionCookieName, auth.RefreshCookieName, auth.CSRFCookieName} {
-		cookie := cookieByName(t, rec.Result(), name)
+		cookie := cookieByName(t, rec.Result(), auth.BrowserCookieName(req, name))
 		assertCookieSecurity(t, cookie, cookieSecurityWant{
 			value:    "",
 			path:     "/",
