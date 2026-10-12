@@ -334,7 +334,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/charlie/threads" && method === "GET") {
       return route.fulfill({
-        json: {
+        json: apiResponse({
           threads: [
             {
               id: "session-private-user",
@@ -343,7 +343,7 @@ async function mockApi(page: Page, user = adminUser) {
               updated_at: new Date().toISOString(),
             },
           ],
-        },
+        }),
       });
     }
     if (
@@ -352,7 +352,7 @@ async function mockApi(page: Page, user = adminUser) {
     ) {
       return route.fulfill({
         json: apiResponse({
-          messages: [
+          items: [
             {
               itemId: "message-charlie",
               kind: "assistant_message",
@@ -364,7 +364,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/charlie/sessions" && method === "GET") {
       return route.fulfill({
-        json: {
+        json: apiResponse({
           mode: "approval",
           sessions: [
             {
@@ -392,7 +392,7 @@ async function mockApi(page: Page, user = adminUser) {
               updatedAt: new Date().toISOString(),
             },
           ],
-        },
+        }),
       });
     }
     if (
@@ -413,7 +413,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/charlie/findings" && method === "GET") {
       return route.fulfill({
-        json: {
+        json: apiResponse({
           items: [
             {
               id: "f-1",
@@ -434,12 +434,12 @@ async function mockApi(page: Page, user = adminUser) {
               summary: "Review the selected installation.",
             },
           ],
-        },
+        }),
       });
     }
     if (path === "/charlie/findings/f-1") {
       return route.fulfill({
-        json: {
+        json: apiResponse({
           finding: {
             id: "f-1",
             title: "Bounded finding",
@@ -456,12 +456,15 @@ async function mockApi(page: Page, user = adminUser) {
             operatorChecks: [],
             evidence: [],
           },
-        },
+        }),
       });
     }
     if (path === "/charlie/activation" && method === "GET") {
       return route.fulfill({
-        json: { activated: true, endpoint: "https://charlie.example.test" },
+        json: apiResponse({
+          activated: true,
+          endpoint: "https://charlie.example.test",
+        }),
       });
     }
     if (path === "/catalog/repositories") {
