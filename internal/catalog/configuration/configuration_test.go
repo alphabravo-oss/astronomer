@@ -52,3 +52,19 @@ func TestCompatibilityAndUpgradeConstraints(t *testing.T) {
 		t.Fatal("upgrade constraint ignored")
 	}
 }
+
+func TestReviewedDigestAcceptsHelmIndexAndCanonicalRepresentations(t *testing.T) {
+	profile := Version{Available: true}
+	hex := strings.Repeat("a", 64)
+	profile.Artifact.Digest = "sha256:" + hex
+	for _, digest := range []string{hex, "sha256:" + hex} {
+		if err := profile.Validate(digest); err != nil {
+			t.Fatalf("rejected matching chart digest %q: %v", digest, err)
+		}
+	}
+	for _, digest := range []string{"", "sha256:", "sha256:sha256:" + hex, "sha512:" + hex, strings.Repeat("b", 64), strings.Repeat("a", 63), strings.Repeat("g", 64)} {
+		if profile.Validate(digest) == nil {
+			t.Fatalf("accepted malformed or different chart digest %q", digest)
+		}
+	}
+}

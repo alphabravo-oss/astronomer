@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
 )
@@ -80,7 +81,12 @@ func (v Version) Validate(digest string) error {
 	if v.Revoked || !v.Available {
 		return errors.New("this catalog version is unavailable or revoked")
 	}
-	if v.Artifact.Digest != digest {
+	// Helm HTTP indexes store a bare SHA-256 hex digest; OCI-style catalog
+	// identities include the algorithm. Compare the same validated identity.
+	if !strings.Contains(digest, ":") {
+		digest = "sha256:" + digest
+	}
+	if !chartDigestPattern.MatchString(digest) || v.Artifact.Digest != digest {
 		return errors.New("the chart digest differs from the reviewed catalog version")
 	}
 	return nil
