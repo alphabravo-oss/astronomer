@@ -50,6 +50,17 @@ Tests cover exact/idempotent patching, version/source mismatch rejection,
 both matrix completion orders, output preservation, failure/skip/cancellation,
 and execution of the real PR aggregate for passing and failing dependencies.
 All patch anchors are validated before any installed dependency is rewritten.
+
+## Secondary checkout repair (0.18.1)
+
+The Git shim also intercepted Trivy's secondary repository checkout, replacing
+its fetch with the candidate workspace's synthetic SHA. The image scan failed
+before scanning because Trivy's pinned commit was absent. `patch-runner-git.mjs`
+limits synthetic Git behavior to `GITHUB_WORKSPACE`; a separately initialized
+repository uses real Git and fetches its pinned source. The regression test
+fetches and checks out a real secondary commit and verifies that the candidate
+workspace retains its synthetic behavior. No scan or failure gate is skipped.
+
 Review and remove these repairs when upgrading the pinned runner. The runner
 still aborts later waves after a failed mixed first wave; a skipped aggregate
 is not passing qualification, and local evidence is not protected GitHub signoff.

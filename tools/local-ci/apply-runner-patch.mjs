@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { patchRunnerNeedsContext, patchRunnerResults, patchRunnerWaveResults } from "./patch-runner-needs.mjs";
+import { patchRunnerGit } from "./patch-runner-git.mjs";
 
 export const runnerVersion = "0.18.1";
 export const originalCommand = 'chmod -R 777 "${dirs.containerWorkDir}" "${dirs.diagDir}"';
@@ -28,6 +29,7 @@ function installPatch() {
   const metadata = JSON.parse(readFileSync(new URL("package.json", dependency), "utf8"));
   const patches = [
     ["dist/runner/local-job.js", patchRunnerSource],
+    ["dist/runner/git-shim.js", patchRunnerGit],
     ["dist/commands/run.js", (source, version) => patchRunnerWaveResults(patchRunnerResults(source, version), version)],
     ["dist/workflow/workflow-parser.js", patchRunnerNeedsContext],
   ].map(([path, patch]) => {

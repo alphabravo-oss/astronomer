@@ -79,7 +79,7 @@ test("Catalog installed pages keep recovery outside denied content", async ({
   await expect(browser.getByText("release-1", { exact: true })).toBeVisible();
   expect(await browser.pageErrors()).toEqual([]);
 });
-test("Apps install chooses a version beyond 200 and keeps versions/defaults project-scoped", async ({
+test("Apps install chooses a version beyond 200 and keeps versions cluster-scoped and defaults project-scoped", async ({
   page: browser,
 }) => {
   const reads: URL[] = [];
@@ -101,6 +101,8 @@ test("Apps install chooses a version beyond 200 and keeps versions/defaults proj
           },
         },
       });
+    if (path === `/catalog/charts/${chart.id}`)
+      return route.fulfill({ json: { data: chart } });
     if (path === "/catalog/charts")
       return route.fulfill({ json: page([chart], url) });
     if (path === `/catalog/charts/${chart.id}/versions`) {
@@ -132,7 +134,9 @@ test("Apps install chooses a version beyond 200 and keeps versions/defaults proj
     `/dashboard/clusters/${SMOKE_CLUSTER_ID}/apps?section=browse&project=${projectId}`,
   );
   await browser.getByRole("button", { name: "Install →", exact: true }).click();
-  const dialog = browser.getByRole("dialog");
+  await expect(browser).toHaveURL(/catalog\/configure/);
+  await expect(browser.getByRole("dialog")).toHaveCount(0);
+  const dialog = browser.getByRole("main");
   const select = dialog.getByRole("combobox", { name: "Version", exact: true });
   await expect(select).toHaveValue("v-1");
   for (let index = 1; index <= 9; index++) {
@@ -148,6 +152,10 @@ test("Apps install chooses a version beyond 200 and keeps versions/defaults proj
     )
     .toBe(true);
   await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await browser
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm installation", exact: true })
+    .click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toMatchObject({
     project_id: projectId,
@@ -155,10 +163,12 @@ test("Apps install chooses a version beyond 200 and keeps versions/defaults proj
     chart_version_id: "v-226",
   });
   expect(
-    reads.every(
-      (url) =>
-        url.searchParams.get("project_id") === projectId &&
-        !url.searchParams.has("cluster_id"),
+    reads.every((url) =>
+      url.pathname.includes("/versions")
+        ? url.searchParams.get("cluster_id") === SMOKE_CLUSTER_ID &&
+          !url.searchParams.has("project_id")
+        : url.searchParams.get("project_id") === projectId &&
+          !url.searchParams.has("cluster_id"),
     ),
   ).toBe(true);
   expect(

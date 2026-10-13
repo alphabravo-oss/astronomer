@@ -258,8 +258,16 @@ async function mockApi(page: Page, user = adminUser) {
     if (path === "/clusters/cluster-1") {
       return route.fulfill({ json: apiResponse(cluster) });
     }
+    if (
+      path === "/clusters/cluster-1/namespaces" ||
+      path === "/clusters/cluster-1/resources/generic/namespaces"
+    )
+      return route.fulfill({ json: paginated([]) });
     if (path.startsWith("/clusters/cluster-1/")) {
       return route.fulfill({ json: apiResponse([]) });
+    }
+    if (path === `/projects/${project.id}` && method === "GET") {
+      return route.fulfill({ json: apiResponse(project) });
     }
     if (path === "/projects" && method === "GET") {
       return route.fulfill({ json: paginated([project]) });
@@ -470,6 +478,18 @@ async function mockApi(page: Page, user = adminUser) {
     if (path === "/catalog/repositories") {
       return route.fulfill({ json: paginated([]) });
     }
+    if (path === `/catalog/charts/${catalogChart.id}`) {
+      return route.fulfill({ json: apiResponse(catalogChart) });
+    }
+    if (path === `/catalog/charts/${catalogChart.id}/values`) {
+      return route.fulfill({
+        json: {
+          chart: catalogChart.name,
+          version: catalogVersion.version,
+          default_values: catalogVersion.default_values,
+        },
+      });
+    }
     if (path === "/catalog/charts") {
       return route.fulfill({ json: paginated([catalogChart]) });
     }
@@ -637,37 +657,40 @@ test("delivery overview renders the Flux-native system for authenticated users",
   ).toHaveCount(1);
 });
 
-test("catalog install modal remains usable on responsive viewports", async ({
+test("catalog install page remains usable on responsive viewports", async ({
   context,
   page,
 }) => {
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/catalog");
-
   await expect(page.getByRole("heading", { name: /^Catalog$/ })).toBeVisible();
   await page.getByRole("button", { name: /kube prometheus stack/i }).click();
-  await expect(
-    page.getByRole("heading", { name: /kube prometheus stack/i }),
-  ).toBeVisible();
   await page.getByRole("button", { name: /^Install$/ }).click();
-
+  await expect(page).toHaveURL(/catalog\/configure/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Target cluster" }).click();
+  await page.getByRole("option", { name: /Prod East/ }).click();
   await expect(
-    page.getByRole("heading", { name: /install kube prometheus stack/i }),
+    page.getByRole("heading", {
+      name: "Install kube-prometheus-stack",
+      exact: true,
+    }),
   ).toBeVisible();
-  const installDialog = page.getByRole("dialog", {
-    name: /install kube prometheus stack/i,
-  });
-  await installDialog.getByRole("combobox", { name: "Target Cluster" }).click();
-  await installDialog.getByRole("option", { name: /Prod East/ }).click();
-  await expect(installDialog).toBeVisible();
-  await installDialog.getByLabel("Release Name").fill("platform-monitoring");
-  await expect(installDialog).toBeVisible();
-  await installDialog.getByLabel("Namespace").fill("monitoring");
-  await expect(installDialog).toBeVisible();
+  await page
+    .getByLabel("Release name", { exact: true })
+    .fill("platform-monitoring");
+  await page.getByLabel("Namespace", { exact: true }).fill("monitoring");
   await expect(
-    installDialog.getByRole("button", { name: /install chart/i }),
+    page.getByText("Namespace: monitoring · Release: platform-monitoring"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Install", exact: true }),
   ).toBeEnabled();
-  await installDialog.getByRole("button", { name: /install chart/i }).click();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("settings general form remains usable on responsive viewports", async ({
