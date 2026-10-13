@@ -184,6 +184,7 @@ export async function getChartDefaultValues(
   version: string;
   defaultValues: string;
   valuesSchema: Record<string, unknown>;
+  catalogVersion?: OpenAPIComponents["schemas"]["CatalogVersionProfile"];
 }> {
   const wire = await generated.getCatalogChartsByIdValues({
     path: { id: chartId },
@@ -203,6 +204,7 @@ export async function previewCatalogApplication(
   input: {
     clusterId: string;
     chartVersionId: string;
+    fromChartVersionId?: string;
     namespace: string;
     valuesOverride: string;
     operation: "install" | "upgrade";
@@ -214,6 +216,7 @@ export async function previewCatalogApplication(
     body: {
       cluster_id: input.clusterId,
       chart_version_id: input.chartVersionId,
+      from_chart_version_id: input.fromChartVersionId,
       namespace: input.namespace,
       values_override: input.valuesOverride || undefined,
       operation: input.operation,

@@ -142,8 +142,8 @@ export function getClusterNavGroups(
         // numeric count for now; a status-dot replacement (green/amber
         // driven by recent Warning count) is the better end state.
         { label: "Events", href: `${base}/events`, icon: History },
-        { label: "Tools", href: `${base}/tools`, icon: Wrench },
-        { label: "Apps", href: `${base}/apps`, icon: Package },
+        { label: "Platform Tools", href: `${base}/tools`, icon: Wrench },
+        { label: "Applications", href: `${base}/apps`, icon: Package },
         {
           label: "Delivery",
           href: `${base}/delivery`,

@@ -1,8 +1,8 @@
 {
   "baseline": "v1.2.1",
   "baseline_sha256": "db9725d5c092c10192e591264a1e0a730a83e4de5a554b5507fa06022352551c",
-  "current_sha256": "92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6",
-  "reason": "Approved v2 browser-isolation migration: main-origin tool proxy responses are HTML launch documents or 410, not tool JSON. All other released SDK symbols remain compile-checked. The merged main Charlie API correction makes SDK success payloads match the existing HTTP data envelope; only the listed exact wrappers and generated mode-type rename are migrated in the fixture.",
+  "current_sha256": "4aec6ecbfee582397a05a3f9bab4be9d0a0b2f43cf97c68356195bbd864ebb13",
+  "reason": "Approved v2 browser-isolation migration: main-origin tool proxy responses are HTML launch documents or 410, not tool JSON. All other released SDK symbols remain compile-checked. The merged main Charlie API correction makes SDK success payloads match the existing HTTP data envelope; only the listed exact wrappers and generated mode-type rename are migrated in the fixture. Catalog configuration adds optional version profiles, optional curated-view/selection query parameters, and an optional upgrade-source version. No additional removed fields, envelopes, or type-renaming exceptions are granted.",
   "release": "v2.0.1",
   "removed_fields": {
     "GetClustersByIdObservabilityGrafanaProxyResponse": [

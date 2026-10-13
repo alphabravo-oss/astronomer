@@ -17,6 +17,10 @@ type toolPreflightCheck struct {
 }
 
 func (h *ToolHandler) toolPreflightChecks(ctx context.Context, slug, clusterID string, plan []toolRelease, allowedRelease string) []toolPreflightCheck {
+	return append(h.toolCatalogChecks(ctx, plan), h.toolRuntimePreflightChecks(ctx, slug, clusterID, plan, allowedRelease)...)
+}
+
+func (h *ToolHandler) toolRuntimePreflightChecks(ctx context.Context, slug, clusterID string, plan []toolRelease, allowedRelease string) []toolPreflightCheck {
 	if slug == "fluent-bit" {
 		return fluentBitOutputChecks(plan)
 	}

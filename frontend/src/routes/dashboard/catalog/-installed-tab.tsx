@@ -7,19 +7,20 @@ import { useCluster } from "@/lib/hooks/clusters";
 import { AgeCell } from "@/components/ui/age-cell";
 import type { InstalledChart } from "@/types";
 import { ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react";
-import { UpgradeChartModal } from "./-upgrade-chart-modal";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export function InstalledTab({
   installed,
   loading,
   onRollback,
+  onUpgrade,
   onUninstall,
   uninstallPending,
 }: {
   installed: InstalledChart[] | undefined;
   loading: boolean;
   onRollback: (id: string, revision: number) => void;
+  onUpgrade: (row: InstalledChart) => void;
   onUninstall: (request: {
     id: string;
     confirmDataDeletion?: boolean;
@@ -27,9 +28,6 @@ export function InstalledTab({
   uninstallPending?: boolean;
 }) {
   const [uninstallTarget, setUninstallTarget] = useState<InstalledChart | null>(
-    null,
-  );
-  const [upgradeTarget, setUpgradeTarget] = useState<InstalledChart | null>(
     null,
   );
   const installedColumns: Column<InstalledChart>[] = [
@@ -132,7 +130,7 @@ export function InstalledTab({
           {
             label: "Upgrade",
             icon: <ArrowUpCircle className="h-3.5 w-3.5" />,
-            onClick: () => setUpgradeTarget(row),
+            onClick: () => onUpgrade(row),
           },
           {
             label: "Rollback",
@@ -221,12 +219,6 @@ export function InstalledTab({
             : undefined
         }
       />
-      {upgradeTarget && (
-        <UpgradeChartModal
-          installation={upgradeTarget}
-          onClose={() => setUpgradeTarget(null)}
-        />
-      )}
     </>
   );
 }

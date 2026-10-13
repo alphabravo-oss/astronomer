@@ -21,6 +21,7 @@ import { Route as DashboardAlertingIndexRouteImport } from './routes/dashboard/a
 import { Route as DashboardAuditIndexRouteImport } from './routes/dashboard/audit/index'
 import { Route as DashboardBackupsIndexRouteImport } from './routes/dashboard/backups/index'
 import { Route as DashboardCatalogIndexRouteImport } from './routes/dashboard/catalog/index'
+import { Route as DashboardCatalogConfigureRouteImport } from './routes/dashboard/catalog/configure'
 import { Route as DashboardCharlieIndexRouteImport } from './routes/dashboard/charlie/index'
 import { Route as DashboardClusterTemplatesIndexRouteImport } from './routes/dashboard/cluster-templates/index'
 import { Route as DashboardClustersIndexRouteImport } from './routes/dashboard/clusters/index'
@@ -150,6 +151,7 @@ import { Route as DashboardClustersIdDeliverySystemComponentsIndexRouteImport } 
 import { Route as DashboardClustersIdDeliveryTargetsIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/targets/index'
 import { Route as DashboardClustersIdNodesNodeNameIndexRouteImport } from './routes/dashboard/clusters/$id/nodes/$nodeName/index'
 import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './routes/dashboard/clusters/$id/service-mesh/mtls/index'
+import { Route as DashboardClustersIdToolsSlugConfigureRouteImport } from './routes/dashboard/clusters/$id/tools/$slug/configure'
 import { Route as DashboardLoggingPipelinesPipelineIdEditIndexRouteImport } from './routes/dashboard/logging/pipelines/$pipelineId/edit/index'
 import { Route as DashboardProjectsIdCloudCredentialsNewIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/new/index'
 import { Route as DashboardSettingsAuthConnectorsIdIndexRouteImport } from './routes/dashboard/settings/auth/connectors/$id/index'
@@ -225,6 +227,12 @@ const DashboardCatalogIndexRoute = DashboardCatalogIndexRouteImport.update({
   path: '/catalog/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const DashboardCatalogConfigureRoute =
+  DashboardCatalogConfigureRouteImport.update({
+    id: '/catalog/configure',
+    path: '/catalog/configure',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardCharlieIndexRoute = DashboardCharlieIndexRouteImport.update({
   id: '/charlie/',
   path: '/charlie/',
@@ -987,6 +995,12 @@ const DashboardClustersIdServiceMeshMtlsIndexRoute =
     path: '/service-mesh/mtls/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
+const DashboardClustersIdToolsSlugConfigureRoute =
+  DashboardClustersIdToolsSlugConfigureRouteImport.update({
+    id: '/tools/$slug/configure',
+    path: '/tools/$slug/configure',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
 const DashboardLoggingPipelinesPipelineIdEditIndexRoute =
   DashboardLoggingPipelinesPipelineIdEditIndexRouteImport.update({
     id: '/logging/pipelines/$pipelineId/edit/',
@@ -1082,6 +1096,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
   '/dashboard/projects/$id': typeof DashboardProjectsIdRouteRouteWithChildren
+  '/dashboard/catalog/configure': typeof DashboardCatalogConfigureRoute
   '/dashboard/monitoring/grafana': typeof DashboardMonitoringGrafanaRoute
   '/auth/change-password/': typeof AuthChangePasswordIndexRoute
   '/auth/login/': typeof AuthLoginIndexRoute
@@ -1206,6 +1221,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
+  '/dashboard/clusters/$id/tools/$slug/configure': typeof DashboardClustersIdToolsSlugConfigureRoute
   '/dashboard/clusters/$id/delivery/bundles/': typeof DashboardClustersIdDeliveryBundlesIndexRoute
   '/dashboard/clusters/$id/delivery/configuration-templates/': typeof DashboardClustersIdDeliveryConfigurationTemplatesIndexRoute
   '/dashboard/clusters/$id/delivery/deployments/': typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
@@ -1234,6 +1250,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/catalog/configure': typeof DashboardCatalogConfigureRoute
   '/dashboard/monitoring/grafana': typeof DashboardMonitoringGrafanaRoute
   '/auth/change-password': typeof AuthChangePasswordIndexRoute
   '/auth/login': typeof AuthLoginIndexRoute
@@ -1357,6 +1374,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings/templates/$key': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new': typeof DashboardSettingsWebhooksNewIndexRoute
+  '/dashboard/clusters/$id/tools/$slug/configure': typeof DashboardClustersIdToolsSlugConfigureRoute
   '/dashboard/clusters/$id/delivery/bundles': typeof DashboardClustersIdDeliveryBundlesIndexRoute
   '/dashboard/clusters/$id/delivery/configuration-templates': typeof DashboardClustersIdDeliveryConfigurationTemplatesIndexRoute
   '/dashboard/clusters/$id/delivery/deployments': typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
@@ -1391,6 +1409,7 @@ export interface FileRoutesById {
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
   '/dashboard/projects/$id': typeof DashboardProjectsIdRouteRouteWithChildren
+  '/dashboard/catalog/configure': typeof DashboardCatalogConfigureRoute
   '/dashboard/monitoring/grafana': typeof DashboardMonitoringGrafanaRoute
   '/auth/change-password/': typeof AuthChangePasswordIndexRoute
   '/auth/login/': typeof AuthLoginIndexRoute
@@ -1515,6 +1534,7 @@ export interface FileRoutesById {
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
+  '/dashboard/clusters/$id/tools/$slug/configure': typeof DashboardClustersIdToolsSlugConfigureRoute
   '/dashboard/clusters/$id/delivery/bundles/': typeof DashboardClustersIdDeliveryBundlesIndexRoute
   '/dashboard/clusters/$id/delivery/configuration-templates/': typeof DashboardClustersIdDeliveryConfigurationTemplatesIndexRoute
   '/dashboard/clusters/$id/delivery/deployments/': typeof DashboardClustersIdDeliveryDeploymentsIndexRoute
@@ -1550,6 +1570,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/clusters/$id'
     | '/dashboard/projects/$id'
+    | '/dashboard/catalog/configure'
     | '/dashboard/monitoring/grafana'
     | '/auth/change-password/'
     | '/auth/login/'
@@ -1674,6 +1695,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
+    | '/dashboard/clusters/$id/tools/$slug/configure'
     | '/dashboard/clusters/$id/delivery/bundles/'
     | '/dashboard/clusters/$id/delivery/configuration-templates/'
     | '/dashboard/clusters/$id/delivery/deployments/'
@@ -1702,6 +1724,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/dashboard/catalog/configure'
     | '/dashboard/monitoring/grafana'
     | '/auth/change-password'
     | '/auth/login'
@@ -1825,6 +1848,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key'
     | '/dashboard/settings/webhooks/$id'
     | '/dashboard/settings/webhooks/new'
+    | '/dashboard/clusters/$id/tools/$slug/configure'
     | '/dashboard/clusters/$id/delivery/bundles'
     | '/dashboard/clusters/$id/delivery/configuration-templates'
     | '/dashboard/clusters/$id/delivery/deployments'
@@ -1858,6 +1882,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/clusters/$id'
     | '/dashboard/projects/$id'
+    | '/dashboard/catalog/configure'
     | '/dashboard/monitoring/grafana'
     | '/auth/change-password/'
     | '/auth/login/'
@@ -1982,6 +2007,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
+    | '/dashboard/clusters/$id/tools/$slug/configure'
     | '/dashboard/clusters/$id/delivery/bundles/'
     | '/dashboard/clusters/$id/delivery/configuration-templates/'
     | '/dashboard/clusters/$id/delivery/deployments/'
@@ -2101,6 +2127,13 @@ declare module '@tanstack/react-router' {
       path: '/catalog'
       fullPath: '/dashboard/catalog/'
       preLoaderRoute: typeof DashboardCatalogIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/catalog/configure': {
+      id: '/dashboard/catalog/configure'
+      path: '/catalog/configure'
+      fullPath: '/dashboard/catalog/configure'
+      preLoaderRoute: typeof DashboardCatalogConfigureRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/charlie/': {
@@ -3006,6 +3039,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardClustersIdServiceMeshMtlsIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
+    '/dashboard/clusters/$id/tools/$slug/configure': {
+      id: '/dashboard/clusters/$id/tools/$slug/configure'
+      path: '/tools/$slug/configure'
+      fullPath: '/dashboard/clusters/$id/tools/$slug/configure'
+      preLoaderRoute: typeof DashboardClustersIdToolsSlugConfigureRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
     '/dashboard/logging/pipelines/$pipelineId/edit/': {
       id: '/dashboard/logging/pipelines/$pipelineId/edit/'
       path: '/logging/pipelines/$pipelineId/edit'
@@ -3359,6 +3399,7 @@ interface DashboardClustersIdRouteRouteChildren {
   DashboardClustersIdTemplateIndexRoute: typeof DashboardClustersIdTemplateIndexRoute
   DashboardClustersIdToolsIndexRoute: typeof DashboardClustersIdToolsIndexRoute
   DashboardClustersIdWorkloadsIndexRoute: typeof DashboardClustersIdWorkloadsIndexRoute
+  DashboardClustersIdToolsSlugConfigureRoute: typeof DashboardClustersIdToolsSlugConfigureRoute
   DashboardClustersIdNodesNodeNameIndexRoute: typeof DashboardClustersIdNodesNodeNameIndexRoute
   DashboardClustersIdServiceMeshMtlsIndexRoute: typeof DashboardClustersIdServiceMeshMtlsIndexRoute
 }
@@ -3410,6 +3451,8 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
     DashboardClustersIdToolsIndexRoute: DashboardClustersIdToolsIndexRoute,
     DashboardClustersIdWorkloadsIndexRoute:
       DashboardClustersIdWorkloadsIndexRoute,
+    DashboardClustersIdToolsSlugConfigureRoute:
+      DashboardClustersIdToolsSlugConfigureRoute,
     DashboardClustersIdNodesNodeNameIndexRoute:
       DashboardClustersIdNodesNodeNameIndexRoute,
     DashboardClustersIdServiceMeshMtlsIndexRoute:
@@ -3457,6 +3500,7 @@ interface DashboardRouteRouteChildren {
   DashboardIndexRoute: typeof DashboardIndexRoute
   DashboardClustersIdRouteRoute: typeof DashboardClustersIdRouteRouteWithChildren
   DashboardProjectsIdRouteRoute: typeof DashboardProjectsIdRouteRouteWithChildren
+  DashboardCatalogConfigureRoute: typeof DashboardCatalogConfigureRoute
   DashboardMonitoringGrafanaRoute: typeof DashboardMonitoringGrafanaRoute
   DashboardAgentsIndexRoute: typeof DashboardAgentsIndexRoute
   DashboardAlertingIndexRoute: typeof DashboardAlertingIndexRoute
@@ -3503,6 +3547,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardIndexRoute: DashboardIndexRoute,
   DashboardClustersIdRouteRoute: DashboardClustersIdRouteRouteWithChildren,
   DashboardProjectsIdRouteRoute: DashboardProjectsIdRouteRouteWithChildren,
+  DashboardCatalogConfigureRoute: DashboardCatalogConfigureRoute,
   DashboardMonitoringGrafanaRoute: DashboardMonitoringGrafanaRoute,
   DashboardAgentsIndexRoute: DashboardAgentsIndexRoute,
   DashboardAlertingIndexRoute: DashboardAlertingIndexRoute,

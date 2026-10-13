@@ -1,3 +1,4 @@
+import { offeringSupport, type OfferingSupport } from "./assurance";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { HelmChart, HelmChartCategory } from "@/types";
 import type { HelmRepository } from "@/types";
@@ -6,7 +7,7 @@ import {
   type CatalogSourcePresentation,
 } from "@/lib/catalogs/source";
 
-export type CatalogSupportTier = "Astronomer" | "Upstream" | "Experimental";
+export type CatalogSupportTier = "Assured" | "Community" | "Experimental";
 type CatalogWire =
   OpenAPIComponents["schemas"]["CatalogApplicationPresentation"];
 
@@ -18,6 +19,8 @@ export interface CatalogPresentation {
   category: HelmChartCategory;
   keywords: string[];
   supportTier: CatalogSupportTier;
+  support: OfferingSupport;
+  artifact: Record<string, unknown>;
   featured: boolean;
   privileged: boolean;
   defaultEnabled: boolean;
@@ -62,6 +65,12 @@ function presentationFromWire(wire: CatalogWire): CatalogPresentation {
         ? `${storage.recommended} recommended`
         : "Required"
       : "None";
+  const support = offeringSupport({
+    tier: wire.support_tier,
+    artifact: wire.artifact,
+    verification: wire.verification_status,
+    revoked: wire.revoked,
+  });
   return {
     slug: wire.slug,
     displayName: wire.display_name,
@@ -69,7 +78,9 @@ function presentationFromWire(wire: CatalogWire): CatalogPresentation {
     iconUrl: wire.icon_url || "",
     category: wire.category as HelmChartCategory,
     keywords: presentation.keywords || [],
-    supportTier: titleCase(wire.support_tier) as CatalogSupportTier,
+    supportTier: support.level,
+    support,
+    artifact: wire.artifact,
     featured: wire.featured,
     privileged: wire.privileged,
     defaultEnabled: wire.default_enabled,
@@ -116,7 +127,7 @@ export function decorateCatalogChart(
       repositoryId: chart.repositoryId,
       repositoryName: chart.repositoryName,
     },
-    presentation?.supportTier === "Astronomer" &&
+    presentation?.repositoryName === "astronomer-first-party" &&
       presentation.slug === "constellation",
   );
   if (!presentation) return { ...chart, catalogSource: source };

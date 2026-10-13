@@ -13,6 +13,8 @@ export interface HelmValuesSchemaNode {
   maxLength?: number;
   pattern?: string;
   format?: string;
+  "x-astronomer-resource"?: "storageclasses" | "ingressclasses" | "secrets";
+  "x-astronomer-advanced"?: boolean;
   "x-astronomer-group"?: string;
   "x-astronomer-show-when"?: { path: string; equals: string };
   properties?: Record<string, HelmValuesSchemaNode>;
@@ -43,9 +45,15 @@ function cloneValue<T>(value: T): T {
 
 export function parseHelmValuesYAML(raw: string): HelmValuesObject | null {
   if (!raw.trim()) return {};
-  const parsed = yaml.load(raw);
-  if (parsed == null) return {};
-  return isPlainObject(parsed) ? (parsed as HelmValuesObject) : null;
+  if (raw.length > 1_048_576) return null;
+  try {
+    const parsed = yaml.load(raw);
+    if (parsed == null) return {};
+    JSON.stringify(parsed); // Reject cyclic aliases that cannot be delivered as values.
+    return isPlainObject(parsed) ? (parsed as HelmValuesObject) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function dumpHelmValuesYAML(values: HelmValuesObject): string {

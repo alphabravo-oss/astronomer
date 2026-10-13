@@ -155,6 +155,41 @@ describe("tools generated API boundary", () => {
     });
   });
 
+  it("joins version profiles by namespace and release without changing legacy chart rows", async () => {
+    const profile = {
+      version: "1.2.3",
+      available: true,
+      recommended: true,
+      deprecated: false,
+      revoked: false,
+      supportTier: "upstream",
+    };
+    vi.mocked(generated.postToolsBySlugPreview).mockResolvedValueOnce({
+      data: {
+        charts: [
+          {
+            chart_name: "fluent-bit",
+            chart_version: "1.2.3",
+            release_name: "logs",
+            namespace: "logging",
+            values_yaml: "",
+          },
+        ],
+        catalog_versions: {
+          "logging/logs": profile,
+          "other/logs": { ...profile, version: "wrong" },
+        },
+        preset: "default",
+        checks: [],
+      },
+    });
+    const preview = await previewToolInstall("fluent-bit", {
+      cluster_id: "cluster",
+      preset: "default",
+    });
+    expect(preview.charts[0].catalogVersion).toEqual(profile);
+  });
+
   it("maps the saved multi-release configuration", async () => {
     vi.mocked(generated.getToolsBySlugConfiguration).mockResolvedValueOnce({
       data: {

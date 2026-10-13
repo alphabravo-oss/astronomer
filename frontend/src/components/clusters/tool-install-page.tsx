@@ -1,5 +1,9 @@
+import { ToolCatalogFields } from "./tool-catalog-fields";
+import { CatalogOfferingSupport } from "@/components/catalog/catalog-offering-support";
+import { OfferingSupport } from "@/components/catalog/offering-support";
+import { InstallationDestination } from "@/components/catalog/installation-destination";
 import { ActionButton } from "@/components/ui/action-button";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfigurationPage } from "@/components/catalog/configuration-page";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import { toastWarning } from "@/lib/toast";
@@ -24,7 +28,7 @@ import { previewToolFieldValues } from "./tool-values";
 import { ToolValuesReview } from "./tool-values-review";
 import { useToolInstallPreview } from "./use-tool-install-preview";
 
-interface ToolInstallModalProps {
+interface ToolInstallPageProps {
   tool: ClusterTool;
   clusterId: string;
   preset: string;
@@ -41,13 +45,12 @@ interface ToolInstallModalProps {
 
 const EMPTY_TOOL_FIELDS: ToolFormField[] = [];
 
-export function ToolInstallModal(props: ToolInstallModalProps) {
+export function ToolInstallPage(props: ToolInstallPageProps) {
   if (props.action === "upgrade" && props.initialValuesYaml === undefined) {
     return (
-      <ModalShell
+      <ConfigurationPage
         title={`Configure ${props.tool.name}`}
         onClose={props.onClose}
-        size="lg"
         footer={<ActionButton onClick={props.onClose}>Close</ActionButton>}
       >
         <p
@@ -62,13 +65,13 @@ export function ToolInstallModal(props: ToolInstallModalProps) {
             ? `Saved configuration unavailable: ${props.initialValuesError.message}`
             : "Loading the saved configuration…"}
         </p>
-      </ModalShell>
+      </ConfigurationPage>
     );
   }
-  return <ToolInstallModalEditor {...props} />;
+  return <ToolInstallPageEditor {...props} />;
 }
 
-function ToolInstallModalEditor({
+function ToolInstallPageEditor({
   tool,
   clusterId,
   preset,
@@ -81,19 +84,16 @@ function ToolInstallModalEditor({
   initialPreset,
   loadingInitialValues,
   initialValuesError,
-}: ToolInstallModalProps) {
+}: ToolInstallPageProps) {
   const isUpgrade = action === "upgrade";
   const fields = tool.formSchema?.fields ?? EMPTY_TOOL_FIELDS;
   const hasForm = fields.length > 0;
   const [mode, setMode] = useState<EditorMode>(hasForm ? "form" : "yaml");
   // Presets belong to the install editor; changing one refreshes its preview.
   const presetNames = useMemo(() => Object.keys(tool.presets), [tool.presets]);
-  const [selectedPreset, setSelectedPreset] = useState(() =>
-    presetNames.includes(initialPreset ?? preset)
-      ? (initialPreset ?? preset)
-      : presetNames.includes("default")
-        ? "default"
-        : (presetNames[0] ?? ""),
+  const [selectedPreset, setSelectedPreset] = useInitialToolPreset(
+    presetNames,
+    initialPreset ?? preset,
   );
 
   // Only operator edits override the selected preset. Schema display defaults
@@ -109,7 +109,6 @@ function ToolInstallModalEditor({
   );
   const [editedPaths, setEditedPaths] = useState<Set<string>>(() => new Set());
 
-  // Chart metadata (name/version/namespace) for the header.
   const { data: preview, isLoading } = useToolInstallPreview(
     tool.slug,
     clusterId,
@@ -196,7 +195,7 @@ function ToolInstallModalEditor({
   };
 
   return (
-    <ModalShell
+    <ConfigurationPage
       title={`${isUpgrade ? "Configure" : "Install"} ${tool.name}`}
       subtitle={
         isUpgrade
@@ -204,10 +203,6 @@ function ToolInstallModalEditor({
           : "Choose a preset, adjust common settings, and review the exact release plan before installation."
       }
       onClose={onClose}
-      size="lg"
-      panelClassName="max-w-2xl max-h-[88vh] bg-popover flex flex-col overflow-hidden"
-      bodyClassName="flex-1 overflow-y-auto"
-      footerClassName="bg-muted/30"
       headerActions={
         charts.length ? (
           <ol
@@ -248,6 +243,11 @@ function ToolInstallModalEditor({
         />
       }
     >
+      <ToolInstallationSummary
+        clusterId={clusterId}
+        tool={tool}
+        charts={charts}
+      />
       <PresetSelector
         names={presetNames}
         value={selectedPreset}
@@ -255,6 +255,14 @@ function ToolInstallModalEditor({
         isUpgrade={isUpgrade}
       />
 
+      {mode === "form" && (
+        <ToolCatalogFields
+          charts={charts}
+          clusterId={clusterId}
+          overrides={overrideValues}
+          onChange={setOverrideValues}
+        />
+      )}
       {mode === "form" ? (
         <ToolSettingsEditor
           groups={groups}
@@ -296,6 +304,55 @@ function ToolInstallModalEditor({
           isUpgrade={isUpgrade}
         />
       )}
-    </ModalShell>
+    </ConfigurationPage>
+  );
+}
+
+function ToolInstallationSummary({
+  clusterId,
+  tool,
+  charts,
+}: {
+  clusterId: string;
+  tool: ClusterTool;
+  charts: {
+    namespace: string;
+    releaseName?: string;
+    chartName: string;
+    chartVersion: string;
+  }[];
+}) {
+  return (
+    <>
+      <InstallationDestination
+        clusterId={clusterId}
+        manager="Platform Tools"
+        releases={charts.map((chart) => ({
+          namespace: chart.namespace,
+          releaseName: chart.releaseName ?? chart.chartName,
+          version: chart.chartVersion,
+        }))}
+      />
+      {tool.charts.length === 1 ? (
+        <CatalogOfferingSupport
+          chart={tool.charts[0].chartName}
+          repository={tool.charts[0].repoUrl}
+          version={charts[0]?.chartVersion}
+          detail
+        />
+      ) : (
+        <OfferingSupport detail />
+      )}
+    </>
+  );
+}
+
+function useInitialToolPreset(names: string[], selected: string) {
+  return useState(() =>
+    names.includes(selected)
+      ? selected
+      : names.includes("default")
+        ? "default"
+        : (names[0] ?? ""),
   );
 }

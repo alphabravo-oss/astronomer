@@ -129,6 +129,10 @@ function mapToolPreview(wire: Schemas["ToolPreview"]): ToolPreviewResponse {
     charts: wire.charts.map((chart) => ({
       chartName: chart.chart_name,
       chartVersion: chart.chart_version,
+      catalogVersion:
+        wire.catalog_versions?.[
+          `${chart.namespace}/${chart.release_name ?? chart.chart_name}`
+        ],
       releaseName: chart.release_name,
       namespace: chart.namespace,
       valuesYaml: chart.values_yaml,

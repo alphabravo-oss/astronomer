@@ -1,3 +1,7 @@
+import { CatalogConfigurationChange } from "@/components/catalog/catalog-configuration-change";
+import type { CatalogValueError } from "@/lib/catalog-values-validation";
+import { CatalogResourceContext } from "@/components/catalog/catalog-resource-field";
+import { CatalogPresets } from "@/components/catalog/catalog-presets";
 import { HelmValuesForm } from "@/components/catalog/helm-values-form";
 import { BareButton } from "@/components/form/bare-button";
 import { QueryStates } from "@/components/ui/query-states";
@@ -17,6 +21,8 @@ import { Braces, FileCode2, GitCompare } from "lucide-react";
 import { CatalogApplicationReview } from "./catalog-application-review";
 type EditorMode = "form" | "yaml" | "review";
 export function AppInstallValuesEditor({
+  clusterId,
+  fieldErrors,
   defaultValues,
   isUpgrade,
   valuesSchema,
@@ -33,6 +39,8 @@ export function AppInstallValuesEditor({
   setYamlError,
   yamlError,
 }: {
+  clusterId: string;
+  fieldErrors: CatalogValueError[];
   defaultValues: UseQueryResult<
     Awaited<ReturnType<typeof getChartDefaultValues>>
   >;
@@ -83,6 +91,16 @@ export function AppInstallValuesEditor({
           </BareButton>
         )}
       </div>
+      {defaultValues.data?.catalogVersion?.configuration && (
+        <CatalogPresets
+          configuration={defaultValues.data.catalogVersion.configuration}
+          valuesYaml={valuesYaml}
+          onChange={onValuesChange}
+        />
+      )}
+      <CatalogConfigurationChange
+        profile={defaultValues.data?.catalogVersion}
+      />
       {valuesSchema && (
         <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
           <BareButton
@@ -138,14 +156,16 @@ export function AppInstallValuesEditor({
         />
       ) : valuesSchema && editorMode === "form" && schemaValues ? (
         <div className="rounded-lg border border-border bg-muted/20 p-4">
-          <HelmValuesForm
-            schema={valuesSchema}
-            value={schemaValues}
-            onChange={(next) => {
-              onValuesChange(dumpHelmValuesYAML(next));
-              setYamlError(null);
-            }}
-          />
+          <CatalogResourceContext.Provider value={{ clusterId, namespace }}>
+            <HelmValuesForm
+              schema={valuesSchema}
+              value={schemaValues}
+              onChange={(next) => {
+                onValuesChange(dumpHelmValuesYAML(next));
+                setYamlError(null);
+              }}
+            />
+          </CatalogResourceContext.Provider>
         </div>
       ) : (
         <textarea
@@ -165,6 +185,15 @@ export function AppInstallValuesEditor({
           placeholder="# values.yaml — overrides applied on top of chart defaults"
         />
       )}
+      {fieldErrors.length > 0 && (
+        <ul role="alert" className="text-xs text-status-error">
+          {fieldErrors.map((error, index) => (
+            <li key={`${error.path}:${index}`}>
+              {error.path}: {error.message}
+            </li>
+          ))}
+        </ul>
+      )}
       {yamlError && (
         <p role="alert" className="text-xs text-status-error">
           {yamlError}
@@ -172,7 +201,7 @@ export function AppInstallValuesEditor({
       )}
       <p className="text-11 text-muted-foreground">
         Use chart fields that reference an existing Kubernetes Secret for
-        credentials. Verified Apps reject inline Vault placeholders so the
+        credentials. Applications reject inline Vault placeholders so the
         durable delivery bundle never persists a hidden secret template.
       </p>
     </div>

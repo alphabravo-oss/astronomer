@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/catalog/configuration"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -82,11 +83,12 @@ func (h *CatalogHandler) ListApplicationCatalogSources(w http.ResponseWriter, r 
 
 // openapi:request Operation_postCatalogApplicationsPreview
 type catalogInstallationPreviewRequest struct {
-	ClusterID      string `json:"cluster_id"`
-	ChartVersionID string `json:"chart_version_id"`
-	Namespace      string `json:"namespace"`
-	ValuesOverride string `json:"values_override"`
-	Operation      string `json:"operation"`
+	FromChartVersionID string `json:"from_chart_version_id"`
+	ClusterID          string `json:"cluster_id"`
+	ChartVersionID     string `json:"chart_version_id"`
+	Namespace          string `json:"namespace"`
+	ValuesOverride     string `json:"values_override"`
+	Operation          string `json:"operation"`
 }
 
 // openapi:request Operation_putCatalogChartsByIdFavorite
@@ -151,6 +153,9 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
 		return
 	}
+	if !h.authorizeCatalogPreviewChart(w, r, version, projectID) {
+		return
+	}
 	version, err = h.hydrateChartVersion(r.Context(), version)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
@@ -168,6 +173,12 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 	}
 	effectiveOverride := catalogInstallValues(presentation.Slug, cluster.Distribution, request.ValuesOverride)
 	checks, allowed := catalogInstallChecks(cluster, version, presentation, effectiveOverride)
+	if request.Operation == "upgrade" {
+		if err := h.catalogPreviewUpgrade(r.Context(), version, request.FromChartVersionID); err != nil {
+			allowed = false
+			checks = append(checks, catalogPrerequisiteCheck{Code: "upgrade_path", Status: "blocking", Title: "Upgrade compatibility", Description: err.Error()})
+		}
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"allowed": allowed, "checks": checks, "application": presentation.Slug,
 		"artifact_digest": version.Digest, "values_digest": sha256Hex([]byte(effectiveOverride)),
@@ -189,19 +200,30 @@ func catalogInstallChecks(cluster sqlc.Cluster, version sqlc.HelmChartVersion, p
 	} else {
 		add("catalog_trust", "ready", "Catalog trust", "Catalog index identity and digest are verified.")
 	}
-	var artifact struct {
-		Version string `json:"version"`
-	}
-	_ = json.Unmarshal(presentation.Artifact, &artifact)
-	if artifact.Version == "" || artifact.Version != version.Version || !validSHA256Digest(version.Digest) {
-		add("artifact_identity", "blocking", "Immutable artifact", "The selected chart version does not match the catalog pin or lacks a SHA-256 digest.")
-	} else {
-		add("artifact_identity", "ready", "Immutable artifact", "The selected chart version and SHA-256 digest match the catalog entry.")
+	artifact, artifactErr := configuration.Parse(presentation.Artifact)
+	profile := artifact.Find(version.Version)
+	if artifactErr != nil || !validSHA256Digest(version.Digest) {
+		add("artifact_identity", "blocking", "Immutable artifact", "Catalog version metadata or the chart digest is invalid.")
+	} else if profile != nil {
+		if err := profile.Validate(version.Digest); err != nil {
+			add("artifact_identity", "blocking", "Immutable artifact", err.Error())
+		} else {
+			add("artifact_identity", "ready", "Immutable artifact", "Chart version and digest match the reviewed catalog configuration.")
+		}
+	} else if len(artifact.Versions) > 0 {
+		add("artifact_identity", "advisory", "Other upstream version", "This version has no reviewed Astronomer configuration or support assurance. Use at your own risk.")
+	} else if artifact.Version != version.Version {
+		add("artifact_identity", "blocking", "Immutable artifact", "The selected chart version does not match the catalog pin.")
 	}
 	var compatibility struct {
 		Kubernetes string `json:"kubernetes"`
 	}
 	_ = json.Unmarshal(presentation.Compatibility, &compatibility)
+	if profile != nil {
+		compatibility.Kubernetes = profile.Compatibility.Kubernetes
+	} else if len(artifact.Versions) > 0 {
+		compatibility.Kubernetes = ""
+	}
 	if compatibility.Kubernetes != "" {
 		constraint, constraintErr := semver.NewConstraint(compatibility.Kubernetes)
 		current, versionErr := semver.NewVersion(strings.TrimPrefix(cluster.KubernetesVersion, "v"))
@@ -239,7 +261,7 @@ func catalogInstallChecks(cluster sqlc.Cluster, version sqlc.HelmChartVersion, p
 	effectiveValues, effectiveErr := valuesJSONForPreview(mergeValueLayers(version.DefaultValues, values))
 	if effectiveErr != nil {
 		add("values", "blocking", "Configuration", "Chart defaults and overrides could not be merged into valid values.")
-	} else if schemaErr := validateCatalogValuesSchema(version.ValuesSchema, effectiveValues); schemaErr != nil {
+	} else if schemaErr := validateCatalogConfigurationValues(version.ValuesSchema, profile, effectiveValues); schemaErr != nil {
 		add("values", "blocking", "Configuration", schemaErr.Error())
 	} else {
 		add("values", "ready", "Configuration", "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders.")

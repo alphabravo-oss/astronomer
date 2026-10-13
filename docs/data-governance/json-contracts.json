@@ -19844,6 +19844,11 @@
       "path": "internal/toolui/launch.go",
       "owner": "toolui",
       "scope": "Typed serialization and validated reader contracts are owned at the exact sites below"
+    },
+    {
+      "path": "internal/catalog/configuration/configuration.go",
+      "owner": "/catalog/configuration",
+      "scope": "Version-bound catalog artifact decoding and identity validation."
     }
   ],
   "json_sites": [
@@ -24378,18 +24383,6 @@
       "owner": "/handler",
       "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
-    },
-    {
-      "path": "internal/handler/catalog_applications.go",
-      "function": "catalogInstallChecks",
-      "operation": "json.Unmarshal",
-      "arguments": [
-        "presentation.Artifact",
-        "&artifact"
-      ],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; discarded_result_requires_domain_review"
     },
     {
       "path": "internal/handler/catalog_applications.go",
@@ -33928,6 +33921,18 @@
       "owner": "toolui browser isolation gateway",
       "schema": "Purpose-versioned encrypted session DTO or string-only target DTO for deterministic origin hashing",
       "reader_behavior": "Marshal typed fields; reject decrypt/JSON failure, wrong purpose, target/host mismatch, expiry or inactive parent JWT before proxy dispatch; never accept browser plaintext session JSON"
+    },
+    {
+      "path": "internal/catalog/configuration/configuration.go",
+      "function": "Parse",
+      "operation": "json.Unmarshal",
+      "arguments": [
+        "raw",
+        "&artifact"
+      ],
+      "owner": "/catalog/configuration",
+      "schema": "Catalog artifact with bounded exact-version records and immutable SHA-256 identities; versioned JSON Schema owned by astronomer-catalog.",
+      "reader_behavior": "Return decoding and identity errors; callers fail closed. Additive fields are preserved in the original catalog document."
     }
   ]
 }

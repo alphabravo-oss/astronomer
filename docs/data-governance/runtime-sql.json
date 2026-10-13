@@ -420,7 +420,7 @@
     {
       "path": "internal/handler/catalog_installations.go",
       "owner": "HTTP backend",
-      "source_sha256": "4bd6d64c2a5a113ea1c0583730aa267ce5b5eba6b7f26357dca7c44bbc3b18af"
+      "source_sha256": "a721029c5a8dff946b588fffb0aa79bb689781bcec4d77c5a99958b6eda34ad8"
     },
     {
       "path": "internal/handler/catalog_operations.go",
@@ -435,7 +435,7 @@
     {
       "path": "internal/handler/catalog_queries.go",
       "owner": "HTTP backend",
-      "source_sha256": "418466ac29a3d1ad0a4f57d4fbfa1e6246ac98062b54f83482194ceacf04307a"
+      "source_sha256": "460d3967696b4c6bf144d0b6829fe50a1a5eea9c251ee49c5e9c584e03f3af47"
     },
     {
       "path": "internal/handler/catalog_repositories.go",
@@ -755,7 +755,7 @@
     {
       "path": "internal/handler/tools_catalog.go",
       "owner": "HTTP backend",
-      "source_sha256": "e00d867a1c8f36e8bb466c431b765d01c7facf8aa7b38de838f6d0715485c58f"
+      "source_sha256": "2a666ce99a9098ab8d1e339916fcfc901b77f748d2a8934badf88ad766638cc8"
     },
     {
       "path": "internal/handler/tools_operations.go",
@@ -915,7 +915,12 @@
     {
       "path": "pkg/astroclient/astroclient.gen.go",
       "owner": "paired generated public SDK",
-      "source_sha256": "92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6"
+      "source_sha256": "4aec6ecbfee582397a05a3f9bab4be9d0a0b2f43cf97c68356195bbd864ebb13"
+    },
+    {
+      "path": "internal/handler/catalog_configuration.go",
+      "owner": "catalog application configuration",
+      "source_sha256": "f172bf82a847a1b53bacff2e72ae5f3b4fd033d4f205e7ad189e9f3ccaec0267"
     }
   ],
   "sites": [
@@ -4992,7 +4997,7 @@
       "function": "*CatalogHandler.resolveChartVersion",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "6ba2ede46231f466477e6c1b1cbfe87c348a6e3792c1ab414482b790fbcfa825",
+      "scope_sha256": "f404736fb3edaf8f60a82d659f6938e6ed015955fedcf00a098c58c38b10dd13",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -7647,7 +7652,7 @@
       "function": "NewGetCatalogChartsByIdVersionsRequest",
       "operation": "Query",
       "sha256": "7dc381c70ae3257d35589c3b783238a6f8c1288473eec66ae048c8b8bbc9020f",
-      "scope_sha256": "ddf707fb1c2643f3be4decd2b716e3c80f0fe623cc59bac380142d4a63a24bb4",
+      "scope_sha256": "8d78d0fddd582b685cd90071d088e35083013aea48867f51dd95b8ef7750bb21",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -9000,6 +9005,51 @@
       "scope_sha256": "3f68bd0a8bf65fa6df17810990474abd05479da022b8cd73e18d42ad8a254eee",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
+    },
+    {
+      "path": "internal/handler/catalog_configuration.go",
+      "function": "*CatalogHandler.listCuratedChartVersions",
+      "operation": "Query",
+      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
+      "scope_sha256": "e04b0b4e8406658d4df91eaf776e09c09e6e3df6c8f9e2f7707a522f1c62101c",
+      "classification": "non-sql-candidate",
+      "control": "Exact HTTP URL.Query access or upgrade-validation error prose. Database reads use canonical sqlc queries; no raw SQL is executed here."
+    },
+    {
+      "path": "internal/handler/catalog_configuration.go",
+      "function": "*CatalogHandler.listCuratedChartVersions",
+      "operation": "Query",
+      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
+      "scope_sha256": "e04b0b4e8406658d4df91eaf776e09c09e6e3df6c8f9e2f7707a522f1c62101c",
+      "classification": "non-sql-candidate",
+      "control": "Exact HTTP URL.Query access or upgrade-validation error prose. Database reads use canonical sqlc queries; no raw SQL is executed here."
+    },
+    {
+      "path": "internal/handler/catalog_configuration.go",
+      "function": "*CatalogHandler.listCuratedChartVersions",
+      "operation": "Query",
+      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
+      "scope_sha256": "e04b0b4e8406658d4df91eaf776e09c09e6e3df6c8f9e2f7707a522f1c62101c",
+      "classification": "non-sql-candidate",
+      "control": "Exact HTTP URL.Query access or upgrade-validation error prose. Database reads use canonical sqlc queries; no raw SQL is executed here."
+    },
+    {
+      "path": "internal/handler/catalog_configuration.go",
+      "function": "*CatalogHandler.listCuratedChartVersions",
+      "operation": "Query",
+      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
+      "scope_sha256": "e04b0b4e8406658d4df91eaf776e09c09e6e3df6c8f9e2f7707a522f1c62101c",
+      "classification": "non-sql-candidate",
+      "control": "Exact HTTP URL.Query access or upgrade-validation error prose. Database reads use canonical sqlc queries; no raw SQL is executed here."
+    },
+    {
+      "path": "internal/handler/catalog_configuration.go",
+      "function": "*CatalogHandler.catalogPreviewUpgrade",
+      "operation": "SQLLiteral",
+      "sha256": "c7d4b9c81764fdf2640614543a3b73d7e62e6f595a080de347dca9bbee45f732",
+      "scope_sha256": "56b0fc8ee951beff5fde7e5fac2a1902599c275fecedaf597047e6550aa34948",
+      "classification": "non-sql-candidate",
+      "control": "Exact HTTP URL.Query access or upgrade-validation error prose. Database reads use canonical sqlc queries; no raw SQL is executed here."
     }
   ],
   "builders": [

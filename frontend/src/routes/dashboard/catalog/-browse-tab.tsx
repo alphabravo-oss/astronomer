@@ -1,3 +1,4 @@
+import { CatalogOfferingSupport } from "@/components/catalog/catalog-offering-support";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   EmptyState,
@@ -153,6 +154,12 @@ export function BrowseTab({
               <p className="text-xs text-muted-foreground mt-2 line-clamp-2 min-h-8">
                 {chart.description || "No description available"}
               </p>
+              <CatalogOfferingSupport
+                chart={chart.name}
+                repository={chart.repositoryName}
+                repositoryId={chart.repositoryId}
+                version={chart.latestVersion}
+              />
               <div className="flex items-center justify-between mt-3">
                 <CategoryChip
                   category={chart.category}

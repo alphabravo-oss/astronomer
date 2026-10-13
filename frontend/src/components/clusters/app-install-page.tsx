@@ -1,3 +1,5 @@
+import { ApplicationReleaseFields } from "@/components/catalog/application-release-fields";
+import { ApplicationInstallationSummary } from "@/components/catalog/application-installation-summary";
 import {
   CatalogVersionSelect,
   useCatalogVersionSelection,
@@ -7,7 +9,7 @@ import { AppInstallValuesEditor } from "./app-install-values-editor";
 import { useUpgradeValues } from "./app-upgrade-values";
 import { useAppInstallPreview } from "./use-app-install-preview";
 /**
- * App install / upgrade modal — sprint 082+.
+ * App install / upgrade page — sprint 082+.
  *
  * Shared component for both fresh installs (from Browse / Recommended)
  * and upgrades on already-installed releases (from the Installed row's
@@ -40,13 +42,13 @@ import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfigurationPage } from "@/components/catalog/configuration-page";
 import {
   installChartOnCluster,
   upgradeClusterApp,
 } from "@/lib/api/cluster-apps";
 import { recommendedCatalogNamespace } from "@/lib/catalog-chart-fields";
-import { catalogInstallDefaultValues } from "@/lib/catalog-install-defaults";
+import { initialCatalogValues } from "@/lib/catalog-configuration";
 import { parseHelmValuesYAML } from "@/lib/helm-values-schema";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
@@ -56,10 +58,9 @@ import {
   ChartInstallationNotes,
   HAS_CRDS,
 } from "./app-install-parts";
-export { AppUninstallModal } from "./app-uninstall-modal";
 
 type Mode =
-  | { kind: "install"; chartId: string; chartName: string }
+  | { kind: "install"; chartId: string; chartName: string; versionId?: string }
   | {
       kind: "upgrade";
       installedChartId: string;
@@ -71,7 +72,7 @@ type Mode =
       namespace: string;
     };
 
-interface AppInstallModalProps {
+interface AppInstallPageProps {
   projectId: string;
   clusterId: string;
   mode: Mode;
@@ -94,14 +95,14 @@ const SLOW_INSTALL_CHARTS = new Set([
   "loki-distributed",
 ]);
 
-export function AppInstallModal({
+export function AppInstallPage({
   projectId,
   clusterId,
   mode,
   onClose,
   submitDecision,
   onOperationStarted,
-}: AppInstallModalProps) {
+}: AppInstallPageProps) {
   const qc = useQueryClient();
   const isUpgrade = mode.kind === "upgrade";
   const submitBlockedReason =
@@ -111,7 +112,10 @@ export function AppInstallModal({
 
   const form = useAppForm({
     defaultValues: {
-      selectedVersionId: mode.kind === "upgrade" ? mode.currentVersionId : "",
+      selectedVersionId:
+        mode.kind === "upgrade"
+          ? mode.currentVersionId
+          : (mode.versionId ?? ""),
       releaseName: mode.kind === "upgrade" ? mode.releaseName : mode.chartName,
       namespace:
         mode.kind === "upgrade"
@@ -136,7 +140,6 @@ export function AppInstallModal({
     "form",
   );
   const [yamlError, setYamlError] = useState<string | null>(null);
-  // Hydrate each selected version once so background renders preserve edits.
   const hydratedForVersion = useRef("");
 
   const versions = useCatalogVersionSelection(
@@ -144,6 +147,7 @@ export function AppInstallModal({
     mode.chartId,
     selectedVersionId,
     (id) => form.setFieldValue("selectedVersionId", id),
+    clusterId,
   );
   const selectedVersion = versions.selected;
 
@@ -153,11 +157,15 @@ export function AppInstallModal({
     schemaValues,
     preview,
     blockingPreview,
+    fieldErrors,
   } = useAppInstallPreview({
     projectId,
     chartId: mode.chartId,
     chartName: mode.chartName,
+    fromChartVersionId:
+      mode.kind === "upgrade" ? mode.currentVersionId : undefined,
     version: selectedVersion?.version,
+    catalogVersion: selectedVersion?.catalogVersion,
     clusterId,
     selectedVersionId,
     namespace,
@@ -169,14 +177,25 @@ export function AppInstallModal({
   useEffect(() => {
     if (isUpgrade) return; // don't auto-clobber on upgrade
     if (defaultValues.isError || !defaultValues.data) return;
-    if (hydratedForVersion.current === selectedVersionId) return;
+    if (hydratedForVersion.current) return;
+    if (form.state.values.valuesYaml.trim()) return;
     form.setFieldValue(
       "valuesYaml",
-      catalogInstallDefaultValues(
-        mode.chartName,
+      initialCatalogValues(
         defaultValues.data.defaultValues,
+        defaultValues.data.catalogVersion,
       ),
     );
+    if (
+      form.state.values.namespace ===
+        recommendedCatalogNamespace(mode.chartName) &&
+      defaultValues.data.catalogVersion?.configuration?.namespace
+    ) {
+      form.setFieldValue(
+        "namespace",
+        defaultValues.data.catalogVersion.configuration.namespace,
+      );
+    }
     hydratedForVersion.current = selectedVersionId;
   }, [
     defaultValues.data,
@@ -190,6 +209,10 @@ export function AppInstallModal({
   const intent = useOperationIntent();
   const install = useMutation({
     mutationFn: async () => {
+      if (fieldErrors.length)
+        throw new Error(
+          "Fix the configuration field errors before installing.",
+        );
       if (isUpgrade && (!upgradeValues.isSuccess || upgradeValues.isError))
         throw new Error("Load the saved release values before upgrading");
       const value = form.state.values;
@@ -207,6 +230,8 @@ export function AppInstallModal({
       });
       if (
         !selectedVersion ||
+        selectedVersion.catalogVersion?.available === false ||
+        selectedVersion.catalogVersion?.revoked ||
         selectedVersion.id !== value.selectedVersionId ||
         submitBlockedReason ||
         (!isUpgrade && (defaultValues.isError || defaultValues.isLoading))
@@ -238,7 +263,9 @@ export function AppInstallModal({
     },
     onSuccess: (receipt) => {
       intent.complete();
-      if (receipt.operation?.id) onOperationStarted?.(receipt.operation.id);
+      if (receipt.operation?.id && onOperationStarted)
+        onOperationStarted(receipt.operation.id);
+      else onClose();
       toastSuccess(
         isUpgrade
           ? `Upgrade dispatched — ${mode.kind === "upgrade" ? mode.releaseName : ""} will reflect new revision shortly`
@@ -247,7 +274,6 @@ export function AppInstallModal({
       qc.invalidateQueries({
         queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
       });
-      onClose();
     },
     onError: (err) => {
       toastApiError(`${isUpgrade ? "Upgrade" : "Install"} failed`, err);
@@ -256,12 +282,15 @@ export function AppInstallModal({
 
   const submittable =
     !!selectedVersion &&
+    selectedVersion.catalogVersion?.available !== false &&
+    !selectedVersion.catalogVersion?.revoked &&
     (isUpgrade || (!defaultValues.isError && !defaultValues.isLoading)) &&
     !!selectedVersionId &&
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
     !install.isPending &&
     !yamlError &&
+    fieldErrors.length === 0 &&
     !blockingPreview &&
     !(editorMode === "review" && (preview.isLoading || preview.isError)) &&
     !submitBlockedReason &&
@@ -289,11 +318,8 @@ export function AppInstallModal({
     setEditorMode(next);
   };
 
-  const slowInstall = SLOW_INSTALL_CHARTS.has(mode.chartName);
-  const hasCRDs = HAS_CRDS.has(mode.chartName);
-
   return (
-    <ModalShell
+    <ConfigurationPage
       title={`${isUpgrade ? "Upgrade" : "Install"} ${mode.chartName}`}
       subtitle={
         isUpgrade
@@ -301,10 +327,6 @@ export function AppInstallModal({
           : "Configure version, namespace, release name, and values."
       }
       onClose={onClose}
-      size="xl"
-      panelClassName="max-w-3xl bg-popover flex flex-col overflow-hidden"
-      bodyClassName="p-0"
-      footerClassName="bg-muted/30 shrink-0"
       footer={
         <AppInstallFooter
           onClose={onClose}
@@ -321,7 +343,7 @@ export function AppInstallModal({
         />
       }
     >
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="space-y-6">
         {isUpgrade && (
           <QueryStates
             query={upgradeValues}
@@ -331,73 +353,31 @@ export function AppInstallModal({
             <></>
           </QueryStates>
         )}
-        <ChartInstallationNotes
-          slowInstall={slowInstall}
-          hasCRDs={hasCRDs}
-          isUpgrade={isUpgrade}
-          chartName={mode.chartName}
+        <ApplicationInstallationSummary
+          destination={{ clusterId, projectId, namespace, releaseName }}
+          version={selectedVersion?.version}
+          chartId={mode.chartId}
         />
+        <AppInstallNotes chartName={mode.chartName} isUpgrade={isUpgrade} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <label
-              className="text-xs font-medium text-muted-foreground"
-              htmlFor="field-ae92ffd8-268"
-            >
-              Version
-            </label>
+        <ApplicationReleaseFields
+          clusterId={clusterId}
+          version={
             <CatalogVersionSelect
               selection={versions}
-              id="field-ae92ffd8-268"
+              id="application-version"
             />
-          </div>
-
-          <div className="space-y-1.5">
-            <label
-              className="text-xs font-medium text-muted-foreground"
-              htmlFor="field-ae92ffd8-296"
-            >
-              Release name
-            </label>
-            <form.Field name="releaseName">
-              {(field) => (
-                <input
-                  id="field-ae92ffd8-296"
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  disabled={isUpgrade}
-                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
-                />
-              )}
-            </form.Field>
-          </div>
-
-          <div className="space-y-1.5">
-            <label
-              className="text-xs font-medium text-muted-foreground"
-              htmlFor="field-ae92ffd8-312"
-            >
-              Namespace
-            </label>
-            <form.Field name="namespace">
-              {(field) => (
-                <input
-                  id="field-ae92ffd8-312"
-                  type="text"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                  disabled={isUpgrade}
-                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
-                />
-              )}
-            </form.Field>
-          </div>
-        </div>
+          }
+          releaseName={releaseName}
+          namespace={namespace}
+          readOnly={isUpgrade}
+          onReleaseName={(value) => form.setFieldValue("releaseName", value)}
+          onNamespace={(value) => form.setFieldValue("namespace", value)}
+        />
 
         <AppInstallValuesEditor
+          clusterId={clusterId}
+          fieldErrors={fieldErrors}
           defaultValues={defaultValues}
           isUpgrade={isUpgrade}
           valuesSchema={valuesSchema}
@@ -415,6 +395,23 @@ export function AppInstallModal({
           yamlError={yamlError}
         />
       </div>
-    </ModalShell>
+    </ConfigurationPage>
+  );
+}
+
+function AppInstallNotes({
+  chartName,
+  isUpgrade,
+}: {
+  chartName: string;
+  isUpgrade: boolean;
+}) {
+  return (
+    <ChartInstallationNotes
+      slowInstall={SLOW_INSTALL_CHARTS.has(chartName)}
+      hasCRDs={HAS_CRDS.has(chartName)}
+      isUpgrade={isUpgrade}
+      chartName={chartName}
+    />
   );
 }

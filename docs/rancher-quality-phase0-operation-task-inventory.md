@@ -9,8 +9,8 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 114
-- Handler Go files scanned: 380
-- Production source files scanned: 539
+- Handler Go files scanned: 383
+- Production source files scanned: 542
 - Task constants resolved: 161
 - Worker handler registrations: 91
 - Periodic schedules: 62
@@ -243,7 +243,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:91`](internal/handler/cluster_agents_upgrade.go:91) |
 | `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:264`](internal/handler/clusters_registration.go:264) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
-| `catalog` |4 |[`internal/handler/catalog_installations.go:252`](internal/handler/catalog_installations.go:252)<br>[`internal/handler/catalog_installations.go:332`](internal/handler/catalog_installations.go:332)<br>[`internal/handler/catalog_installations.go:610`](internal/handler/catalog_installations.go:610)<br>[`internal/handler/catalog_installations.go:688`](internal/handler/catalog_installations.go:688) |
+| `catalog` |4 |[`internal/handler/catalog_installations.go:252`](internal/handler/catalog_installations.go:252)<br>[`internal/handler/catalog_installations.go:332`](internal/handler/catalog_installations.go:332)<br>[`internal/handler/catalog_installations.go:589`](internal/handler/catalog_installations.go:589)<br>[`internal/handler/catalog_installations.go:667`](internal/handler/catalog_installations.go:667) |
 | `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:362`](internal/handler/catalog_repositories.go:362) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates_applications.go:103`](internal/handler/cluster_templates_applications.go:103) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates_applications.go:226`](internal/handler/cluster_templates_applications.go:226) |

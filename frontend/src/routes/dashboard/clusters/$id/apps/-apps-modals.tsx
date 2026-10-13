@@ -1,25 +1,18 @@
 import { AddRepositoryModal } from "../../../catalog/-add-repository-modal";
-import {
-  AppInstallModal,
-  AppUninstallModal,
-} from "@/components/clusters/app-install-modal";
+import { AppUninstallModal } from "@/components/clusters/app-uninstall-modal";
 import type { PermissionDecision } from "@/lib/permissions";
 import { DeleteFailedModal } from "./-delete-failed-modal";
 import type { ModalState } from "./-modal-state";
 
 /**
- * The apps page's modal layer: install/upgrade, uninstall, add-repository,
+ * The apps page's modal layer: uninstall, add-repository,
  * and bulk delete-failed. Extracted so the page body stays focused on
  * data-fetching and tab dispatch.
  */
 export function AppsModals({
   modal,
   onCloseModal,
-  onOperationStarted,
-  projectId,
   clusterId,
-  catalogCreateDecision,
-  catalogUpdateDecision,
   catalogDeleteDecision,
   uninstallPending,
   onConfirmUninstall,
@@ -33,11 +26,7 @@ export function AppsModals({
 }: {
   modal: ModalState;
   onCloseModal: () => void;
-  onOperationStarted?: (id: string) => void;
-  projectId: string;
   clusterId: string;
-  catalogCreateDecision: PermissionDecision;
-  catalogUpdateDecision: PermissionDecision;
   catalogDeleteDecision: PermissionDecision;
   uninstallPending: boolean;
   onConfirmUninstall: (installedChartId: string) => void;
@@ -51,41 +40,6 @@ export function AppsModals({
 }) {
   return (
     <>
-      {projectId && modal.kind === "install" && (
-        <AppInstallModal
-          key={projectId}
-          projectId={projectId}
-          clusterId={clusterId}
-          mode={{
-            kind: "install",
-            chartId: modal.chartId,
-            chartName: modal.chartName,
-          }}
-          submitDecision={catalogCreateDecision}
-          onClose={onCloseModal}
-          onOperationStarted={onOperationStarted}
-        />
-      )}
-      {projectId && modal.kind === "upgrade" && (
-        <AppInstallModal
-          key={projectId}
-          projectId={projectId}
-          clusterId={clusterId}
-          mode={{
-            kind: "upgrade",
-            installedChartId: modal.installedChartId,
-            chartId: modal.chartId,
-            chartName: modal.chartName,
-            currentVersionId: modal.currentVersionId,
-            currentValues: modal.currentValues,
-            releaseName: modal.releaseName,
-            namespace: modal.namespace,
-          }}
-          submitDecision={catalogUpdateDecision}
-          onClose={onCloseModal}
-          onOperationStarted={onOperationStarted}
-        />
-      )}
       {modal.kind === "uninstall" && (
         <AppUninstallModal
           clusterId={clusterId}

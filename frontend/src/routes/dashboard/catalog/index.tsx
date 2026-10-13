@@ -21,13 +21,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
-import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
+import type { HelmChart, HelmChartCategory } from "@/types";
 import { Package, Plus } from "lucide-react";
 import { AddRepositoryModal } from "./-add-repository-modal";
 import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
-import { InstallChartModal } from "./-install-chart-modal";
-import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
 import {
   OffsetPagination,
   useOffsetPagination,
@@ -65,11 +63,7 @@ function CatalogPage() {
   const navigate = useNavigate();
   const requestedProjectId = initialSearchParams?.get("project") ?? "";
   const projectScope = useCatalogProjectScope(requestedProjectId);
-  const { projectId, project: selectedProject } = projectScope;
-  const allowedClusterIds = [
-    selectedProject?.clusterId,
-    ...(selectedProject?.clusterIds ?? []),
-  ].filter((id): id is string => Boolean(id));
+  const { projectId } = projectScope;
   const setProjectId = (nextProjectId: string) => {
     const next = new URLSearchParams(initialSearchParams);
     if (nextProjectId) next.set("project", nextProjectId);
@@ -79,8 +73,6 @@ function CatalogPage() {
       replace: true,
     });
     setSelectedChart(null);
-    setShowInstallModal(false);
-    setInstallChart(null);
   };
   const [searchQuery, setSearchQuery] = useState(
     initialSearchParams?.get("search") ?? "",
@@ -88,12 +80,6 @@ function CatalogPage() {
   const presetClusterIdPage = initialSearchParams?.get("cluster_id") ?? "";
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
-  const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installChart, setInstallChart] = useState<{
-    chart: HelmChart;
-    version: HelmChartVersion;
-  } | null>(null);
-  const [operationId, setOperationId] = useState<string | null>(null);
 
   const chartsPaging = useCursorPagination(
     JSON.stringify([projectId, searchQuery.trim(), selectedCategory]),
@@ -140,7 +126,7 @@ function CatalogPage() {
       <div>
         <PageHeader
           title="Catalog"
-          description="Shared Helm repositories. Browse and install charts from a cluster's Apps page."
+          description="Shared Helm repositories. Browse applications or use Platform Tools for guided cluster capabilities."
           actions={
             <>
               <CatalogProjectPicker
@@ -252,6 +238,11 @@ function CatalogPage() {
               }
             >
               <InstalledTab
+                onUpgrade={(row) =>
+                  void navigate({
+                    to: `/dashboard/catalog/configure?release=${encodeURIComponent(row.id)}&project=${encodeURIComponent(projectId)}&cluster=${encodeURIComponent(row.clusterId)}`,
+                  })
+                }
                 installed={installed}
                 loading={false}
                 onRollback={(id, revision) => rollback.mutate({ id, revision })}
@@ -313,31 +304,12 @@ function CatalogPage() {
           chart={selectedChart}
           onClose={() => setSelectedChart(null)}
           onInstall={(chart, version) => {
-            setInstallChart({ chart, version });
-            setShowInstallModal(true);
+            void navigate({
+              to: `/dashboard/catalog/configure?chart=${encodeURIComponent(chart.id)}&version=${encodeURIComponent(version.id)}&project=${encodeURIComponent(projectId)}${presetClusterIdPage ? `&cluster=${encodeURIComponent(presetClusterIdPage)}` : ""}`,
+            });
             setSelectedChart(null);
           }}
         />
-      )}
-
-      {projectId && showInstallModal && installChart && (
-        <InstallChartModal
-          projectId={projectId}
-          allowedClusterIds={allowedClusterIds}
-          chart={installChart.chart}
-          version={installChart.version}
-          onOperationStarted={setOperationId}
-          onClose={() => {
-            setShowInstallModal(false);
-            setInstallChart(null);
-          }}
-        />
-      )}
-
-      {operationId && (
-        <div className="fixed bottom-4 right-4 z-40 w-full max-w-xl shadow-lg">
-          <CatalogOperationTimeline operationId={operationId} />
-        </div>
       )}
 
       {showRepoModal && (

@@ -91,12 +91,28 @@ beforeEach(() => {
 });
 
 describe("useClusterToolActions", () => {
+  it("navigates install and upgrade actions to configuration pages without opening dialogs or mutating", () => {
+    const onConfigure = vi.fn();
+    const { result } = renderHook(() =>
+      useClusterToolActions({ ...props, onConfigure }),
+    );
+    act(() => result.current.cardProps(tool).onInstall(tool.slug));
+    act(() => result.current.cardProps(tool).onUpgrade?.(tool.slug));
+    expect(onConfigure.mock.calls).toEqual([
+      ["install", tool.slug],
+      ["upgrade", tool.slug],
+    ]);
+    expect(result.current.configurationPage).toBeNull();
+    expect(result.current.confirmation).toBeNull();
+    expect(mocks.install).not.toHaveBeenCalled();
+    expect(mocks.upgrade).not.toHaveBeenCalled();
+  });
   it("hands a confirmed install to the operation drawer with the chosen values and preset", () => {
     const { result } = renderHook(() => useClusterToolActions(props));
     act(() => result.current.cardProps(tool).onInstall(tool.slug));
-    expect(result.current.installDialog?.preset).toBe("production");
+    expect(result.current.configurationPage?.preset).toBe("production");
     act(() =>
-      result.current.installDialog?.onConfirm(
+      result.current.configurationPage?.onConfirm(
         "istiod:\n  replicaCount: 2",
         "default",
       ),
@@ -110,7 +126,7 @@ describe("useClusterToolActions", () => {
     act(() =>
       mocks.install.mock.calls[0][1].onSuccess({ id: "new-operation" }),
     );
-    expect(result.current.installDialog).toBeNull();
+    expect(result.current.configurationPage).toBeNull();
     expect(result.current.progress).toMatchObject({
       operationId: "new-operation",
       toolName: "Istio",
@@ -124,7 +140,9 @@ describe("useClusterToolActions", () => {
     act(() => result.current.cardProps(tool).onInstall(tool.slug));
     mocks.grants.create = false;
     rerender();
-    act(() => result.current.installDialog?.onConfirm(undefined, "production"));
+    act(() =>
+      result.current.configurationPage?.onConfirm(undefined, "production"),
+    );
     expect(mocks.install).not.toHaveBeenCalled();
     expect(mocks.denied).toHaveBeenCalledOnce();
     expect(result.current.cardProps(tool).installDisabledReason).toBe(
@@ -138,13 +156,13 @@ describe("useClusterToolActions", () => {
       useClusterToolActions({ ...props, statuses: [readyStatus] }),
     );
     act(() => result.current.cardProps(tool).onUpgrade?.(tool.slug));
-    expect(result.current.installDialog).toMatchObject({
+    expect(result.current.configurationPage).toMatchObject({
       action: "upgrade",
       initialPreset: "production",
       initialValuesYaml: "istiod:\n  replicaCount: 2",
     });
     act(() =>
-      result.current.installDialog?.onConfirm(
+      result.current.configurationPage?.onConfirm(
         "istiod:\n  replicaCount: 3",
         "production",
       ),

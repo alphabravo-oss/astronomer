@@ -78,10 +78,7 @@ func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
-	charts := make([]map[string]any, 0, len(plan))
-	for _, release := range plan {
-		charts = append(charts, map[string]any{"chart_name": release.ChartName, "chart_version": release.Version, "namespace": release.Namespace, "release_name": release.ReleaseName, "values_yaml": release.ValuesYAML})
-	}
+	charts, profiles := h.toolPreviewCharts(r.Context(), plan)
 	allowedRelease := ""
 	if tool.Slug == "prometheus-node-exporter" {
 		if installed, lookupErr := h.findInstalledTool(r.Context(), clusterID, tool.Slug); lookupErr == nil {
@@ -90,7 +87,7 @@ func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	}
 	checks := h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, allowedRelease)
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"charts": charts,
+		"charts": charts, "catalog_versions": profiles,
 		"preset": req.Preset,
 		"checks": checks,
 	})

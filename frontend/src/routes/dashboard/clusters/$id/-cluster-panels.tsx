@@ -382,7 +382,7 @@ export function ClusterPlatformHealthRow({
         className="contents"
       >
         <MetricCard
-          title="Tools"
+          title="Platform Tools"
           value={toolsMetric.value}
           subtitle={toolsMetric.subtitle}
           icon={<Package className="h-4 w-4" />}

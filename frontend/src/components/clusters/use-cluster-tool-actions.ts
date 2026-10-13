@@ -15,7 +15,7 @@ import {
 import type { PermissionDecision } from "@/lib/permissions";
 import type { ClusterTool, ClusterToolStatus, ToolOperation } from "@/types";
 import type { ToolCard } from "./tool-card";
-import type { ToolInstallModal } from "./tool-install-modal";
+import type { ToolInstallPage } from "./tool-install-page";
 import type { ToolInstallProgress } from "./tool-install-progress";
 import type { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -38,11 +38,19 @@ export function useClusterToolActions({
   clusterEnvironment,
   tools,
   statuses,
+  onConfigure,
+  initialConfiguration,
+  onCloseConfiguration,
+  onOperationStarted,
 }: {
   clusterId: string;
   clusterEnvironment: string;
   tools: ClusterTool[];
   statuses: ClusterToolStatus[];
+  onConfigure?: (action: "install" | "upgrade", slug: string) => void;
+  initialConfiguration?: { kind: "install" | "upgrade"; tool: ClusterTool };
+  onCloseConfiguration?: () => void;
+  onOperationStarted?: (operation: ToolOperation) => void;
 }) {
   const scope = { type: "cluster" as const, id: clusterId };
   const create = usePermissionDecision("catalog", "create", scope);
@@ -53,7 +61,9 @@ export function useClusterToolActions({
   const uninstall = useUninstallTool();
   const adopt = useAdoptTool();
   const recovery = useRecoverTool();
-  const [dialog, setDialog] = useState<ToolDialog | null>(null);
+  const [dialog, setDialog] = useState<ToolDialog | null>(
+    initialConfiguration ?? null,
+  );
   const [activeOperation, setActiveOperation] = useState<{
     id: string;
     name: string;
@@ -70,16 +80,27 @@ export function useClusterToolActions({
     : "development";
   const decisionFor = (kind: DialogKind) =>
     kind === "install" ? create : kind === "uninstall" ? remove : update;
-  const closeDialog = () => setDialog(null);
+  const closeDialog = () => {
+    setDialog(null);
+    if (initialConfiguration) onCloseConfiguration?.();
+  };
 
   function openDialog(kind: DialogKind, slug: string) {
     if (!authorize(decisionFor(kind))) return;
+    if ((kind === "install" || kind === "upgrade") && onConfigure) {
+      onConfigure(kind, slug);
+      return;
+    }
     const tool = tools.find((item) => item.slug === slug);
     if (tool) setDialog({ kind, tool });
   }
 
   function trackOperation(tool: ClusterTool) {
     return (operation: ToolOperation) => {
+      if (onOperationStarted) {
+        onOperationStarted(operation);
+        return;
+      }
       closeDialog();
       setActiveOperation({ id: operation.id, name: tool.name });
     };
@@ -133,7 +154,7 @@ export function useClusterToolActions({
     adopt.mutate({ slug, cluster_id: clusterId, release_name: releaseName });
   }
 
-  const installDialog: ComponentProps<typeof ToolInstallModal> | null =
+  const configurationPage: ComponentProps<typeof ToolInstallPage> | null =
     dialog && ["install", "upgrade"].includes(dialog.kind)
       ? {
           tool: dialog.tool,
@@ -156,7 +177,7 @@ export function useClusterToolActions({
         }
       : null;
   const confirmation: ComponentProps<typeof ConfirmDialog> | null =
-    dialog && dialog.kind !== "install"
+    dialog && (dialog.kind === "uninstall" || dialog.kind === "rollback")
       ? {
           open: true,
           onClose: closeDialog,
@@ -233,5 +254,5 @@ export function useClusterToolActions({
     };
   }
 
-  return { cardProps, installDialog, confirmation, progress };
+  return { cardProps, configurationPage, confirmation, progress };
 }

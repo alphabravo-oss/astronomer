@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import * as yaml from "js-yaml";
-import { ToolInstallModal } from "@/components/clusters/tool-install-modal";
+import { ToolInstallPage } from "@/components/clusters/tool-install-page";
 import type { ClusterTool } from "@/types";
 
 vi.mock("@tanstack/react-query", () => ({
@@ -91,11 +91,11 @@ const tool: ClusterTool = {
   },
 };
 
-describe("ToolInstallModal release plans", () => {
+describe("ToolInstallPage release plans", () => {
   it("shows the complete ordered plan and the selected preset without overriding it", () => {
     const confirm = vi.fn();
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="development"
@@ -103,6 +103,10 @@ describe("ToolInstallModal release plans", () => {
         onClose={vi.fn()}
       />,
     );
+    expect(
+      screen.getByRole("region", { name: "Installation destination" }),
+    ).toHaveTextContent("Managed through Platform Tools");
+    expect(screen.getByLabelText("Support: Experimental")).toBeVisible();
     expect(
       within(
         screen.getByRole("list", { name: "Release installation order" }),
@@ -116,12 +120,16 @@ describe("ToolInstallModal release plans", () => {
       "development",
     );
     fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm installation" }),
+    );
     expect(confirm).toHaveBeenCalledWith(undefined, "development");
   });
   it("sends only explicit edits under the release values key", () => {
     const confirm = vi.fn();
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="development"
@@ -133,6 +141,10 @@ describe("ToolInstallModal release plans", () => {
       target: { value: "3" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm installation" }),
+    );
     expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
       istiod: { replicaCount: 3 },
     });
@@ -141,7 +153,7 @@ describe("ToolInstallModal release plans", () => {
   it("round-trips advanced YAML through the settings form without losing it", () => {
     const confirm = vi.fn();
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="development"
@@ -165,6 +177,10 @@ describe("ToolInstallModal release plans", () => {
       target: { value: "5" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm installation" }),
+    );
     expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
       istiod: {
         replicaCount: 5,
@@ -176,7 +192,7 @@ describe("ToolInstallModal release plans", () => {
   it("blocks invalid YAML from review and install", () => {
     const confirm = vi.fn();
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="development"
@@ -199,7 +215,7 @@ describe("ToolInstallModal release plans", () => {
 
   it("shows dependent settings only when their controlling value matches", () => {
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="development"
@@ -217,7 +233,7 @@ describe("ToolInstallModal release plans", () => {
   it("edits multiline chart configuration without flattening it", () => {
     const confirm = vi.fn();
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="development"
@@ -230,6 +246,10 @@ describe("ToolInstallModal release plans", () => {
       { target: { value: "line one\nline two" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm installation" }),
+    );
     expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
       istiod: { telemetry: { accessLogFormat: "line one\nline two" } },
     });
@@ -238,7 +258,7 @@ describe("ToolInstallModal release plans", () => {
   it("hydrates saved effective values for a configure operation", () => {
     const confirm = vi.fn();
     render(
-      <ToolInstallModal
+      <ToolInstallPage
         tool={tool}
         clusterId="cluster"
         preset="default"
@@ -254,6 +274,7 @@ describe("ToolInstallModal release plans", () => {
     expect(screen.getByRole("spinbutton", { name: "Replicas" })).toHaveValue(4);
     expect(screen.getAllByText("Saved").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm upgrade" }));
     expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
       istiod: {
         replicaCount: 4,

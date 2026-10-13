@@ -1,3 +1,4 @@
+import { ConfigurationConfirmation } from "@/components/catalog/configuration-confirmation";
 import { BareButton } from "@/components/form/bare-button";
 import { ActionButton } from "@/components/ui/action-button";
 import { Select } from "@/components/ui/select";
@@ -10,7 +11,7 @@ import {
 import { type ReactNode } from "react";
 export type EditorMode = "form" | "yaml" | "review";
 
-export function ToolInstallFooter({
+function ToolInstallFooterContent({
   hasForm,
   mode,
   onModeChange,
@@ -32,7 +33,7 @@ export function ToolInstallFooter({
   action: "install" | "upgrade";
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="inline-flex rounded-md border border-border bg-background p-1">
         {hasForm && (
           <ModeButton
@@ -55,7 +56,7 @@ export function ToolInstallFooter({
           label="Review"
         />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-2">
         <ActionButton onClick={onClose}>Cancel</ActionButton>
         <ActionButton
           intent="primary"
@@ -186,5 +187,23 @@ export function ModeButton({
       {icon}
       {label}
     </BareButton>
+  );
+}
+
+export function ToolInstallFooter(
+  props: Parameters<typeof ToolInstallFooterContent>[0],
+) {
+  const upgrade = props.action === "upgrade";
+  return (
+    <ConfigurationConfirmation
+      title={upgrade ? "Confirm upgrade" : "Confirm installation"}
+      description="Proceed with the destination, version and configuration shown on this page? Track the accepted operation for rollout status."
+      confirmText={upgrade ? "Confirm upgrade" : "Confirm installation"}
+      onConfirm={props.onConfirm}
+      pending={props.installing}
+      disabled={!!props.disabled}
+    >
+      {(open) => <ToolInstallFooterContent {...props} onConfirm={open} />}
+    </ConfigurationConfirmation>
   );
 }

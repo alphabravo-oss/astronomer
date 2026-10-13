@@ -1,3 +1,4 @@
+import { ConfigurationConfirmation } from "@/components/catalog/configuration-confirmation";
 import { Loader2, Info } from "lucide-react";
 import { BareButton } from "@/components/form/bare-button";
 
@@ -14,7 +15,7 @@ export const HAS_CRDS = new Set([
   "opa-gatekeeper",
 ]);
 
-export function AppInstallFooter({
+function AppInstallFooterContent({
   onClose,
   pending,
   onSubmit,
@@ -94,5 +95,23 @@ export function ChartInstallationNotes({
         </div>
       )}
     </>
+  );
+}
+
+export function AppInstallFooter(
+  props: Parameters<typeof AppInstallFooterContent>[0],
+) {
+  const upgrade = props.upgrade;
+  return (
+    <ConfigurationConfirmation
+      title={upgrade ? "Confirm upgrade" : "Confirm installation"}
+      description="Proceed with the destination, version and configuration shown on this page? Track the accepted operation for rollout status."
+      confirmText={upgrade ? "Confirm upgrade" : "Confirm installation"}
+      onConfirm={props.onSubmit}
+      pending={props.pending}
+      disabled={!props.submittable}
+    >
+      {(open) => <AppInstallFooterContent {...props} onSubmit={open} />}
+    </ConfigurationConfirmation>
   );
 }

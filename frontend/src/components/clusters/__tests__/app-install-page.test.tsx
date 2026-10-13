@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { AppInstallModal } from "@/components/clusters/app-install-modal";
+import { AppInstallPage } from "@/components/clusters/app-install-page";
 import {
   getChartDefaultValues,
   getClusterAppValues,
@@ -51,7 +51,7 @@ vi.mock("@/lib/api/cluster-apps", () => ({
   getClusterAppValues: vi.fn(),
 }));
 
-type Mode = ComponentProps<typeof AppInstallModal>["mode"];
+type Mode = ComponentProps<typeof AppInstallPage>["mode"];
 const installMode: Mode = {
   kind: "install",
   chartId: "chart-1",
@@ -63,7 +63,7 @@ function renderModal(mode: Mode = installMode) {
   });
   const tree = (next: Mode) => (
     <QueryClientProvider client={client}>
-      <AppInstallModal
+      <AppInstallPage
         projectId="project-1"
         clusterId="cluster-1"
         mode={next}
@@ -79,7 +79,7 @@ function renderModal(mode: Mode = installMode) {
   };
 }
 
-describe("AppInstallModal", () => {
+describe("AppInstallPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     catalogVersions.data.data = [catalogVersions.data.data[0]];
@@ -94,13 +94,19 @@ describe("AppInstallModal", () => {
       valuesSchema: {
         type: "object",
         properties: {
+          prometheusOperator: {
+            type: "object",
+            properties: {
+              enabled: { type: "boolean", title: "Deploy Prometheus Operator" },
+            },
+          },
           prometheus: {
             type: "object",
             properties: {
               prometheusSpec: {
                 type: "object",
                 properties: {
-                  scrapeInterval: { type: "string" },
+                  scrapeInterval: { type: "string", title: "Scrape interval" },
                 },
               },
             },
@@ -120,6 +126,16 @@ describe("AppInstallModal", () => {
 
   it("hydrates a fresh install into the curated form and YAML editor", async () => {
     renderModal();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Install",
+    );
+    const destination = screen.getByRole("region", {
+      name: "Installation destination",
+    });
+    expect(destination).toHaveTextContent("cluster-1");
+    expect(destination).toHaveTextContent("project-1");
+    expect(destination).toHaveTextContent("Managed through Applications");
 
     expect(await screen.findByRole("button", { name: "Form" })).toBeVisible();
     expect(
@@ -160,7 +176,7 @@ describe("AppInstallModal", () => {
     expect(editor).toHaveValue("custom: keep-me\n");
   });
 
-  it("hydrates new-version defaults only in install mode", async () => {
+  it("preserves custom values when an install changes version", async () => {
     catalogVersions.data.data.push({
       ...catalogVersions.data.data[0],
       id: "version-2",
@@ -190,7 +206,7 @@ describe("AppInstallModal", () => {
             name: "Values (YAML)",
           }) as HTMLTextAreaElement
         ).value,
-      ).toContain("newVersion: true"),
+      ).toContain("custom: old-version"),
     );
     expect(
       (
@@ -198,7 +214,7 @@ describe("AppInstallModal", () => {
           name: "Values (YAML)",
         }) as HTMLTextAreaElement
       ).value,
-    ).not.toContain("old-version");
+    ).not.toContain("newVersion: true");
   });
 
   it("retains saved upgrade values and operator edits across defaults and version changes", async () => {

@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -233,6 +232,9 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 	if !h.authorizeChartRead(w, r, chart) {
 		return
 	}
+	if h.listCuratedChartVersions(w, r, chart) {
+		return
+	}
 	limit := queryLimit(r, 50)
 	offset := queryOffset(r)
 	versions, err := h.queries.ListChartVersions(r.Context(), sqlc.ListChartVersionsParams{
@@ -245,7 +247,7 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	// No exact total is available; infer has_more from a full SQL page.
-	paging.Write(w, versions, paging.FromPage(limit, offset, len(versions)))
+	paging.Write(w, h.presentChartVersions(r.Context(), versions), paging.FromPage(limit, offset, len(versions)))
 }
 
 // GetChartReadme handles GET /api/v1/catalog/charts/{id}/readme/.
@@ -316,6 +318,11 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 		h.log.Warn("chart values hydration failed",
 			"chart_id", chart.ID, "version_id", version.ID, "error", hErr)
 	}
+	_, profileErr := h.chartVersionProfile(r.Context(), version)
+	if profileErr != nil {
+		catalogConfigurationUnavailable(w, r)
+		return
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"chart":          chart.Name,
 		"version":        version.Version,
@@ -327,20 +334,10 @@ func (h *CatalogHandler) GetChartValues(w http.ResponseWriter, r *http.Request) 
 // resolveChartVersion picks a specific chart version (by ?version= query param) or the latest.
 func (h *CatalogHandler) resolveChartVersion(r *http.Request, chart sqlc.HelmChart) (sqlc.HelmChartVersion, error) {
 	if v := strings.TrimSpace(r.URL.Query().Get("version")); v != "" {
-		versions, err := h.queries.ListChartVersions(r.Context(), sqlc.ListChartVersionsParams{
-			ChartID: chart.ID,
-			Limit:   200,
-			Offset:  0,
-		})
-		if err != nil {
-			return sqlc.HelmChartVersion{}, err
-		}
-		for _, ver := range versions {
-			if ver.Version == v {
-				return ver, nil
-			}
-		}
-		return sqlc.HelmChartVersion{}, fmt.Errorf("version %q not found", v)
+		return h.queries.GetHelmChartVersion(r.Context(), sqlc.GetHelmChartVersionParams{ChartID: chart.ID, Version: v})
+	}
+	if version, found, err := h.recommendedChartVersion(r.Context(), chart); found {
+		return version, err
 	}
 	return h.queries.GetLatestChartVersion(r.Context(), chart.ID)
 }

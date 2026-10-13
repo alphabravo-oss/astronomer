@@ -1,5 +1,5 @@
 /**
- * App install / upgrade modal — sprint 082+.
+ * App install / upgrade page — sprint 082+.
  *
  * Shared component for both fresh installs (from Browse / Recommended)
  * and upgrades on already-installed releases (from the Installed row's
@@ -26,19 +26,21 @@
  * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
+import { catalogValueErrors } from "@/lib/catalog-values-validation";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import {
   getChartDefaultValues,
   previewCatalogApplication,
 } from "@/lib/api/cluster-apps";
-import { curateHelmValuesSchema } from "@/lib/catalog-chart-fields";
+import {
+  catalogConfigurationSchema,
+  type CatalogVersionProfile,
+} from "@/lib/catalog-configuration";
 import {
   hasRenderableSchema,
-  mergeSchemaDefaults,
   parseHelmValuesYAML,
-  resolveSchemaRefs,
   type HelmValuesObject,
   type HelmValuesSchemaNode,
 } from "@/lib/helm-values-schema";
@@ -47,10 +49,11 @@ import { queryKeys } from "@/lib/query-keys";
 export function useAppInstallPreview({
   projectId,
   chartId,
-  chartName,
   version,
+  catalogVersion,
   clusterId,
   selectedVersionId,
+  fromChartVersionId,
   namespace,
   valuesYaml,
   isUpgrade,
@@ -60,8 +63,10 @@ export function useAppInstallPreview({
   chartId: string;
   chartName: string;
   version?: string;
+  catalogVersion?: CatalogVersionProfile;
   clusterId: string;
   selectedVersionId: string;
+  fromChartVersionId?: string;
   namespace: string;
   valuesYaml: string;
   isUpgrade: boolean;
@@ -71,23 +76,37 @@ export function useAppInstallPreview({
     queryKey: queryKeys.catalog.installChartValues(projectId, chartId, version),
     queryFn: ({ signal }) =>
       getChartDefaultValues(projectId, chartId, version, signal),
+    select: useCallback(
+      (data: Awaited<ReturnType<typeof getChartDefaultValues>>) => ({
+        ...data,
+        catalogVersion,
+      }),
+      [catalogVersion],
+    ),
     enabled: !!projectId && !!version,
     throwOnError: false,
   });
   const valuesSchema = useMemo(() => {
-    const resolved = resolveSchemaRefs(defaultValues.data?.valuesSchema);
+    const resolved = catalogConfigurationSchema(
+      defaultValues.data?.catalogVersion,
+      defaultValues.data?.valuesSchema,
+    );
     const renderable = hasRenderableSchema(resolved)
       ? (resolved as HelmValuesSchemaNode)
       : null;
-    return curateHelmValuesSchema(chartName, renderable);
-  }, [defaultValues.data?.valuesSchema, chartName]);
+    return renderable;
+  }, [defaultValues.data]);
   const schemaValues = useMemo(() => {
-    const parsed = parseHelmValuesYAML(valuesYaml);
+    let parsed;
+    try {
+      parsed = parseHelmValuesYAML(valuesYaml);
+    } catch {
+      return null;
+    }
     if (parsed == null) return null;
-    return (
-      valuesSchema ? mergeSchemaDefaults(valuesSchema, parsed) : parsed
-    ) as HelmValuesObject;
-  }, [valuesSchema, valuesYaml]);
+    return parsed as HelmValuesObject;
+  }, [valuesYaml]);
+  const fieldErrors = catalogValueErrors(valuesSchema, schemaValues);
   const valuesAreValid = !valuesYaml.trim() || schemaValues != null;
   const preview = useQuery({
     queryKey: queryKeys.catalog.applicationPreview(
@@ -96,12 +115,14 @@ export function useAppInstallPreview({
       namespace,
       valuesYaml,
       isUpgrade ? "upgrade" : "install",
+      fromChartVersionId,
     ),
     queryFn: ({ signal }) =>
       previewCatalogApplication(
         {
           clusterId,
           chartVersionId: selectedVersionId,
+          fromChartVersionId,
           namespace: namespace.trim(),
           valuesOverride: valuesYaml,
           operation: isUpgrade ? "upgrade" : "install",
@@ -125,5 +146,6 @@ export function useAppInstallPreview({
     schemaValues,
     preview,
     blockingPreview,
+    fieldErrors,
   };
 }

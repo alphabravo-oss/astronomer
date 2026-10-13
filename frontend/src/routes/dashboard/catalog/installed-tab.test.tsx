@@ -28,6 +28,7 @@ describe("catalog InstalledTab actions", () => {
   it("offers Upgrade, Rollback, and Uninstall from the row action menu", () => {
     render(
       <InstalledTab
+        onUpgrade={vi.fn()}
         installed={[row]}
         loading={false}
         onRollback={vi.fn()}
@@ -41,7 +42,9 @@ describe("catalog InstalledTab actions", () => {
       }),
     );
 
-    expect(screen.getByRole("menuitem", { name: "Upgrade" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Upgrade" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("menuitem", { name: "Rollback" }),
     ).toBeInTheDocument();
@@ -50,9 +53,11 @@ describe("catalog InstalledTab actions", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the upgrade modal for the row when Upgrade is clicked", () => {
+  it("navigates to configuration instead of opening a dialog", () => {
+    const onUpgrade = vi.fn();
     render(
       <InstalledTab
+        onUpgrade={onUpgrade}
         installed={[row]}
         loading={false}
         onRollback={vi.fn()}
@@ -67,14 +72,14 @@ describe("catalog InstalledTab actions", () => {
     );
     fireEvent.click(screen.getByRole("menuitem", { name: "Upgrade" }));
 
-    expect(
-      screen.getByRole("dialog", { name: `Upgrade ${row.releaseName}` }),
-    ).toBeInTheDocument();
+    expect(onUpgrade).toHaveBeenCalledWith(row);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("disables Rollback at revision 1 with a reason", () => {
     render(
       <InstalledTab
+        onUpgrade={vi.fn()}
         installed={[{ ...row, revision: 1 }]}
         loading={false}
         onRollback={vi.fn()}
