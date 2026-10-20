@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -30,7 +30,7 @@ func (h *CatalogHandler) tryProjectChartCursor(w http.ResponseWriter, r *http.Re
 		return true
 	}
 	if filter.Tag != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "tag filtering is available only on the global catalog")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "tag filtering is available only on the global catalog")
 		return true
 	}
 	if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -43,7 +43,7 @@ func (h *CatalogHandler) tryProjectChartCursor(w http.ResponseWriter, r *http.Re
 		return true
 	}
 	if page.provided && (page.cursor.Version != 2 || page.cursor.Text == nil || page.cursor.Group == nil) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid catalog chart cursor position")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid catalog chart cursor position")
 		return true
 	}
 	var charts []sqlc.HelmChart
@@ -54,7 +54,7 @@ func (h *CatalogHandler) tryProjectChartCursor(w http.ResponseWriter, r *http.Re
 		charts, err = store.ListProjectHelmChartsPage(r.Context(), sqlc.ListProjectHelmChartsPageParams{ProjectID: projectID, SearchPattern: filter.SearchPattern, QueryLimit: page.queryLimit()})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list charts")
 		return true
 	}
 	writeCatalogChartPage(w, r, charts, page, nil)

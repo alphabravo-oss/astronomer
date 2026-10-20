@@ -1,10 +1,40 @@
 title = "Astronomer secret scanning policy"
 
+# The scan covers the FULL commit history (guide ch.06), so allow-list entries
+# for evidence/plan paths deleted in the 2026-10 realignment stay: those blobs
+# still exist in history and were reviewed as non-secrets (digests, counters,
+# public commit ids). Entries cite the path and the reviewed shape.
+
 [extend]
 useDefault = true
 
+[[allowlists]]
+description = "Tracked local-development defaults (.env.dev, guide ch.04) and helm-lint throwaway keys (Makefile): published on purpose; internal/config/production.go rejects them when ENV=production"
+condition = "AND"
+regexTarget = "match"
+paths = ['''^\.env\.dev$''', '''^Makefile$''']
+regexes = ['''^(?:SECRET_KEY|ASTRONOMER_ENCRYPTION_KEY|ASTRONOMER_INTERNAL_PSK|ASTRONOMER_BOOTSTRAP_PASSWORD)=|secrets\.encryptionKey=AGE-SECRET-KEY-1YXRFCUA5''']
+
+[[allowlists]]
+description = "Published age identities (.env.dev dev key, values-k3d.yaml, render-only key for scripts/extract-images.sh and deploy render tests, Makefile helm-lint key): published on purpose; internal/config/production.go lists them, flags them at runtime and rejects them when ENV=production"
+regexes = ['''AGE-SECRET-KEY-1(?:G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7|PP9QEMWWYX3L0L80VA7062GN8NMHTGEYCZW80TL7PJKGUH6PKWZQ6H6DAA|9RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U|YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9)''']
+
 [[rules]]
 id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Tracked local-development defaults (.env.dev, guide ch.04): published on purpose; internal/config/production.go rejects them when ENV=production"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^\.env\.dev$''']
+  regexes = ['''^(?:SECRET_KEY|ASTRONOMER_ENCRYPTION_KEY|ASTRONOMER_INTERNAL_PSK|ASTRONOMER_BOOTSTRAP_PASSWORD)=''']
+
+  [[rules.allowlists]]
+  description = "Operator envtest renders the chart CRDs with the same public throwaway Fernet key the deploy/ chart-render tests use; it never encrypts anything"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^internal/operator/wire/wire_integration_test\.go$''']
+  regexes = ['''^\s*"--set", "secrets\.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=",\s*$''']
 
   [[rules.allowlists]]
   description = "Offering report fixture uses a literal idempotency marker, not an authentication credential"

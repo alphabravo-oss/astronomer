@@ -9,15 +9,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -202,10 +203,10 @@ func TestQueryOutputSystemRowFailsClosedWithoutManagementProxy(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if wrap.Error.Code != apierror.ProxyError {
+	if wrap.Error.Code != string(apiutil.ProxyError) {
 		t.Fatalf("code = %q", wrap.Error.Code)
 	}
-	if wrap.Error.Message != publicServerErrorMessage(http.StatusBadGateway) {
+	if wrap.Error.Message != "An upstream service could not complete the request" {
 		t.Fatalf("message = %q, want redacted upstream error", wrap.Error.Message)
 	}
 }
@@ -412,14 +413,14 @@ func TestCreateOutputStripsBearerFromConfiguration(t *testing.T) {
 	}
 }
 
-func TestApplySystemLokiInjectsBearerFromFernet(t *testing.T) {
+func TestApplySystemLokiInjectsBearerFromSealedToken(t *testing.T) {
 	q := newLoggingFakeQuerier()
 	h := newLoggingHandlerForTest(q)
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,11 +435,11 @@ func TestApplySystemLokiInjectsBearerFromFernet(t *testing.T) {
 hotReload:
   enabled: true
 `)
-	sealed, err := enc.Encrypt("rotate-me-token")
+	sealed, err := enc.EncryptString("rotate-me-token")
 	if err != nil {
 		t.Fatal(err)
 	}
-	q.lokiTokens[clusterID] = sqlc.LokiIngestToken{ClusterID: clusterID, TokenEncrypted: sealed}
+	q.lokiTokens[clusterID] = sqlc.LokiIngestToken{ClusterID: clusterID, TokenKeyID: sealed.KeyID, TokenAlgorithm: sealed.Algorithm, TokenCiphertext: sealed.Ciphertext, TokenNonce: sealed.Nonce}
 	out, err := h.upsertSystemLoggingOutput(context.Background(), systemLoggingOutputSpec{
 		ClusterID: clusterID, Host: "loki-ingest.example.com", Enabled: true,
 	})

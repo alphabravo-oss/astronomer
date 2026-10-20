@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type recordingAgentStatusWriter struct {

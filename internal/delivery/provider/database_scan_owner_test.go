@@ -3,10 +3,11 @@ package provider
 import (
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestOwnedDatabaseScanRequiresPrivateCurrentConstructorAndCannotPromoteUserOrigin(t *testing.T) {

@@ -9,14 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 type scimCreateUserRequest struct {
@@ -473,8 +476,8 @@ func (h *SCIMHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	startIndex, count := scimPaging(r)
 	rows, err := h.queries.ListUsers(r.Context(), sqlc.ListUsersParams{
-		Limit:  int32(count),
-		Offset: int32(startIndex - 1),
+		Limit:  safeconv.Int32(count),
+		Offset: safeconv.Int32(startIndex - 1),
 	})
 	if err != nil {
 		h.scimError(w, http.StatusInternalServerError, "failed to list users")

@@ -248,7 +248,7 @@ export function InlineOperationList({
 }) {
   return (
     <div>
-      <h4 className="text-xs font-medium uppercase text-muted-foreground">
+      <h4 className="text-xs font-medium text-muted-foreground">
         {title}
       </h4>
       {items.length === 0 ? (

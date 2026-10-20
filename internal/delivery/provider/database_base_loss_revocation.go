@@ -5,11 +5,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 )
 
 // RevokeAfterTrustLoss is restricted to this existing constructor's previously

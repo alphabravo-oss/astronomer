@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // apiserverAuditStore is the narrow DB surface the apiserver-audit
@@ -166,10 +167,10 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 	var req ingestApiserverAuditRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
 		if _, ok := err.(*http.MaxBytesError); ok {
-			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.ValidationError, "Request body too large")
+			apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.ValidationError, "Request body too large")
 			return
 		}
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid request body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid request body")
 		return
 	}
 	if len(req.Events) > maxIngestEvents {
@@ -178,7 +179,7 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 
 	accepted, skipped, err := h.PersistAuditEvents(r.Context(), clusterID, req.Events)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to persist audit event")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to persist audit event")
 		return
 	}
 
@@ -280,7 +281,7 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list apiserver audit events")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list apiserver audit events")
 		return
 	}
 
@@ -295,7 +296,7 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		total, err = h.queries.CountApiserverAuditEventsByCluster(r.Context(), clusterID)
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count apiserver audit events")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count apiserver audit events")
 		return
 	}
 

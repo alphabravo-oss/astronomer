@@ -7,8 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // DatabaseRegistryReadOptions is protected operator DATA. It selects one mounted

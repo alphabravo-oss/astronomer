@@ -150,7 +150,7 @@ func (q *Queries) GetPasswordResetTokenByHash(ctx context.Context, tokenHash str
 
 const getSMTPSettings = `-- name: GetSMTPSettings :one
 
-SELECT id, enabled, host, port, username, password_encrypted, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at FROM smtp_settings WHERE id = $1
+SELECT id, enabled, host, port, username, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at, password_key_id, password_algorithm, password_ciphertext, password_nonce FROM smtp_settings WHERE id = $1
 `
 
 // SMTP + email-message queries (migration 047). Backs:
@@ -164,7 +164,7 @@ SELECT id, enabled, host, port, username, password_encrypted, from_address, from
 //
 // The smtp_settings row is a singleton — every read/write targets the
 // same well-known id. The application code (NOT this query layer) is
-// responsible for Fernet-encrypting/decrypting password_encrypted; we
+// responsible for age-encrypting/decrypting password_{key_id,algorithm,ciphertext,nonce}; we
 // store and return the ciphertext verbatim.
 // Returns the singleton settings row. Callers handle the no-rows case
 // by treating an absent row as "disabled with all defaults".
@@ -177,7 +177,6 @@ func (q *Queries) GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSettin
 		&i.Host,
 		&i.Port,
 		&i.Username,
-		&i.PasswordEncrypted,
 		&i.FromAddress,
 		&i.FromName,
 		&i.AuthMechanism,
@@ -186,6 +185,10 @@ func (q *Queries) GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSettin
 		&i.TimeoutSeconds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PasswordKeyID,
+		&i.PasswordAlgorithm,
+		&i.PasswordCiphertext,
+		&i.PasswordNonce,
 	)
 	return i, err
 }
@@ -427,17 +430,20 @@ func (q *Queries) MarkEmailSkipped(ctx context.Context, arg MarkEmailSkippedPara
 
 const upsertSMTPSettings = `-- name: UpsertSMTPSettings :one
 INSERT INTO smtp_settings (
-    id, enabled, host, port, username, password_encrypted,
+    id, enabled, host, port, username, password_key_id, password_algorithm, password_ciphertext, password_nonce,
     from_address, from_name, auth_mechanism, encryption,
     require_tls, timeout_seconds
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $13, $14, $15, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (id) DO UPDATE SET
     enabled             = EXCLUDED.enabled,
     host                = EXCLUDED.host,
     port                = EXCLUDED.port,
     username            = EXCLUDED.username,
-    password_encrypted  = EXCLUDED.password_encrypted,
+    password_key_id = EXCLUDED.password_key_id,
+    password_algorithm = EXCLUDED.password_algorithm,
+    password_ciphertext = EXCLUDED.password_ciphertext,
+    password_nonce = EXCLUDED.password_nonce,
     from_address        = EXCLUDED.from_address,
     from_name           = EXCLUDED.from_name,
     auth_mechanism      = EXCLUDED.auth_mechanism,
@@ -445,22 +451,25 @@ ON CONFLICT (id) DO UPDATE SET
     require_tls         = EXCLUDED.require_tls,
     timeout_seconds     = EXCLUDED.timeout_seconds,
     updated_at          = now()
-RETURNING id, enabled, host, port, username, password_encrypted, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at
+RETURNING id, enabled, host, port, username, from_address, from_name, auth_mechanism, encryption, require_tls, timeout_seconds, created_at, updated_at, password_key_id, password_algorithm, password_ciphertext, password_nonce
 `
 
 type UpsertSMTPSettingsParams struct {
-	ID                uuid.UUID `json:"id"`
-	Enabled           bool      `json:"enabled"`
-	Host              string    `json:"host"`
-	Port              int32     `json:"port"`
-	Username          string    `json:"username"`
-	PasswordEncrypted string    `json:"password_encrypted"`
-	FromAddress       string    `json:"from_address"`
-	FromName          string    `json:"from_name"`
-	AuthMechanism     string    `json:"auth_mechanism"`
-	Encryption        string    `json:"encryption"`
-	RequireTls        bool      `json:"require_tls"`
-	TimeoutSeconds    int32     `json:"timeout_seconds"`
+	ID                 uuid.UUID `json:"id"`
+	Enabled            bool      `json:"enabled"`
+	Host               string    `json:"host"`
+	Port               int32     `json:"port"`
+	Username           string    `json:"username"`
+	PasswordKeyID      string    `json:"password_key_id"`
+	FromAddress        string    `json:"from_address"`
+	FromName           string    `json:"from_name"`
+	AuthMechanism      string    `json:"auth_mechanism"`
+	Encryption         string    `json:"encryption"`
+	RequireTls         bool      `json:"require_tls"`
+	TimeoutSeconds     int32     `json:"timeout_seconds"`
+	PasswordAlgorithm  string    `json:"password_algorithm"`
+	PasswordCiphertext []byte    `json:"password_ciphertext"`
+	PasswordNonce      []byte    `json:"password_nonce"`
 }
 
 // Singleton write. The handler always passes the same well-known id;
@@ -473,13 +482,16 @@ func (q *Queries) UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettings
 		arg.Host,
 		arg.Port,
 		arg.Username,
-		arg.PasswordEncrypted,
+		arg.PasswordKeyID,
 		arg.FromAddress,
 		arg.FromName,
 		arg.AuthMechanism,
 		arg.Encryption,
 		arg.RequireTls,
 		arg.TimeoutSeconds,
+		arg.PasswordAlgorithm,
+		arg.PasswordCiphertext,
+		arg.PasswordNonce,
 	)
 	var i SmtpSetting
 	err := row.Scan(
@@ -488,7 +500,6 @@ func (q *Queries) UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettings
 		&i.Host,
 		&i.Port,
 		&i.Username,
-		&i.PasswordEncrypted,
 		&i.FromAddress,
 		&i.FromName,
 		&i.AuthMechanism,
@@ -497,6 +508,10 @@ func (q *Queries) UpsertSMTPSettings(ctx context.Context, arg UpsertSMTPSettings
 		&i.TimeoutSeconds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PasswordKeyID,
+		&i.PasswordAlgorithm,
+		&i.PasswordCiphertext,
+		&i.PasswordNonce,
 	)
 	return i, err
 }

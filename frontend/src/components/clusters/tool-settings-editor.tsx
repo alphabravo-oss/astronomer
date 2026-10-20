@@ -44,7 +44,7 @@ export function ToolSettingsEditor({
       </p>
       {groups.map(([group, fields]) => (
         <section key={group} className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-xs font-semibold text-muted-foreground">
             {group}
           </h3>
           <div className="space-y-3">
@@ -141,7 +141,7 @@ export function FormFieldRow({
         )}
         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground/70">
           <span className="font-mono">{field.path}</span>
-          <span className="rounded bg-muted px-1.5 py-0.5 font-medium uppercase tracking-wide">
+          <span className="rounded bg-muted px-1.5 py-0.5 font-medium">
             {source}
           </span>
           {canReset && (

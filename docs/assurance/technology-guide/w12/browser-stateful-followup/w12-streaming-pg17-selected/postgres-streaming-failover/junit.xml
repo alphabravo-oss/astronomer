@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="1" failures="0" errors="0" time="0.707546">
-	<testsuite tests="1" failures="0" time="0.708000" name="github.com/alphabravocompany/astronomer-go/internal/server" timestamp="2026-10-09T22:42:19Z">
-		<properties>
-			<property name="go.version" value="go1.27.2 linux/amd64"></property>
-		</properties>
-		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestPostgresFailoverRecoveryCertification" time="0.650000"></testcase>
-	</testsuite>
-</testsuites>

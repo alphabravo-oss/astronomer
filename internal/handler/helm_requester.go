@@ -118,7 +118,7 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 		return nil, true, err
 	}
 	target := "http://" + addr + "/internal/tunnel/helm/" + clusterID
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body)) // #nosec G704 -- target is the internal Helm forward service for a registered cluster; repository destinations are governed by HELM_REPOSITORY_DESTINATION_POLICY
 	if err != nil {
 		return nil, true, err
 	}
@@ -137,7 +137,7 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 		return nil, true, err
 	}
 
-	httpResp, err := internalHelmForwardClient.Do(req)
+	httpResp, err := internalHelmForwardClient.Do(req) // #nosec G704 -- see NewRequestWithContext above: internal forward service, PSK-authenticated
 	if err != nil {
 		return nil, true, err
 	}

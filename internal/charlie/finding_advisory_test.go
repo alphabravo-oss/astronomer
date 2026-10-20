@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TestAdvisoryAndNotificationDTOsHaveNoExecutionFields(t *testing.T) {

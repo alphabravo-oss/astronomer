@@ -41,26 +41,29 @@ func (q *Queries) CreateProjectCatalogSubscription(ctx context.Context, arg Crea
 const createProjectOwnedCatalog = `-- name: CreateProjectOwnedCatalog :one
 INSERT INTO helm_repositories (
     name, url, repo_type, description, is_default, auth_type,
-    auth_config, enabled, created_by_id, owner_project_id, auth_config_encrypted
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    auth_config, enabled, created_by_id, owner_project_id, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING id, name, url, repo_type, description, is_default, auth_type,
           auth_config, enabled, last_synced_at, created_by_id, created_at,
           updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
-          auth_config_encrypted
+          auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 `
 
 type CreateProjectOwnedCatalogParams struct {
-	Name                string          `json:"name"`
-	Url                 string          `json:"url"`
-	RepoType            string          `json:"repo_type"`
-	Description         string          `json:"description"`
-	IsDefault           bool            `json:"is_default"`
-	AuthType            string          `json:"auth_type"`
-	AuthConfig          json.RawMessage `json:"auth_config"`
-	Enabled             bool            `json:"enabled"`
-	CreatedByID         pgtype.UUID     `json:"created_by_id"`
-	OwnerProjectID      pgtype.UUID     `json:"owner_project_id"`
-	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
+	Name                 string          `json:"name"`
+	Url                  string          `json:"url"`
+	RepoType             string          `json:"repo_type"`
+	Description          string          `json:"description"`
+	IsDefault            bool            `json:"is_default"`
+	AuthType             string          `json:"auth_type"`
+	AuthConfig           json.RawMessage `json:"auth_config"`
+	Enabled              bool            `json:"enabled"`
+	CreatedByID          pgtype.UUID     `json:"created_by_id"`
+	OwnerProjectID       pgtype.UUID     `json:"owner_project_id"`
+	AuthConfigKeyID      string          `json:"auth_config_key_id"`
+	AuthConfigAlgorithm  string          `json:"auth_config_algorithm"`
+	AuthConfigCiphertext []byte          `json:"auth_config_ciphertext"`
+	AuthConfigNonce      []byte          `json:"auth_config_nonce"`
 }
 
 func (q *Queries) CreateProjectOwnedCatalog(ctx context.Context, arg CreateProjectOwnedCatalogParams) (HelmRepository, error) {
@@ -75,7 +78,10 @@ func (q *Queries) CreateProjectOwnedCatalog(ctx context.Context, arg CreateProje
 		arg.Enabled,
 		arg.CreatedByID,
 		arg.OwnerProjectID,
-		arg.AuthConfigEncrypted,
+		arg.AuthConfigKeyID,
+		arg.AuthConfigAlgorithm,
+		arg.AuthConfigCiphertext,
+		arg.AuthConfigNonce,
 	)
 	var i HelmRepository
 	err := row.Scan(
@@ -95,7 +101,10 @@ func (q *Queries) CreateProjectOwnedCatalog(ctx context.Context, arg CreateProje
 		&i.OwnerProjectID,
 		&i.LastSyncError,
 		&i.LastSyncAttemptedAt,
-		&i.AuthConfigEncrypted,
+		&i.AuthConfigKeyID,
+		&i.AuthConfigAlgorithm,
+		&i.AuthConfigCiphertext,
+		&i.AuthConfigNonce,
 	)
 	return i, err
 }
@@ -119,7 +128,7 @@ const getHelmRepositoryWithOwner = `-- name: GetHelmRepositoryWithOwner :one
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
        updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
-       auth_config_encrypted
+       auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 FROM helm_repositories
 WHERE id = $1
 `
@@ -144,7 +153,10 @@ func (q *Queries) GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) 
 		&i.OwnerProjectID,
 		&i.LastSyncError,
 		&i.LastSyncAttemptedAt,
-		&i.AuthConfigEncrypted,
+		&i.AuthConfigKeyID,
+		&i.AuthConfigAlgorithm,
+		&i.AuthConfigCiphertext,
+		&i.AuthConfigNonce,
 	)
 	return i, err
 }
@@ -177,7 +189,7 @@ const listAdminCatalogsIncludingProjectOwned = `-- name: ListAdminCatalogsInclud
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
        updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
-       auth_config_encrypted
+       auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 FROM helm_repositories
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -214,7 +226,10 @@ func (q *Queries) ListAdminCatalogsIncludingProjectOwned(ctx context.Context, ar
 			&i.OwnerProjectID,
 			&i.LastSyncError,
 			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
+			&i.AuthConfigKeyID,
+			&i.AuthConfigAlgorithm,
+			&i.AuthConfigCiphertext,
+			&i.AuthConfigNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -231,7 +246,7 @@ const listCatalogsForProject = `-- name: ListCatalogsForProject :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
        updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
-       auth_config_encrypted
+       auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 FROM helm_repositories
 WHERE owner_project_id IS NULL
    OR owner_project_id = $1::uuid
@@ -279,7 +294,10 @@ func (q *Queries) ListCatalogsForProject(ctx context.Context, projectID uuid.UUI
 			&i.OwnerProjectID,
 			&i.LastSyncError,
 			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
+			&i.AuthConfigKeyID,
+			&i.AuthConfigAlgorithm,
+			&i.AuthConfigCiphertext,
+			&i.AuthConfigNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -295,7 +313,7 @@ const listProjectOwnedCatalogs = `-- name: ListProjectOwnedCatalogs :many
 SELECT id, name, url, repo_type, description, is_default, auth_type,
        auth_config, enabled, last_synced_at, created_by_id, created_at,
        updated_at, owner_project_id, last_sync_error, last_sync_attempted_at,
-       auth_config_encrypted
+       auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 FROM helm_repositories
 WHERE owner_project_id = $1::uuid
 ORDER BY name ASC
@@ -327,7 +345,10 @@ func (q *Queries) ListProjectOwnedCatalogs(ctx context.Context, projectID uuid.U
 			&i.OwnerProjectID,
 			&i.LastSyncError,
 			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
+			&i.AuthConfigKeyID,
+			&i.AuthConfigAlgorithm,
+			&i.AuthConfigCiphertext,
+			&i.AuthConfigNonce,
 		); err != nil {
 			return nil, err
 		}

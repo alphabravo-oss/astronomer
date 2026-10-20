@@ -13,8 +13,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 )
 
 const estateSchema = "astronomer-real-estate-v2"

@@ -13,13 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // --- CR rendering tests ---------------------------------------------------
@@ -451,44 +453,40 @@ func (f *fakeBackupQuerier) ListBackupStorageConfigs(ctx context.Context, arg sq
 func (f *fakeBackupQuerier) CreateBackupStorageConfig(ctx context.Context, arg sqlc.CreateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error) {
 	f.createArg = arg
 	return sqlc.BackupStorageConfig{
-		ID:                   uuid.New(),
-		Name:                 arg.Name,
-		StorageType:          arg.StorageType,
-		Bucket:               arg.Bucket,
-		Prefix:               arg.Prefix,
-		Region:               arg.Region,
-		EndpointUrl:          arg.EndpointUrl,
-		AccessKey:            arg.AccessKey,
-		SecretKey:            arg.SecretKey,
-		IsDefault:            arg.IsDefault,
-		CreatedByID:          arg.CreatedByID,
-		ClusterID:            arg.ClusterID,
-		VeleroNamespace:      arg.VeleroNamespace,
-		BslName:              arg.BslName,
-		EncryptedCredentials: arg.EncryptedCredentials,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:               uuid.New(),
+		Name:             arg.Name,
+		StorageType:      arg.StorageType,
+		Bucket:           arg.Bucket,
+		Prefix:           arg.Prefix,
+		Region:           arg.Region,
+		EndpointUrl:      arg.EndpointUrl,
+		IsDefault:        arg.IsDefault,
+		CreatedByID:      arg.CreatedByID,
+		ClusterID:        arg.ClusterID,
+		VeleroNamespace:  arg.VeleroNamespace,
+		BslName:          arg.BslName,
+		CredentialsKeyID: arg.CredentialsKeyID, CredentialsAlgorithm: arg.CredentialsAlgorithm, CredentialsCiphertext: arg.CredentialsCiphertext, CredentialsNonce: arg.CredentialsNonce,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}, nil
 }
 func (f *fakeBackupQuerier) UpdateBackupStorageConfig(ctx context.Context, arg sqlc.UpdateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error) {
 	f.updateArg = arg
 	return sqlc.BackupStorageConfig{
-		ID:                   arg.ID,
-		Name:                 arg.Name,
-		StorageType:          arg.StorageType,
-		Bucket:               arg.Bucket,
-		Prefix:               arg.Prefix,
-		Region:               arg.Region,
-		EndpointUrl:          arg.EndpointUrl,
-		AccessKey:            arg.AccessKey,
-		SecretKey:            arg.SecretKey,
-		IsDefault:            arg.IsDefault,
-		ClusterID:            arg.ClusterID,
-		VeleroNamespace:      arg.VeleroNamespace,
-		BslName:              arg.BslName,
-		EncryptedCredentials: arg.EncryptedCredentials,
-		CreatedAt:            time.Now(),
-		UpdatedAt:            time.Now(),
+		ID:               arg.ID,
+		Name:             arg.Name,
+		StorageType:      arg.StorageType,
+		Bucket:           arg.Bucket,
+		Prefix:           arg.Prefix,
+		Region:           arg.Region,
+		EndpointUrl:      arg.EndpointUrl,
+		IsDefault:        arg.IsDefault,
+		ClusterID:        arg.ClusterID,
+		VeleroNamespace:  arg.VeleroNamespace,
+		BslName:          arg.BslName,
+		CredentialsKeyID: arg.CredentialsKeyID, CredentialsAlgorithm: arg.CredentialsAlgorithm, CredentialsCiphertext: arg.CredentialsCiphertext, CredentialsNonce: arg.CredentialsNonce,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}, nil
 }
 func (f *fakeBackupQuerier) DeleteBackupStorageConfig(ctx context.Context, id uuid.UUID) error {
@@ -649,11 +647,11 @@ func TestCreateRestoreOperationUsesIdempotencyKey(t *testing.T) {
 }
 
 func TestCreateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -671,13 +669,10 @@ func TestCreateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if q.createArg.AccessKey != "" || q.createArg.SecretKey != "" {
-		t.Fatalf("expected plaintext credential columns to be blank, got access=%q secret=%q", q.createArg.AccessKey, q.createArg.SecretKey)
-	}
-	if q.createArg.EncryptedCredentials == "" {
+	if q.createArg.CredentialsKeyID == "" {
 		t.Fatal("expected encrypted credentials to be stored")
 	}
-	plain, err := enc.Decrypt(q.createArg.EncryptedCredentials)
+	plain, err := enc.DecryptString(crypto.FromParts(q.createArg.CredentialsKeyID, q.createArg.CredentialsAlgorithm, q.createArg.CredentialsCiphertext, q.createArg.CredentialsNonce))
 	if err != nil {
 		t.Fatalf("Decrypt: %v", err)
 	}
@@ -697,17 +692,17 @@ func TestCreateStorageConfigFailsClosedWithoutCredentialEncryptor(t *testing.T) 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if q.createArg.Name != "" || q.createArg.AccessKey != "" || q.createArg.SecretKey != "" {
+	if q.createArg.Name != "" || q.createArg.CredentialsKeyID != "" {
 		t.Fatalf("credential-bearing row was attempted without encryption: %#v", q.createArg)
 	}
 }
 
 func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -731,10 +726,7 @@ func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if q.updateArg.AccessKey != "" || q.updateArg.SecretKey != "" {
-		t.Fatalf("expected plaintext credential columns to be blank, got access=%q secret=%q", q.updateArg.AccessKey, q.updateArg.SecretKey)
-	}
-	if q.updateArg.EncryptedCredentials == "" {
+	if q.updateArg.CredentialsKeyID == "" {
 		t.Fatal("expected encrypted credentials to be stored")
 	}
 }
@@ -753,8 +745,6 @@ func TestStorageConfigEndpoint_Success(t *testing.T) {
 			Bucket:      "x",
 			Region:      "us-east-1",
 			EndpointUrl: srv.URL,
-			AccessKey:   "AK",
-			SecretKey:   "SK",
 		},
 	}
 	h := &BackupHandler{queries: q, httpClient: srv.Client()}

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -32,7 +33,7 @@ func AuthOrTOTPEnrollChallenge(jwtManager *auth.JWTManager, queries auth.TokenUs
 						// between login and this request.
 						dbUser, uerr := queries.GetUserByID(r.Context(), claims.UserID)
 						if uerr != nil || !dbUser.IsActive {
-							authError(w, "authentication_required", "Invalid or expired token")
+							authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
 							return
 						}
 						user := &reqctx.User{

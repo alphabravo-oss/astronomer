@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 var charlieAuditDigestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -78,7 +80,7 @@ func logCharlieAdminAuditFailure(r *http.Request) {
 	if r != nil {
 		ctx = r.Context()
 	}
-	charlie.LogOperationalFailure(ctx, nil, "charlie.admin_audit_persist_failed", "")
+	charlie.LogOperationalFailure(ctx, *logging.Default(), "charlie.admin_audit_persist_failed", "")
 }
 
 func validCharlieAuditResourceID(value string) bool {

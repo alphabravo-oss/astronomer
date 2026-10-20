@@ -68,11 +68,11 @@ func encodedNodeResponse(status int, value any) *protocol.K8sResponsePayload {
 func runNodeDrainTest(t *testing.T, operation sqlc.NodeOperation, store *nodeOperationTaskStore, k8s K8sRequester) error {
 	t.Helper()
 	enc := resourceTaskEncryptor(t)
-	parameters, err := enc.Encrypt(`{"ignore_daemonsets":true}`)
+	parameters, err := enc.EncryptString(`{"ignore_daemonsets":true}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation.ParametersEncrypted = parameters
+	operation.ParametersKeyID, operation.ParametersAlgorithm, operation.ParametersCiphertext, operation.ParametersNonce = parameters.Parts()
 	store.operation = operation
 	task, err := NewNodeOperationTask(operation.ID, operation.Generation)
 	if err != nil {

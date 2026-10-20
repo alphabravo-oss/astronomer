@@ -326,7 +326,7 @@ export function Detail({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs font-medium text-muted-foreground">
         {label}
       </dt>
       <dd

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -14,6 +13,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/rs/zerolog"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
@@ -31,10 +36,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 // busPublisherAdapter bridges the *events.Bus into the tunnel.LifecyclePublisher
@@ -164,10 +167,7 @@ func (t securityCacheTarget) InvalidateRBACAllLocal() {
 // reconcilers only while this pod is leader (CORR-R06). On leadership loss it
 // cancels the child context (stopping ticker loops that respect ctx) and
 // retries acquisition.
-func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log *slog.Logger, run func(context.Context) error) error {
-	if log == nil {
-		log = slog.Default()
-	}
+func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log zerolog.Logger, run func(context.Context) error) error {
 	const job = "server.reconcilers"
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -177,14 +177,14 @@ func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log
 			return nil
 		}
 		if errors.Is(err, leader.ErrLeadershipLost) {
-			log.Warn("server reconciler leadership lost; stopped reconcilers", "error", err)
+			log.Warn().Err(err).Msg("server reconciler leadership lost; stopped reconcilers")
 		} else if held {
 			if err == nil {
 				err = errors.New("reconciler group exited without cancellation")
 			}
 			return err
 		} else if err != nil {
-			log.Warn("server reconciler leader election failed", "error", err)
+			log.Warn().Err(err).Msg("server reconciler leader election failed")
 		}
 		select {
 		case <-ctx.Done():
@@ -229,14 +229,14 @@ func dsnEnforcesTLS(dsn string) bool {
 // server and the worker call (C-01).
 const (
 	devSecretKey     = "local-dev-secret-key-change-in-production"
-	devEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+	devEncryptionKey = "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7"
 )
 
 func isProductionConfig(cfg *config.Config) bool {
 	return config.IsProduction(cfg)
 }
 
-func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryptor) error {
+func validateProductionSecurityConfig(cfg *config.Config, encryptor *crypto.Encryptor) error {
 	return config.ValidateProductionSecurity(cfg, encryptor != nil)
 }
 
@@ -245,8 +245,8 @@ func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryp
 // under config.env=production, which is where the published chart keys used to
 // hide: a "development" install signs the same JWTs and wraps the same stored
 // cluster credentials (dev-keys-default-and-silent).
-func reportInsecureDevKeys(cfg *config.Config, logger *slog.Logger) {
-	observability.ReportInsecureDevKeys(logger, config.DevSentinelsInUse(cfg))
+func reportInsecureDevKeys(cfg *config.Config, logger zerolog.Logger) {
+	observability.ReportInsecureDevKeys(logging.Slog(logger), config.DevSentinelsInUse(cfg))
 }
 
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
@@ -385,7 +385,7 @@ func resolveCallbackBaseURL(ctx context.Context, _ *config.Config, queries *sqlc
 type Server struct {
 	httpServer *http.Server
 	handler    http.Handler
-	logger     *slog.Logger
+	logger     zerolog.Logger
 	db         *db.DB
 	queue      *asynq.Client
 	// hub is the tunnel hub; nil in lightweight test servers. Held here
@@ -397,9 +397,9 @@ type Server struct {
 	// path, which only works on the pod that owns the WS terminations.
 	// Nil in lightweight test servers built via New().
 	tunnelWorker tunnelWorkerLifecycle
-	// Encryptor is the Fernet encryptor wired into handlers that surface
+	// Encryptor is the age keyring (pkg/crypto) wired into handlers that surface
 	// encrypted columns (delivery credentials, SSO client secrets, etc.).
-	Encryptor *auth.Encryptor
+	Encryptor *crypto.Encryptor
 	// SSO drives the OAuth login/callback flow. May be nil if no providers
 	// are configured at boot.
 	SSO *auth.SSOManager
@@ -467,7 +467,7 @@ func (s *Server) DB() *db.DB {
 }
 
 // New creates a new Server with the given config and logger.
-func New(cfg *config.Config, logger *slog.Logger) *Server {
+func New(cfg *config.Config, logger zerolog.Logger) *Server {
 	router := NewRouter(cfg, RouterDependencies{})
 
 	s := &Server{
@@ -516,43 +516,43 @@ type firstBootSyncEnqueuer interface {
 //
 // Best-effort: any failure (Redis offline, DB hiccup, marshal error)
 // logs a warning and returns silently. NEVER fails server startup.
-func kickFirstBootCatalogSync(ctx context.Context, logger *slog.Logger, queries firstBootSyncCounter, queue firstBootSyncEnqueuer) {
+func kickFirstBootCatalogSync(ctx context.Context, logger zerolog.Logger, queries firstBootSyncCounter, queue firstBootSyncEnqueuer) {
 	if queries == nil || queue == nil {
 		return
 	}
 	n, err := queries.CountHelmCharts(ctx)
 	if err != nil {
-		logger.Warn("sprint075: first-boot catalog sync count failed", "error", err)
+		logger.Warn().Err(err).Msg("sprint075: first-boot catalog sync count failed")
 		return
 	}
 	if n > 0 {
-		logger.Debug("sprint075: catalog already populated, skipping first-boot sync", "chart_count", n)
+		logger.Debug().Int64("chart_count", n).Msg("sprint075: catalog already populated, skipping first-boot sync")
 		return
 	}
 	task, err := tasks.NewCatalogSyncTask(tasks.CatalogSyncPayload{})
 	if err != nil {
-		logger.Warn("sprint075: first-boot catalog sync build failed", "error", err)
+		logger.Warn().Err(err).Msg("sprint075: first-boot catalog sync build failed")
 		return
 	}
 	if _, err := queue.Enqueue(task); err != nil {
-		logger.Warn("sprint075: first-boot catalog sync enqueue failed", "error", err)
+		logger.Warn().Err(err).Msg("sprint075: first-boot catalog sync enqueue failed")
 		return
 	}
-	logger.Info("sprint075: first-boot catalog sync enqueued")
+	logger.Info().Msg("sprint075: first-boot catalog sync enqueued")
 }
 
 // bootstrapLocalCluster ensures the local cluster row exists. It builds a
 // transient in-cluster k8s client purely to enrich the row with version /
 // node-count metadata; if InClusterConfig is unavailable, the row is still
 // created with empty discovery fields.
-func bootstrapLocalCluster(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries) (*sqlc.Cluster, error) {
+func bootstrapLocalCluster(ctx context.Context, logger zerolog.Logger, queries *sqlc.Queries) (*sqlc.Cluster, error) {
 	restCfg, restErr := rest.InClusterConfig()
 	var clientset *kubernetes.Clientset
 	if restErr != nil {
-		logger.Warn("local cluster discovery skipped: not running in-cluster", "error", restErr)
+		logger.Warn().Err(restErr).Msg("local cluster discovery skipped: not running in-cluster")
 		restCfg = nil
 	} else if cs, err := kubernetes.NewForConfig(restCfg); err != nil {
-		logger.Warn("local cluster discovery skipped: clientset error", "error", err)
+		logger.Warn().Err(err).Msg("local cluster discovery skipped: clientset error")
 	} else {
 		clientset = cs
 	}
@@ -578,7 +578,7 @@ func (s *Server) Start(addr string) error {
 			return err
 		}
 	}
-	s.logger.Info("server listening", "addr", addr)
+	s.logger.Info().Str("addr", addr).Msg("server listening")
 	go func() { errCh <- s.httpServer.Serve(ln) }()
 	var runtimeFailures <-chan error
 	if s.runtime != nil {
@@ -623,7 +623,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	runtimeJoined := true
 	if s.hub != nil {
 		drained := s.hub.Drain()
-		s.logger.Info("tunnel hub drained", "agents_disconnected", drained)
+		s.logger.Info().Int("agents_disconnected", drained).Msg("tunnel hub drained")
 	}
 	if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		shutdownErrs = append(shutdownErrs, fmt.Errorf("http server: %w", err))
@@ -652,12 +652,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	for _, hook := range s.shutdownHooks {
 		if err := hook.fn(ctx); err != nil {
-			s.logger.Warn("shutdown drain failed", "component", hook.name, "error", err)
+			s.logger.Warn().Str("component", hook.name).Err(err).Msg("shutdown drain failed")
 			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", hook.name, err))
 		}
 	}
 	if !runtimeJoined {
-		s.logger.Error("runtime loops did not join; leaving dependency pools open for process exit")
+		s.logger.Error().Msg("runtime loops did not join; leaving dependency pools open for process exit")
 		s.shutdownErr = errors.Join(shutdownErrs...)
 		s.shutdownDone = true
 		return s.shutdownErr
@@ -667,7 +667,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	for _, closer := range s.resourceClosers {
 		if err := closer.fn(ctx); err != nil {
-			s.logger.Warn("runtime resource close failed", "component", closer.name, "error", err)
+			s.logger.Warn().Str("component", closer.name).Err(err).Msg("runtime resource close failed")
 			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", closer.name, err))
 		}
 	}
@@ -700,7 +700,7 @@ func kubectlShellComponents(
 	rbacEngine *rbac.Engine,
 	requester handler.K8sRequester,
 	cfg *config.Config,
-	logger *slog.Logger,
+	logger zerolog.Logger,
 	taskLeader tasks.LeaderElector,
 ) (*handler.KubectlShellHandler, tasks.KubectlSessionReapRuntime) {
 	if cfg == nil || !cfg.KubectlShellEnabled {
@@ -720,9 +720,9 @@ func kubectlShellComponents(
 		Image:       cfg.KubectlShellImage,
 		IdleTimeout: idle,
 		HardCap:     hard,
-		Log:         logger,
+		Log:         logging.Slog(logger),
 	}
-	runtime := tasks.KubectlSessionReapRuntime{Deps: deps, Leader: taskLeader, Log: logger}
+	runtime := tasks.KubectlSessionReapRuntime{Deps: deps, Leader: taskLeader, Log: logging.Slog(logger)}
 	return handler.NewKubectlShellHandler(queries, rbacQuerier, rbacEngine, deps), runtime
 }
 
@@ -750,7 +750,7 @@ func detectReleaseNamespace(configured string) string {
 // gate supports — operators MUST opt into it intentionally. The check
 // runs once at startup; the handler doesn't reject the configuration
 // at PUT time because it's a valid choice.
-func maintenanceStartupWarn(ctx context.Context, q maintenanceStartupQuerier, logger *slog.Logger) {
+func maintenanceStartupWarn(ctx context.Context, q maintenanceStartupQuerier, logger zerolog.Logger) {
 	if q == nil {
 		return
 	}
@@ -766,12 +766,7 @@ func maintenanceStartupWarn(ctx context.Context, q maintenanceStartupQuerier, lo
 		// a missing or malformed value (very unusual; the schema
 		// defaults it) is treated the same way.
 		if len(row.OperationTypes) == 0 || string(row.OperationTypes) == "[]" {
-			logger.Warn("maintenance window in permitted mode with empty operation_types blocks ALL destructive ops outside its window",
-				"window_id", row.ID.String(),
-				"name", row.Name,
-				"cron_open", row.CronOpen,
-				"timezone", row.Timezone,
-			)
+			logger.Warn().Str("window_id", row.ID.String()).Str("name", row.Name).Str("cron_open", row.CronOpen).Str("timezone", row.Timezone).Msg("maintenance window in permitted mode with empty operation_types blocks ALL destructive ops outside its window")
 		}
 	}
 }

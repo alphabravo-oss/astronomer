@@ -25,8 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 const (
@@ -113,7 +113,7 @@ type ManagementBackupRetention struct {
 	Monthly string `json:"monthly,omitempty"`
 }
 
-// ManagementKeyBackupStatus reports whether the Fernet/JWT key is being
+// ManagementKeyBackupStatus reports whether the encryption/JWT key is being
 // wrapped into S3 alongside the dump. WrappingConfigured is the DR-critical
 // flag: the chart refuses to upload the key in plaintext, so an enabled
 // CronJob without wrapping means dumps exist but a restore onto a new
@@ -153,7 +153,7 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if h.queries != nil {
 		rows, err := h.queries.ListManagementBackupDestinations(ctx)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 			return
 		}
 		for _, row := range rows {
@@ -176,7 +176,7 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if h.k8s != nil && h.namespace != "" {
 		helmCJ, err := h.findHelmBackupCronJob(ctx)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, err.Error())
 			return
 		}
 		if helmCJ != nil {
@@ -208,7 +208,7 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if drillCJ, err := h.findCronJob(ctx, restoreDrillComponent); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, err.Error())
 			return
 		} else if drillCJ != nil {
 			out.Drill = cronJobStatus(drillCJ)
@@ -309,7 +309,7 @@ func destinationView(row sqlc.ManagementBackupDestination) ManagementBackupDesti
 		KeepDaily:         row.KeepDaily,
 		KeepWeekly:        row.KeepWeekly,
 		KeepMonthly:       row.KeepMonthly,
-		HasCredentials:    row.EncryptedCredentials != "",
+		HasCredentials:    row.CredentialsKeyID != "",
 		DesiredGeneration: row.DesiredGeneration,
 		AppliedGeneration: row.AppliedGeneration,
 		DesiredState:      row.DesiredState,

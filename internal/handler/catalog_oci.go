@@ -25,7 +25,7 @@ func IsOCIRepo(repoURL string) bool { return catalog.IsOCIURL(repoURL) }
 // the path that starts from a stored row.
 func parseOCIAuthConfig(raw []byte) catalog.OCIAuthConfig { return catalog.ParseOCIAuthConfig(raw) }
 
-// resolveOCIAuthConfig unwraps the migration-145 Fernet envelope and decodes
+// resolveOCIAuthConfig unwraps the sealed auth_config_* family and decodes
 // the OCI credential + chart selection.
 func (h *CatalogHandler) resolveOCIAuthConfig(repo sqlc.HelmRepository) (catalog.OCIAuthConfig, error) {
 	return catalog.ResolveOCIAuthConfig(repo, h.decryptor())

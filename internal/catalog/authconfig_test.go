@@ -9,25 +9,35 @@ import (
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
-// stubCryptor is a deterministic stand-in for the Fernet encryptor: it is
-// enough to prove the column-boundary contract without pulling internal/auth
-// into this package's tests.
+// stubCryptor is a deterministic stand-in for the age encryptor: the "key id"
+// is prefix and the "ciphertext" is the plaintext. Enough to prove the
+// column-boundary contract; pkg/crypto has its own crypto tests.
 type stubCryptor struct {
 	prefix  string
 	failing bool
 }
 
-func (s stubCryptor) Encrypt(plaintext string) (string, error) {
-	return s.prefix + plaintext, nil
+func (s stubCryptor) Encrypt(plaintext []byte) (crypto.Sealed, error) {
+	return stubSealed(s.prefix, string(plaintext)), nil
 }
 
-func (s stubCryptor) Decrypt(token string) (string, error) {
-	if s.failing || !strings.HasPrefix(token, s.prefix) {
-		return "", errors.New("no matching key")
+func stubSealed(keyID, plaintext string) crypto.Sealed {
+	return crypto.Sealed{KeyID: keyID, Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: []byte(plaintext)}
+}
+
+func withSealed(repo sqlc.HelmRepository, s crypto.Sealed) sqlc.HelmRepository {
+	repo.AuthConfigKeyID, repo.AuthConfigAlgorithm, repo.AuthConfigCiphertext, repo.AuthConfigNonce = s.Parts()
+	return repo
+}
+
+func (s stubCryptor) Decrypt(sealed crypto.Sealed) ([]byte, error) {
+	if s.failing || sealed.KeyID != s.prefix {
+		return nil, errors.New("no matching key")
 	}
-	return strings.TrimPrefix(token, s.prefix), nil
+	return sealed.Ciphertext, nil
 }
 
 // TestSealAuthConfigSplitsSecretsFromTheQueryableProjection.
@@ -39,7 +49,7 @@ func TestSealAuthConfigSplitsSecretsFromTheQueryableProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	if ciphertext == "" {
+	if ciphertext.IsZero() {
 		t.Fatal("a document with a password must produce an envelope")
 	}
 	if strings.Contains(string(public), "s3cret") {
@@ -70,8 +80,8 @@ func TestSealAuthConfigLeavesSecretlessDocumentsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	if ciphertext != "" {
-		t.Fatalf("secretless document should not be sealed, got %q", ciphertext)
+	if !ciphertext.IsZero() {
+		t.Fatalf("secretless document should not be sealed, got %+v", ciphertext)
 	}
 	if !strings.Contains(string(public), "charts") {
 		t.Fatalf("chart list lost: %s", public)
@@ -79,7 +89,7 @@ func TestSealAuthConfigLeavesSecretlessDocumentsAlone(t *testing.T) {
 }
 
 // TestSealAuthConfigWithoutEncryptorKeepsPre145Shape — development deployments
-// have no Fernet key (production cannot: ValidateProductionSecurity refuses to
+// have no encryption key (production cannot: ValidateProductionSecurity refuses to
 // start). The row must come out in exactly the shape the legacy read branch
 // expects, or dev would write rows neither branch can read.
 func TestSealAuthConfigWithoutEncryptorKeepsPre145Shape(t *testing.T) {
@@ -88,8 +98,8 @@ func TestSealAuthConfigWithoutEncryptorKeepsPre145Shape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	if ciphertext != "" {
-		t.Fatalf("no encryptor must produce no envelope, got %q", ciphertext)
+	if !ciphertext.IsZero() {
+		t.Fatalf("no encryptor must produce no envelope, got %+v", ciphertext)
 	}
 	if string(public) != doc {
 		t.Fatalf("document should pass through unchanged, got %s", public)
@@ -97,7 +107,7 @@ func TestSealAuthConfigWithoutEncryptorKeepsPre145Shape(t *testing.T) {
 }
 
 // TestResolveAuthConfigDisambiguatesOnTheColumnNotTheBytes is the core of the
-// transition design. There is no "does this look like a Fernet token"
+// transition design. There is no "does this look like ciphertext"
 // heuristic: an empty envelope means the JSONB is the whole document, a
 // non-empty one means decrypt. A plaintext document that happens to look like
 // ciphertext (or vice versa) cannot confuse it.
@@ -107,7 +117,7 @@ func TestResolveAuthConfigDisambiguatesOnTheColumnNotTheBytes(t *testing.T) {
 	legacy := sqlc.HelmRepository{
 		Name:       "pre-145",
 		AuthConfig: json.RawMessage(`{"username":"u","password":"p"}`),
-		// AuthConfigEncrypted empty.
+		// No sealed value.
 	}
 	got, err := ResolveAuthConfig(legacy, enc)
 	if err != nil {
@@ -118,7 +128,7 @@ func TestResolveAuthConfigDisambiguatesOnTheColumnNotTheBytes(t *testing.T) {
 	}
 
 	ciphertext, public, _ := SealAuthConfig(json.RawMessage(`{"username":"u","password":"p"}`), enc)
-	sealed := sqlc.HelmRepository{Name: "post-145", AuthConfig: public, AuthConfigEncrypted: ciphertext}
+	sealed := withSealed(sqlc.HelmRepository{Name: "post-145", AuthConfig: public}, ciphertext)
 	got, err = ResolveAuthConfig(sealed, enc)
 	if err != nil {
 		t.Fatalf("sealed row must resolve: %v", err)
@@ -134,11 +144,10 @@ func TestResolveAuthConfigDisambiguatesOnTheColumnNotTheBytes(t *testing.T) {
 // for decryptGitAuth's shape (internal/worker/tasks/gitops_sync.go), which
 // returns the stored blob when Decrypt fails.
 func TestResolveAuthConfigNeverReturnsCiphertextOnFailure(t *testing.T) {
-	sealed := sqlc.HelmRepository{
-		Name:                "private",
-		AuthConfig:          json.RawMessage(`{"username":"u"}`),
-		AuthConfigEncrypted: "SEALED:{\"password\":\"p\"}",
-	}
+	sealed := withSealed(sqlc.HelmRepository{
+		Name:       "private",
+		AuthConfig: json.RawMessage(`{"username":"u"}`),
+	}, stubSealed("SEALED:", `{"password":"p"}`))
 	for name, dec := range map[string]Decryptor{
 		"wrong key":  stubCryptor{prefix: "OTHER:"},
 		"no key":     nil,
@@ -154,7 +163,7 @@ func TestResolveAuthConfigNeverReturnsCiphertextOnFailure(t *testing.T) {
 		if got != nil {
 			t.Fatalf("%s: a failed resolve must return no document, got %s", name, got)
 		}
-		if strings.Contains(string(got), sealed.AuthConfigEncrypted) {
+		if strings.Contains(string(got), string(sealed.AuthConfigCiphertext)) {
 			t.Fatalf("%s: ciphertext returned as a credential", name)
 		}
 	}
@@ -167,11 +176,10 @@ func TestResolveAuthConfigNeverReturnsCiphertextOnFailure(t *testing.T) {
 // which upstream reports as a 401 and the operator reads as a rejected
 // password rather than a key problem.
 func TestApplyIndexAuthDropsCredentialsItCannotDecrypt(t *testing.T) {
-	sealed := sqlc.HelmRepository{
+	sealed := withSealed(sqlc.HelmRepository{
 		Name: "private", AuthType: "basic",
-		AuthConfig:          json.RawMessage(`{"username":"u"}`),
-		AuthConfigEncrypted: "SEALED:{\"username\":\"u\",\"password\":\"p\"}",
-	}
+		AuthConfig: json.RawMessage(`{"username":"u"}`),
+	}, stubSealed("SEALED:", `{"username":"u","password":"p"}`))
 	req := httptest.NewRequest(http.MethodGet, "https://charts.example.com/index.yaml", nil)
 	ApplyIndexAuth(req, sealed, stubCryptor{prefix: "OTHER:"}, nil)
 

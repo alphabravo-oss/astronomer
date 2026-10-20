@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func productionReadAdapterFixture(t *testing.T) *CatalogExecutor {

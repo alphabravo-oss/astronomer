@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
 )
 
 type cursorRequest struct {
@@ -42,7 +43,7 @@ func readCursorRequest(w http.ResponseWriter, r *http.Request, defaultLimit int,
 	page.limit = int32(limit)
 	offset, err := paging.LegacyOffset(query)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.OffsetNotSupported, "offset must be one value in the supported range 0..10000; this legacy offset cannot continue beyond that range")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.OffsetNotSupported, "offset must be one value in the supported range 0..10000; this legacy offset cannot continue beyond that range")
 		return page, false
 	}
 	page.offset = offset
@@ -53,22 +54,22 @@ func readCursorRequest(w http.ResponseWriter, r *http.Request, defaultLimit int,
 	page.provided = provided && len(values) == 1 && values[0] != ""
 	_, offsetProvided := query["offset"]
 	if provided && (len(values) != 1 || offsetProvided) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor must be one opaque value and cannot be combined with offset")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cursor must be one opaque value and cannot be combined with offset")
 		return page, false
 	}
 	page.mode = provided && !offsetProvided && codec != nil && capable
 	if provided && !page.mode {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Signed cursor listing is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Signed cursor listing is unavailable")
 		return page, false
 	}
 	if page.mode && cursorActor(r) == "" {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "An authenticated pagination actor is required")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "An authenticated pagination actor is required")
 		return page, false
 	}
 	if page.provided {
 		page.cursor, err = codec.Decode(values[0], binding)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid or expired pagination cursor")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid or expired pagination cursor")
 			return page, false
 		}
 		page.seen = page.cursor.Seen
@@ -102,7 +103,7 @@ func (page cursorRequest) metadata(w http.ResponseWriter, r *http.Request, lengt
 		var err error
 		token, err = page.codec.Encode(*next)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode pagination cursor")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to encode pagination cursor")
 			return paging.Metadata{}, false
 		}
 	}
@@ -114,16 +115,16 @@ func (page cursorRequest) metadata(w http.ResponseWriter, r *http.Request, lengt
 func readCursorQuery(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Malformed pagination query")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Malformed pagination query")
 		return nil, false
 	}
 	for key, values := range query {
 		if key == "" || len(values) != 1 {
-			code := apierror.ValidationError
+			code := apiutil.ValidationError
 			if key == "offset" {
-				code = apierror.OffsetNotSupported
+				code = apiutil.OffsetNotSupported
 			}
-			RespondRequestError(w, r, http.StatusBadRequest, code, "Pagination query parameters must each have one value")
+			apiutil.WriteError(w, r, http.StatusBadRequest, code, "Pagination query parameters must each have one value")
 			return nil, false
 		}
 	}

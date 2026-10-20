@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -79,10 +79,8 @@ func CharlieSessionLimits() func(http.Handler) http.Handler {
 			}
 			mu.Unlock()
 			if !allowed {
-				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "2")
-				w.WriteHeader(http.StatusTooManyRequests)
-				_ = json.NewEncoder(w).Encode(map[string]string{"code": "charlie_rate_limited", "message": "Charlie request capacity is temporarily exhausted"})
+				apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.CharlieRateLimited, "Charlie request capacity is temporarily exhausted")
 				return
 			}
 			defer func() {

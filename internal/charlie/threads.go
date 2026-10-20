@@ -9,10 +9,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // Interactive thread lifecycle (product-local). Sessions remain the authorized

@@ -119,7 +119,7 @@ export function CharlieTranscript({
                       <Tooltip content={recognizedCommand.descriptor.label}>
                         <span
                           aria-label="Recognized Charlie command"
-                          className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-primary"
+                          className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-2xs font-semibold text-primary"
                         >
                           <Command className="h-2.5 w-2.5" aria-hidden="true" />
                           Command

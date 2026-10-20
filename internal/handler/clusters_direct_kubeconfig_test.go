@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 type directRequesterProbe struct{ calls int }

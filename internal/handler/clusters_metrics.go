@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/kubernetes"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // SetMetricsLocalClient wires the in-process kubernetes clientset used to
@@ -134,7 +135,7 @@ func (h *ClusterHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 
 	health, err := h.queries.GetClusterHealthStatus(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Health status not found for cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Health status not found for cluster")
 		return
 	}
 
@@ -165,7 +166,7 @@ func (h *ClusterHandler) ListConditions(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := h.queries.ListClusterConditions(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to list conditions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to list conditions")
 		return
 	}
 	out := make([]ClusterConditionResponse, 0, len(rows))
@@ -195,12 +196,12 @@ func (h *ClusterHandler) ListConditionRemediation(w http.ResponseWriter, r *http
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterConditionRemediationByCluster(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list remediation attempts")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list remediation attempts")
 		return
 	}
 	// The endpoint returns the complete bounded remediation history.
@@ -216,17 +217,17 @@ func (h *ClusterHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	livenessStore, ok := h.queries.(clusterLivenessQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster liveness store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cluster liveness store is not available")
 		return
 	}
 	liveness, livenessErr := livenessStore.GetClusterLiveness(r.Context(), id)
 	if livenessErr != nil && !errors.Is(livenessErr, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load cluster liveness")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load cluster liveness")
 		return
 	}
 	isConnected := liveness.LastHeartbeat.Valid && time.Since(liveness.LastHeartbeat.Time) < 5*time.Minute
@@ -263,7 +264,7 @@ func (h *ClusterHandler) GetMetricsSummary(w http.ResponseWriter, r *http.Reques
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	nodeCount := int(cluster.NodeCount)

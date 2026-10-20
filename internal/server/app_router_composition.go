@@ -2,13 +2,14 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
+
+	"github.com/hibiken/asynq"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
 )
 
 type routerComposition struct {
@@ -17,7 +18,7 @@ type routerComposition struct {
 	deferredRuntime tasks.DeferredRuntime
 }
 
-func (c *productionComposition) composeRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*routerComposition, error) {
+func (c *productionComposition) composeRouter(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*routerComposition, error) {
 	deps, err := c.composeCoreRouterDependencies(cfg, logger)
 	if err != nil {
 		return nil, err

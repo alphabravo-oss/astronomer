@@ -18,6 +18,7 @@ import {
   TimestampCell,
   UsageGauge,
 } from "@/components/tables/cells";
+import { EntityName } from "@/ui";
 
 // ── Column Definitions ──
 
@@ -276,12 +277,10 @@ const podColumns: Column<Pod>[] = [
     header: "Namespace",
     kind: "name",
     grow: false,
-    size: 120,
-    minSize: 100,
+    size: 160,
+    minSize: 120,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
+      <EntityName name={row.namespace} className="text-muted-foreground" />
     ),
     sortAccessor: (row) => row.namespace,
     filter: { label: "Namespace" },
@@ -370,13 +369,14 @@ const podColumns: Column<Pod>[] = [
     header: "Node",
     kind: "name",
     grow: false,
-    size: 140,
-    minSize: 120,
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.node}
-      </span>
-    ),
+    size: 180,
+    minSize: 140,
+    accessor: (row) =>
+      row.node ? (
+        <EntityName name={row.node} className="text-muted-foreground" />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
     sortAccessor: (row) => row.node,
     filter: { label: "Node" },
   },
@@ -408,12 +408,10 @@ const workloadColumns: Column<Workload>[] = [
     header: "Namespace",
     kind: "name",
     grow: false,
-    size: 130,
-    minSize: 110,
+    size: 160,
+    minSize: 120,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
+      <EntityName name={row.namespace} className="text-muted-foreground" />
     ),
   },
   {

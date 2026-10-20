@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 func TestInstrumentTaskPreservesTypedErrorRedactionAndCorrelation(t *testing.T) {
@@ -38,7 +39,7 @@ func TestInstrumentTaskPreservesTypedErrorRedactionAndCorrelation(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
 			previous := slog.Default()
-			slog.SetDefault(slog.New(observability.NewJSONHandler(&output, nil)))
+			slog.SetDefault(diagnosticSlog(&output))
 			t.Cleanup(func() { slog.SetDefault(previous) })
 			parent := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled})
 			ctx := trace.ContextWithSpanContext(context.Background(), parent)
@@ -71,4 +72,12 @@ func TestInstrumentTaskPreservesTypedErrorRedactionAndCorrelation(t *testing.T) 
 			}
 		})
 	}
+}
+
+func diagnosticSlog(w io.Writer) *slog.Logger {
+	logger, err := logging.NewWithWriter(w, logging.Config{Level: "debug"})
+	if err != nil {
+		panic(err)
+	}
+	return logging.Slog(logger)
 }

@@ -110,8 +110,6 @@ function VaultConnectionsPage() {
   return (
     <PageShell>
       <ResourceMasthead
-        backTo="/dashboard/settings"
-        backLabel="Back to settings"
         title="Vault connections"
         actions={
           <BareButton
@@ -159,7 +157,7 @@ function VaultConnectionsPage() {
                   <TableCell className="p-2 font-mono text-xs">
                     {row.addr}
                   </TableCell>
-                  <TableCell className="p-2 uppercase text-xs">
+                  <TableCell className="p-2 text-xs">
                     {row.authMethod}
                   </TableCell>
                   <TableCell className="p-2">

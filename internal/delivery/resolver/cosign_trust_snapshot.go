@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/sigstore/sigstore-go/pkg/root"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 // CosignTrustSnapshot captures constructor-owned policy and physical mounted

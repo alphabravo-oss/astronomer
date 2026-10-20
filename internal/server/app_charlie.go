@@ -2,18 +2,19 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"strings"
+
+	"github.com/rs/zerolog"
+	"k8s.io/client-go/discovery"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"k8s.io/client-go/discovery"
 )
 
-func (c *productionComposition) initializeCharlie(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeCharlie(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	bus := c.bus

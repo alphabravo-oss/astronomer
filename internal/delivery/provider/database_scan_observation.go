@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	digest "github.com/opencontainers/go-digest"
 	"io"
 	"net/url"
 	"reflect"
 	"strings"
 	"time"
+
+	digest "github.com/opencontainers/go-digest"
 
 	"github.com/google/uuid"
 	batchv1 "k8s.io/api/batch/v1"

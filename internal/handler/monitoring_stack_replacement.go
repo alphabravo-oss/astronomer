@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func clusterMonitoringReplaceRequired(cfg sqlc.ClusterMonitoringConfig, exists bool, req MonitoringStackRequest) (bool, []string) {

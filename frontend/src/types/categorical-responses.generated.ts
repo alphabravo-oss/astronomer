@@ -933,6 +933,13 @@ export const categoricalDefinitions: Record<string, CategoricalNode> = {
           nullable: true,
         },
       },
+      pending_release: {
+        required: false,
+        node: {
+          ref: "DeliverySystemRelease",
+          nullable: true,
+        },
+      },
       current_rollout: {
         required: true,
         node: {

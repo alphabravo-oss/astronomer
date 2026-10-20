@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // ListSchedules handles GET /api/v1/backups/schedules/.
@@ -33,13 +34,13 @@ func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list schedules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list schedules")
 		return
 	}
 
 	total, err := h.queries.CountBackupSchedules(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count schedules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count schedules")
 		return
 	}
 
@@ -81,18 +82,18 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 
 	storageID, err := uuid.Parse(req.StorageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage ID")
 		return
 	}
 	storage, err := h.queries.GetBackupStorageConfigByID(r.Context(), storageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 
 	clusterID, err := h.optionalClusterID(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if !clusterID.Valid {
@@ -143,7 +144,7 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create schedule")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create schedule")
 		return
 	}
 
@@ -161,12 +162,12 @@ func (h *BackupHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid schedule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid schedule ID")
 		return
 	}
 	schedule, err := h.queries.GetBackupScheduleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, schedule.ClusterID, rbac.VerbRead) {
@@ -179,13 +180,13 @@ func (h *BackupHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid schedule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid schedule ID")
 		return
 	}
 
 	existing, err := h.queries.GetBackupScheduleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbDelete) {
@@ -200,7 +201,7 @@ func (h *BackupHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 			return mutationAuditEvent{action: "backup.schedule.delete", resourceType: "backup_schedule", resourceID: schedule.ID.String(), resourceName: scheduleName, status: http.StatusNoContent}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete schedule")
 		return
 	}
 
@@ -213,29 +214,29 @@ func (h *BackupHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid schedule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid schedule ID")
 		return
 	}
 
 	var req CreateScheduleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	storageID, err := uuid.Parse(req.StorageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage ID")
 		return
 	}
 	storage, err := h.queries.GetBackupStorageConfigByID(r.Context(), storageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 
 	clusterID, err := h.optionalClusterID(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if !clusterID.Valid {
@@ -244,7 +245,7 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := h.queries.GetBackupScheduleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbUpdate) {
@@ -298,7 +299,7 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update schedule")
 		return
 	}
 
@@ -318,17 +319,17 @@ func (h *BackupHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid schedule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid schedule ID")
 		return
 	}
 	schedule, err := h.queries.GetBackupScheduleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Backup schedule not found")
 		return
 	}
 	storage, err := h.queries.GetBackupStorageConfigByID(r.Context(), schedule.StorageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 
@@ -372,7 +373,7 @@ func (h *BackupHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to trigger backup")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to trigger backup")
 		return
 	}
 

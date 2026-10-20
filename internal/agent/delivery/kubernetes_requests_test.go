@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -17,6 +16,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/flowcontrol"
+
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 )
 
 type requestTestTransport func(*http.Request) (*http.Response, error)
@@ -164,8 +165,8 @@ func TestAssignmentCacheCallbacksTagListAndWatch(t *testing.T) {
 	go func() { done <- cache.Run(ctx) }()
 	defer func() {
 		cancel()
-		select {
-		case <-done:
+		select { //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
+		case <-done: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		case <-time.After(5 * time.Second):
 			t.Error("assignment watchers failed to stop")
 		}

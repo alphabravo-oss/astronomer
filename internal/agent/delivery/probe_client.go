@@ -2,10 +2,12 @@ package delivery
 
 import (
 	"fmt"
-	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
+
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 )
 
 // NewClusterProbeForConfig shares the existing typed client and creates only a

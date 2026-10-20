@@ -5,8 +5,9 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // TerminalFailurePublisher is intentionally payload-free. The queue adapter

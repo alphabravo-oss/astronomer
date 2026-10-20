@@ -87,19 +87,77 @@ ServiceAccount name to use.
 {{- end }}
 
 {{/*
+Cluster-local registry host (air-gap layer 1). image.registry wins; else the
+in-cluster zot Service when registry.zot.enabled; else empty (online profile:
+every image renders with its own online default registry).
+*/}}
+{{- define "astronomer.localRegistry" -}}
+{{- if .Values.image.registry -}}
+{{- .Values.image.registry -}}
+{{- else if and .Values.registry .Values.registry.zot .Values.registry.zot.enabled -}}
+{{- include "astronomer.zotHost" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Host[:port] image references use for the in-cluster zot registry. Pods reach it
+through cluster DNS; node container runtimes need a mirror entry for the same
+name (docs/airgapped-install.md).
+*/}}
+{{- define "astronomer.zotHost" -}}
+{{- .Values.registry.zot.host | default (printf "%s-zot.%s.svc.cluster.local:%d" (include "astronomer.fullname" .) .Release.Namespace (int .Values.registry.zot.service.port)) -}}
+{{- end }}
+
+{{/*
+Comma-separated registry hosts reached without TLS: the in-cluster zot when it
+is the local registry, plus registry.plainHTTPHosts.
+*/}}
+{{- define "astronomer.registryPlainHTTP" -}}
+{{- $hosts := list -}}
+{{- if and (not .Values.image.registry) .Values.registry.zot.enabled -}}
+{{- $hosts = append $hosts (include "astronomer.zotHost" .) -}}
+{{- end -}}
+{{- range (.Values.registry.plainHTTPHosts | default list) -}}
+{{- $hosts = append $hosts . -}}
+{{- end -}}
+{{- join "," $hosts -}}
+{{- end }}
+
+{{/*
+Re-host one online image reference onto the cluster-local registry. This is
+the chart twin of internal/registry.Rehost: the first path segment is the
+registry host when it contains "." or ":" (or is "localhost"), otherwise the
+reference is a Docker Hub short name; Docker Hub "library/" is dropped; tag and
+digest are preserved. Pass dict { ref: "<online ref>", local: "<host>" }.
+*/}}
+{{- define "astronomer.rehost" -}}
+{{- $ref := .ref -}}
+{{- if .local -}}
+{{- $parts := splitn "/" 2 $ref -}}
+{{- $path := $ref -}}
+{{- if and (ne $parts._1 "") (or (contains "." $parts._0) (contains ":" $parts._0) (eq $parts._0 "localhost")) -}}
+{{- $path = $parts._1 -}}
+{{- end -}}
+{{- $path = trimPrefix "library/" $path -}}
+{{- printf "%s/%s" .local $path -}}
+{{- else -}}
+{{- $ref -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Image reference helper for astronomer-built images. Pass dict
-  { context: $, component: "server"|"worker"|"agent"|"migrate" }.
-Honours .Values.image.registry as an optional global prefix.
+  { context: $, component: "server"|"worker"|"agent" }.
+The online reference is <image.X.registry>/<repository>; with a cluster-local
+registry (image.registry or registry.zot.enabled) it is re-hosted onto it.
 */}}
 {{- define "astronomer.image" -}}
 {{- $img := index .context.Values.image .component -}}
-{{- /* Global image.registry (air-gap mirror) wins; else this image's own
-       registry default (GHCR for first-party); else bare (local dev). */ -}}
-{{- $reg := .context.Values.image.registry | default $img.registry | default "" -}}
 {{- $name := $img.repository -}}
-{{- if $reg -}}
-{{- $name = printf "%s/%s" $reg $img.repository -}}
+{{- if $img.registry -}}
+{{- $name = printf "%s/%s" $img.registry $img.repository -}}
 {{- end -}}
+{{- $name = include "astronomer.rehost" (dict "ref" $name "local" (include "astronomer.localRegistry" .context)) -}}
 {{- if $img.digest -}}
 {{ printf "%s@%s" $name $img.digest }}
 {{- else -}}
@@ -114,11 +172,11 @@ human-readable target version used by fleet upgrade status.
 */}}
 {{- define "astronomer.agentImageRepository" -}}
 {{- $img := .Values.image.agent -}}
-{{- $reg := .Values.image.registry | default $img.registry | default "" -}}
 {{- $name := $img.repository -}}
-{{- if $reg -}}
-{{- $name = printf "%s/%s" $reg $img.repository -}}
+{{- if $img.registry -}}
+{{- $name = printf "%s/%s" $img.registry $img.repository -}}
 {{- end -}}
+{{- $name = include "astronomer.rehost" (dict "ref" $name "local" (include "astronomer.localRegistry" .)) -}}
 {{- if $img.digest -}}
 {{ printf "%s@%s" $name $img.digest }}
 {{- else -}}
@@ -127,26 +185,25 @@ human-readable target version used by fleet upgrade status.
 {{- end }}
 
 {{/*
-Third-party image helper. T23 FEATURES-051126 — air-gapped installs
-mirror runtime images (postgres, redis, kubectl, busybox, DR helper,
-frontend) into the operator's internal registry. Each image
-config supports an optional .registry override; when unset, falls back
-to .Values.image.registry; when that's also unset, the image is left
-unprefixed. Pass dict { repository: $repo, tag: $tag, digest: $digest,
-registry: $reg, fallback: $.Values.image.registry }. digest is optional.
-
-Usage:
-  {{ include "astronomer.thirdPartyImage" (dict
-       "repository" .Values.postgres.image.repository
-       "tag"        .Values.postgres.image.tag
-       "registry"   .Values.postgres.image.registry
-       "fallback"   $.Values.image.registry) }}
+Third-party / auxiliary image helper. Pass dict
+  { repository, tag, digest (optional), registry (per-image override),
+    fallback: (include "astronomer.localRegistry" $),
+    online (optional): online default prefix, e.g. "ghcr.io/alphabravo-oss" }.
+A per-image .registry is an explicit operator prefix and is used verbatim.
+Otherwise the online reference (<online>/<repository>, or the repository as
+written, which may embed its registry host) is re-hosted onto the cluster-local
+registry when one is configured.
 */}}
 {{- define "astronomer.thirdPartyImage" -}}
-{{- $reg := .registry | default .fallback | default "" -}}
 {{- $name := .repository -}}
-{{- if $reg -}}
-{{- $name = printf "%s/%s" $reg .repository -}}
+{{- if .registry -}}
+{{- $name = printf "%s/%s" .registry .repository -}}
+{{- else -}}
+{{- $online := get . "online" | default "" -}}
+{{- if $online -}}
+{{- $name = printf "%s/%s" $online .repository -}}
+{{- end -}}
+{{- $name = include "astronomer.rehost" (dict "ref" $name "local" (.fallback | default "")) -}}
 {{- end -}}
 {{- $digest := get . "digest" | default "" -}}
 {{- if $digest -}}
@@ -501,31 +558,6 @@ server wires straight to the operator-provided one; otherwise the chart-managed
 {{- end }}
 
 {{/*
-astronomer.validateImageSkew (F1 · BLOCKER) runs on every render, any env.
-
-The server binary enforces a minimum DB schema (internal/db.ExpectedSchemaVersion)
-via /readyz; the matching migrations ship in the migrate image built from the
-SAME commit. Bumping image.server.tag without image.migrate.tag (or vice-versa)
-leaves the applied schema below the server's floor and holds the pod out of
-Service rotation PERMANENTLY — the exact production incident F1 exists to prevent.
-
-Both images are built from one commit, so their tags must match. We fail the
-render on a mismatch unless the operator explicitly opts into a skewed rollout
-(image.allowSchemaSkew=true — e.g. a hotfix that ships no new migration), in
-which case NOTES.txt warns instead. Returns "" so callers can discard it.
-*/}}
-{{- define "astronomer.validateImageSkew" -}}
-  {{- $serverTag := toString .Values.image.server.tag }}
-  {{- $migrateTag := toString .Values.image.migrate.tag }}
-  {{- if ne $serverTag $migrateTag }}
-    {{- if not .Values.image.allowSchemaSkew }}
-      {{- $msg := printf "\n\nAstronomer image-skew guard (F1) failed:\n  - image.server.tag=%q but image.migrate.tag=%q\n\nThe server and migrate images are built from the same commit and MUST ship the\nsame schema: the server's /readyz holds the pod out of Service rotation until the\napplied DB schema reaches the binary's ExpectedSchemaVersion, and those migrations\nlive in the migrate image. A mismatched pair can 503 the management plane\npermanently (this happened in production — see plans/production-readiness.md F1).\n\nDeploy server + migrate from ONE commit so the tags match (values-production.yaml\nsets both from a single --set image.<name>.tag=<git-sha>). If you INTEND a skewed\nrollout that ships no new migration, set image.allowSchemaSkew=true to override." $serverTag $migrateTag }}
-      {{- fail $msg }}
-    {{- end }}
-  {{- end }}
-{{- end }}
-
-{{/*
 astronomer.requireSecretMaterial is consumed by configmap.yaml to fail the
 render whenever the install would come up on key material that isn't the
 operator's own: an empty value, or one of the chart's historically-shipped dev
@@ -548,13 +580,20 @@ rendered manifest.
     {{- else if eq $secretKey "local-dev-secret-key-change-in-production" }}
       {{- $errs = append $errs "  - secrets.secretKey is the chart's published development value — anyone with this repository can forge an admin JWT against it" }}
     {{- end }}
-    {{- if eq $encryptionKey "" }}
-      {{- $errs = append $errs "  - secrets.encryptionKey is empty — it is the Fernet key that wraps every stored credential" }}
-    {{- else if eq $encryptionKey "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }}
-      {{- $errs = append $errs "  - secrets.encryptionKey is the chart's published development Fernet key — every stored kubeconfig, git PAT, registry password and SSO client secret would be readable by anyone with this repository" }}
+    {{- if eq (trim $encryptionKey) "" }}
+      {{- $errs = append $errs "  - secrets.encryptionKey is empty — it is the age keyring that seals every stored credential" }}
+    {{- else if contains "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7" $encryptionKey }}
+      {{- $errs = append $errs "  - secrets.encryptionKey contains the chart's published development age key — every stored registry password, git PAT and SSO client secret would be readable by anyone with this repository" }}
+    {{- else }}
+      {{- range $entry := regexSplit "[,\\n]" $encryptionKey -1 }}
+        {{- $e := trim $entry }}
+        {{- if and (ne $e "") (not (hasPrefix "#" $e)) (not (regexMatch "^([A-Za-z0-9][A-Za-z0-9._-]{0,63}:)?AGE-SECRET-KEY-1[0-9A-Z]{58}$" $e)) }}
+          {{- $errs = append $errs "  - secrets.encryptionKey has an entry that is not an age identity ([label:]AGE-SECRET-KEY-1...); Fernet keys are no longer accepted" }}
+        {{- end }}
+      {{- end }}
     {{- end }}
     {{- if gt (len $errs) 0 }}
-      {{- $msg := printf "\n\nAstronomer secret preflight failed:\n%s\n\nThe chart ships NO default key material. Generate both keys once, keep them for\nthe life of the install (losing them makes every encrypted column undecryptable\n— see docs/management-plane-dr-runbook.md), and pass them at install time:\n\n  openssl rand -base64 32 > ./jwt-key\n  python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" > ./fernet-key\n\n  helm install astronomer ./deploy/chart \\\n    --set-file secrets.secretKey=./jwt-key \\\n    --set-file secrets.encryptionKey=./fernet-key\n\nOr create the Secret out of band and set secrets.existingSecret to its name\n(see deploy/chart/README.md, \"Dev vs. Production Posture\")." (join "\n" $errs) }}
+      {{- $msg := printf "\n\nAstronomer secret preflight failed:\n%s\n\nThe chart ships NO default key material. Generate both keys once, keep them for\nthe life of the install (losing them makes every encrypted column undecryptable\n— see docs/management-plane-dr-runbook.md), and pass them at install time:\n\n  openssl rand -base64 32 > ./jwt-key\n  astro admin generate-encryption-key > ./encryption-key   # or: age-keygen | grep AGE-SECRET-KEY > ./encryption-key\n\n  helm install astronomer ./deploy/chart \\\n    --set-file secrets.secretKey=./jwt-key \\\n    --set-file secrets.encryptionKey=./encryption-key\n\nOr create the Secret out of band and set secrets.existingSecret to its name\n(see deploy/chart/README.md, \"Dev vs. Production Posture\")." (join "\n" $errs) }}
       {{- fail $msg }}
     {{- end }}
   {{- end }}
@@ -565,7 +604,7 @@ astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
 render when env=production but mandatory production knobs are missing. Helm's
 `fail` builtin aborts the whole release with a single human-readable message
 rather than letting the user discover three minutes later that the server
-pod is CrashLooping because of an empty Fernet key.
+pod is CrashLooping because of an empty encryption key.
 Returns "" so callers can drop the result without it appearing in the
 rendered manifest.
 */}}
@@ -633,7 +672,6 @@ rendered manifest.
           "image.server.digest" .Values.image.server.digest
           "image.worker.digest" .Values.image.worker.digest
           "image.agent.digest" .Values.image.agent.digest
-          "image.migrate.digest" .Values.image.migrate.digest
           "utilities.busybox.digest" .Values.utilities.busybox.digest
           "postgres.image.digest" .Values.postgres.image.digest
           "preflight.image.digest" .Values.preflight.image.digest -}}
@@ -740,4 +778,18 @@ rendered manifest.
       {{- fail $msg }}
     {{- end }}
   {{- end }}
+{{- end }}
+
+{{/*
+Secret mounted at /etc/astronomer/delivery-trust: the operator's
+delivery.sourceResolution.trustKeys.existingSecret, else the chart-managed
+<fullname>-delivery-trust with the pinned Sigstore trusted_root.json, else empty.
+*/}}
+{{- define "astronomer.deliveryTrustSecretName" -}}
+{{- $trust := .Values.delivery.sourceResolution.trustKeys -}}
+{{- if $trust.existingSecret -}}
+{{- $trust.existingSecret -}}
+{{- else if $trust.chartManagedTrustedRoot -}}
+{{- printf "%s-delivery-trust" (include "astronomer.fullname" .) -}}
+{{- end -}}
 {{- end }}

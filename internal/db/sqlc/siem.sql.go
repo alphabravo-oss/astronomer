@@ -27,21 +27,19 @@ func (q *Queries) CountSIEMQueueByForwarder(ctx context.Context, forwarderID uui
 
 const createSIEMForwarder = `-- name: CreateSIEMForwarder :one
 INSERT INTO siem_forwarders (
-    name, transport, endpoint, auth_encrypted, event_filters, format,
+    name, transport, endpoint, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce, event_filters, format,
     tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
     timeout_seconds, enabled, created_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, name, transport, endpoint, auth_encrypted, event_filters, format,
-          tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-          timeout_seconds, enabled, created_by, created_at, updated_at
+VALUES ($1, $2, $3, $4, $14, $15, $16, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, name, transport, endpoint, event_filters, format, tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms, timeout_seconds, enabled, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 `
 
 type CreateSIEMForwarderParams struct {
 	Name            string          `json:"name"`
 	Transport       string          `json:"transport"`
 	Endpoint        string          `json:"endpoint"`
-	AuthEncrypted   string          `json:"auth_encrypted"`
+	AuthKeyID       string          `json:"auth_key_id"`
 	EventFilters    json.RawMessage `json:"event_filters"`
 	Format          string          `json:"format"`
 	TlsSkipVerify   bool            `json:"tls_skip_verify"`
@@ -51,6 +49,9 @@ type CreateSIEMForwarderParams struct {
 	TimeoutSeconds  int32           `json:"timeout_seconds"`
 	Enabled         bool            `json:"enabled"`
 	CreatedBy       pgtype.UUID     `json:"created_by"`
+	AuthAlgorithm   string          `json:"auth_algorithm"`
+	AuthCiphertext  []byte          `json:"auth_ciphertext"`
+	AuthNonce       []byte          `json:"auth_nonce"`
 }
 
 func (q *Queries) CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForwarderParams) (SiemForwarder, error) {
@@ -58,7 +59,7 @@ func (q *Queries) CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForward
 		arg.Name,
 		arg.Transport,
 		arg.Endpoint,
-		arg.AuthEncrypted,
+		arg.AuthKeyID,
 		arg.EventFilters,
 		arg.Format,
 		arg.TlsSkipVerify,
@@ -68,6 +69,9 @@ func (q *Queries) CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForward
 		arg.TimeoutSeconds,
 		arg.Enabled,
 		arg.CreatedBy,
+		arg.AuthAlgorithm,
+		arg.AuthCiphertext,
+		arg.AuthNonce,
 	)
 	var i SiemForwarder
 	err := row.Scan(
@@ -75,7 +79,6 @@ func (q *Queries) CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForward
 		&i.Name,
 		&i.Transport,
 		&i.Endpoint,
-		&i.AuthEncrypted,
 		&i.EventFilters,
 		&i.Format,
 		&i.TlsSkipVerify,
@@ -87,6 +90,10 @@ func (q *Queries) CreateSIEMForwarder(ctx context.Context, arg CreateSIEMForward
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
@@ -212,9 +219,7 @@ func (q *Queries) EnqueueSIEMEventDeduped(ctx context.Context, arg EnqueueSIEMEv
 }
 
 const getSIEMForwarder = `-- name: GetSIEMForwarder :one
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT id, name, transport, endpoint, event_filters, format, tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms, timeout_seconds, enabled, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM siem_forwarders WHERE id = $1
 `
 
@@ -226,7 +231,6 @@ func (q *Queries) GetSIEMForwarder(ctx context.Context, id uuid.UUID) (SiemForwa
 		&i.Name,
 		&i.Transport,
 		&i.Endpoint,
-		&i.AuthEncrypted,
 		&i.EventFilters,
 		&i.Format,
 		&i.TlsSkipVerify,
@@ -238,14 +242,16 @@ func (q *Queries) GetSIEMForwarder(ctx context.Context, id uuid.UUID) (SiemForwa
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
 
 const getSIEMForwarderByName = `-- name: GetSIEMForwarderByName :one
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT id, name, transport, endpoint, event_filters, format, tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms, timeout_seconds, enabled, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM siem_forwarders WHERE name = $1
 `
 
@@ -257,7 +263,6 @@ func (q *Queries) GetSIEMForwarderByName(ctx context.Context, name string) (Siem
 		&i.Name,
 		&i.Transport,
 		&i.Endpoint,
-		&i.AuthEncrypted,
 		&i.EventFilters,
 		&i.Format,
 		&i.TlsSkipVerify,
@@ -269,6 +274,10 @@ func (q *Queries) GetSIEMForwarderByName(ctx context.Context, name string) (Siem
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
@@ -310,9 +319,7 @@ func (q *Queries) IncrementSIEMQueueAttempts(ctx context.Context, dollar_1 []int
 }
 
 const listEnabledSIEMForwarders = `-- name: ListEnabledSIEMForwarders :many
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT id, name, transport, endpoint, event_filters, format, tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms, timeout_seconds, enabled, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM siem_forwarders WHERE enabled = true ORDER BY created_at ASC
 `
 
@@ -333,7 +340,6 @@ func (q *Queries) ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarde
 			&i.Name,
 			&i.Transport,
 			&i.Endpoint,
-			&i.AuthEncrypted,
 			&i.EventFilters,
 			&i.Format,
 			&i.TlsSkipVerify,
@@ -345,6 +351,10 @@ func (q *Queries) ListEnabledSIEMForwarders(ctx context.Context) ([]SiemForwarde
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AuthKeyID,
+			&i.AuthAlgorithm,
+			&i.AuthCiphertext,
+			&i.AuthNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -394,9 +404,7 @@ func (q *Queries) ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQue
 
 const listSIEMForwarders = `-- name: ListSIEMForwarders :many
 
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT id, name, transport, endpoint, event_filters, format, tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms, timeout_seconds, enabled, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM siem_forwarders ORDER BY created_at DESC
 `
 
@@ -412,7 +420,7 @@ FROM siem_forwarders ORDER BY created_at DESC
 //     days regardless of forwarder status so stale forwarders don't
 //     pin disk
 //
-// auth_encrypted is the Fernet ciphertext of the JSON auth blob; this
+// auth_{key_id,algorithm,ciphertext,nonce} is the age ciphertext of the JSON auth blob; this
 // layer stores and returns it verbatim. Decryption happens in the
 // dispatcher right before the per-tick connect.
 func (q *Queries) ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, error) {
@@ -429,7 +437,6 @@ func (q *Queries) ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, erro
 			&i.Name,
 			&i.Transport,
 			&i.Endpoint,
-			&i.AuthEncrypted,
 			&i.EventFilters,
 			&i.Format,
 			&i.TlsSkipVerify,
@@ -441,6 +448,10 @@ func (q *Queries) ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, erro
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AuthKeyID,
+			&i.AuthAlgorithm,
+			&i.AuthCiphertext,
+			&i.AuthNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -550,7 +561,10 @@ UPDATE siem_forwarders
 SET name              = $2,
     transport         = $3,
     endpoint          = $4,
-    auth_encrypted    = $5,
+    auth_key_id = $5,
+    auth_algorithm = $14,
+    auth_ciphertext = $15,
+    auth_nonce = $16,
     event_filters     = $6,
     format            = $7,
     tls_skip_verify   = $8,
@@ -561,9 +575,7 @@ SET name              = $2,
     enabled           = $13,
     updated_at        = now()
 WHERE id = $1
-RETURNING id, name, transport, endpoint, auth_encrypted, event_filters, format,
-          tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-          timeout_seconds, enabled, created_by, created_at, updated_at
+RETURNING id, name, transport, endpoint, event_filters, format, tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms, timeout_seconds, enabled, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 `
 
 type UpdateSIEMForwarderParams struct {
@@ -571,7 +583,7 @@ type UpdateSIEMForwarderParams struct {
 	Name            string          `json:"name"`
 	Transport       string          `json:"transport"`
 	Endpoint        string          `json:"endpoint"`
-	AuthEncrypted   string          `json:"auth_encrypted"`
+	AuthKeyID       string          `json:"auth_key_id"`
 	EventFilters    json.RawMessage `json:"event_filters"`
 	Format          string          `json:"format"`
 	TlsSkipVerify   bool            `json:"tls_skip_verify"`
@@ -580,18 +592,21 @@ type UpdateSIEMForwarderParams struct {
 	FlushIntervalMs int32           `json:"flush_interval_ms"`
 	TimeoutSeconds  int32           `json:"timeout_seconds"`
 	Enabled         bool            `json:"enabled"`
+	AuthAlgorithm   string          `json:"auth_algorithm"`
+	AuthCiphertext  []byte          `json:"auth_ciphertext"`
+	AuthNonce       []byte          `json:"auth_nonce"`
 }
 
 // Full replacement update (PUT semantics). The handler preserves the
-// existing auth_encrypted when the admin didn't re-supply it (sentinel
-// pattern, analogous to webhook_subscriptions.secret_encrypted).
+// existing auth_{key_id,algorithm,ciphertext,nonce} when the admin didn't re-supply it (sentinel
+// pattern, analogous to webhook_subscriptions.secret_{key_id,algorithm,ciphertext,nonce}).
 func (q *Queries) UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error) {
 	row := q.db.QueryRow(ctx, updateSIEMForwarder,
 		arg.ID,
 		arg.Name,
 		arg.Transport,
 		arg.Endpoint,
-		arg.AuthEncrypted,
+		arg.AuthKeyID,
 		arg.EventFilters,
 		arg.Format,
 		arg.TlsSkipVerify,
@@ -600,6 +615,9 @@ func (q *Queries) UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForward
 		arg.FlushIntervalMs,
 		arg.TimeoutSeconds,
 		arg.Enabled,
+		arg.AuthAlgorithm,
+		arg.AuthCiphertext,
+		arg.AuthNonce,
 	)
 	var i SiemForwarder
 	err := row.Scan(
@@ -607,7 +625,6 @@ func (q *Queries) UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForward
 		&i.Name,
 		&i.Transport,
 		&i.Endpoint,
-		&i.AuthEncrypted,
 		&i.EventFilters,
 		&i.Format,
 		&i.TlsSkipVerify,
@@ -619,6 +636,10 @@ func (q *Queries) UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForward
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }

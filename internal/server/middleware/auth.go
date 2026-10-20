@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -29,20 +29,8 @@ type APITokenLastSeenUpdater interface {
 }
 
 // authError writes a JSON 401 error response.
-func authError(w http.ResponseWriter, code, message string) {
-	authErrorStatus(w, http.StatusUnauthorized, code, message)
-}
-
-func authErrorStatus(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	resp := map[string]interface{}{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
-	}
-	_ = json.NewEncoder(w).Encode(resp)
+func authError(w http.ResponseWriter, r *http.Request, code apiutil.Code, message string) {
+	apiutil.WriteError(w, r, http.StatusUnauthorized, code, message)
 }
 
 func isSafeMethod(method string) bool {
@@ -64,38 +52,37 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 	return AuthWithQueries(jwtManager, nil)
 }
 
-// AuthWithQueries authenticates requests via JWT, API token, or the browser
-// HttpOnly session cookie, using DB lookups when provided. Authorization
-// headers take precedence so headless API-token callers are unaffected even
-// when a browser cookie is also present.
+// AuthWithQueries authenticates requests via the browser HttpOnly session
+// cookie, a JWT bearer token, or an API token, using DB lookups when provided.
+// The session cookie takes precedence over the Authorization header (guide
+// ch.06: "the server accepts cookie and bearer, cookie first"); a cookie-bearing
+// mutation must also carry the CSRF double-submit header.
 func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			usedSessionCookie := false
-			if header == "" {
-				if c, err := auth.BrowserCookie(r, auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
-					header = "Bearer " + c.Value
-					usedSessionCookie = true
-				} else {
-					authError(w, "authentication_required", "Authorization header or session cookie is required")
-					return
-				}
+			if c, err := auth.BrowserCookie(r, auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+				header = "Bearer " + c.Value
+				usedSessionCookie = true
+			} else if header == "" {
+				authError(w, r, apiutil.AuthenticationRequired, "Authorization header or session cookie is required")
+				return
 			}
 			if usedSessionCookie && !isSafeMethod(r.Method) && !auth.ValidateCSRF(r) {
-				authError(w, "csrf_required", "CSRF token is required")
+				authError(w, r, apiutil.CSRFRequired, "CSRF token is required")
 				return
 			}
 
 			parts := strings.SplitN(header, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				authError(w, "authentication_required", "Authorization header must use Bearer scheme")
+				authError(w, r, apiutil.AuthenticationRequired, "Authorization header must use Bearer scheme")
 				return
 			}
 
 			token := parts[1]
 			if token == "" {
-				authError(w, "authentication_required", "Bearer token is empty")
+				authError(w, r, apiutil.AuthenticationRequired, "Bearer token is empty")
 				return
 			}
 
@@ -133,12 +120,12 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 						authentication, err = resolve(r.Context())
 					}
 					if err != nil {
-						authError(w, "authentication_required", "Invalid or expired token")
+						authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
 						return
 					}
 					apiToken := authentication.Token
 					if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
-						authError(w, "authentication_required", "Invalid or expired token")
+						authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
 						return
 					}
 					// Migration-044: per-token IP allowlist. Empty
@@ -150,7 +137,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 						nets, perr := auth.ParseAllowedCIDRs(apiToken.AllowedCidrs)
 						if perr != nil || !auth.IPAllowed(nets, netIP(reqctx.ClientIP(r))) {
 							auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
-							authError(w, "ip_not_allowlisted", "Token not permitted from this IP address")
+							authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
 							return
 						}
 					}
@@ -181,10 +168,10 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 				if err != nil {
 					if errors.Is(err, auth.ErrRevocationUnavailable) {
 						w.Header().Set("Retry-After", "2")
-						authErrorStatus(w, http.StatusServiceUnavailable, "authentication_dependency_unavailable", "Authentication state is temporarily unavailable")
+						apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuthenticationDependencyUnavailable, "Authentication state is temporarily unavailable")
 						return
 					}
-					authError(w, "authentication_required", "Invalid or expired token")
+					authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
 					return
 				}
 				// Purpose-bound tokens (TOTP challenge etc.) are NEVER accepted
@@ -192,7 +179,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 				// endpoint only — POST /auth/totp/verify reads them via
 				// JWTManager.ValidateToken + Purpose check directly.
 				if claims.TokenType == auth.PurposeToken {
-					authError(w, "authentication_required", "Token is not valid for this endpoint")
+					authError(w, r, apiutil.AuthenticationRequired, "Token is not valid for this endpoint")
 					return
 				}
 
@@ -218,7 +205,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 						return sessionIdentityFromDatabase(dbUser), nil
 					})
 					if resolveErr != nil {
-						authError(w, "authentication_required", "Invalid or expired token")
+						authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
 						return
 					}
 					user = requestUserFromSessionIdentity(identity, "jwt")

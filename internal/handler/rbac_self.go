@@ -3,16 +3,17 @@ package handler
 import (
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
 )
 
 func (h *RBACHandler) MyRoles(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if h.bindings == nil {
@@ -24,7 +25,7 @@ func (h *RBACHandler) MyRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	bindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load user bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load user bindings")
 		return
 	}
 	items := make([]map[string]any, 0, len(bindings))
@@ -55,13 +56,13 @@ func (h *RBACHandler) MyRoles(w http.ResponseWriter, r *http.Request) {
 func (h *RBACHandler) CheckMyRole(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	resource := r.URL.Query().Get("resource")
 	verb := r.URL.Query().Get("verb")
 	if resource == "" || verb == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Both 'resource' and 'verb' query params are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Both 'resource' and 'verb' query params are required")
 		return
 	}
 	clusterIDStr := r.URL.Query().Get("cluster_id")
@@ -93,7 +94,7 @@ func (h *RBACHandler) CheckMyRole(w http.ResponseWriter, r *http.Request) {
 
 	bindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load user bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load user bindings")
 		return
 	}
 	allowed := h.engine.CheckPermission(bindings, rbac.Resource(resource), rbac.Verb(verb), clusterID, projectID)

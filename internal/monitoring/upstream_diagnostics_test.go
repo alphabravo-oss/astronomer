@@ -11,9 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 )
 
 func TestMonitoringUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {
@@ -26,11 +30,16 @@ func TestMonitoringUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 	}))
 	defer collector.Close()
-	priorProvider, priorPropagator := otel.GetTracerProvider(), otel.GetTextMapPropagator()
-	defer func() { otel.SetTracerProvider(priorProvider); otel.SetTextMapPropagator(priorPropagator) }()
+	priorProvider, priorMeters, priorPropagator := otel.GetTracerProvider(), otel.GetMeterProvider(), otel.GetTextMapPropagator()
+	defer func() {
+		otel.SetTracerProvider(priorProvider)
+		otel.SetMeterProvider(priorMeters)
+		otel.SetTextMapPropagator(priorPropagator)
+	}()
 	var output bytes.Buffer
-	logger := slog.New(observability.NewJSONHandler(&output, nil))
-	shutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{Endpoint: collector.URL, SamplerRatio: 1, ServiceName: "upstream-error-fixture"})
+	logger := diagnosticSlog(&output)
+	registry := prometheus.NewRegistry()
+	shutdown, _, err := telemetry.Init(context.Background(), telemetry.Config{Protocol: telemetry.ProtocolHTTPProtobuf, Endpoint: collector.URL, SampleRate: 1, ServiceName: "upstream-error-fixture", Registerer: registry, Gatherer: registry})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,4 +94,12 @@ func TestMonitoringUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {
 	if !strings.Contains(output.String(), "503") {
 		t.Fatal("safe HTTP status lost")
 	}
+}
+
+func diagnosticSlog(w io.Writer) *slog.Logger {
+	logger, err := logging.NewWithWriter(w, logging.Config{Level: "debug"})
+	if err != nil {
+		panic(err)
+	}
+	return logging.Slog(logger)
 }

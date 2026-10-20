@@ -826,6 +826,32 @@ export interface OpenAPIComponents {
           "last_viewed_at"?: string | null;
           "view_count": number;
         };
+    CatalogVersionConfiguration: {
+          "schema": Record<string, unknown>;
+          "namespace": string;
+          "defaultPreset": string;
+          "presets": Array<{
+            "id": string;
+            "label": string;
+            "description": string;
+            "values": Record<string, unknown>;
+          }>;
+        };
+    CatalogVersionProfile: {
+          "compatibility"?: {
+            "kubernetes"?: string;
+            "architectures"?: string[];
+          };
+          "unavailableReason"?: string;
+          "upgradeFrom"?: string;
+          "version": string;
+          "available": boolean;
+          "recommended": boolean;
+          "deprecated": boolean;
+          "revoked": boolean;
+          "supportTier": string;
+          "configuration"?: OpenAPIComponents['schemas']['CatalogVersionConfiguration'];
+        };
     CharlieAbortRequest: {
           "request_id": string;
         };
@@ -2761,6 +2787,7 @@ export interface OpenAPIComponents {
     DeliverySystemCompatibility: {
           "contract": OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
           "current_release": OpenAPIComponents['schemas']['DeliverySystemRelease'] | null;
+          "pending_release"?: OpenAPIComponents['schemas']['DeliverySystemRelease'] | null;
           "current_rollout": OpenAPIComponents['schemas']['DeliverySystemRollout'] | null;
           "observed_inventory": OpenAPIComponents['schemas']['DeliveryCompatibilityCount'][];
         };
@@ -3392,6 +3419,7 @@ export interface OpenAPIComponents {
           "updated_at"?: string;
         };
     HelmChartVersion: {
+          "catalog_version"?: OpenAPIComponents['schemas']['CatalogVersionProfile'];
           "id"?: string;
           "chart_id"?: string;
           "version"?: string;
@@ -5794,6 +5822,7 @@ export interface OpenAPIComponents {
           "message": string;
         };
     ToolPreview: {
+          "catalog_versions"?: Record<string, OpenAPIComponents['schemas']['CatalogVersionProfile']>;
           "charts": Array<{
             "chart_name": string;
             "chart_version": string;
@@ -7023,6 +7052,7 @@ export interface OpenAPIReadComponents {
     DeliverySystemCompatibility: {
           "contract": OpenAPIReadComponents['schemas']['DeliveryCompatibilityContract'];
           "current_release": OpenAPIReadComponents['schemas']['DeliverySystemRelease'] | null;
+          "pending_release"?: OpenAPIReadComponents['schemas']['DeliverySystemRelease'] | null;
           "current_rollout": OpenAPIReadComponents['schemas']['DeliverySystemRollout'] | null;
           "observed_inventory": OpenAPIReadComponents['schemas']['DeliveryCompatibilityCount'][];
         };
@@ -13764,6 +13794,7 @@ export interface OpenAPIOperations {
         "body": {
           "cluster_id": string;
           "chart_version_id": string;
+          "from_chart_version_id"?: string;
           "namespace": string;
           "values_override"?: string;
           "operation"?: "install" | "upgrade";
@@ -13879,6 +13910,8 @@ export interface OpenAPIOperations {
         "query"?: {
           "project_id"?: string;
           "cluster_id"?: string;
+          "selected_version_id"?: string;
+          "view"?: "curated" | "all";
           "limit"?: number;
           "offset"?: number;
         };
@@ -19945,6 +19978,8 @@ export type CatalogRepositorySyncReceipt = OpenAPIComponents['schemas']['Catalog
 export type CatalogRepositorySyncReceiptEnvelope = OpenAPIComponents['schemas']['CatalogRepositorySyncReceiptEnvelope'];
 export type CatalogUninstallRequest = OpenAPIComponents['schemas']['CatalogUninstallRequest'];
 export type CatalogUserDiscovery = OpenAPIComponents['schemas']['CatalogUserDiscovery'];
+export type CatalogVersionConfiguration = OpenAPIComponents['schemas']['CatalogVersionConfiguration'];
+export type CatalogVersionProfile = OpenAPIComponents['schemas']['CatalogVersionProfile'];
 export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
 export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];
 export type CharlieAdminAccess = OpenAPIComponents['schemas']['CharlieAdminAccess'];

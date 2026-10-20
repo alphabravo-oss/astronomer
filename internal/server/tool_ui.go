@@ -2,16 +2,15 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/toolui"
-	"github.com/go-chi/chi/v5"
 )
 
 func newToolUIGateway(cfg *config.Config, deps RouterDependencies) *toolui.Gateway {
@@ -77,7 +76,8 @@ func serveIsolatedTool(w http.ResponseWriter, r *http.Request, target toolui.Tar
 	switch target.Kind {
 	case "service":
 		if deps.ClusterResources.ServiceProxy != nil {
-			endpoint = requireServiceProxyScope()(requireServiceProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries)(deps.ClusterResources.ServiceProxy))
+			endpoint = requireServiceProxyScope()(deps.ClusterResources.ServiceProxy)
+			endpoint = authorizeToolUI(deps, "TOOLUI service", endpoint)
 		}
 	case "grafana":
 		if deps.ClusterResources.Monitoring != nil {
@@ -86,12 +86,12 @@ func serveIsolatedTool(w http.ResponseWriter, r *http.Request, target toolui.Tar
 	case "cluster-grafana":
 		if deps.ClusterResources.Monitoring != nil {
 			endpoint = http.HandlerFunc(deps.ClusterResources.Monitoring.ProxyClusterGrafana)
-			verb := rbac.VerbRead
+			key := "TOOLUI cluster-grafana read"
 			if r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
-				verb = rbac.VerbUpdate
+				key = "TOOLUI cluster-grafana update"
 				endpoint = requireScope(auth.ScopeWriteClusters)(endpoint)
 			}
-			endpoint = appmiddleware.ClusterScopeFromIDParam(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, verb)(endpoint))
+			endpoint = authorizeToolUI(deps, key, endpoint)
 		}
 	}
 	if endpoint == nil {
@@ -99,7 +99,21 @@ func serveIsolatedTool(w http.ResponseWriter, r *http.Request, target toolui.Tar
 		return
 	}
 	if deps.CoreAuth.Queries != nil {
-		endpoint = appmiddleware.AuditLogWithWriter(slog.Default(), deps.CoreAuth.Queries)(endpoint)
+		endpoint = appmiddleware.AuditLogWithWriter(deps.CoreAuth.Logger, deps.CoreAuth.Queries)(endpoint)
 	}
-	requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)(endpoint).ServeHTTP(w, r)
+	if deps.CoreAuth.JWT == nil {
+		unavailableSecurityDependency("JWT authentication")(endpoint).ServeHTTP(w, r)
+		return
+	}
+	appmiddleware.RequireAuthWithQueries(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)(endpoint).ServeHTTP(w, r)
+}
+
+// authorizeToolUI applies the toolUIPermissions row for an isolated tool host.
+// These requests never reach the root router, so the route authorizer cannot
+// resolve them by pattern; the row is chosen by the tool kind instead.
+func authorizeToolUI(deps RouterDependencies, key string, endpoint http.Handler) http.Handler {
+	if deps.CoreAuth.authz == nil {
+		return unavailableSecurityDependency("route authorization")(endpoint)
+	}
+	return deps.CoreAuth.authz.enforceFixed(key, endpoint)
 }

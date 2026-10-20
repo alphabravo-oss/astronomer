@@ -8,13 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 type fakeLiveAuthority struct {
@@ -920,7 +921,7 @@ func TestActionGuardAuditOutageNeverLeaksPersistenceError(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	guard.SetLogger(slog.New(slog.NewJSONHandler(&output, nil)))
+	guard.SetLogger(zerolog.New(&output))
 	findings := &actionFindingRecorder{}
 	guard.SetFindingRecorder(findings, "installation-a")
 	result := guard.Execute(context.Background(), signedTestAction(t, privateKey, "astronomer.queue.retry_task", map[string]any{"resource_id": "resource-a", "task_id": "task-a", "operation_id": "action-a"}))

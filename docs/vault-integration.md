@@ -132,7 +132,7 @@ retry indefinitely.
 | `helm_installations.values_override`        | Original blob with `${vault://...}` markers |
 | `cluster_template_applications.spec_snapshot` | Same — markers preserved |
 | Audit log (`audit_logs`)                    | Reference path only (never the value) |
-| `vault_connections.auth_encrypted`          | Fernet-encrypted auth blob |
+| `vault_connections.auth_{key_id,algorithm,ciphertext,nonce}` | age-sealed auth blob |
 | Cluster manifest (in-cluster)               | Resolved cleartext (k8s RBAC + at-rest encryption gates this) |
 
 The fact that the resolved value never lives in our DB is the

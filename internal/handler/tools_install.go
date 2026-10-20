@@ -9,13 +9,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // errToolNotFound is returned by resolveAction when the slug doesn't match any

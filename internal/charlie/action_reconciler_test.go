@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type reconcileQueriesFake struct {
@@ -38,7 +39,7 @@ func (f *reconcileQueriesFake) TransitionCharlieActionReceipt(_ context.Context,
 	f.receipt.State = arg.NextState
 	f.receipt.ResultStatus = arg.ResultStatus
 	f.receipt.ResultDigest = arg.ResultDigest
-	f.receipt.ResultEncrypted = arg.ResultEncrypted
+	f.receipt.ResultKeyID, f.receipt.ResultAlgorithm, f.receipt.ResultCiphertext, f.receipt.ResultNonce = resultSealed(arg).Parts()
 	return f.receipt, nil
 }
 
@@ -78,10 +79,10 @@ func reconcilerFixture(t *testing.T, verified bool, age time.Duration) (*Ambiguo
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, _ := receiptTestCipher{}.Encrypt(string(arguments))
+	sealed, _ := receiptTestCipher{}.Encrypt(arguments)
 	queries := &reconcileQueriesFake{receipt: sqlc.CharlieActionReceipt{
 		ID: uuid.New(), CharlieActionID: "action-a", Capability: "astronomer.queue.retry_task", Effect: "write",
-		ArgumentDigest: digestBytes(canonical), ArgumentsEncrypted: sealed, FencingEpoch: 7, State: "dispatched",
+		ArgumentDigest: digestBytes(canonical), ArgumentsKeyID: sealed.KeyID, ArgumentsAlgorithm: sealed.Algorithm, ArgumentsCiphertext: sealed.Ciphertext, FencingEpoch: 7, State: "dispatched",
 		AuditCorrelationID: uuid.New(), CreatedAt: now.Add(-age),
 		DispatchedAt: pgtype.Timestamptz{Time: now.Add(-age), Valid: true}, Attempt: 1,
 	}}
@@ -107,8 +108,8 @@ func TestAmbiguousReceiptReconcilerVerifiesWithoutRedispatch(t *testing.T) {
 	if err := json.Unmarshal(executor.verifyArguments["operation_id"], &operationID); err != nil || operationID != queries.receipt.CharlieActionID {
 		t.Fatalf("reconciliation used untrusted operation ID %q: %v", operationID, err)
 	}
-	plain, err := receiptTestCipher{}.Decrypt(queries.transition.ResultEncrypted)
-	if err != nil || !json.Valid([]byte(plain)) || queries.transition.ResultDigest != digestBytes([]byte(plain)) {
+	plain, err := receiptTestCipher{}.Decrypt(resultSealed(queries.transition))
+	if err != nil || !json.Valid(plain) || queries.transition.ResultDigest != digestBytes(plain) {
 		t.Fatal("reconciled terminal result is not encrypted and integrity-bound")
 	}
 }
@@ -147,7 +148,7 @@ func TestAmbiguousReceiptReconcilerBlocksExpiredPreDispatchClaimWithoutVerificat
 		t.Fatalf("stale pre-dispatch claim was not terminally blocked: execute=%d verify=%d transition=%+v audit=%+v",
 			executor.executeCalls, executor.verifyCalls, queries.transition, auditor)
 	}
-	plain, err := receiptTestCipher{}.Decrypt(queries.transition.ResultEncrypted)
+	plain, err := receiptTestCipher{}.Decrypt(resultSealed(queries.transition))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -114,8 +114,8 @@ describe("useOpenNavGroups", () => {
     act(() => result.current.toggleGroup("Workloads"));
     rerender({ scope: "cluster" });
     expect([...result.current.openGroups]).toEqual(["Services"]);
-    act(() => result.current.toggleGroup("Tool UIs"));
-    expect([...result.current.openGroups]).toEqual(["Tool UIs"]);
+    act(() => result.current.toggleGroup("Tool links"));
+    expect([...result.current.openGroups]).toEqual(["Tool links"]);
     rerender({ scope: "global" });
     expect([...result.current.openGroups]).toEqual(["Workloads"]);
   });

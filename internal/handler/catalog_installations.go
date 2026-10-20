@@ -9,17 +9,18 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
+	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 type installedChartScopedPager interface {
@@ -55,13 +56,13 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list installations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list installations")
 		return
 	}
 
 	total, err := h.queries.CountInstalledChartsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count installations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count installations")
 		return
 	}
 	for index := range installations {
@@ -143,23 +144,23 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve namespace ownership")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to resolve namespace ownership")
 			return
 		}
 		if req.ProjectID != "" {
 			legacyProjectID, parseErr := uuid.Parse(req.ProjectID)
 			if parseErr != nil || !targetHasProject || legacyProjectID != targetProjectID {
-				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "project_id does not match the target namespace")
+				apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "project_id does not match the target namespace")
 				return
 			}
 		}
 		allowedTarget, authErr := h.catalogCallerAllowsTarget(r.Context(), clusterID, targetProjectID, req.Namespace, rbac.VerbCreate)
 		if authErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 			return
 		}
 		if !allowedTarget {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to install applications in this namespace")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to install applications in this namespace")
 			return
 		}
 		if targetHasProject {
@@ -167,27 +168,27 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		}
 		cvID, err := uuid.Parse(req.ChartVersionID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart version ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid chart version ID")
 			return
 		}
 		params.ChartVersionID = pgtype.UUID{Bytes: cvID, Valid: true}
 		version, err = h.queries.GetHelmChartVersionByID(r.Context(), cvID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart version not found")
 			return
 		}
 		chart, err = h.queries.GetHelmChartByID(r.Context(), version.ChartID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart not found")
 			return
 		}
 		repo, err = h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Repository not found")
 			return
 		}
 		if repo.OwnerProjectID.Valid && (!targetHasProject || !catalogVisibleToProject(r.Context(), h.queries, targetProjectID, repo.ID)) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Chart repository is not visible from the target namespace")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Chart repository is not visible from the target namespace")
 			return
 		}
 		if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
@@ -195,23 +196,23 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			if presentationErr == nil {
 				version, err = h.hydrateChartVersion(r.Context(), version)
 				if err != nil {
-					RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
+					apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Chart configuration metadata is temporarily unavailable")
 					return
 				}
 				cluster, clusterErr := h.queries.GetClusterByID(r.Context(), clusterID)
 				if clusterErr != nil {
-					RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+					apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 					return
 				}
 				req.ValuesOverride = catalogInstallValues(presentation.Slug, cluster.Distribution, req.ValuesOverride)
 				params.ValuesOverride = req.ValuesOverride
 				checks, allowed := catalogInstallChecks(cluster, version, presentation, req.ValuesOverride)
 				if !allowed {
-					RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apierror.Conflict, "message": "Catalog installation prerequisites failed", "checks": checks}})
+					RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apiutil.Conflict, "message": "Catalog installation prerequisites failed", "checks": checks}})
 					return
 				}
 			} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to verify catalog application trust")
 				return
 			}
 		}
@@ -230,7 +231,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	if resolvedProjectID == "" && h.delivery != nil {
 		projectID, scopeErr := h.platformCatalogProject(r.Context(), clusterID)
 		if scopeErr != nil {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, scopeErr.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, scopeErr.Error())
 			return
 		}
 		resolvedProjectID = projectID.String()
@@ -270,7 +271,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			}}
 		})
 	if err != nil {
-		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to create and enqueue installation")
+		respondCatalogMutationError(w, r, err, apiutil.EnqueueError, "Failed to create and enqueue installation")
 		return
 	}
 	installation, op := result.row, result.op
@@ -292,12 +293,12 @@ type catalogUninstallRequest struct {
 func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid installation ID")
 		return
 	}
 	installation, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installation not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installation.ClusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
@@ -313,11 +314,11 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 	}
 	_, chart, _, resolveErr := h.resolveInstalledChartRelease(r.Context(), installation)
 	if resolveErr != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Installed chart identity could not be resolved")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Installed chart identity could not be resolved")
 		return
 	}
 	if strings.EqualFold(chart.Name, "longhorn") && !req.ConfirmDataDeletion {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Longhorn uninstall requires explicit confirmation that persistent data may be deleted")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Longhorn uninstall requires explicit confirmation that persistent data may be deleted")
 		return
 	}
 	statusParams := sqlc.UpdateInstalledChartStatusParams{
@@ -344,7 +345,7 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 			}}
 		})
 	if err != nil {
-		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to stage and enqueue uninstall")
+		respondCatalogMutationError(w, r, err, apiutil.EnqueueError, "Failed to stage and enqueue uninstall")
 		return
 	}
 	op := result.op
@@ -372,7 +373,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	// field remains available only through the separately gated detail route.
 	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceCatalog, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	limit := queryLimit(r, 20)
@@ -387,7 +388,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	} else {
 		pager, ok := h.queries.(installedChartScopedPager)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped installed-chart pagination is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Scoped installed-chart pagination is unavailable")
 			return
 		}
 		rows, err = pager.ListInstalledChartsForScopes(r.Context(), sqlc.ListInstalledChartsForScopesParams{
@@ -398,7 +399,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list installed charts")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list installed charts")
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
@@ -469,12 +470,12 @@ func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Req
 		CreateInstallationRequest
 	}
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	// Gate before adapting to the legacy path-based handler. The adapter body
@@ -482,7 +483,7 @@ func (h *CatalogHandler) CreateInstalledChart(w http.ResponseWriter, r *http.Req
 	// public /catalog/installed/ endpoint incomplete.
 	fullBody, err := json.Marshal(req)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(fullBody))
@@ -502,12 +503,12 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 	// but the route-security tests reach here with a nil querier once a caller
 	// clears the scope/RBAC gate. Answer 500 rather than dereferencing nil.
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Catalog store not configured")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Catalog store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installed chart ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid installed chart ID")
 		return
 	}
 	// openapi:request-operation putCatalogInstalledByIdUpgrade
@@ -520,7 +521,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -528,9 +529,10 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 	}
 	version, chart, repo, err := h.resolveInstalledChartRelease(r.Context(), installed)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve installed chart release")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve installed chart release")
 		return
 	}
+	fromVersion := version.Version
 	targetVersionID := installed.ChartVersionID
 	valuesOverride := installed.ValuesOverride
 	if req.ValuesOverride != nil {
@@ -539,46 +541,24 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 	if req.ChartVersionID != "" {
 		requestedID, parseErr := uuid.Parse(req.ChartVersionID)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_version_id must be a UUID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_version_id must be a UUID")
 			return
 		}
 		requestedVersion, lookupErr := h.queries.GetHelmChartVersionByID(r.Context(), requestedID)
 		if lookupErr != nil {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart version not found")
 			return
 		}
 		if requestedVersion.ChartID != chart.ID {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "chart_version_id must belong to the installed chart")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "chart_version_id must belong to the installed chart")
 			return
 		}
 		version = requestedVersion
 		targetVersionID = pgtype.UUID{Bytes: requestedID, Valid: true}
 	}
-	if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
-		presentation, presentationErr := catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), version.ID)
-		if presentationErr == nil {
-			version, err = h.hydrateChartVersion(r.Context(), version)
-			if err != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
-				return
-			}
-			cluster, clusterErr := h.queries.GetClusterByID(r.Context(), installed.ClusterID)
-			if clusterErr != nil {
-				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
-				return
-			}
-			if req.ValuesOverride != nil {
-				valuesOverride = mergeValueLayers(distributionInstallValues(presentation.Slug, cluster.Distribution), valuesOverride)
-			}
-			checks, allowed := catalogInstallChecks(cluster, version, presentation, valuesOverride)
-			if !allowed {
-				RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apierror.Conflict, "message": "Catalog upgrade prerequisites failed", "checks": checks}})
-				return
-			}
-		} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
-			return
-		}
+	version, valuesOverride, valid := h.catalogUpgradeConfiguration(w, r, installed, version, valuesOverride, req.ValuesOverride != nil, fromVersion)
+	if !valid {
+		return
 	}
 	updateParams := sqlc.UpdateInstalledChartValuesParams{
 		ID:             id,
@@ -624,7 +604,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 			}}
 		})
 	if err != nil {
-		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to stage and enqueue installed chart upgrade")
+		respondCatalogMutationError(w, r, err, apiutil.EnqueueError, "Failed to stage and enqueue installed chart upgrade")
 		return
 	}
 	updated, op := result.row, result.op
@@ -640,12 +620,12 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installed chart ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid installed chart ID")
 		return
 	}
 	current, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, current.ClusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -667,7 +647,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 		targetRevision = req.Revision
 	}
 	if targetRevision >= int(current.Revision) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "revision must be lower than the current revision")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "revision must be lower than the current revision")
 		return
 	}
 	statusParams := sqlc.UpdateInstalledChartStatusParams{
@@ -701,7 +681,7 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 			}}
 		})
 	if err != nil {
-		respondCatalogMutationError(w, r, err, apierror.EnqueueError, "Failed to stage and enqueue rollback")
+		respondCatalogMutationError(w, r, err, apiutil.EnqueueError, "Failed to stage and enqueue rollback")
 		return
 	}
 	op := result.op
@@ -715,12 +695,12 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid release ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid release ID")
 		return
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -729,7 +709,7 @@ func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *h
 	if installed.RequestID.Valid && h.delivery != nil {
 		revs, historyErr := h.delivery.Revisions(r.Context(), installed.ID)
 		if historyErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to load application revision history")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to load application revision history")
 			return
 		}
 		if revs == nil {
@@ -743,12 +723,12 @@ func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *h
 		return
 	}
 	if h.helm == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Helm requester not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Helm requester not configured")
 		return
 	}
 	result, err := h.helm.History(r.Context(), installed.ClusterID.String(), installed.ReleaseName, installed.Namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.ProxyError, err.Error())
 		return
 	}
 	revs := result.Revisions
@@ -767,12 +747,12 @@ func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *h
 func (h *CatalogHandler) GetInstalledChartValues(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid release ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid release ID")
 		return
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installed chart not found")
 		return
 	}
 	// values_override routinely carries secrets (DB passwords, API keys).

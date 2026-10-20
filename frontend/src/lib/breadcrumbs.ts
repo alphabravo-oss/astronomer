@@ -1,28 +1,35 @@
 import { navLabelForHref } from "@/components/layout/sidebar-navigation";
 
+/**
+ * Segment → label registry for breadcrumbs. Sentence case everywhere;
+ * Kubernetes kinds keep their canonical casing (ConfigMaps, DaemonSets, CRDs).
+ * Nav-registered hrefs are resolved through `navLabelForHref` first, so a
+ * destination never carries a different name in different chrome.
+ */
 const routeLabels: Record<string, string> = {
-  dashboard: "Dashboard",
+  dashboard: "Overview",
   clusters: "Clusters",
   workloads: "Workloads",
-  monitoring: "Monitoring",
+  monitoring: "Metrics",
+  stacks: "Shared stacks",
   alerting: "Alerting",
   logging: "Logging",
   storage: "Storage",
   networking: "Networking",
-  delivery: "Continuous Delivery",
-  rbac: "RBAC",
+  delivery: "Delivery",
+  rbac: "Access control",
   projects: "Projects",
   settings: "Settings",
   register: "Register",
-  audit: "Audit",
+  audit: "Audit log",
   catalog: "Catalog",
   security: "Security",
   search: "Search",
-  resources: "Resources",
+  resources: "Mirrored resources",
   shell: "Shell",
   adoption: "Adoption",
   tools: "Tools",
-  apps: "Apps",
+  apps: "Applications",
   registries: "Registries",
   snapshots: "Snapshots",
   extensions: "Extensions",
@@ -31,32 +38,49 @@ const routeLabels: Record<string, string> = {
   deployments: "Deployments",
   daemonsets: "DaemonSets",
   statefulsets: "StatefulSets",
+  replicasets: "ReplicaSets",
   jobs: "Jobs",
   cronjobs: "CronJobs",
   services: "Services",
   ingresses: "Ingresses",
   configmaps: "ConfigMaps",
   secrets: "Secrets",
-  hpa: "HPA",
-  "network-policies": "Network Policies",
-  persistentvolumes: "Persistent Volumes",
-  persistentvolumeclaims: "PVCs",
-  storageclasses: "Storage Classes",
-  resourcequotas: "Resource Quotas",
-  limitranges: "Limit Ranges",
-  poddisruptionbudgets: "PDBs",
+  hpa: "Autoscalers",
+  "network-policies": "Network policies",
+  persistentvolumes: "Persistent volumes",
+  persistentvolumeclaims: "Volume claims",
+  storageclasses: "Storage classes",
+  resourcequotas: "Resource quotas",
+  limitranges: "Limit ranges",
+  poddisruptionbudgets: "Disruption budgets",
   crds: "CRDs",
-  serviceaccounts: "Service Accounts",
-  "k8s-clusterroles": "Cluster Roles",
-  "k8s-clusterrolebindings": "Cluster Role Bindings",
+  "custom-resources": "Custom resources",
+  serviceaccounts: "Service accounts",
+  "k8s-clusterroles": "Cluster roles",
+  "k8s-clusterrolebindings": "Cluster role bindings",
   "k8s-roles": "Roles",
-  "k8s-rolebindings": "Role Bindings",
+  "k8s-rolebindings": "Role bindings",
   endpoints: "Endpoints",
-  replicasets: "ReplicaSets",
   namespaces: "Namespaces",
   nodes: "Nodes",
   events: "Events",
   charlie: "Charlie",
+  "cluster-templates": "Onboarding templates",
+  "configuration-templates": "Templates",
+  "override-sets": "Overrides",
+  "image-scans": "Image scans",
+  "monitoring-stack": "Monitoring stack",
+  "service-mesh": "Service mesh",
+  "control-plane-snapshots": "Control-plane DR",
+  "network-access": "Network & access",
+  template: "Onboarding template",
+  gatekeeper: "Gatekeeper",
+  grafana: "Grafana",
+  metrics: "Metrics",
+  account: "Account",
+  preferences: "Preferences",
+  new: "New",
+  edit: "Edit",
 };
 
 const opaqueSegment = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
@@ -70,9 +94,8 @@ export function breadcrumbLabel(segment: string): string {
   }
   if (routeLabels[decoded]) return routeLabels[decoded];
   if (opaqueSegment.test(decoded)) return decoded;
-  return decoded
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+  const words = decoded.replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export type Breadcrumb = { label: string; href: string };

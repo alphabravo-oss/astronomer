@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 )
 
 type alertPlannerFake struct {

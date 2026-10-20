@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -147,20 +147,12 @@ func RequireQueryNamespacePermission(engine *rbac.Engine, querier rbac.BindingQu
 func authAndBindings(w http.ResponseWriter, r *http.Request, querier rbac.BindingQuerier) ([]rbac.RoleBinding, bool) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		authError(w, "authentication_required", "Authentication is required to access this resource")
+		authError(w, r, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
 		return nil, false
 	}
 	bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		resp := map[string]interface{}{
-			"error": map[string]string{
-				"code":    "internal_error",
-				"message": "Failed to retrieve user permissions",
-			},
-		}
-		_ = json.NewEncoder(w).Encode(resp)
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return nil, false
 	}
 	return bindings, true
@@ -169,16 +161,8 @@ func authAndBindings(w http.ResponseWriter, r *http.Request, querier rbac.Bindin
 // permissionDenied writes the shared 403 permission_denied envelope every RBAC
 // gate emits when the caller's bindings do not satisfy the required
 // (resource, verb, scope).
-func permissionDenied(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusForbidden)
-	resp := map[string]interface{}{
-		"error": map[string]string{
-			"code":    "permission_denied",
-			"message": "You do not have permission to perform this action",
-		},
-	}
-	_ = json.NewEncoder(w).Encode(resp)
+func permissionDenied(w http.ResponseWriter, r *http.Request) {
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 }
 
 // RequirePermissionForNamespace is RequirePermission with a caller-supplied
@@ -200,7 +184,7 @@ func RequirePermissionForNamespace(engine *rbac.Engine, querier rbac.BindingQuer
 			namespace := resolveNamespace(r)
 
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
-				permissionDenied(w)
+				permissionDenied(w, r)
 				return
 			}
 
@@ -240,7 +224,7 @@ func RequireListPermission(engine *rbac.Engine, querier rbac.BindingQuerier, res
 			}
 
 			if !allowed {
-				permissionDenied(w)
+				permissionDenied(w, r)
 				return
 			}
 
@@ -279,7 +263,7 @@ func RequireCollectionPermission(engine *rbac.Engine, querier rbac.BindingQuerie
 			}
 
 			if !allowed {
-				permissionDenied(w)
+				permissionDenied(w, r)
 				return
 			}
 

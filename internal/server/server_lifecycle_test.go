@@ -3,19 +3,19 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
 
 func TestShutdownHooksRunInRegistrationOrderAndAggregateErrors(t *testing.T) {
-	srv := New(&config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(&config.Config{}, zerolog.Nop())
 	var order []string
 	srv.AddShutdownHook("audit", func(context.Context) error {
 		order = append(order, "audit")
@@ -36,7 +36,7 @@ func TestShutdownHooksRunInRegistrationOrderAndAggregateErrors(t *testing.T) {
 }
 
 func TestAddShutdownHookIgnoresNil(t *testing.T) {
-	srv := New(&config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(&config.Config{}, zerolog.Nop())
 	srv.AddShutdownHook("nil", nil)
 	if err := srv.Shutdown(t.Context()); err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
@@ -63,7 +63,7 @@ func (w *injectedTunnelWorker) Run(context.Context) error {
 func (w *injectedTunnelWorker) Shutdown() { w.stopOnce.Do(func() { close(w.exit) }) }
 
 func TestCriticalWorkerCrashTerminatesServer(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zerolog.Nop()
 	srv := New(&config.Config{}, log)
 	srv.runtime = newRuntimeSupervisor(log)
 	if err := srv.runtime.Start(context.Background()); err != nil {
@@ -95,7 +95,7 @@ func TestCriticalWorkerCrashTerminatesServer(t *testing.T) {
 }
 
 func TestWorkerExitDuringShutdownIsIntentional(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zerolog.Nop()
 	srv := New(&config.Config{}, log)
 	srv.runtime = newRuntimeSupervisor(log)
 	if err := srv.runtime.Start(context.Background()); err != nil {
@@ -129,7 +129,7 @@ func TestWorkerExitDuringShutdownIsIntentional(t *testing.T) {
 }
 
 func TestShutdownJoinsRuntimeBeforeDrainAndIsIdempotent(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zerolog.Nop()
 	srv := New(&config.Config{}, log)
 	srv.runtime = newRuntimeSupervisor(log)
 	if err := srv.runtime.Start(context.Background()); err != nil {
@@ -164,7 +164,7 @@ func TestShutdownJoinsRuntimeBeforeDrainAndIsIdempotent(t *testing.T) {
 }
 
 func TestShutdownDeadlineLeavesDependenciesOpenForHungLoop(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zerolog.Nop()
 	srv := New(&config.Config{}, log)
 	srv.runtime = newRuntimeSupervisor(log)
 	if err := srv.runtime.Start(context.Background()); err != nil {

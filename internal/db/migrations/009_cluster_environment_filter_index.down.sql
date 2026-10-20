@@ -1,1 +1,0 @@
-DROP INDEX CONCURRENTLY IF EXISTS public.clusters_active_environment_created_idx;

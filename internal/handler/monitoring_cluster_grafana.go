@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"sigs.k8s.io/yaml"
 	"strings"
+
+	"sigs.k8s.io/yaml"
 )
 
 // Cluster Grafana trusts only the ticket-verifying sidecar on loopback. Direct

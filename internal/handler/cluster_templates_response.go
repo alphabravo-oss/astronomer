@@ -3,8 +3,9 @@ package handler
 import (
 	"encoding/json"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // ClusterTemplateResponse is the wire shape returned by the list/get/

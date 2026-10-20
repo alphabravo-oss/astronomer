@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // TestFlattenCISReport feeds a representative ClusterScanReport (matching the

@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func upgradeRecommendation(agent clusterAgentItem) agentUpgradeRecommendation {
@@ -200,10 +201,10 @@ func sanitizeUpgradeCanaryIDs(values []string) []string {
 func respondClusterAgentError(w http.ResponseWriter, r *http.Request, err error) {
 	var handlerErr *clusterAgentHandlerError
 	if errors.As(err, &handlerErr) {
-		RespondRequestError(w, r, handlerErr.status, handlerErr.code, handlerErr.message)
+		apiutil.WriteError(w, r, handlerErr.status, handlerErr.code, handlerErr.message)
 		return
 	}
-	RespondRequestError(w, r, http.StatusInternalServerError, apierror.ClusterAgentError, "Cluster agent request failed")
+	apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ClusterAgentError, "Cluster agent request failed")
 }
 
 func agentLifecycleOperationDTO(op sqlc.AgentLifecycleOperation) agentLifecycleOperationResponse {
@@ -238,7 +239,9 @@ func targetAgentImage(repository, tag string) string {
 	repository = strings.TrimSpace(repository)
 	tag = strings.TrimSpace(tag)
 	if repository == "" {
-		repository = "ghcr.io/alphabravo-oss/astronomer-go-agent"
+		// No public default: the agent image is explicit configuration
+		// (AGENT_IMAGE_REPOSITORY), re-hosted by the registry policy.
+		return ""
 	}
 	if tag == "" {
 		return repository

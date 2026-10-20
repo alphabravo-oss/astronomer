@@ -15,11 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	dto "github.com/prometheus/client_model/go"
 )
 
 // recordingPublisher captures every Publish call so tests can assert what
@@ -106,7 +107,7 @@ func (r *recordingValidator) GetClusterAgentTokenByClusterID(_ context.Context, 
 	if r.clusterAgentErr != nil {
 		return sqlc.ClusterAgentToken{}, r.clusterAgentErr
 	}
-	if r.clusterAgentToken.ClusterID == clusterID && r.clusterAgentToken.Token != "" {
+	if r.clusterAgentToken.ClusterID == clusterID && r.clusterAgentToken.TokenHash != "" {
 		return r.clusterAgentToken, nil
 	}
 	// pgx.ErrNoRows mirrors production so the A3 registration gate treats
@@ -126,10 +127,9 @@ func (r *recordingValidator) GetClusterAgentTokenByToken(_ context.Context, toke
 	if r.clusterAgentToken.RevokedAt.Valid {
 		return sqlc.ClusterAgentToken{}, errors.New("not found")
 	}
-	// Accept the live token (plaintext or hash) OR the grace previous hash —
+	// Accept the live token hash OR the grace previous hash —
 	// mirrors GetClusterAgentTokenByToken's OR branch.
-	if r.clusterAgentToken.Token == token ||
-		r.clusterAgentToken.TokenHash == hash ||
+	if r.clusterAgentToken.TokenHash == hash ||
 		(r.clusterAgentToken.PreviousTokenHash.Valid && r.clusterAgentToken.PreviousTokenHash.String == hash) {
 		return r.clusterAgentToken, nil
 	}
@@ -140,7 +140,7 @@ func (r *recordingValidator) UpsertClusterAgentToken(_ context.Context, arg sqlc
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.upsertAgentArgs = append(r.upsertAgentArgs, arg)
-	r.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: arg.ClusterID, Token: arg.Token, TokenHash: arg.TokenHash}
+	r.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: arg.ClusterID, TokenHash: arg.TokenHash}
 	return r.clusterAgentToken, nil
 }
 
@@ -168,7 +168,6 @@ func (r *recordingValidator) RotateClusterAgentToken(_ context.Context, arg sqlc
 	r.clusterAgentToken = sqlc.ClusterAgentToken{
 		ID:                arg.ID,
 		ClusterID:         r.clusterAgentToken.ClusterID,
-		Token:             arg.Token,
 		TokenHash:         arg.TokenHash,
 		PreviousTokenHash: pgtype.Text{String: prev, Valid: prev != ""},
 		LastRotatedAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},

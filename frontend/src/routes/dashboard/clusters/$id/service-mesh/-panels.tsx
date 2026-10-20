@@ -162,7 +162,7 @@ export function HealthTile({
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+      <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
       <p className="text-2xl font-semibold text-foreground mt-1">

@@ -1,14 +1,15 @@
 package server
 
 import (
-	"log/slog"
+	"github.com/hibiken/asynq"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
-	"github.com/hibiken/asynq"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) composeManagementRouterDependencies(cfg *config.Config, logger *slog.Logger, deps *RouterDependencies) {
+func (c *productionComposition) composeManagementRouterDependencies(cfg *config.Config, logger zerolog.Logger, deps *RouterDependencies) {
 	database := c.database
 	queries := c.queries
 	rbacQuerier := c.rbacQuerier
@@ -26,7 +27,7 @@ func (c *productionComposition) composeManagementRouterDependencies(cfg *config.
 	deps.AdminPlatform.Webhooks = c.webhookHandler
 	deps.AdminPlatform.SIEMForwarders = c.siemHandler
 	deps.AdminPlatform.NotificationTemplates = func() *handler.NotificationTemplateHandler {
-		h := handler.NewNotificationTemplateHandler(queries, logger)
+		h := handler.NewNotificationTemplateHandler(queries, logging.Slog(logger))
 		h.SetAuditWriter(queries)
 		h.SetRunTx(sqlcMutationTxRunner[handler.NotificationTemplateMutationTx](database))
 		return h

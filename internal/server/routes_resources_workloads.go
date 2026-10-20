@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
+	"github.com/go-chi/chi/v5"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/go-chi/chi/v5"
 )
 
 // requireListPermission wraps appmiddleware.RequireListPermission with the same
@@ -49,12 +51,12 @@ func requireNamespacePickerListPermission(engine *rbac.Engine, querier rbac.Bind
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
 				return
 			}
 			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 				return
 			}
 			clusterID, projectID := permissionScopeIDs(r)
@@ -64,7 +66,7 @@ func requireNamespacePickerListPermission(engine *rbac.Engine, querier rbac.Bind
 					engine.HasAnyNamespaceAccess(bindings, rbac.ResourcePods, rbac.VerbList, clusterID)
 			}
 			if !allowed {
-				writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -90,26 +92,25 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 		r.Group(func(r chi.Router) {
 			r.Use(mutationWriteScope)
 			r.Use(idem)
-			r.With(requireNamedResourceListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries)).
+			r.
 				Get("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumes|persistentvolumeclaims|storageclasses|gateways|httproutes|gatewayclasses|grpcroutes|tcproutes|udproutes|tlsroutes|referencegrants)}/", deps.ClusterResources.Resources.ListNamedResources)
 			// Create is gated on the BODY's metadata.namespace, not the URL —
 			// see requireNamedResourceCreatePermission.
-			r.With(requireNamedResourceCreatePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries)).
+			r.
 				Post("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/", deps.ClusterResources.Resources.CreateNamedResource)
-			r.With(requireNamedResourcePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, "resource_type", rbac.VerbDelete)).
+			r.
 				Delete("/clusters/{cluster_id}/resources/{resource_type:(?:services|ingresses|networkpolicies|persistentvolumeclaims)}/{namespace}/{name}/", deps.ClusterResources.Resources.DeleteNamedResource)
-			r.With(requireNamedResourcePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, "resource_type", rbac.VerbDelete)).
+			r.
 				Delete("/clusters/{cluster_id}/resources/{resource_type:(?:persistentvolumes)}/{name}/", deps.ClusterResources.Resources.DeleteNamedResource)
 			r.With(
-				requireGenericResourceListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries),
 				auditGenericSecretList(deps.CoreAuth.AuditWriter),
 			).Get("/clusters/{cluster_id}/resources/generic/{resource_type}/", deps.ClusterResources.Resources.ListGenericResources)
 			// The count handler performs per-resource and per-namespace RBAC in one
 			// binding lookup, omitting unauthorized types from its response.
 			r.Get("/clusters/{cluster_id}/resource-counts/", deps.ClusterResources.Resources.CountResources)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
+			r.
 				Get("/clusters/{cluster_id}/resources/discovery/", deps.ClusterResources.Resources.GetResourceDiscovery)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).
+			r.
 				Get("/clusters/{cluster_id}/resources/schema/", deps.ClusterResources.Resources.GetResourceSchema)
 			// Authorization is operation-dependent: the handler binds the opaque ID
 			// to this cluster, then rechecks the stored originating resource verb or
@@ -117,48 +118,45 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 			r.Get("/clusters/{cluster_id}/resources/operations/{id}/", deps.ClusterResources.Resources.GetResourceOperation)
 			r.Get("/settings/", deps.ClusterResources.Resources.GetGeneralSettings)
 			// Per-resource REST verbs (Python: /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/).
-			r.With(requireNamedResourcePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, "type", rbac.VerbRead)).
+			r.
 				Get("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.ClusterResources.Resources.GetNamedResource)
-			r.With(
-				requireNamedResourcePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, "type", rbac.VerbUpdate),
-				requireNamedResourceForcePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, "type"),
-			).
+			r.
 				Put("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.ClusterResources.Resources.UpdateNamedResource)
-			r.With(requireNamedResourcePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, "type", rbac.VerbDelete)).
+			r.
 				Delete("/resources/{cluster_id}/{type}/{namespace}/{name}/", deps.ClusterResources.Resources.DeleteNamedResourceREST)
 			// Node action endpoints (cordon/uncordon/drain/metadata/taints).
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/cordon/", deps.ClusterResources.Resources.CordonNode)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/uncordon/", deps.ClusterResources.Resources.UncordonNode)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbManage)).Post("/nodes/{cluster_id}/{node_name}/drain/", deps.ClusterResources.Resources.DrainNode)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/", deps.ClusterResources.Resources.SetNodeLabel)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/labels/remove/", deps.ClusterResources.Resources.RemoveNodeLabel)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/", deps.ClusterResources.Resources.SetNodeAnnotation)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/annotations/remove/", deps.ClusterResources.Resources.RemoveNodeAnnotation)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/", deps.ClusterResources.Resources.AddNodeTaint)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbUpdate)).Post("/nodes/{cluster_id}/{node_name}/taints/remove/", deps.ClusterResources.Resources.RemoveNodeTaint)
+			r.Post("/nodes/{cluster_id}/{node_name}/cordon/", deps.ClusterResources.Resources.CordonNode)
+			r.Post("/nodes/{cluster_id}/{node_name}/uncordon/", deps.ClusterResources.Resources.UncordonNode)
+			r.Post("/nodes/{cluster_id}/{node_name}/drain/", deps.ClusterResources.Resources.DrainNode)
+			r.Post("/nodes/{cluster_id}/{node_name}/labels/", deps.ClusterResources.Resources.SetNodeLabel)
+			r.Post("/nodes/{cluster_id}/{node_name}/labels/remove/", deps.ClusterResources.Resources.RemoveNodeLabel)
+			r.Post("/nodes/{cluster_id}/{node_name}/annotations/", deps.ClusterResources.Resources.SetNodeAnnotation)
+			r.Post("/nodes/{cluster_id}/{node_name}/annotations/remove/", deps.ClusterResources.Resources.RemoveNodeAnnotation)
+			r.Post("/nodes/{cluster_id}/{node_name}/taints/", deps.ClusterResources.Resources.AddNodeTaint)
+			r.Post("/nodes/{cluster_id}/{node_name}/taints/remove/", deps.ClusterResources.Resources.RemoveNodeTaint)
 			// The handler performs an action-aware current-permission check after
 			// loading and route-binding the receipt (read OR its mutation verb).
-			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/", deps.ClusterResources.Resources.GetNodeOperation)
+			r.With(requireAuth(deps)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/", deps.ClusterResources.Resources.GetNodeOperation)
 			// User CRUD (List/Get already wired above; add Create/Update/Delete + reset-password).
 			// These identity-plane mutations require both users:* RBAC and an
 			// admin-scoped API token when token auth is used. Browser sessions rely
 			// on the RBAC gate.
-			r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceUsers, rbac.VerbCreate)).Post("/users/", deps.ClusterResources.Resources.CreateUser)
-			r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceUsers, rbac.VerbUpdate)).Put("/users/{id}/", deps.ClusterResources.Resources.UpdateUser)
-			r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceUsers, rbac.VerbUpdate)).Patch("/users/{id}/", deps.ClusterResources.Resources.UpdateUser)
-			r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceUsers, rbac.VerbDelete)).Delete("/users/{id}/", deps.ClusterResources.Resources.DeleteUser)
-			r.With(requireScope(iauth.ScopeAdmin), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceUsers, rbac.VerbUpdate)).Post("/users/{id}/reset-password/", deps.ClusterResources.Resources.ResetUserPassword)
+			r.With(requireScope(iauth.ScopeAdmin)).Post("/users/", deps.ClusterResources.Resources.CreateUser)
+			r.With(requireScope(iauth.ScopeAdmin)).Put("/users/{id}/", deps.ClusterResources.Resources.UpdateUser)
+			r.With(requireScope(iauth.ScopeAdmin)).Patch("/users/{id}/", deps.ClusterResources.Resources.UpdateUser)
+			r.With(requireScope(iauth.ScopeAdmin)).Delete("/users/{id}/", deps.ClusterResources.Resources.DeleteUser)
+			r.With(requireScope(iauth.ScopeAdmin)).Post("/users/{id}/reset-password/", deps.ClusterResources.Resources.ResetUserPassword)
 			// Admin-only auth hardening endpoints (migration 039).
 			//
 			// Superuser gating lives inside the handler — same pattern as the
 			// other /admin/* routes here (keyStatusHandler, AdminQueues etc.).
 			// We deliberately keep the auth requirement on the wrapper so a
 			// non-superuser hits a clean 403 instead of falling through.
-			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/unlock/", deps.ClusterResources.Resources.UnlockUser)
-			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/force-logout/", deps.ClusterResources.Resources.ForceLogoutUser)
+			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/unlock/", deps.ClusterResources.Resources.UnlockUser)
+			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/force-logout/", deps.ClusterResources.Resources.ForceLogoutUser)
 			// 2FA admin override. Superuser-only inside the handler.
 			if deps.CoreAuth.TOTP != nil {
-				r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/disable-totp/", deps.CoreAuth.TOTP.AdminForceDisable)
+				r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).Post("/admin/users/{id}/disable-totp/", deps.CoreAuth.TOTP.AdminForceDisable)
 			}
 		})
 	}
@@ -167,36 +165,34 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 		r.Group(func(r chi.Router) {
 			r.Use(mutationWriteScope)
 			r.Use(idem)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/controller/status/", deps.ClusterResources.Workloads.ControllerStatus)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/workloads/operations/", deps.ClusterResources.Workloads.ListOperations)
+			r.Get("/workloads/controller/status/", deps.ClusterResources.Workloads.ControllerStatus)
+			r.Get("/workloads/operations/", deps.ClusterResources.Workloads.ListOperations)
 			// Receipt authorization is row-aware: creators may poll their own
 			// mutation receipts, while support readers retain scoped access.
 			r.Get("/workloads/operations/{id}/", deps.ClusterResources.Workloads.GetOperation)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbUpdate)).Post("/workloads/operations/{id}/retry/", deps.ClusterResources.Workloads.RetryOperation)
-			r.With(requireListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbList, deps.ClusterResources.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/workloads/", deps.ClusterResources.Workloads.List)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRead)).Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.ClusterResources.Workloads.Get)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbRead)).Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods/", deps.ClusterResources.Workloads.ListWorkloadPods)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbScale)).Patch("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/", deps.ClusterResources.Workloads.Scale)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbRestart)).Post("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/", deps.ClusterResources.Workloads.Restart)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceWorkloads, rbac.VerbDelete)).Delete("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.ClusterResources.Workloads.Delete)
-			r.With(requireNamespacePickerListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, deps.ClusterResources.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/namespaces/", deps.ClusterResources.Workloads.ListNamespaces)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbList)).Get("/clusters/{cluster_id}/nodes/", deps.ClusterResources.Workloads.ListNodes)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceNodes, rbac.VerbRead)).Get("/clusters/{cluster_id}/nodes/{node_name}/", deps.ClusterResources.Workloads.GetNode)
-			r.With(requireNamespacePickerListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, deps.ClusterResources.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/events/", deps.ClusterResources.Workloads.ListEvents)
-			r.With(requireListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbList, deps.ClusterResources.NamespaceScopedRBAC)).Get("/clusters/{cluster_id}/pods/", deps.ClusterResources.Workloads.ListPods)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.ClusterResources.Workloads.DeletePod)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbLogs)).Get("/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/", deps.ClusterResources.Workloads.PodLogs)
+			r.Post("/workloads/operations/{id}/retry/", deps.ClusterResources.Workloads.RetryOperation)
+			r.Get("/clusters/{cluster_id}/workloads/", deps.ClusterResources.Workloads.List)
+			r.Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.ClusterResources.Workloads.Get)
+			r.Get("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/pods/", deps.ClusterResources.Workloads.ListWorkloadPods)
+			r.Patch("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/", deps.ClusterResources.Workloads.Scale)
+			r.Post("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/restart/", deps.ClusterResources.Workloads.Restart)
+			r.Delete("/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", deps.ClusterResources.Workloads.Delete)
+			r.Get("/clusters/{cluster_id}/namespaces/", deps.ClusterResources.Workloads.ListNamespaces)
+			r.Get("/clusters/{cluster_id}/nodes/", deps.ClusterResources.Workloads.ListNodes)
+			r.Get("/clusters/{cluster_id}/nodes/{node_name}/", deps.ClusterResources.Workloads.GetNode)
+			r.Get("/clusters/{cluster_id}/events/", deps.ClusterResources.Workloads.ListEvents)
+			r.Get("/clusters/{cluster_id}/pods/", deps.ClusterResources.Workloads.ListPods)
+			r.Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.ClusterResources.Workloads.DeletePod)
+			r.Get("/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/", deps.ClusterResources.Workloads.PodLogs)
 		})
 	}
 
 	if deps.ClusterResources.ServiceProxy != nil {
 		r.With(
 			requireServiceProxyScope(),
-			requireServiceProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries),
 		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/", toolUIEntry(deps.CoreAuth.ToolUI, "service"))
 		r.With(
 			requireServiceProxyScope(),
-			requireServiceProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries),
 		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", toolUIEntry(deps.CoreAuth.ToolUI, "service"))
 	}
 

@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"time"
 
+	digest "github.com/opencontainers/go-digest"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
-	digest "github.com/opencontainers/go-digest"
 )
 
 type DatabaseExportCommandOptions struct{ OutputDirectory, FeedDigest string }

@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -34,15 +35,15 @@ type projectBindingLister interface {
 // One row is enough to answer "do any exist", so this is a LIMIT 1 read, not a
 // count. Any error is swallowed: a warning must never keep the server from
 // starting.
-func warnInertProjectBindings(ctx context.Context, q projectBindingLister, namespaceScopedRBAC bool, logger *slog.Logger) {
-	if namespaceScopedRBAC || q == nil || logger == nil {
+func warnInertProjectBindings(ctx context.Context, q projectBindingLister, namespaceScopedRBAC bool, logger zerolog.Logger) {
+	if namespaceScopedRBAC || q == nil {
 		return
 	}
 	rows, err := q.ListProjectRoleBindings(ctx, sqlc.ListProjectRoleBindingsParams{Limit: 1, Offset: 0})
 	if err != nil || len(rows) == 0 {
 		return
 	}
-	logger.Warn("project role bindings exist but namespace-scoped RBAC is disabled: " +
+	logger.Warn().Msg("project role bindings exist but namespace-scoped RBAC is disabled: " +
 		"project members can still reach namespace-explicit paths (the project→namespace expansion is not gated on this flag), " +
 		"but they are 403'd off cluster-wide list/watch routes (workloads, pods, namespaces, events) instead of getting a filtered page, " +
 		"and kubectl-shell sessions are not scoped to the caller's grants. " +

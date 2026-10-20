@@ -43,14 +43,15 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // MaxClusterGroupDepth is the inclusive cap on tree depth (depth 0 ==
@@ -370,7 +371,7 @@ func (h *ClusterGroupHandler) isDescendant(ctx context.Context, root, candidate 
 func (h *ClusterGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.ListClusterGroupsAsTree(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster groups")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cluster groups")
 		return
 	}
 	// Per-node cluster counts in ONE grouped rollup query instead of the old
@@ -414,16 +415,16 @@ func (h *ClusterGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster group ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster group ID")
 		return
 	}
 	g, err := h.queries.GetClusterGroupByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster group not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster group not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load cluster group")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to load cluster group")
 		return
 	}
 	resp := clusterGroupToResponse(g)
@@ -440,17 +441,17 @@ func (h *ClusterGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateClusterGroupRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	slug, err := validateClusterGroupCommon(req.Name, req.Slug, req.Color, req.Icon)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidField, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidField, err.Error())
 		return
 	}
 	parent, parentDepth, err := h.resolveParent(r.Context(), req.ParentID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidParent, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidParent, err.Error())
 		return
 	}
 	// Depth cap: parentDepth == -1 means "no parent" (depth 0); otherwise
@@ -460,7 +461,7 @@ func (h *ClusterGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		newDepth = parentDepth + 1
 	}
 	if newDepth > MaxClusterGroupDepth {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MaxDepth,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MaxDepth,
 			fmt.Sprintf("Cluster group tree depth is capped at %d (root + %d levels)", MaxClusterGroupDepth, MaxClusterGroupDepth))
 
 		return
@@ -495,10 +496,10 @@ func (h *ClusterGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.Conflict, "A cluster group with this slug already exists under the same parent")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.Conflict, "A cluster group with this slug already exists under the same parent")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster group")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create cluster group")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, clusterGroupToResponse(g))
@@ -508,31 +509,31 @@ func (h *ClusterGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster group ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster group ID")
 		return
 	}
 	existing, err := h.queries.GetClusterGroupByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster group not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster group not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load cluster group")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to load cluster group")
 		return
 	}
 	var req UpdateClusterGroupRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	slug, err := validateClusterGroupCommon(req.Name, req.Slug, req.Color, req.Icon)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidField, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidField, err.Error())
 		return
 	}
 	parent, parentDepth, err := h.resolveParent(r.Context(), req.ParentID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidParent, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidParent, err.Error())
 		return
 	}
 	// Reject the four pathological reparent cases:
@@ -543,16 +544,16 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if parent.Valid {
 		newParentID := uuid.UUID(parent.Bytes)
 		if newParentID == id {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidParent, "A group cannot be its own parent")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidParent, "A group cannot be its own parent")
 			return
 		}
 		descendant, err := h.isDescendant(r.Context(), id, newParentID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to validate parent chain")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to validate parent chain")
 			return
 		}
 		if descendant {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidParent, "A group cannot be parented under its own descendant")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidParent, "A group cannot be parented under its own descendant")
 			return
 		}
 	}
@@ -561,7 +562,7 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 		newDepth = parentDepth + 1
 	}
 	if newDepth > MaxClusterGroupDepth {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MaxDepth,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MaxDepth,
 			fmt.Sprintf("Cluster group tree depth is capped at %d (root + %d levels)", MaxClusterGroupDepth, MaxClusterGroupDepth))
 
 		return
@@ -574,11 +575,11 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if parent.Valid {
 		height, err := h.subtreeHeight(r.Context(), id)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to validate subtree depth")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to validate subtree depth")
 			return
 		}
 		if newDepth+height > MaxClusterGroupDepth {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.MaxDepth,
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MaxDepth,
 				fmt.Sprintf("Cluster group tree depth is capped at %d (root + %d levels)", MaxClusterGroupDepth, MaxClusterGroupDepth))
 
 			return
@@ -614,10 +615,10 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.Conflict, "A cluster group with this slug already exists under the same parent")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.Conflict, "A cluster group with this slug already exists under the same parent")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster group")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update cluster group")
 		return
 	}
 	RespondJSON(w, http.StatusOK, clusterGroupToResponse(g))
@@ -633,16 +634,16 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster group ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster group ID")
 		return
 	}
 	g, err := h.queries.GetClusterGroupByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster group not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster group not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load cluster group")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to load cluster group")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -676,7 +677,7 @@ func (h *ClusterGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return events
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete cluster group")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete cluster group")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -691,20 +692,20 @@ func (h *ClusterGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *ClusterGroupHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster group ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster group ID")
 		return
 	}
 	if _, err := h.queries.GetClusterGroupByID(r.Context(), id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster group not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster group not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load cluster group")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to load cluster group")
 		return
 	}
 	clusters, err := h.queries.ListClustersInGroupTree(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters in group")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters in group")
 		return
 	}
 	// Clamp the response so a huge group tree can't force multi-MB JSON
@@ -732,16 +733,16 @@ func (h *ClusterGroupHandler) ListClusters(w http.ResponseWriter, r *http.Reques
 func (h *ClusterGroupHandler) MoveClusters(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster group ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster group ID")
 		return
 	}
 	g, err := h.queries.GetClusterGroupByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster group not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster group not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load cluster group")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to load cluster group")
 		return
 	}
 	var req MoveClustersRequest
@@ -785,7 +786,7 @@ func (h *ClusterGroupHandler) MoveClusters(w http.ResponseWriter, r *http.Reques
 			return events
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to move clusters into group")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to move clusters into group")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{

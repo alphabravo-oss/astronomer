@@ -155,7 +155,6 @@ export default function SCIMTokensPage() {
           Back to Auth
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · Auth · SCIM"
           title="SCIM Provisioning Tokens"
           description={
             <>

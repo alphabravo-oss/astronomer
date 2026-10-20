@@ -13,9 +13,10 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/mod/semver"
+
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
-	"golang.org/x/mod/semver"
 )
 
 // InitialInstallation contains only independently observed initial bindings.

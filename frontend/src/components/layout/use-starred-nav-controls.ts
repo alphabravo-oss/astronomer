@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 import { useUserPreferences } from "@/lib/user-preferences";
 import { toastApiError } from "@/lib/toast";
-import type { StarredNavControls } from "./sidebar-nav-items";
+
+export interface StarredNavControls {
+  types: readonly string[];
+  disabled: boolean;
+  toggle: (resourceType: string) => void;
+}
 
 export function useStarredNavControls(): StarredNavControls {
   const {

@@ -1,12 +1,14 @@
 package handler
 
 import (
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/google/uuid"
+
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 func TestCursorRequestEmptyInitialAndInvalidContinuation(t *testing.T) {

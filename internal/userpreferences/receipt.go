@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
-	"github.com/google/uuid"
 )
 
 const preferenceReceiptTable = "user_preferences:v1"

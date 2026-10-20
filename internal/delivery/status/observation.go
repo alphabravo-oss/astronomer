@@ -3,8 +3,9 @@ package status
 import (
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // Legacy agents have no source freshness contract: retain documented receipt

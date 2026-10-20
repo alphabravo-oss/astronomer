@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 const systemLoggingOutputName = "Astronomer logs"
@@ -147,7 +149,7 @@ func rejectSystemOutputMutation(w http.ResponseWriter, r *http.Request, output s
 	if !output.IsSystem {
 		return false
 	}
-	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 		fmt.Sprintf("System logging destinations cannot be %s", action))
 	return true
 }
@@ -300,7 +302,7 @@ func (h *LoggingHandler) attachLokiBearer(ctx context.Context, env *loggingOpera
 	if err != nil {
 		return fmt.Errorf("load ingest token: %w", err)
 	}
-	plain, err := h.encryptor.Decrypt(tok.TokenEncrypted)
+	plain, err := h.encryptor.DecryptString(crypto.FromParts(tok.TokenKeyID, tok.TokenAlgorithm, tok.TokenCiphertext, tok.TokenNonce))
 	if err != nil {
 		return fmt.Errorf("decrypt ingest token: %w", err)
 	}

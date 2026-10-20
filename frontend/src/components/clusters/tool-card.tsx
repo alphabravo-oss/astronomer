@@ -1,3 +1,5 @@
+import { OfferingSupport } from "@/components/catalog/offering-support";
+import type { OfferingSupport as Support } from "@/lib/catalogs/assurance";
 import { normalizeToolStatus } from "@/lib/tool-status";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { ClusterTool, ClusterToolStatus, ToolStatus } from "@/types";
@@ -36,6 +38,7 @@ const statusToBadge: Record<ToolStatus, { status: string; label: string }> = {
 
 interface ToolCardProps {
   tool: ClusterTool;
+  support?: Support;
   toolStatus?: ClusterToolStatus;
   onInstall: (slug: string) => void;
   onUpgrade?: (slug: string) => void;
@@ -53,6 +56,7 @@ interface ToolCardProps {
 
 export function ToolCard({
   tool,
+  support,
   toolStatus,
   onInstall,
   onUpgrade,
@@ -111,25 +115,13 @@ export function ToolCard({
         />
       </div>
 
+      <OfferingSupport support={support} />
+
       {/* Description */}
       <p className="text-xs text-muted-foreground line-clamp-2">
         {tool.description}
       </p>
-      {tool.charts.length > 1 && (
-        <ol
-          aria-label={`${tool.name} releases`}
-          className="text-xs text-muted-foreground space-y-1"
-        >
-          {[...tool.charts]
-            .sort((a, b) => a.order - b.order)
-            .map((chart, index) => (
-              <li key={`${chart.namespace}/${chart.chartName}`}>
-                {index + 1}. {chart.releaseName ?? chart.chartName} ·{" "}
-                {chart.version ?? tool.versionConstraint}
-              </li>
-            ))}
-        </ol>
-      )}
+      <ToolReleaseList tool={tool} />
 
       {/* Error message */}
       {status === "failed" && toolStatus?.error && (
@@ -289,5 +281,27 @@ export function ToolCard({
         )}
       </div>
     </div>
+  );
+}
+
+function ToolReleaseList({ tool }: { tool: ClusterTool }) {
+  return (
+    <>
+      {tool.charts.length > 1 && (
+        <ol
+          aria-label={`${tool.name} releases`}
+          className="text-xs text-muted-foreground space-y-1"
+        >
+          {[...tool.charts]
+            .sort((a, b) => a.order - b.order)
+            .map((chart, index) => (
+              <li key={`${chart.namespace}/${chart.chartName}`}>
+                {index + 1}. {chart.releaseName ?? chart.chartName} ·{" "}
+                {chart.version ?? tool.versionConstraint}
+              </li>
+            ))}
+        </ol>
+      )}
+    </>
   );
 }

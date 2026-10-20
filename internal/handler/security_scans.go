@@ -9,16 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // securityScanScopeQuerier is the production query surface required by
@@ -80,18 +81,18 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list security scans")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list security scans")
 		return
 	}
 
 	scoped, ok := h.queries.(securityScanScopeQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Security scan authorization is not configured")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Security scan authorization is not configured")
 		return
 	}
 	total, err := scoped.CountSecurityScanResultsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count security scans")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count security scans")
 		return
 	}
 
@@ -106,13 +107,13 @@ func (h *SecurityHandler) GetScan(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid scan ID")
 		return
 	}
 
 	scoped, ok := h.queries.(securityScanScopeQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Security scan authorization is not configured")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Security scan authorization is not configured")
 		return
 	}
 	scan, err := scoped.GetSecurityScanResultByClusterAndID(r.Context(), sqlc.GetSecurityScanResultByClusterAndIDParams{
@@ -120,7 +121,7 @@ func (h *SecurityHandler) GetScan(w http.ResponseWriter, r *http.Request) {
 		ID:        id,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security scan not found")
 		return
 	}
 
@@ -138,11 +139,11 @@ func (h *SecurityHandler) CancelScan(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid scan ID")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	var scan sqlc.SecurityScanResult
@@ -159,27 +160,27 @@ func (h *SecurityHandler) CancelScan(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		scoped, scopedOK := h.queries.(securityScanScopeQuerier)
 		if !scopedOK {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Security scan authorization is not configured")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Security scan authorization is not configured")
 			return
 		}
 		existing, getErr := scoped.GetSecurityScanResultByClusterAndID(r.Context(), sqlc.GetSecurityScanResultByClusterAndIDParams{ClusterID: clusterID, ID: id})
 		if errors.Is(getErr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security scan not found")
 			return
 		}
 		if getErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load security scan")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load security scan")
 			return
 		}
 		if existing.Status == "cancelled" {
 			RespondJSON(w, http.StatusOK, scanWithFindings(existing))
 			return
 		}
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Security scan is already terminal")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Security scan is already terminal")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.StatusError, "Failed to cancel security scan")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.StatusError, "Failed to cancel security scan")
 		return
 	}
 	h.publishCISScanChanged(clusterID, scan.ID)
@@ -196,7 +197,7 @@ func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
 	offset := queryOffset32(r)
 	all, clusterIDs, err := h.securityScanVisibility(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	var scans []sqlc.SecurityScanResult
@@ -209,7 +210,7 @@ func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
 	} else {
 		scoped, ok := h.queries.(securityEstateScanScopeQuerier)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped security scan pagination is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Scoped security scan pagination is unavailable")
 			return
 		}
 		scans, err = scoped.ListSecurityScanResultsForScopes(r.Context(), sqlc.ListSecurityScanResultsForScopesParams{
@@ -220,7 +221,7 @@ func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list security scans")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list security scans")
 		return
 	}
 	paging.Write(w, scans, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(scans)))
@@ -273,16 +274,16 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ClusterID == uuid.Nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cluster_id is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cluster_id is required")
 		return
 	}
 	if h.k8s == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "CIS scan tunnel runtime is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "CIS scan tunnel runtime is unavailable")
 		return
 	}
 	lifecycle, ok := h.queries.(securityScanLifecycleQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "CIS scan lifecycle is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "CIS scan lifecycle is not configured")
 		return
 	}
 
@@ -337,7 +338,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 		AuditCorrelationID:   reqctx.CorrelationID(r.Context()),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create security scan")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create security scan")
 		return
 	}
 	scan := securityScanResultFromCreate(created)
@@ -352,7 +353,7 @@ func (h *SecurityHandler) CreateScan(w http.ResponseWriter, r *http.Request) {
 			h.log.Error("record ClusterScan creation failure", "scan_id", scan.ID.String(), "error", failErr)
 		}
 		h.publishCISScanChanged(req.ClusterID, scan.ID)
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.CRCreateError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.CRCreateError, err.Error())
 		return
 	}
 

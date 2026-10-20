@@ -10,12 +10,13 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 func descriptorFixture(t *testing.T, fixture *registryFixture, signer signature.Signer, mutation string) ([]byte, string, string, map[string]bool) {

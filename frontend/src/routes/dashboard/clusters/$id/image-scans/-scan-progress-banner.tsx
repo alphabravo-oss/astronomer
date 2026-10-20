@@ -52,7 +52,8 @@ export function ScanProgressBanner({
             isn&apos;t installed here — so there are no vulnerability reports.
             If you already use a different scanner (e.g. NeuVector), you can
             ignore this. To turn on Astronomer scanning, install Trivy from the
-            Tools tab; reports appear within the first scan window (~5–15 min).
+            Tools page; reports appear within the first scan window
+            (~5–15 min).
           </div>
           <a
             href={`/dashboard/clusters/${clusterId}/tools`}

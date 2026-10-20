@@ -1,6 +1,0 @@
-=== RUN   TestCatalogPaginationCeilingMustProgressOrReject
-    pagination_progress_test.go:43: accepted continuation repeated ceiling page: status200 first=chart-10000 next=chart-10000
---- FAIL: TestCatalogPaginationCeilingMustProgressOrReject (0.05s)
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	0.099s
-FAIL

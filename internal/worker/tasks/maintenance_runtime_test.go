@@ -5,26 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
 func completeMaintenanceRuntime(t *testing.T) MaintenanceRuntime {
 	t.Helper()
-	key, err := auth.GenerateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
-	encryptor, err := auth.NewEncryptor(key)
-	if err != nil {
-		t.Fatal(err)
-	}
 	return MaintenanceRuntime{
 		AgentTokens: AgentTokenRotateDeps{Queries: &fakeAgentTokenRotateQuerier{}},
-		PlaintextCredentials: PlaintextCredentialMigrationDeps{
-			Queries: &fakePlaintextCredentialMigrationQuerier{}, Encryptor: encryptor,
-		},
 	}
 }
 
@@ -34,8 +22,7 @@ func TestMaintenanceRuntimeRejectsMissingAndTypedNilDependencies(t *testing.T) {
 		t.Fatal("empty maintenance runtime validated successfully")
 	}
 	for _, dependency := range []string{
-		"agent_tokens.queries", "plaintext_credentials.queries",
-		"plaintext_credentials.encryptor",
+		"agent_tokens.queries",
 	} {
 		if !strings.Contains(err.Error(), dependency) {
 			t.Errorf("validation error %q does not report %s", err, dependency)
@@ -56,14 +43,14 @@ func TestMaintenanceRuntimeBindsCompleteHandlerFamily(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, taskType := range []string{
-		AgentTokenRotateSweepType, PlaintextCredentialMigrationType,
+		AgentTokenRotateSweepType,
 	} {
 		if bindings[taskType] == nil {
 			t.Errorf("handler %q is not bound", taskType)
 		}
 	}
-	if len(bindings) != 2 {
-		t.Fatalf("handler bindings = %d, want 2", len(bindings))
+	if len(bindings) != 1 {
+		t.Fatalf("handler bindings = %d, want 1", len(bindings))
 	}
 }
 

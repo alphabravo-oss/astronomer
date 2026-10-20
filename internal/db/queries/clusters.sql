@@ -393,13 +393,8 @@ RETURNING *;
 UPDATE cluster_health_statuses SET last_metrics_at = now() WHERE cluster_id = $1;
 
 -- name: CreateClusterRegistrationToken :one
-INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
-VALUES (
-    sqlc.arg(cluster_id),
-    sqlc.arg(token)::text,
-    COALESCE(NULLIF(sqlc.arg(token_hash)::text, ''), encode(digest(sqlc.arg(token)::text, 'sha256'), 'hex')),
-    sqlc.arg(expires_at)
-)
+INSERT INTO cluster_registration_tokens (cluster_id, token_hash, expires_at)
+VALUES (sqlc.arg(cluster_id), sqlc.arg(token_hash), sqlc.arg(expires_at))
 RETURNING *;
 
 -- name: GetRegistrationTokenByToken :one
@@ -410,10 +405,11 @@ RETURNING *;
 -- the registration branch of validateAndMaybeRotateToken denies any token
 -- created at/before that adoption. ORDER BY created_at DESC LIMIT 1 keeps this
 -- :one deterministic when several un-expired tokens coexist (re-import mints a
--- new one before the old expires). The legacy `OR (token_hash='' AND token=$1)`
--- branch matches pre-093 plaintext rows; backfill removal is out of A3 scope.
+-- new one before the old expires).
+-- Only the SHA-256 hash is stored; the plaintext token column was dropped in
+-- migration 00082.
 SELECT * FROM cluster_registration_tokens
-WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex') OR (token_hash = '' AND token = $1::text))
+WHERE token_hash = encode(digest($1::text, 'sha256'), 'hex')
   AND expires_at > now()
 ORDER BY created_at DESC
 LIMIT 1;
@@ -431,21 +427,14 @@ SELECT * FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL;
 -- a revoked row matches neither branch.
 SELECT * FROM cluster_agent_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
-   OR (token_hash = '' AND token = $1::text)
    OR (previous_token_hash IS NOT NULL
        AND previous_token_hash = encode(digest($1::text, 'sha256'), 'hex')))
   AND revoked_at IS NULL;
 
 -- name: UpsertClusterAgentToken :one
-INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
-VALUES (
-    sqlc.arg(cluster_id),
-    sqlc.arg(token)::text,
-    COALESCE(NULLIF(sqlc.arg(token_hash)::text, ''), encode(digest(sqlc.arg(token)::text, 'sha256'), 'hex')),
-    now()
-)
+INSERT INTO cluster_agent_tokens (cluster_id, token_hash, last_used_at)
+VALUES (sqlc.arg(cluster_id), sqlc.arg(token_hash), now())
 ON CONFLICT (cluster_id) DO UPDATE SET
-    token = EXCLUDED.token,
     token_hash = EXCLUDED.token_hash,
     last_used_at = now(),
     revoked_at = NULL,
@@ -465,12 +454,11 @@ UPDATE cluster_agent_tokens SET adopted_at = now() WHERE id = $1 AND adopted_at 
 -- name: RotateClusterAgentToken :one
 -- Performs the grace rotation atomically: the current token_hash moves to
 -- previous_token_hash (so the old token keeps validating until the agent
--- adopts the new one), token/token_hash become the freshly-minted values,
+-- adopts the new one), token_hash becomes the freshly-minted values,
 -- last_rotated_at is stamped and rotation_pending_at is cleared.
 UPDATE cluster_agent_tokens
 SET previous_token_hash = token_hash,
-    token = sqlc.arg(token)::text,
-    token_hash = COALESCE(NULLIF(sqlc.arg(token_hash)::text, ''), encode(digest(sqlc.arg(token)::text, 'sha256'), 'hex')),
+    token_hash = sqlc.arg(token_hash),
     last_used_at = now(),
     last_rotated_at = now(),
     rotation_pending_at = NULL,
@@ -544,13 +532,15 @@ DELETE FROM cluster_registration_tokens WHERE expires_at < now() OR (is_used = t
 SELECT * FROM cluster_registry_configs WHERE cluster_id = $1;
 
 -- name: UpsertClusterRegistryConfig :one
-INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce, insecure, ca_bundle)
+VALUES ($1, $2, $3, $4, $7, $8, $9, $5, $6)
 ON CONFLICT (cluster_id) DO UPDATE SET
     private_registry_url = EXCLUDED.private_registry_url,
     registry_username = EXCLUDED.registry_username,
-    registry_password = EXCLUDED.registry_password,
-    registry_password_encrypted = EXCLUDED.registry_password_encrypted,
+    registry_password_key_id = EXCLUDED.registry_password_key_id,
+    registry_password_algorithm = EXCLUDED.registry_password_algorithm,
+    registry_password_ciphertext = EXCLUDED.registry_password_ciphertext,
+    registry_password_nonce = EXCLUDED.registry_password_nonce,
     insecure = EXCLUDED.insecure,
     ca_bundle = EXCLUDED.ca_bundle
 RETURNING *;
@@ -581,28 +571,29 @@ INSERT INTO cluster_registry_configs (
     cluster_id,
     private_registry_url,
     registry_username,
-    registry_password,
-    registry_password_encrypted,
+    registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce,
     insecure,
     ca_bundle,
     namespaces,
     inject_default_sa,
     secret_name
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $10, $11, $12, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpdateClusterRegistryConfig :one
 UPDATE cluster_registry_configs SET
     private_registry_url = $2,
     registry_username    = $3,
-    registry_password    = $4,
-    registry_password_encrypted = $5,
-    insecure             = $6,
-    ca_bundle            = $7,
-    namespaces           = $8,
-    inject_default_sa    = $9,
-    secret_name          = $10,
+    registry_password_key_id = $4,
+    registry_password_algorithm = $10,
+    registry_password_ciphertext = $11,
+    registry_password_nonce = $12,
+    insecure             = $5,
+    ca_bundle            = $6,
+    namespaces           = $7,
+    inject_default_sa    = $8,
+    secret_name          = $9,
     updated_at           = now()
 WHERE id = $1
 RETURNING *;

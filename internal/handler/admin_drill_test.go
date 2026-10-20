@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // fakeDrillQuerier is the minimal AdminDrillQuerier the tests need.
@@ -70,7 +71,7 @@ func (f *fakeDrillQuerier) GetManagementBackupDestination(_ context.Context, id 
 func (f *fakeDrillQuerier) CreateManagementBackupDestination(_ context.Context, arg sqlc.CreateManagementBackupDestinationParams) (sqlc.ManagementBackupDestination, error) {
 	row := sqlc.ManagementBackupDestination{
 		ID: uuid.New(), Name: arg.Name, Bucket: arg.Bucket, Prefix: arg.Prefix,
-		Region: arg.Region, EndpointUrl: arg.EndpointUrl, EncryptedCredentials: arg.EncryptedCredentials,
+		Region: arg.Region, EndpointUrl: arg.EndpointUrl, CredentialsKeyID: arg.CredentialsKeyID, CredentialsAlgorithm: arg.CredentialsAlgorithm, CredentialsCiphertext: arg.CredentialsCiphertext, CredentialsNonce: arg.CredentialsNonce,
 		Schedule: arg.Schedule, Enabled: arg.Enabled, KeepDaily: arg.KeepDaily, KeepWeekly: arg.KeepWeekly,
 		KeepMonthly: arg.KeepMonthly, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
@@ -81,7 +82,8 @@ func (f *fakeDrillQuerier) UpdateManagementBackupDestination(_ context.Context, 
 	for i, d := range f.destinations {
 		if d.ID == arg.ID {
 			d.Name, d.Bucket, d.Prefix, d.Region = arg.Name, arg.Bucket, arg.Prefix, arg.Region
-			d.EndpointUrl, d.EncryptedCredentials = arg.EndpointUrl, arg.EncryptedCredentials
+			d.EndpointUrl = arg.EndpointUrl
+			d.CredentialsKeyID, d.CredentialsAlgorithm, d.CredentialsCiphertext, d.CredentialsNonce = arg.CredentialsKeyID, arg.CredentialsAlgorithm, arg.CredentialsCiphertext, arg.CredentialsNonce
 			d.Schedule, d.Enabled = arg.Schedule, arg.Enabled
 			d.KeepDaily, d.KeepWeekly, d.KeepMonthly = arg.KeepDaily, arg.KeepWeekly, arg.KeepMonthly
 			f.destinations[i] = d

@@ -344,7 +344,7 @@ function findingColumns(expanded: ReadonlySet<string>): Column<CISFinding>[] {
       accessor: (row) => (
         <span
           className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase tracking-wide",
+"inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium",
             severityClass(row.severity),
           )}
         >
@@ -361,7 +361,7 @@ function findingColumns(expanded: ReadonlySet<string>): Column<CISFinding>[] {
       accessor: (row) => (
         <span
           className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
+"inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium",
             findingStatusClass(row.status),
           )}
         >
@@ -510,7 +510,7 @@ function FindingsSection({
                   </span>
                   <span
                     className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
+"inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium",
                       severityClass(f.severity),
                     )}
                   >
@@ -518,7 +518,7 @@ function FindingsSection({
                   </span>
                   <span
                     className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
+"inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium",
                       findingStatusClass(f.status),
                     )}
                   >
@@ -536,7 +536,7 @@ function FindingsSection({
                 <p className="text-sm text-foreground">{f.description}</p>
                 {f.remediation && (
                   <div>
-                    <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    <p className="text-2xs font-medium text-muted-foreground mb-1">
                       Remediation
                     </p>
                     <p className="text-xs text-foreground whitespace-pre-wrap">
@@ -574,7 +574,7 @@ function FilterPills<T extends string>({
           key={String(opt)}
           onClick={() => onChange(opt)}
           className={cn(
-            "px-2 py-0.5 rounded-sm text-2xs font-medium uppercase transition-colors",
+"px-2 py-0.5 rounded-sm text-2xs font-medium transition-colors",
             value === opt
               ? "bg-foreground text-background"
               : "text-muted-foreground hover:text-foreground",

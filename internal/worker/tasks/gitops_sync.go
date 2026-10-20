@@ -53,6 +53,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/gitops"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // GitOpsSyncType owns both the empty-payload periodic sweep and durable,
@@ -178,13 +179,10 @@ type GitOpsQuerier interface {
 	CreateAuditLogV1(ctx context.Context, arg sqlc.CreateAuditLogV1Params) error
 }
 
-// GitOpsDecryptor unwraps the encrypted-at-rest git auth blob
-// (auth_encrypted). The production implementation is *auth.Encryptor;
-// tests pass a stub that returns the input verbatim. Mirrors
-// CloudCredentialDecryptor so the worker never imports the auth package
-// directly.
+// GitOpsDecryptor opens the sealed git auth family (auth_*). The production
+// implementation is *crypto.Encryptor.
 type GitOpsDecryptor interface {
-	Decrypt(token string) (string, error)
+	DecryptString(sealed crypto.Sealed) (string, error)
 }
 
 // GitOpsEnqueuer matches the asynq.Client surface used to enqueue
@@ -199,8 +197,8 @@ type GitOpsDeps struct {
 	Queries    GitOpsQuerier
 	Enqueuer   GitOpsEnqueuer
 	TaskOutbox TaskOutboxWriter
-	// Decryptor unwraps the source's auth_encrypted blob before it's
-	// handed to go-git. Without it, only legacy plaintext is accepted.
+	// Decryptor opens the source's sealed auth before it is handed to
+	// go-git. Without it, credentialed sources fail.
 	Decryptor GitOpsDecryptor
 	Log       *slog.Logger
 	CloneRoot string // overrides GitOpsCloneRoot when non-empty
@@ -717,30 +715,26 @@ func branchOrDefault(b string) string {
 	return b
 }
 
-// buildGitAuth resolves the auth_encrypted blob into a go-git auth method.
-// The blob is a Fernet ciphertext in production (written by the handler's
-// SetEncryptor path); it is decrypted here before being handed to go-git
-// as the https_token password or the ssh_key PEM. When no decryptor is
-// wired — or the value is already plaintext (dev / pre-encryption rows) —
-// the stored value is used verbatim.
+// buildGitAuth opens the sealed auth family into a go-git auth method: the
+// https_token password or the ssh_key PEM.
 func (runtime GitOpsRuntime) buildGitAuth(src sqlc.GitopsRegistrationSource) (transport.AuthMethod, error) {
 	switch src.AuthMode {
 	case "", "none":
 		return nil, nil
 	case "https_token":
-		if src.AuthEncrypted == "" {
-			return nil, fmt.Errorf("source %q is https_token but auth_encrypted is empty", src.Name)
+		if src.AuthKeyID == "" {
+			return nil, fmt.Errorf("source %q is https_token but has no sealed credential", src.Name)
 		}
-		credential, err := runtime.decryptGitAuth(src.AuthEncrypted)
+		credential, err := runtime.decryptGitAuth(src)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt source %q HTTPS credential: %w", src.Name, err)
 		}
 		return &githttp.BasicAuth{Username: "astronomer-gitops", Password: credential}, nil
 	case "ssh_key":
-		if src.AuthEncrypted == "" {
-			return nil, fmt.Errorf("source %q is ssh_key but auth_encrypted is empty", src.Name)
+		if src.AuthKeyID == "" {
+			return nil, fmt.Errorf("source %q is ssh_key but has no sealed credential", src.Name)
 		}
-		credential, err := runtime.decryptGitAuth(src.AuthEncrypted)
+		credential, err := runtime.decryptGitAuth(src)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt source %q SSH credential: %w", src.Name, err)
 		}

@@ -3,19 +3,18 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
-func (h *ClusterHandler) encryptLegacyRegistryPassword(password string) (string, string, error) {
-	if h == nil || h.encryptor == nil || password == "" {
-		return password, "", nil
+func (h *ClusterHandler) encryptLegacyRegistryPassword(password string) (crypto.Sealed, error) {
+	var enc *crypto.Encryptor
+	if h != nil {
+		enc = h.encryptor
 	}
-	encrypted, err := h.encryptor.Encrypt(password)
-	if err != nil {
-		return "", "", err
-	}
-	return "", encrypted, nil
+	return sealRegistryPassword(enc, password)
 }
 
 // UpdateRegistryConfigRequest represents the request body for upserting registry config.
@@ -37,7 +36,7 @@ func (h *ClusterHandler) GetRegistryConfig(w http.ResponseWriter, r *http.Reques
 
 	config, err := h.queries.GetClusterRegistryConfig(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found for cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Registry config not found for cluster")
 		return
 	}
 
@@ -59,20 +58,19 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	registryPassword, registryPasswordEncrypted, err := h.encryptLegacyRegistryPassword(req.RegistryPassword)
+	registryPasswordEncrypted, err := h.encryptLegacyRegistryPassword(req.RegistryPassword)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt registry password")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt registry password")
 		return
 	}
 
 	params := sqlc.UpsertClusterRegistryConfigParams{
-		ClusterID:                 id,
-		PrivateRegistryUrl:        req.PrivateRegistryUrl,
-		RegistryUsername:          req.RegistryUsername,
-		RegistryPassword:          registryPassword,
-		RegistryPasswordEncrypted: registryPasswordEncrypted,
-		Insecure:                  req.Insecure,
-		CaBundle:                  req.CaBundle,
+		ClusterID:             id,
+		PrivateRegistryUrl:    req.PrivateRegistryUrl,
+		RegistryUsername:      req.RegistryUsername,
+		RegistryPasswordKeyID: registryPasswordEncrypted.KeyID, RegistryPasswordAlgorithm: registryPasswordEncrypted.Algorithm, RegistryPasswordCiphertext: registryPasswordEncrypted.Ciphertext, RegistryPasswordNonce: registryPasswordEncrypted.Nonce,
+		Insecure: req.Insecure,
+		CaBundle: req.CaBundle,
 	}
 	config, err := executeMutation(r, h.runTx,
 		func(q ClusterMutationTx) (sqlc.ClusterRegistryConfig, error) {
@@ -89,12 +87,12 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update registry config")
 		return
 	}
 
 	// Redact the secret before echoing back — the raw sqlc row carries both
-	// registry_password and registry_password_encrypted, which must never be
+	// registry_password and registry_password_* sealed, which must never be
 	// serialized (same reason GET uses the DTO mapper).
 	RespondJSON(w, http.StatusOK, clusterRegistryConfigToResponse(config))
 }
@@ -117,7 +115,7 @@ func (h *ClusterHandler) DeleteRegistryConfig(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete registry config")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

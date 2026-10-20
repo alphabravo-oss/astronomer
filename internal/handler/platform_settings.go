@@ -44,9 +44,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/platformsettings"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
@@ -137,7 +137,7 @@ var settingsRegistry = map[string]settingSpec{
 	platformsettings.ReadAuditTierKey:         {Type: typeEnum, Default: "standard", Description: "Read-audit coverage: standard uses configured policies; diagnostic adds a 10% sample of all authenticated reads; incident records all authenticated reads. No request or response bodies are recorded. Takes effect within 30 seconds", Enum: []string{"standard", "diagnostic", "incident"}},
 	"branding.product_name":                   {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
 	"branding.logo_url":                       {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
-	"branding.primary_color":                  {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
+	"branding.primary_color":                  {Type: typeString, Default: "", Description: "Primary brand color (hex); empty means not configured (the UI uses its theme default); applied as a CSS variable across the SPA"},
 	"branding.support_url":                    {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
 	"branding.copyright":                      {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
 	"banner.login_text":                       {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
@@ -279,12 +279,12 @@ func (h *PlatformSettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Settings store not configured")
 		return
 	}
 	rows, err := h.queries.ListPlatformSettings(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	rowByKey := make(map[string]sqlc.PlatformSetting, len(rows))
@@ -309,16 +309,16 @@ func (h *PlatformSettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.UnknownKey, "Unknown setting key")
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Settings store not configured")
 		return
 	}
 	row, err := h.queries.GetPlatformSetting(r.Context(), key)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, buildResponse(key, spec, row))
@@ -350,20 +350,20 @@ func (h *PlatformSettingsHandler) BatchUpdate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Settings store not configured")
 		return
 	}
 	var req platformSettingsBatchUpdateRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if len(req.Updates) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "updates must contain at least one setting")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "updates must contain at least one setting")
 		return
 	}
 	if len(req.Updates) > len(settingsRegistry) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "updates contains more settings than the platform registry")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "updates contains more settings than the platform registry")
 		return
 	}
 
@@ -376,32 +376,32 @@ func (h *PlatformSettingsHandler) BatchUpdate(w http.ResponseWriter, r *http.Req
 	for _, key := range keys {
 		spec, known := settingsRegistry[key]
 		if !known {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key: "+key)
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.UnknownKey, "Unknown setting key: "+key)
 			return
 		}
 		if key == "feature.charlie" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "feature.charlie must be updated independently so its runtime lifecycle can be coordinated")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "feature.charlie must be updated independently so its runtime lifecycle can be coordinated")
 			return
 		}
 		value := req.Updates[key]
 		if len(value) == 0 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "value is required for "+key)
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "value is required for "+key)
 			return
 		}
 		if err := validateValue(spec, value); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, key+": "+err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, key+": "+err.Error())
 			return
 		}
 		records = append(records, platformSettingBatchRecord{Key: key, Value: value, Description: spec.Description})
 	}
 	payload, err := json.Marshal(records)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode validated settings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to encode validated settings")
 		return
 	}
 	actor := currentUserUUID(r)
 	if !actor.Valid {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	rows, err := executeMutation(r, h.runTx,
@@ -419,7 +419,7 @@ func (h *PlatformSettingsHandler) BatchUpdate(w http.ResponseWriter, r *http.Req
 		},
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to save platform settings")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to save platform settings")
 		return
 	}
 	rowByKey := make(map[string]sqlc.PlatformSetting, len(rows))
@@ -449,24 +449,24 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.UnknownKey, "Unknown setting key")
 		return
 	}
 	var req updateRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if len(req.Value) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "value is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "value is required")
 		return
 	}
 	if err := validateValue(spec, req.Value); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Settings store not configured")
 		return
 	}
 
@@ -474,28 +474,28 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 	charlieTransition := 0 // -1 disabled, +1 enabled; compensated if DB commit fails.
 	if key == "feature.charlie" {
 		if h.charlieLifecycle == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Charlie feature lifecycle is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Charlie feature lifecycle is unavailable")
 			return
 		}
 		_ = json.Unmarshal(req.Value, &charlieEnabled)
 		previousEnabled, err := h.currentCharlieEnabled(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load Charlie feature state")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load Charlie feature state")
 			return
 		}
 		if charlieEnabled && !previousEnabled {
 			if err := requireCharlieAdminAudit(r, h.queries, "charlie.feature.enabled", "charlie_feature", "feature.charlie", map[string]any{"enabled": true}); err != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie feature authority audit is unavailable")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie feature authority audit is unavailable")
 				return
 			}
 			if err := h.charlieLifecycle.Enable(r.Context(), platformSettingActor(r)); err != nil {
-				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+				apiutil.WriteError(w, r, http.StatusConflict, apiutil.ValidationError, err.Error())
 				return
 			}
 			charlieTransition = 1
 		} else if !charlieEnabled && previousEnabled {
 			if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
-				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+				apiutil.WriteError(w, r, http.StatusConflict, apiutil.ValidationError, err.Error())
 				return
 			}
 			charlieTransition = -1
@@ -535,10 +535,10 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 		// an unavailable runtime. Restore the prior runtime posture if the
 		// setting/audit transaction cannot commit.
 		if compensationErr := h.compensateCharlieTransition(r.Context(), charlieTransition, platformSettingActor(r)); compensationErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Platform setting was not committed and Charlie runtime recovery did not complete")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Platform setting was not committed and Charlie runtime recovery did not complete")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to save platform setting")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to save platform setting")
 		return
 	}
 
@@ -560,27 +560,27 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 	key := chi.URLParam(r, "key")
 	spec, known := settingsRegistry[key]
 	if !known {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.UnknownKey, "Unknown setting key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.UnknownKey, "Unknown setting key")
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Settings store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Settings store not configured")
 		return
 	}
 	charlieTransition := false
 	if key == "feature.charlie" {
 		if h.charlieLifecycle == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Charlie feature lifecycle is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Charlie feature lifecycle is unavailable")
 			return
 		}
 		previousEnabled, err := h.currentCharlieEnabled(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load Charlie feature state")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load Charlie feature state")
 			return
 		}
 		if previousEnabled {
 			if err := h.charlieLifecycle.Disable(r.Context(), platformSettingActor(r)); err != nil {
-				RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, err.Error())
+				apiutil.WriteError(w, r, http.StatusConflict, apiutil.ValidationError, err.Error())
 				return
 			}
 			charlieTransition = true
@@ -607,11 +607,11 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		if charlieTransition {
 			if compensationErr := h.compensateCharlieTransition(r.Context(), -1, platformSettingActor(r)); compensationErr != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Platform setting was not reset and Charlie runtime recovery did not complete")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Platform setting was not reset and Charlie runtime recovery did not complete")
 				return
 			}
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to reset platform setting")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to reset platform setting")
 		return
 	}
 	if h.cache != nil {
@@ -688,7 +688,7 @@ func (h *PlatformSettingsHandler) Features(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := h.queries.ListPlatformSettingsByPrefix(r.Context(), NamespaceFeature+".")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, featureSubsetResponse(rows))
@@ -703,7 +703,7 @@ func (h *PlatformSettingsHandler) servePublicNamespace(w http.ResponseWriter, r 
 	// check against the explicit allowlist so accidental additions to
 	// servePublicNamespace's callsites can't widen the exposure.
 	if _, ok := preAuthAllowedNamespaces[canonical]; !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown public settings namespace")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown public settings namespace")
 		return
 	}
 	if h.queries == nil {
@@ -714,7 +714,7 @@ func (h *PlatformSettingsHandler) servePublicNamespace(w http.ResponseWriter, r 
 	}
 	rows, err := h.queries.ListPlatformSettingsByPrefix(r.Context(), canonical+".")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, publicSubsetResponse(canonical, rows))

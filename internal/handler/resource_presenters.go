@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func flattenNamedResources(clusterID, resourceType string, payload map[string]any) []map[string]any {

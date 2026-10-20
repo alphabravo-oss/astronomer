@@ -1,0 +1,61 @@
+# Chart values that make the astronomer-dev release (live values in
+# live-values-astronomer-dev.yaml) render every object the 2026-10-20 runtime
+# hardening created by hand (/root/runtime-changes-20261020 on the host). Layer
+# it on top of the live values (helm upgrade --reuse-values -f <this file>) and
+# then delete the hand-made objects listed in each section.
+#
+# Replaces cnpg-backup/cnpg-kubeapi-egress.yaml, cnpg-backup/dr-jobs-db-netpol.yaml,
+# astronomer-offhost-s3-egress and astronomer-dr-jobs-offhost-s3-egress.
+networkPolicy:
+  # kubernetes Service ClusterIP + the node's public and Tailscale API endpoints.
+  kubernetesAPIEgressCIDRs: [10.43.0.1/32, 5.78.179.107/32, 100.86.167.87/32]
+  # RustFS on constellation-dev over Tailscale (S3 API on :9000).
+  objectStoreEgressCIDRs: [100.118.107.29/32]
+  objectStoreEgressPorts: [9000, 443]
+  walArchiveEgressCIDRs: [100.118.107.29/32]
+  walArchiveEgressPorts: [9000, 443]
+# Replaces cnpg-backup/objectstore-offhost.yaml (the ObjectStore only; the
+# offhost-rustfs-credentials Secret stays operator-managed). Adopt the existing
+# object before the upgrade:
+#   kubectl -n astronomer label objectstore offhost-archive app.kubernetes.io/managed-by=Helm
+#   kubectl -n astronomer annotate objectstore offhost-archive \
+#     meta.helm.sh/release-name=astronomer meta.helm.sh/release-namespace=astronomer
+postgres:
+  cloudNativePG:
+    barmanCloud:
+      objectStore:
+        create: true
+        destinationPath: s3://astronomer-recovery-offhost/
+        endpointURL: http://100.118.107.29:9000
+        region: us-east-1
+        s3Credentials:
+          accessKeyId: {name: offhost-rustfs-credentials, key: ACCESS_KEY_ID}
+          secretAccessKey: {name: offhost-rustfs-credentials, key: SECRET_ACCESS_KEY}
+        wal: {compression: gzip, maxParallel: 2}
+        data: {compression: gzip, jobs: 2}
+        retentionPolicy: 14d
+        retentionPolicyIntervalSeconds: 1800
+# The live values pin the drill sidecar to postgres:16-alpine; the restore
+# target must match the CNPG 17.11 server. (The astronomer-dr image itself
+# needs a release built from Dockerfile.dr with postgresql17-client.)
+managementRestoreDrill:
+  sidecar:
+    image:
+      repository: docker.io/library/postgres
+      tag: 17-alpine
+      digest: sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+# Replaces delivery/secret-astronomer-delivery-trust.yaml + delivery-trust-overlay.yaml:
+# the chart renders Secret astronomer-delivery-trust (same name, byte-identical
+# trusted_root.json). Adopt the hand-made Secret before the upgrade:
+#   kubectl -n astronomer label secret astronomer-delivery-trust app.kubernetes.io/managed-by=Helm
+#   kubectl -n astronomer annotate secret astronomer-delivery-trust \
+#     meta.helm.sh/release-name=astronomer meta.helm.sh/release-namespace=astronomer
+delivery:
+  sourceResolution:
+    trustKeys:
+      existingSecret: ""
+# ghcr.io/dexidp/dex carries Dex's keyless signature (docker.io does not);
+# same digest, so policy-controller can verify it instead of passing it.
+dex:
+  image:
+    repository: ghcr.io/dexidp/dex

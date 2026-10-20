@@ -6,34 +6,35 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func (h *ProjectHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	previous, updated, transferred, err := transferProjectOwnershipToAPI(r.Context(), h.queries, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		case errors.Is(err, errProjectOwnershipTransferUnsupported):
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Only CRD-owned projects can be transferred through this endpoint")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Only CRD-owned projects can be transferred through this endpoint")
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to transfer project ownership")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to transfer project ownership")
 		}
 		return
 	}

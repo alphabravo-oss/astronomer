@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 )
 
 // DatabasePublicationRegistry is a protected operator-constructor write client,

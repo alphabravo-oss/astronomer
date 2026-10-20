@@ -53,13 +53,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
+	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // DashboardQuerier is the narrow DB surface the handler reads + writes.
@@ -100,7 +102,7 @@ type DashboardHandler struct {
 	queries   DashboardQuerier
 	runTx     dashboardRunTxFunc
 	auditor   any
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	cache     *dashboards.Cache
 	// settingsCache lets the handler read dashboard.allowed_iframe_hosts
 	// at render time without hitting the DB on every request.
@@ -146,11 +148,11 @@ func (h *DashboardHandler) SetAuditor(a any) {
 	h.auditor = a
 }
 
-// SetEncryptor wires the Fernet encryptor used to seal datasource
-// auth secrets at rest. Optional: when nil the auth_encrypted column
+// SetEncryptor wires the age encryptor used to seal datasource
+// auth secrets at rest. Optional: when nil the auth_* sealed column
 // is written empty (no auth) and the /test/ endpoint returns 503
 // not_configured for any datasource with stored auth.
-func (h *DashboardHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *DashboardHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -330,7 +332,7 @@ type DatasourceResponse struct {
 	UpdatedAt     string    `json:"updated_at"`
 }
 
-// authBlob is the JSON shape inside the encrypted auth_encrypted
+// authBlob is the JSON shape inside the encrypted auth_* sealed
 // column. Storing all three fields in one blob means a future "add
 // scram-sha-256" doesn't need a migration.
 type authBlob struct {

@@ -373,7 +373,7 @@ export function useDataTableController<T extends RowData>({
     [columns, columnVisibility, columnOrder, pinning],
   );
   const leadWidth =
-    (selectable ? SELECT_COLUMN_WIDTH : 0) + (expandable ? 40 : 0);
+    (selectable ? SELECT_COLUMN_WIDTH : 0) + (expandable ? 32 : 0);
   const activePinning = useMemo(
     () => normalizePinning(pinning, new Set(activeColumns.map((c) => c.key))),
     [pinning, activeColumns],

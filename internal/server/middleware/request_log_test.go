@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
@@ -29,14 +30,11 @@ func (w *hijackableRequestLogRecorder) Flush() {}
 
 func TestRequestLoggerEmitsStructuredHTTPEvent(t *testing.T) {
 	var buf bytes.Buffer
-	previous := slog.Default()
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	slog.SetDefault(logger)
-	defer slog.SetDefault(previous)
+	logger := zerolog.New(&buf)
 
 	router := chi.NewRouter()
 	router.Use(RequestID)
-	router.Use(RequestLogger)
+	router.Use(RequestLogger(logger))
 	router.Get("/items/{id}", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	})
@@ -56,28 +54,28 @@ func TestRequestLoggerEmitsStructuredHTTPEvent(t *testing.T) {
 	if payload["correlation_id"] != "corr-123" {
 		t.Fatalf("correlation_id = %v, want corr-123", payload["correlation_id"])
 	}
-	if payload["request_id"] != "corr-123" {
-		t.Fatalf("request_id = %v, want corr-123", payload["request_id"])
+	if payload["route"] != "/items/{id}" || payload["method"] != http.MethodGet {
+		t.Fatalf("route/method = %v %v, want GET /items/{id}", payload["method"], payload["route"])
 	}
-	if payload["route_template"] != "/items/{id}" {
-		t.Fatalf("route_template = %v, want /items/{id}", payload["route_template"])
+	if payload["status"] != float64(http.StatusCreated) {
+		t.Fatalf("status = %v, want %d", payload["status"], http.StatusCreated)
 	}
-	if payload["status_code"] != float64(http.StatusCreated) {
-		t.Fatalf("status_code = %v, want %d", payload["status_code"], http.StatusCreated)
+	if _, ok := payload["duration_ms"]; !ok {
+		t.Fatalf("duration_ms missing: %v", payload)
+	}
+	if _, ok := payload["principal"]; ok {
+		t.Fatalf("anonymous request must not carry a principal: %v", payload)
 	}
 }
 
 func TestRequestLoggerEmitsActorClusterAndOperationIDs(t *testing.T) {
 	var buf bytes.Buffer
-	previous := slog.Default()
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	slog.SetDefault(logger)
-	defer slog.SetDefault(previous)
+	logger := zerolog.New(&buf)
 
 	user := &reqctx.User{ID: "user-123", AuthMethod: "jwt"}
 	router := chi.NewRouter()
 	router.Use(RequestID)
-	router.Use(RequestLogger)
+	router.Use(RequestLogger(logger))
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := reqctx.WithUser(r.Context(), user)
@@ -97,11 +95,11 @@ func TestRequestLoggerEmitsActorClusterAndOperationIDs(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal log: %v", err)
 	}
-	if payload["actor_id"] != "user-123" {
-		t.Fatalf("actor_id = %v, want user-123", payload["actor_id"])
+	if payload["principal"] != "user-123" {
+		t.Fatalf("principal = %v, want user-123", payload["principal"])
 	}
-	if payload["actor_auth_method"] != "jwt" {
-		t.Fatalf("actor_auth_method = %v, want jwt", payload["actor_auth_method"])
+	if payload["auth_method"] != "jwt" {
+		t.Fatalf("auth_method = %v, want jwt", payload["auth_method"])
 	}
 	if payload["cluster_id"] != "cluster-123" {
 		t.Fatalf("cluster_id = %v, want cluster-123", payload["cluster_id"])
@@ -112,7 +110,7 @@ func TestRequestLoggerEmitsActorClusterAndOperationIDs(t *testing.T) {
 }
 
 func TestRequestLoggerPreservesHijacker(t *testing.T) {
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := RequestLogger(zerolog.Nop())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {
 			t.Fatalf("wrapped response writer does not implement http.Hijacker")

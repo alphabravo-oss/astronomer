@@ -8,8 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // PublicKeySnapshot captures operator-mounted public trust before QA catalog

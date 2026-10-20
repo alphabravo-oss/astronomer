@@ -7,37 +7,40 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription id")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable webhook delivery storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Durable webhook delivery storage is unavailable")
 		return
 	}
 	sub, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Webhook subscription not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read webhook subscription")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read webhook subscription")
 		return
 	}
 	now := time.Now().UTC()
@@ -55,7 +58,7 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 		EventName:      "webhook.test_ping",
 		EventID:        uuid.New().String(),
 		Payload:        payload,
-		PayloadSize:    int32(len(payload)),
+		PayloadSize:    safeconv.Int32(len(payload)),
 		Status:         "queued",
 		NextAttemptAt:  pgtype.Timestamptz{Time: now, Valid: true},
 	}
@@ -106,10 +109,10 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different webhook delivery")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different webhook delivery")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to enqueue test delivery")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to enqueue test delivery")
 		return
 	}
 	RespondAcceptedOperation(w, webhookDeliveryLocation(sub.ID, result.delivery.ID), toDeliveryResponse(result.delivery))

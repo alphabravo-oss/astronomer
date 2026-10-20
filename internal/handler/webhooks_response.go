@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 )
 
 type mergedSettings struct {
@@ -157,7 +158,7 @@ func toSubscriptionResponse(row sqlc.WebhookSubscription) subscriptionResponse {
 		Name:             row.Name,
 		URL:              row.Url,
 		Secret:           SecretSentinel,
-		SecretConfigured: row.SecretEncrypted != "",
+		SecretConfigured: row.SecretKeyID != "",
 		EventFilters:     filters,
 		PayloadTemplate:  row.PayloadTemplate,
 		ExtraHeaders:     headers,

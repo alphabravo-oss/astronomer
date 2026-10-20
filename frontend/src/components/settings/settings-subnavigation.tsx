@@ -1,8 +1,6 @@
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 
-import { Link as RouterLink } from "@tanstack/react-router";
 import { useLocation } from "@tanstack/react-router";
-import { cn } from "@/lib/utils";
 import { canManageCharlie as hasCharlieManagement } from "@/components/charlie/admin-utils";
 import { useIsSuperuser } from "@/components/settings/hooks";
 import {
@@ -12,8 +10,9 @@ import {
 } from "@/components/settings/settings-navigation";
 import { useFeatureFlags } from "@/lib/hooks/clusters";
 import { useAuthStore } from "@/lib/store";
+import { SidebarGroup, SidebarItem } from "@/ui";
 
-function NavigationGroups({ onNavigate }: { onNavigate?: () => void }) {
+function NavigationGroups() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const user = useAuthStore((state) => state.user);
   const { isSuperuser } = useIsSuperuser();
@@ -25,44 +24,25 @@ function NavigationGroups({ onNavigate }: { onNavigate?: () => void }) {
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-2">
       {groups.map((group) => (
-        <section key={group.label} aria-labelledby={`settings-${group.label}`}>
-          <h2
-            id={`settings-${group.label}`}
-            className="mb-1 px-2 text-11 font-semibold uppercase tracking-wider text-muted-foreground"
-          >
-            {group.label}
-          </h2>
-          <div className="space-y-0.5">
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const active = settingsItemIsActive(pathname, item.href);
-              return (
-                <RouterLink
-                  key={item.href}
-                  to={item.href}
-                  onClick={onNavigate}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-9 items-center gap-2 rounded-md px-2 text-sm transition-colors",
-                    active
-                      ? "bg-accent font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{item.title}</span>
-                </RouterLink>
-              );
-            })}
-          </div>
-        </section>
+        <SidebarGroup key={group.label} label={group.label}>
+          {group.items.map((item) => (
+            <SidebarItem
+              key={item.href}
+              to={item.href}
+              icon={item.icon}
+              label={item.title}
+              active={settingsItemIsActive(pathname, item.href)}
+            />
+          ))}
+        </SidebarGroup>
       ))}
     </div>
   );
 }
 
+/** Second layer of Settings: a persistent page list (sentence-case groups). */
 export function SettingsSubnavigation() {
   return (
     <>
@@ -80,7 +60,7 @@ export function SettingsSubnavigation() {
       <aside className="hidden lg:block">
         <nav
           aria-label="Settings"
-          className="sticky top-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2"
+          className="sticky top-6 max-h-[calc(100vh-8rem)] overflow-y-auto pl-2 pr-2"
         >
           <NavigationGroups />
         </nav>

@@ -22,7 +22,7 @@ function DeliveryEstateLayout() {
         />
       )}
       <PageEyebrowProvider
-        value={`Continuous Delivery · ${
+        value={`Delivery · ${
           estate && inventory.allowed
             ? "All authorized clusters"
             : "Project scope"

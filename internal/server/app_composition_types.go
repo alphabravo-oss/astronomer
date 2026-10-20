@@ -1,6 +1,12 @@
 package server
 
 import (
+	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
@@ -26,11 +32,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
-	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // productionComposition is the explicit hand-off between dependency
@@ -48,7 +50,7 @@ type productionComposition struct {
 	database                             *db.DB
 	queries                              *sqlc.Queries
 	jwtManager                           *auth.JWTManager
-	encryptor                            *auth.Encryptor
+	encryptor                            *crypto.Encryptor
 	ssoManager                           *auth.SSOManager
 	bus                                  *events.Bus
 	hub                                  *tunnel.Hub

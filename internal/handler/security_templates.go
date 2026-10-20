@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // --- Request types ---
@@ -47,13 +48,13 @@ func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list security templates")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list security templates")
 		return
 	}
 
 	total, err := h.queries.CountPodSecurityTemplates(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count security templates")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count security templates")
 		return
 	}
 
@@ -97,7 +98,7 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 	}
 	var template sqlc.PodSecurityTemplate
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	err := h.runTx(r.Context(), func(q SecurityMutationTx) error {
@@ -112,7 +113,7 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create security template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create security template")
 		return
 	}
 
@@ -124,13 +125,13 @@ func (h *SecurityHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 func (h *SecurityHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid template ID")
 		return
 	}
 
 	template, err := h.queries.GetPodSecurityTemplateByID(r.Context(), id)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Security template not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Security template not found")
 		return
 	}
 
@@ -141,7 +142,7 @@ func (h *SecurityHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid template ID")
 		return
 	}
 
@@ -153,14 +154,14 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 		// missing default. Mirrors the platform-baseline guard on
 		// cluster_templates.
 		if existing.IsBuiltin {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinTemplate,
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.BuiltinTemplate,
 				fmt.Sprintf("%q is a built-in PSA template and cannot be deleted.", existing.Name))
 			return
 		}
 		templateName = existing.Name
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
@@ -170,7 +171,7 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 		return recordSecurityAuditOutbox(r, q, "security.template.delete", "pod_security_template", id.String(), templateName, http.StatusNoContent, nil)
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security template not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -180,20 +181,20 @@ func (h *SecurityHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid template ID")
 		return
 	}
 	// Refuse mutations to built-in PSA starter templates (mirrors the
 	// platform-baseline guard on cluster_templates). Loaded here so we can
 	// pre-empt the SQL UPDATE and return a clean 403.
 	if existing, gerr := h.queries.GetPodSecurityTemplateByID(r.Context(), id); gerr == nil && existing.IsBuiltin {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinTemplate,
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.BuiltinTemplate,
 			fmt.Sprintf("%q is a built-in PSA template and cannot be edited.", existing.Name))
 		return
 	}
 	var req CreateTemplateRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	params := sqlc.UpdatePodSecurityTemplateParams{
@@ -213,7 +214,7 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 	}
 	var template sqlc.PodSecurityTemplate
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
@@ -227,7 +228,7 @@ func (h *SecurityHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update security template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update security template")
 		return
 	}
 	RespondJSON(w, http.StatusOK, template)

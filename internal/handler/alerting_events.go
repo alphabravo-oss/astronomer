@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 type alertEventSummaryQuerier interface {
@@ -72,7 +73,7 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert events")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list alert events")
 		return
 	}
 
@@ -91,21 +92,21 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) EventSummary(w http.ResponseWriter, r *http.Request) {
 	store, ok := h.queries.(alertEventSummaryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Alert event summary store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Alert event summary store is not available")
 		return
 	}
 	var clusterID pgtype.UUID
 	if value := r.URL.Query().Get("clusterId"); value != "" {
 		parsed, err := uuid.Parse(value)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid cluster ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid cluster ID")
 			return
 		}
 		clusterID = pgtype.UUID{Bytes: parsed, Valid: true}
 	}
 	row, err := store.GetAlertEventSummary(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to summarize alert events")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to summarize alert events")
 		return
 	}
 	RespondJSON(w, http.StatusOK, alertEventSummaryResponse{
@@ -120,13 +121,13 @@ func (h *AlertingHandler) EventSummary(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid event ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid event ID")
 		return
 	}
 
 	event, err := h.queries.GetAlertEventByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert event not found")
 		return
 	}
 
@@ -137,11 +138,11 @@ func (h *AlertingHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid event ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid event ID")
 		return
 	}
 	if _, err := h.queries.GetAlertEventByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert event not found")
 		return
 	}
 	params := sqlc.AcknowledgeAlertEventParams{
@@ -162,7 +163,7 @@ func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Reques
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to acknowledge alert event")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to acknowledge alert event")
 		return
 	}
 	h.publishAlertingChanged("event", nullableUUIDString(event.ClusterID), id)
@@ -173,11 +174,11 @@ func (h *AlertingHandler) AcknowledgeEvent(w http.ResponseWriter, r *http.Reques
 func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid event ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid event ID")
 		return
 	}
 	if _, err := h.queries.GetAlertEventByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert event not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert event not found")
 		return
 	}
 	params := sqlc.UpdateAlertEventStatusParams{
@@ -198,7 +199,7 @@ func (h *AlertingHandler) ResolveEvent(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to resolve alert event")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to resolve alert event")
 		return
 	}
 	h.publishAlertingChanged("event", nullableUUIDString(event.ClusterID), id)

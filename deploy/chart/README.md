@@ -1,6 +1,6 @@
 # Astronomer management-plane chart
 
-This chart installs the Astronomer 2.0.1 API, worker, web application, database
+This chart installs the Astronomer 2.1.0 API, worker, web application, database
 migration job, and optional supporting services. It is the only supported
 management-plane installation path for the v1 release line.
 
@@ -12,7 +12,7 @@ never installs delivery controllers in the management cluster.
 
 | Contract | Supported value |
 |---|---|
-| Chart and application | 2.0.1 |
+| Chart and application | 2.1.0 |
 | Kubernetes | 1.33 through 1.35 |
 | Agent protocol | 2 |
 | Flux | 2.9.3 |
@@ -51,13 +51,13 @@ credentials to the application:
 
 ```bash
 openssl rand -base64 32 > ./jwt-key
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ./fernet-key
+astro admin generate-encryption-key > ./encryption-key   # or: age-keygen | grep AGE-SECRET-KEY
 
 helm upgrade --install astronomer ./deploy/chart \
   --namespace astronomer --create-namespace \
   -f deploy/chart/values-single-node.yaml \
   --set-file secrets.secretKey=./jwt-key \
-  --set-file secrets.encryptionKey=./fernet-key \
+  --set-file secrets.encryptionKey=./encryption-key \
   --set gateway.enabled=false \
   --wait --timeout 15m
 ```
@@ -281,11 +281,11 @@ delivery:
       docker.io: registry.internal.example.com
 ```
 
-For a tagged release, generate these values with `scripts/mirror-release.py`
-instead of writing them by hand. The utility consumes the signed release
-manifest, mirrors every management/downstream/Charlie subject, verifies exact
-destination digests, emits the mapping plus digest-pinned Helm overrides, and
-signs the mapping after successful copy. See
+For a tagged release, copy every subject with `astro airgap mirror --to <registry>`
+(it consumes the signed release manifest via `--release-manifest`, preserves
+digests, indexes and signatures, and verifies destination digests), then set
+`image.registry` or enable `registry.zot`: every image is re-hosted with the
+same path rule. See
 [`docs/airgapped-install.md`](../../docs/airgapped-install.md).
 
 `image.registry` remains a development convenience. Production mirror values
@@ -425,11 +425,11 @@ The chart itself needs no repository download. Package and validate it with:
 helm dependency list deploy/chart
 helm lint deploy/chart \
   --set secrets.secretKey=render-only-jwt-key \
-  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
+  --set secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U
 helm template astronomer deploy/chart \
   --namespace astronomer \
   --set secrets.secretKey=render-only-jwt-key \
-  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= >/tmp/astronomer-rendered.yaml
+  --set secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U >/tmp/astronomer-rendered.yaml
 ```
 
 For production validation, layer `values-production.yaml` and provide the
@@ -459,10 +459,10 @@ encryption keys, release metadata, and external secret-manager references.
 jq empty deploy/chart/values.schema.json
 helm lint deploy/chart \
   --set secrets.secretKey=render-only-jwt-key \
-  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
+  --set secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U
 helm template astronomer deploy/chart \
   --set secrets.secretKey=render-only-jwt-key \
-  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= >/tmp/astronomer.yaml
+  --set secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U >/tmp/astronomer.yaml
 go test ./deploy -run 'TestAstronomerChart'
 git diff --check -- deploy/chart deploy/chartrepo.go deploy/chartrepo_test.go
 ```

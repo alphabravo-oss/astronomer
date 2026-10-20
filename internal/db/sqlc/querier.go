@@ -66,7 +66,6 @@ type Querier interface {
 	ArchiveAndPurgeAuditLogsForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	ArchiveCharlieInteractiveThread(ctx context.Context, id uuid.UUID) (CharlieInteractiveThread, error)
 	AssignClusterGroup(ctx context.Context, arg AssignClusterGroupParams) error
-	BackfillDexPublicClientsEnvelope(ctx context.Context, arg BackfillDexPublicClientsEnvelopeParams) (DexSetting, error)
 	// Apply a validated settings form as one PostgreSQL statement. The handler
 	// passes a JSON array of {key,value,description} records only after every
 	// entry has passed the registry/type checks, so one bad write can never leave
@@ -467,8 +466,8 @@ type Querier interface {
 	CreateHelmChart(ctx context.Context, arg CreateHelmChartParams) (HelmChart, error)
 	CreateHelmChartVersion(ctx context.Context, arg CreateHelmChartVersionParams) (HelmChartVersion, error)
 	// auth_config carries only the non-secret projection (username, charts,
-	// allow_catalog); the complete document, secrets included, is the Fernet token
-	// in auth_config_encrypted. Migration 145.
+	// allow_catalog); the complete document, secrets included, is the age ciphertext
+	// in auth_config_{key_id,algorithm,ciphertext,nonce}. Migration 145.
 	CreateHelmRepository(ctx context.Context, arg CreateHelmRepositoryParams) (HelmRepository, error)
 	CreateInstalledChart(ctx context.Context, arg CreateInstalledChartParams) (InstalledChart, error)
 	// Kubectl shell session bookkeeping (migration 065).
@@ -1173,8 +1172,9 @@ type Querier interface {
 	// the registration branch of validateAndMaybeRotateToken denies any token
 	// created at/before that adoption. ORDER BY created_at DESC LIMIT 1 keeps this
 	// :one deterministic when several un-expired tokens coexist (re-import mints a
-	// new one before the old expires). The legacy `OR (token_hash='' AND token=$1)`
-	// branch matches pre-093 plaintext rows; backfill removal is out of A3 scope.
+	// new one before the old expires).
+	// Only the SHA-256 hash is stored; the plaintext token column was dropped in
+	// migration 00082.
 	GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error)
 	GetResourceOperation(ctx context.Context, id uuid.UUID) (ResourceOperation, error)
 	// Restore Operations
@@ -1194,7 +1194,7 @@ type Querier interface {
 	//
 	// The smtp_settings row is a singleton — every read/write targets the
 	// same well-known id. The application code (NOT this query layer) is
-	// responsible for Fernet-encrypting/decrypting password_encrypted; we
+	// responsible for age-encrypting/decrypting password_{key_id,algorithm,ciphertext,nonce}; we
 	// store and return the ciphertext verbatim.
 	// Returns the singleton settings row. Callers handle the no-rows case
 	// by treating an absent row as "disabled with all defaults".
@@ -1315,7 +1315,7 @@ type Querier interface {
 	// Lifetime is bounded by expires_at (= the Astronomer JWT's exp). The
 	// nightly retention worker piggy-backs on the jwt_revocations purge.
 	// Called by the SSO Callback after the Astronomer JWT pair is minted.
-	// jti is the access JWT's JTI; upstream_id_token_encrypted is Fernet-
+	// jti is the access JWT's JTI; upstream_id_token_{key_id,algorithm,ciphertext,nonce} is age-
 	// ciphertext (the caller wraps before calling). ON CONFLICT replaces
 	// the row so a fresh login re-uses the JTI key (which it shouldn't —
 	// JTIs are uuid.New per token — but the upsert protects against a
@@ -1674,7 +1674,7 @@ type Querier interface {
 	ListDeliveryRollouts(ctx context.Context, arg ListDeliveryRolloutsParams) ([]DeliveryRollout, error)
 	ListDeliverySources(ctx context.Context, arg ListDeliverySourcesParams) ([]ListDeliverySourcesRow, error)
 	// Signed downstream delivery-system releases and staged rollout state.
-	// Public projections deliberately omit registry_credential_encrypted.
+	// Public projections deliberately omit registry_credential_{key_id,algorithm,ciphertext,nonce}.
 	ListDeliverySystemReleases(ctx context.Context, arg ListDeliverySystemReleasesParams) ([]ListDeliverySystemReleasesRow, error)
 	ListDeliveryTargets(ctx context.Context, arg ListDeliveryTargetsParams) ([]DeliveryTarget, error)
 	ListDexConnectors(ctx context.Context) ([]DexConnector, error)
@@ -1788,19 +1788,6 @@ type Querier interface {
 	ListGroupSyncProjectBindingsForConnector(ctx context.Context, arg ListGroupSyncProjectBindingsForConnectorParams) ([]ProjectRoleBinding, error)
 	ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) ([]HelmChart, error)
 	ListHelmRepositories(ctx context.Context, arg ListHelmRepositoriesParams) ([]HelmRepository, error)
-	// Rows that still hold their credential as plaintext JSONB, for the
-	// security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
-	// marker of a pre-145 row.
-	//
-	// The EXISTS clause is what makes "returned by this query" mean "has something
-	// to seal", and it must stay in step with catalog.hasAuthConfigSecret: a
-	// non-empty STRING under one of catalog.AuthConfigSecretKeys. A looser
-	// predicate (auth_config <> '{}', or a bare key-existence test) also matches
-	// rows the sweep can never seal — an OCI repo whose auth_config is just
-	// {"charts":[...]}, or a repo with only a username. Those rows never leave the
-	// result set, so a full page of them ahead of a credentialed row would make
-	// the sweep re-read the same page forever and never reach the credential.
-	ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, arg ListHelmRepositoriesWithLegacyAuthConfigParams) ([]HelmRepository, error)
 	ListInstalledCharts(ctx context.Context, arg ListInstalledChartsParams) ([]InstalledChart, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg ListInstalledChartsByClusterParams) ([]InstalledChart, error)
 	ListInstalledChartsForScopes(ctx context.Context, arg ListInstalledChartsForScopesParams) ([]InstalledChart, error)
@@ -1869,21 +1856,6 @@ type Querier interface {
 	// ---------------------------------------------------------------------
 	ListMirroredResourceQuotas(ctx context.Context, arg ListMirroredResourceQuotasParams) ([]MirroredResourceQuota, error)
 	ListMirroredResourceQuotasByNamespace(ctx context.Context, arg ListMirroredResourceQuotasByNamespaceParams) ([]MirroredResourceQuota, error)
-	// Rows that still hold their credential as plaintext JSONB, for the
-	// security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
-	// marker of a pre-146 row.
-	//
-	// The EXISTS clause is what makes "returned by this query" mean "has something
-	// to seal", and it must stay in exact step with monitoring.HasAuthConfigSecret:
-	// at least one key OUTSIDE the non-secret allow-list. A looser predicate
-	// (auth_config <> '{}') also matches rows the sweep can never seal — a backend
-	// whose auth_config is nothing but {"operationPolicies":{...}}, which is the
-	// common case for an unauthenticated in-cluster Prometheus. Those rows never
-	// leave the result set, so a full page of them ahead of a credentialed row
-	// would make the sweep re-read the same page forever and never reach it.
-	//
-	// jsonb_typeof guards jsonb_object_keys, which errors on a non-object.
-	ListMonitoringBackendsWithLegacyAuthConfig(ctx context.Context, arg ListMonitoringBackendsWithLegacyAuthConfigParams) ([]MonitoringBackend, error)
 	ListMonitoringOperationEvents(ctx context.Context, operationID uuid.UUID) ([]MonitoringOperationEvent, error)
 	ListMonitoringOperations(ctx context.Context, arg ListMonitoringOperationsParams) ([]MonitoringOperation, error)
 	// Admin overview across all users, paged.
@@ -2016,7 +1988,7 @@ type Querier interface {
 	//     days regardless of forwarder status so stale forwarders don't
 	//     pin disk
 	//
-	// auth_encrypted is the Fernet ciphertext of the JSON auth blob; this
+	// auth_{key_id,algorithm,ciphertext,nonce} is the age ciphertext of the JSON auth blob; this
 	// layer stores and returns it verbatim. Decryption happens in the
 	// dispatcher right before the per-tick connect.
 	ListSIEMForwarders(ctx context.Context) ([]SiemForwarder, error)
@@ -2064,7 +2036,7 @@ type Querier interface {
 	// Vault connections CRUD (migration 067).
 	//
 	// Canonical sqlc source for Vault connection persistence.
-	// List projection intentionally excludes auth_encrypted. Detail/probe paths
+	// List projection intentionally excludes auth_{key_id,algorithm,ciphertext,nonce}. Detail/probe paths
 	// use GetVaultConnectionByID when they need to resolve credential material.
 	ListVaultConnectionsPage(ctx context.Context, arg ListVaultConnectionsPageParams) ([]ListVaultConnectionsPageRow, error)
 	// Severity filter is empty-string-treated-as-no-filter so callers can
@@ -2088,7 +2060,7 @@ type Querier interface {
 	//   * the daily retention sweep (default 30 days) that purges old
 	//     delivery rows so the table doesn't grow unbounded
 	//
-	// secret_encrypted is the Fernet ciphertext of the HMAC signing secret;
+	// secret_{key_id,algorithm,ciphertext,nonce} is the age ciphertext of the HMAC signing secret;
 	// this layer stores and returns it verbatim. Decryption happens in the
 	// sender right before signing.
 	ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error)
@@ -2428,22 +2400,12 @@ type Querier interface {
 	RevokeVulnerabilityDatabaseUpdate(ctx context.Context, id uuid.UUID) (int64, error)
 	// Performs the grace rotation atomically: the current token_hash moves to
 	// previous_token_hash (so the old token keeps validating until the agent
-	// adopts the new one), token/token_hash become the freshly-minted values,
+	// adopts the new one), token_hash becomes the freshly-minted values,
 	// last_rotated_at is stamped and rotation_pending_at is cleared.
 	RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error)
 	RotateDeliverySourceCredential(ctx context.Context, arg RotateDeliverySourceCredentialParams) (RotateDeliverySourceCredentialRow, error)
 	RotateRefreshSession(ctx context.Context, arg RotateRefreshSessionParams) (string, error)
 	SCIMGroupExists(ctx context.Context, groupName string) (bool, error)
-	// Compare-and-set on the empty ciphertext: two schedulers (server + dedicated
-	// worker both run this task) racing on the same row must not have the loser
-	// overwrite a freshly-sealed envelope with a re-encryption of a document it
-	// read before the winner stripped it.
-	SealHelmRepositoryAuthConfig(ctx context.Context, arg SealHelmRepositoryAuthConfigParams) error
-	// Compare-and-set on the empty ciphertext: the server and the dedicated worker
-	// both run the sealing task, and the loser of a race must not overwrite a
-	// freshly-sealed envelope with a re-encryption of the document it read before
-	// the winner stripped it.
-	SealMonitoringBackendAuthConfig(ctx context.Context, arg SealMonitoringBackendAuthConfigParams) error
 	SearchPrincipalUsers(ctx context.Context, arg SearchPrincipalUsersParams) ([]SearchPrincipalUsersRow, error)
 	// Server-side human-user lookup for RBAC subject pickers. Keep the expression
 	// aligned with idx_users_directory_search_trgm in migration 032.
@@ -2501,6 +2463,10 @@ type Querier interface {
 	// Cluster tombstone — the final phase of the reconciler. We never hard-delete
 	// the cluster row; setting decommissioned_at preserves the id for audit_archive
 	// referential integrity and lets the UI render historical references.
+	// The tombstone cascades to the cluster's delivery deployments in the same
+	// statement: they can never be observed again, so leaving them active kept the
+	// delivery backlog/stale-status alerts firing forever. 'removed' is the
+	// terminal deployment phase; the reason is kept in last_error_code.
 	TombstoneCluster(ctx context.Context, id uuid.UUID) error
 	// Sets status='tombstoned' + tombstoned_at=now. The reaper later picks
 	// the row up via ListExpiredTombstones.
@@ -2564,6 +2530,7 @@ type Querier interface {
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
 	UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharlieAgentStatusParams) (CharlieConnection, error)
+	UpdateCharlieConnectionAppliedArtifacts(ctx context.Context, arg UpdateCharlieConnectionAppliedArtifactsParams) (CharlieConnection, error)
 	UpdateCharlieKubernetesVisibility(ctx context.Context, arg UpdateCharlieKubernetesVisibilityParams) (CharlieConnection, error)
 	UpdateCharlieSessionCursor(ctx context.Context, arg UpdateCharlieSessionCursorParams) (CharlieSession, error)
 	UpdateCharlieTriggerRule(ctx context.Context, arg UpdateCharlieTriggerRuleParams) (CharlieTriggerRule, error)
@@ -2651,8 +2618,8 @@ type Querier interface {
 	// CORR-05 / CORR-R03: CAS status transition for restores (see UpdateBackupStarted).
 	UpdateRestoreOperationStarted(ctx context.Context, id uuid.UUID) (int64, error)
 	// Full replacement update (PUT semantics). The handler preserves the
-	// existing auth_encrypted when the admin didn't re-supply it (sentinel
-	// pattern, analogous to webhook_subscriptions.secret_encrypted).
+	// existing auth_{key_id,algorithm,ciphertext,nonce} when the admin didn't re-supply it (sentinel
+	// pattern, analogous to webhook_subscriptions.secret_{key_id,algorithm,ciphertext,nonce}).
 	UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error)
 	UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfigurationParams) (SsoConfiguration, error)
 	UpdateSystemRolloutCounters(ctx context.Context, arg UpdateSystemRolloutCountersParams) error
@@ -2704,7 +2671,7 @@ type Querier interface {
 	// and re-assert is_default, but deliberately leave `enabled` alone so an operator
 	// who disabled a default repo keeps it disabled across reconciles.
 	UpsertDefaultHelmRepository(ctx context.Context, arg UpsertDefaultHelmRepositoryParams) error
-	// auth_config and auth_config_encrypted are two halves of ONE value (migration
+	// auth_config and auth_config_{key_id,algorithm,ciphertext,nonce} are two halves of ONE value (migration
 	// 146) and this statement always writes both. Every caller builds its params
 	// through handler.sealMonitoringBackendAuthConfig / tasks.sealMonitoringBackendAuthConfig,
 	// which set the pair together from a RESOLVED document — a writer that set the
@@ -2761,7 +2728,7 @@ type Querier interface {
 	// admin resync endpoint.
 	UpsertUserIDPGroups(ctx context.Context, arg UpsertUserIDPGroupsParams) (UserIdpGroup, error)
 	UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error)
-	// Persists a freshly-confirmed enrollment. Caller passes the Fernet-
+	// Persists a freshly-confirmed enrollment. Caller passes the age-
 	// encrypted secret in $2 — the plaintext must NEVER reach this query.
 	// ON CONFLICT lets the user re-enroll (lost device, new authenticator)
 	// without first calling DeleteUserTOTPEnrollment. confirmed_at is

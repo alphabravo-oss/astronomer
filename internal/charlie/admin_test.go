@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func TestAdminAccessSeparatesOperatorFromAutomationGrants(t *testing.T) {
@@ -142,7 +144,7 @@ func TestApplyAgentWorkloadUsesStatefulSetReadyCount(t *testing.T) {
 func TestAdminAgentReplicaStatusIsBoundedAndDoesNotReadCredentials(t *testing.T) {
 	row := sqlc.CharlieConnection{
 		ReplicaCount: 2, LeaderInstanceID: "leader-opaque", AgentProtocolVersion: "bridge/v1",
-		HealthState: "ready", AgentSecretName: "must-not-appear", LocalTrustMaterialEncrypted: "must-not-appear",
+		HealthState: "ready", AgentSecretName: "must-not-appear", LocalTrustMaterialKeyID: "must-not-appear", LocalTrustMaterialAlgorithm: crypto.AlgorithmAgeX25519, LocalTrustMaterialCiphertext: []byte("must-not-appear"),
 	}
 	view := AdminStatusView{Agent: safeAdminAgent(row)}
 	applyBridgeStatus(&view, AdminBridgeStatus{

@@ -27,9 +27,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // ReadAuditPolicyQuerier is the narrow DB surface the handler needs.
@@ -128,12 +128,12 @@ func policyToResponse(p sqlc.ReadAuditPolicy) readAuditPolicyResponse {
 // List handles GET /api/v1/admin/read-audit-policies/.
 func (h *ReadAuditPolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	rows, err := h.queries.ListReadAuditPolicies(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to list policies")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to list policies")
 		return
 	}
 	items := make([]readAuditPolicyResponse, 0, len(rows))
@@ -149,21 +149,21 @@ func (h *ReadAuditPolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/admin/read-audit-policies/{id}/.
 func (h *ReadAuditPolicyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid policy id")
 		return
 	}
 	row, err := h.queries.GetReadAuditPolicy(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Policy not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read policy")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read policy")
 		return
 	}
 	RespondJSON(w, http.StatusOK, policyToResponse(row))
@@ -183,23 +183,23 @@ type readAuditPolicyCreate struct {
 // Create handles POST /api/v1/admin/read-audit-policies/.
 func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	var req readAuditPolicyCreate
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	req.PathPattern = strings.TrimSpace(req.PathPattern)
 	req.Verbs = strings.TrimSpace(req.Verbs)
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "name is required")
 		return
 	}
 	if req.PathPattern == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "path_pattern is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "path_pattern is required")
 		return
 	}
 	if req.Verbs == "" {
@@ -210,7 +210,7 @@ func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) 
 		sample = *req.SampleRate
 	}
 	if sample < 0 || sample > 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "sample_rate must be between 0.0 and 1.0")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "sample_rate must be between 0.0 and 1.0")
 		return
 	}
 	enabled := true
@@ -229,7 +229,7 @@ func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) 
 		readAuditPolicyEvent("admin.read_audit_policy.created", http.StatusCreated),
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to create policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to create policy")
 		return
 	}
 	if h.invalidator != nil {
@@ -253,17 +253,17 @@ type readAuditPolicyUpdate struct {
 // Update handles PUT /api/v1/admin/read-audit-policies/{id}/.
 func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid policy id")
 		return
 	}
 	var req readAuditPolicyUpdate
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -274,7 +274,7 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 	if req.PathPattern != nil {
 		trimmed := strings.TrimSpace(*req.PathPattern)
 		if trimmed == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "path_pattern cannot be empty")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "path_pattern cannot be empty")
 			return
 		}
 		req.PathPattern = &trimmed
@@ -288,7 +288,7 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 	}
 	if req.SampleRate != nil {
 		if *req.SampleRate < 0 || *req.SampleRate > 1 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "sample_rate must be between 0.0 and 1.0")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "sample_rate must be between 0.0 and 1.0")
 			return
 		}
 	}
@@ -324,10 +324,10 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Policy not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to update policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to update policy")
 		return
 	}
 	if h.invalidator != nil {
@@ -339,12 +339,12 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 // Delete handles DELETE /api/v1/admin/read-audit-policies/{id}/.
 func (h *ReadAuditPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid policy id")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -359,10 +359,10 @@ func (h *ReadAuditPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) 
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Policy not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Policy not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to delete policy")
 		return
 	}
 	if h.invalidator != nil {

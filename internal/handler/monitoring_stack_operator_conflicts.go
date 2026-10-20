@@ -7,8 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	appsv1 "k8s.io/api/apps/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 // MonitoringOperatorConflict describes a Prometheus operator that can
@@ -168,7 +169,7 @@ func monitoringContainsString(values []string, wanted string) bool {
 func (h *MonitoringHandler) monitoringOperatorConflictResponse(w http.ResponseWriter, r *http.Request, clusterID string, req MonitoringStackRequest) bool {
 	conflicts, err := h.clusterMonitoringOperatorConflicts(r.Context(), clusterID, req.Namespace, req.ReleaseName)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError,
 			"Could not verify Prometheus operator ownership: "+err.Error())
 		return true
 	}

@@ -20,14 +20,14 @@ CREATE DATABASE :"restore";
 COMMENT ON DATABASE :"restore" IS :'marker';
 SQL`
 const temporaryRestoreScript = `pg_restore --exit-on-error --no-owner --no-privileges --username="$POSTGRES_USER" --dbname="$1"`
-const temporarySchemaScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -AtF "|" -c "SELECT current_database(), current_setting('server_version_num')::bigint / 10000, count(*), COALESCE(max(version),0), COALESCE(bool_or(dirty),false) FROM schema_migrations"`
+const temporarySchemaScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -AtF "|" -c "SELECT current_database(), current_setting('server_version_num')::bigint / 10000, 1, COALESCE(max(version_id) FILTER (WHERE is_applied),0), COALESCE(bool_or(NOT is_applied),false) FROM goose_db_version"`
 const temporaryDropScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" -v restore="$1" -v marker="$2" -v expected_oid="$3" <<'SQL'
 SELECT datname AS bound_name FROM pg_database WHERE datname = :'restore' AND oid::text = :'expected_oid' AND datdba = (SELECT oid FROM pg_roles WHERE rolname = current_user) AND COALESCE(shobj_description(oid,'pg_database'),'') = :'marker' \gset
 DROP DATABASE :"bound_name";
 SQL`
 
 const temporaryEncryptedProofScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -At --set=proof_id="$2" <<'SQL'
-SELECT count(*) FROM webhook_subscriptions WHERE id=:'proof_id'::uuid AND secret_encrypted <> '';
+SELECT count(*) FROM webhook_subscriptions WHERE id=:'proof_id'::uuid AND secret_key_id <> '';
 SQL`
 
 // TemporaryDatabase verifies one exact retained backup in a separate database.

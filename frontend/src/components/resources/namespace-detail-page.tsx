@@ -493,7 +493,7 @@ function MetadataList({
   const entries = Object.entries(values ?? {});
   return (
     <div>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
         {label}
       </p>
       {entries.length === 0 ? (

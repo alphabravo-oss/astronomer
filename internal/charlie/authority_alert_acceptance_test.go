@@ -6,13 +6,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type acceptanceFindingStore struct {
@@ -206,7 +207,7 @@ func TestDestructiveAndConfusedDeputyCorpusDeniedAcrossModesAndRoles(t *testing.
 						t.Fatal(err)
 					}
 					var output strings.Builder
-					guard.SetLogger(slog.New(slog.NewJSONHandler(&output, nil)))
+					guard.SetLogger(zerolog.New(&output))
 					action := signedTestAction(t, privateKey, attack.capability, attack.arguments)
 					result := guard.Execute(context.Background(), action)
 					replay := guard.Execute(context.Background(), action)

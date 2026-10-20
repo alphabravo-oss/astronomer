@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const (
@@ -122,10 +124,10 @@ func (r *AmbiguousReceiptReconciler) reconcile(ctx context.Context, receipt sqlc
 }
 
 func (r *AmbiguousReceiptReconciler) decryptArguments(receipt sqlc.CharlieActionReceipt, descriptor CapabilityDescriptor, descriptorFound bool) (map[string]json.RawMessage, error) {
-	if !descriptorFound || descriptor.Effect != EffectWrite || !descriptor.RequiresVerification || receipt.Effect != string(EffectWrite) || receipt.ArgumentsEncrypted == "" {
+	if !descriptorFound || descriptor.Effect != EffectWrite || !descriptor.RequiresVerification || receipt.Effect != string(EffectWrite) || receipt.ArgumentsKeyID == "" {
 		return nil, fmt.Errorf("Charlie receipt capability cannot be reconciled")
 	}
-	plain, err := r.cipher.Decrypt(receipt.ArgumentsEncrypted)
+	plain, err := r.cipher.Decrypt(crypto.FromParts(receipt.ArgumentsKeyID, receipt.ArgumentsAlgorithm, receipt.ArgumentsCiphertext, receipt.ArgumentsNonce))
 	if err != nil || len(plain) == 0 || len(plain) > maxActionArguments {
 		return nil, fmt.Errorf("Charlie receipt arguments are unavailable")
 	}
@@ -159,12 +161,13 @@ func (r *AmbiguousReceiptReconciler) finish(ctx context.Context, receipt sqlc.Ch
 	if err != nil || len(encoded) == 0 || len(encoded) > maxActionResult+(16<<10) {
 		return fmt.Errorf("encode Charlie reconciled result")
 	}
-	sealed, err := r.cipher.Encrypt(string(encoded))
-	if err != nil || sealed == "" {
+	sealed, err := r.cipher.Encrypt(encoded)
+	if err != nil || sealed.IsZero() {
 		return fmt.Errorf("encrypt Charlie reconciled result")
 	}
 	updated, err := r.queries.TransitionCharlieActionReceipt(ctx, sqlc.TransitionCharlieActionReceiptParams{
-		NextState: next, ResultDigest: digestBytes(encoded), ResultStatus: result.State, ResultEncrypted: sealed,
+		NextState: next, ResultDigest: digestBytes(encoded), ResultStatus: result.State,
+		ResultKeyID: sealed.KeyID, ResultAlgorithm: sealed.Algorithm, ResultCiphertext: sealed.Ciphertext, ResultNonce: sealed.Nonce,
 		ID: receipt.ID, ExpectedState: receipt.State, LeaseOwner: r.leaseOwner, FencingEpoch: receipt.FencingEpoch,
 	})
 	if err != nil {

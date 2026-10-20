@@ -4,10 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func (h *ToolHandler) resolveAction(r *http.Request) (sqlc.ClusterTool, toolActionRequest, []toolRelease, string, error) {

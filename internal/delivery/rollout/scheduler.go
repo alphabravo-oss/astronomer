@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
@@ -490,7 +492,7 @@ func amountLimit(amount model.Amount, total int) int {
 	if amount.Type == model.AmountCount {
 		return min(int(amount.Value), total)
 	}
-	return int(uint64(total) * uint64(amount.Value) / 100)
+	return safeconv.Int(safeconv.Uint64(total) * uint64(amount.Value) / 100)
 }
 
 func failureBudgetExceeded(amount model.Amount, total, failures int) bool {

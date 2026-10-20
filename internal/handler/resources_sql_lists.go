@@ -3,11 +3,12 @@ package handler
 import (
 	"context"
 	"fmt"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"net/http"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +25,7 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AuditError, "Failed to load audit logs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AuditError, "Failed to load audit logs")
 		return
 	}
 	total, _ := countAuditLogsForResource(r.Context(), h.queries)
@@ -73,7 +74,7 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	offset := queryOffset32(r)
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	if len(search) > 200 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "search must be at most 200 characters")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "search must be at most 200 characters")
 		return
 	}
 	var (
@@ -89,7 +90,7 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	} else {
 		directory, ok := h.queries.(userDirectoryQuerier)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user directory search not configured")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.UsersError, "user directory search not configured")
 			return
 		}
 		users, err = directory.SearchUsers(r.Context(), sqlc.SearchUsersParams{
@@ -100,7 +101,7 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UsersError, "Failed to load users")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UsersError, "Failed to load users")
 		return
 	}
 	items := make([]map[string]any, 0, len(users))

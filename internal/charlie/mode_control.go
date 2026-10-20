@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type ModeState struct {
@@ -496,7 +498,7 @@ func (c *ModeController) Run(ctx context.Context, interval time.Duration) {
 }
 
 func logModeTransitionFailure(ctx context.Context, code string) {
-	LogOperationalFailure(ctx, nil, code, "")
+	LogOperationalFailure(ctx, *logging.Default(), code, "")
 }
 
 // EmergencyDisable closes the product-local latch first. Failure to contact the

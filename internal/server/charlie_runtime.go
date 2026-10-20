@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/hibiken/asynq"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
 )
 
 // charlieRuntimeGeneration is the dynamically replaceable product work plane.

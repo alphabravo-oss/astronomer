@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestCharlieMetricLabelsAreFixedVocabulary(t *testing.T) {

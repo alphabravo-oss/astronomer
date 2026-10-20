@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // openapi:request-operation postExtensions
@@ -22,12 +23,12 @@ type InstallExtensionRequest struct {
 
 func (h *ExtensionHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	rows, err := h.queries.ListUIExtensions(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list extensions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list extensions")
 		return
 	}
 	items := make([]ExtensionRecordResponse, 0, len(rows))
@@ -42,12 +43,12 @@ func (h *ExtensionHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	var req InstallExtensionRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	validation := validateExtensionManifest(req.Manifest, h.current)
@@ -94,7 +95,7 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 
 	var row sqlc.UIExtension
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "extension transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "extension transaction runner is not configured")
 		return
 	}
 	err := h.runTx(r.Context(), func(q ExtensionMutationTx) error {
@@ -112,7 +113,7 @@ func (h *ExtensionHandler) Install(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.InstallFailed, "Failed to install extension")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.InstallFailed, "Failed to install extension")
 		return
 	}
 	RespondJSON(w, http.StatusOK, extensionRecordResponse(row))
@@ -128,12 +129,12 @@ func (h *ExtensionHandler) Disable(w http.ResponseWriter, r *http.Request) {
 
 func (h *ExtensionHandler) setEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	if !extensionNameRE.MatchString(name) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Invalid extension name")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Invalid extension name")
 		return
 	}
 	var errExtensionIncompatible = errors.New("extension is incompatible")
@@ -149,7 +150,7 @@ func (h *ExtensionHandler) setEnabled(w http.ResponseWriter, r *http.Request, en
 	}
 	var row sqlc.UIExtension
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "extension transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "extension transaction runner is not configured")
 		return
 	}
 	err := h.runTx(r.Context(), func(q ExtensionMutationTx) error {
@@ -166,15 +167,15 @@ func (h *ExtensionHandler) setEnabled(w http.ResponseWriter, r *http.Request, en
 		})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Extension not found")
 		return
 	}
 	if errors.Is(err, errExtensionIncompatible) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Incompatible extensions cannot be enabled")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IncompatibleExtension, "Incompatible extensions cannot be enabled")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update extension")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update extension")
 		return
 	}
 	RespondJSON(w, http.StatusOK, extensionRecordResponse(row))

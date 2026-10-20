@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestClusterLokiQueryUsesOwnerAndScopesSelectors(t *testing.T) {

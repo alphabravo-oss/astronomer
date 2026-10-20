@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func TestGenerateLocalTrustRequiresEncryptionAndExactDistinctDNS(t *testing.T) {
@@ -16,8 +16,8 @@ func TestGenerateLocalTrustRequiresEncryptionAndExactDistinctDNS(t *testing.T) {
 	if _, err := GenerateLocalTrust(nil, LocalTrustConfig{InstallationID: installationID, BridgeServerDNS: "bridge.ns.svc", MCPServerDNS: "mcp.ns.svc"}); err == nil {
 		t.Fatal("generated reusable trust without an encryptor")
 	}
-	key, _ := auth.GenerateKey()
-	encryptor, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	encryptor, _ := crypto.NewEncryptor(key)
 	for _, cfg := range []LocalTrustConfig{
 		{InstallationID: installationID, BridgeServerDNS: "*.ns.svc", MCPServerDNS: "mcp.ns.svc"},
 		{InstallationID: installationID, BridgeServerDNS: "same.ns.svc", MCPServerDNS: "same.ns.svc"},
@@ -31,11 +31,11 @@ func TestGenerateLocalTrustRequiresEncryptionAndExactDistinctDNS(t *testing.T) {
 }
 
 func TestGenerateLocalTrustSeparatesEKUsSANsAndStorage(t *testing.T) {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,12 +82,12 @@ func TestGenerateLocalTrustSeparatesEKUsSANsAndStorage(t *testing.T) {
 	assertLeaf("MCP server", trust.Public.MCPServerCertificate, x509.ExtKeyUsageServerAuth, "astronomer-charlie-mcp.astronomer.svc", trust.Public.MCPServerIdentityURI)
 	assertLeaf("MCP client", trust.Agent.MCPClientCertificate, x509.ExtKeyUsageClientAuth, "", trust.Agent.MCPClientIdentityURI)
 
-	plaintext, err := encryptor.Decrypt(trust.EncryptedLocalTrust)
+	plaintext, err := encryptor.Decrypt(trust.SealedLocalTrust)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var persisted map[string]string
-	if err := json.Unmarshal([]byte(plaintext), &persisted); err != nil {
+	if err := json.Unmarshal(plaintext, &persisted); err != nil {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"ca_private_key_pem", "bridge_client_private_key_pem", "mcp_server_private_key_pem"} {
@@ -110,11 +110,11 @@ func TestGenerateLocalTrustSeparatesEKUsSANsAndStorage(t *testing.T) {
 }
 
 func TestRotateLocalTrustUsesExactDualTrustOverlapAndPrunes(t *testing.T) {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,10 +141,10 @@ func TestRotateLocalTrustUsesExactDualTrustOverlapAndPrunes(t *testing.T) {
 		strings.Count(rotation.Agent.CACertificatePEM, "BEGIN CERTIFICATE") != 2 {
 		t.Fatal("rotation did not publish both CA certificates")
 	}
-	if _, changed, err := PruneExpiredPreviousTrust(encryptor, rotation.EncryptedLocalTrust, rotation.OverlapUntil.Add(-time.Nanosecond)); err != nil || changed {
+	if _, changed, err := PruneExpiredPreviousTrust(encryptor, rotation.SealedLocalTrust, rotation.OverlapUntil.Add(-time.Nanosecond)); err != nil || changed {
 		t.Fatalf("previous trust pruned during overlap: changed=%t err=%v", changed, err)
 	}
-	pruned, changed, err := PruneExpiredPreviousTrust(encryptor, rotation.EncryptedLocalTrust, rotation.OverlapUntil)
+	pruned, changed, err := PruneExpiredPreviousTrust(encryptor, rotation.SealedLocalTrust, rotation.OverlapUntil)
 	if err != nil || !changed {
 		t.Fatalf("previous trust not pruned at expiry: changed=%t err=%v", changed, err)
 	}

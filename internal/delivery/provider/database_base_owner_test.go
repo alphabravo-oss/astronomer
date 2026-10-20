@@ -5,10 +5,11 @@ import (
 	"math"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 )
 
 func TestDatabaseBaseOwnerRequiresPrivatePhysicalConstructor(t *testing.T) {

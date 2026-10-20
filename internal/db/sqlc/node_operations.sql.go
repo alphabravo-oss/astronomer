@@ -24,7 +24,7 @@ WHERE id = $3 AND generation = $4
       status IN ('pending', 'retrying')
       OR (status = 'running' AND (locked_until IS NULL OR locked_until < $2))
   )
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type ClaimNodeOperationGenerationParams struct {
@@ -50,7 +50,6 @@ func (q *Queries) ClaimNodeOperationGeneration(ctx context.Context, arg ClaimNod
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -62,6 +61,10 @@ func (q *Queries) ClaimNodeOperationGeneration(ctx context.Context, arg ClaimNod
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
@@ -69,26 +72,29 @@ func (q *Queries) ClaimNodeOperationGeneration(ctx context.Context, arg ClaimNod
 const createNodeOperationIdempotent = `-- name: CreateNodeOperationIdempotent :one
 INSERT INTO node_operations (
     idempotency_scope, idempotency_key, request_digest, cluster_id,
-    node_name, action, parameters_encrypted, created_by_id
+    node_name, action, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce, created_by_id
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6,
-    $7, $8
+    $7, $8, $9, $10, $11
 )
 ON CONFLICT (idempotency_scope, idempotency_key) DO UPDATE
 SET updated_at = node_operations.updated_at
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type CreateNodeOperationIdempotentParams struct {
-	IdempotencyScope    string      `json:"idempotency_scope"`
-	IdempotencyKey      string      `json:"idempotency_key"`
-	RequestDigest       string      `json:"request_digest"`
-	ClusterID           uuid.UUID   `json:"cluster_id"`
-	NodeName            string      `json:"node_name"`
-	Action              string      `json:"action"`
-	ParametersEncrypted string      `json:"parameters_encrypted"`
-	CreatedByID         pgtype.UUID `json:"created_by_id"`
+	IdempotencyScope     string      `json:"idempotency_scope"`
+	IdempotencyKey       string      `json:"idempotency_key"`
+	RequestDigest        string      `json:"request_digest"`
+	ClusterID            uuid.UUID   `json:"cluster_id"`
+	NodeName             string      `json:"node_name"`
+	Action               string      `json:"action"`
+	ParametersKeyID      string      `json:"parameters_key_id"`
+	ParametersAlgorithm  string      `json:"parameters_algorithm"`
+	ParametersCiphertext []byte      `json:"parameters_ciphertext"`
+	ParametersNonce      []byte      `json:"parameters_nonce"`
+	CreatedByID          pgtype.UUID `json:"created_by_id"`
 }
 
 func (q *Queries) CreateNodeOperationIdempotent(ctx context.Context, arg CreateNodeOperationIdempotentParams) (NodeOperation, error) {
@@ -99,7 +105,10 @@ func (q *Queries) CreateNodeOperationIdempotent(ctx context.Context, arg CreateN
 		arg.ClusterID,
 		arg.NodeName,
 		arg.Action,
-		arg.ParametersEncrypted,
+		arg.ParametersKeyID,
+		arg.ParametersAlgorithm,
+		arg.ParametersCiphertext,
+		arg.ParametersNonce,
 		arg.CreatedByID,
 	)
 	var i NodeOperation
@@ -111,7 +120,6 @@ func (q *Queries) CreateNodeOperationIdempotent(ctx context.Context, arg CreateN
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -123,12 +131,16 @@ func (q *Queries) CreateNodeOperationIdempotent(ctx context.Context, arg CreateN
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
 
 const getNodeOperation = `-- name: GetNodeOperation :one
-SELECT id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at FROM node_operations WHERE id = $1
+SELECT id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce FROM node_operations WHERE id = $1
 `
 
 func (q *Queries) GetNodeOperation(ctx context.Context, id uuid.UUID) (NodeOperation, error) {
@@ -142,7 +154,6 @@ func (q *Queries) GetNodeOperation(ctx context.Context, id uuid.UUID) (NodeOpera
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -154,6 +165,10 @@ func (q *Queries) GetNodeOperation(ctx context.Context, id uuid.UUID) (NodeOpera
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
@@ -165,7 +180,7 @@ SET status = 'blocked', observed_generation = $1,
     locked_until = NULL, completed_at = now(), updated_at = now()
 WHERE id = $4 AND generation = $1
   AND observed_generation < $1
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type MarkNodeOperationBlockedParams struct {
@@ -191,7 +206,6 @@ func (q *Queries) MarkNodeOperationBlocked(ctx context.Context, arg MarkNodeOper
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -203,6 +217,10 @@ func (q *Queries) MarkNodeOperationBlocked(ctx context.Context, arg MarkNodeOper
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
@@ -214,7 +232,7 @@ SET status = 'failed', observed_generation = $1,
     locked_until = NULL, completed_at = now(), updated_at = now()
 WHERE id = $4 AND generation = $1
   AND observed_generation < $1
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type MarkNodeOperationFailedParams struct {
@@ -240,7 +258,6 @@ func (q *Queries) MarkNodeOperationFailed(ctx context.Context, arg MarkNodeOpera
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -252,6 +269,10 @@ func (q *Queries) MarkNodeOperationFailed(ctx context.Context, arg MarkNodeOpera
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
@@ -262,7 +283,7 @@ SET status = 'retrying', progress = $1,
     error_code = $2, locked_until = NULL, updated_at = now()
 WHERE id = $3 AND generation = $4
   AND observed_generation < $4
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type MarkNodeOperationRetryingParams struct {
@@ -288,7 +309,6 @@ func (q *Queries) MarkNodeOperationRetrying(ctx context.Context, arg MarkNodeOpe
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -300,6 +320,10 @@ func (q *Queries) MarkNodeOperationRetrying(ctx context.Context, arg MarkNodeOpe
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
@@ -311,7 +335,7 @@ SET status = 'succeeded', observed_generation = $1,
     completed_at = now(), updated_at = now()
 WHERE id = $3 AND generation = $1
   AND observed_generation < $1
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type MarkNodeOperationSucceededParams struct {
@@ -331,7 +355,6 @@ func (q *Queries) MarkNodeOperationSucceeded(ctx context.Context, arg MarkNodeOp
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -343,6 +366,10 @@ func (q *Queries) MarkNodeOperationSucceeded(ctx context.Context, arg MarkNodeOp
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }
@@ -352,7 +379,7 @@ UPDATE node_operations
 SET progress = $1, updated_at = now()
 WHERE id = $2 AND generation = $3
   AND observed_generation < $3 AND status = 'running'
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, parameters_encrypted, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, node_name, action, generation, observed_generation, status, attempt_count, locked_until, error_code, progress, created_by_id, completed_at, created_at, updated_at, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce
 `
 
 type UpdateNodeOperationProgressParams struct {
@@ -372,7 +399,6 @@ func (q *Queries) UpdateNodeOperationProgress(ctx context.Context, arg UpdateNod
 		&i.ClusterID,
 		&i.NodeName,
 		&i.Action,
-		&i.ParametersEncrypted,
 		&i.Generation,
 		&i.ObservedGeneration,
 		&i.Status,
@@ -384,6 +410,10 @@ func (q *Queries) UpdateNodeOperationProgress(ctx context.Context, arg UpdateNod
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ParametersKeyID,
+		&i.ParametersAlgorithm,
+		&i.ParametersCiphertext,
+		&i.ParametersNonce,
 	)
 	return i, err
 }

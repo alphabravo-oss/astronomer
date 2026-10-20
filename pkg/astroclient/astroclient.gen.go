@@ -2370,6 +2370,12 @@ const (
 	PostCatalogApplicationsPreviewJSONBodyOperationUpgrade PostCatalogApplicationsPreviewJSONBodyOperation = "upgrade"
 )
 
+// Defines values for GetCatalogChartsByIdVersionsParamsView.
+const (
+	GetCatalogChartsByIdVersionsParamsViewAll     GetCatalogChartsByIdVersionsParamsView = "all"
+	GetCatalogChartsByIdVersionsParamsViewCurated GetCatalogChartsByIdVersionsParamsView = "curated"
+)
+
 // Defines values for ListCharlieFindingsParamsStatus.
 const (
 	ListCharlieFindingsParamsStatusAcknowledged ListCharlieFindingsParamsStatus = "acknowledged"
@@ -3753,6 +3759,36 @@ type CatalogUserDiscovery struct {
 	FavoriteAt   *time.Time         `json:"favorite_at"`
 	LastViewedAt *time.Time         `json:"last_viewed_at"`
 	ViewCount    int                `json:"view_count"`
+}
+
+// CatalogVersionConfiguration defines model for CatalogVersionConfiguration.
+type CatalogVersionConfiguration struct {
+	DefaultPreset string `json:"defaultPreset"`
+	Namespace     string `json:"namespace"`
+	Presets       []struct {
+		Description string                 `json:"description"`
+		Id          string                 `json:"id"`
+		Label       string                 `json:"label"`
+		Values      map[string]interface{} `json:"values"`
+	} `json:"presets"`
+	Schema map[string]interface{} `json:"schema"`
+}
+
+// CatalogVersionProfile defines model for CatalogVersionProfile.
+type CatalogVersionProfile struct {
+	Available     bool `json:"available"`
+	Compatibility *struct {
+		Architectures *[]string `json:"architectures,omitempty"`
+		Kubernetes    *string   `json:"kubernetes,omitempty"`
+	} `json:"compatibility,omitempty"`
+	Configuration     *CatalogVersionConfiguration `json:"configuration,omitempty"`
+	Deprecated        bool                         `json:"deprecated"`
+	Recommended       bool                         `json:"recommended"`
+	Revoked           bool                         `json:"revoked"`
+	SupportTier       string                       `json:"supportTier"`
+	UnavailableReason *string                      `json:"unavailableReason,omitempty"`
+	UpgradeFrom       *string                      `json:"upgradeFrom,omitempty"`
+	Version           string                       `json:"version"`
 }
 
 // CharlieAbortRequest defines model for CharlieAbortRequest.
@@ -6723,6 +6759,9 @@ type DeliverySystemCompatibility struct {
 	CurrentRelease    *DeliverySystemRelease        `json:"current_release"`
 	CurrentRollout    *DeliverySystemRollout        `json:"current_rollout"`
 	ObservedInventory []DeliveryCompatibilityCount  `json:"observed_inventory"`
+
+	// PendingRelease Newest draft system release above current_release (staged by a server upgrade, promoted by a system rollout).
+	PendingRelease *DeliverySystemRelease `json:"pending_release"`
 }
 
 // DeliverySystemCompatibilityEnvelope defines model for DeliverySystemCompatibilityEnvelope.
@@ -7629,6 +7668,7 @@ type HelmChart struct {
 // HelmChartVersion defines model for HelmChartVersion.
 type HelmChartVersion struct {
 	AppVersion        *string                 `json:"app_version,omitempty"`
+	CatalogVersion    *CatalogVersionProfile  `json:"catalog_version,omitempty"`
 	ChartId           *openapi_types.UUID     `json:"chart_id,omitempty"`
 	CreatedAt         *time.Time              `json:"created_at,omitempty"`
 	CreatedAtUpstream *time.Time              `json:"created_at_upstream"`
@@ -7711,7 +7751,7 @@ type HelmRepository struct {
 // HelmRepositoryAuthConfig Credential document for a chart repository. This is the ONLY place
 // credentials are accepted; the top level of the request body is not.
 //
-// At rest the secret-valued keys live in a Fernet envelope
+// At rest the secret-valued keys live in an age-sealed column
 // (`helm_repositories.auth_config_encrypted`, migration 145) and only the
 // non-secret keys stay queryable as JSONB. Responses replace every
 // non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -11092,7 +11132,9 @@ type ToolPreflightCheckStatus string
 
 // ToolPreview defines model for ToolPreview.
 type ToolPreview struct {
-	Charts []struct {
+	// CatalogVersions Exact catalog profiles keyed by namespace/release name; chart rows retain their released SDK shape.
+	CatalogVersions *map[string]CatalogVersionProfile `json:"catalog_versions,omitempty"`
+	Charts          []struct {
 		ChartName    string  `json:"chart_name"`
 		ChartVersion string  `json:"chart_version"`
 		Namespace    string  `json:"namespace"`
@@ -12429,11 +12471,14 @@ type GetBackupsStorageParams struct {
 
 // PostCatalogApplicationsPreviewJSONBody defines parameters for PostCatalogApplicationsPreview.
 type PostCatalogApplicationsPreviewJSONBody struct {
-	ChartVersionId openapi_types.UUID                               `json:"chart_version_id"`
-	ClusterId      openapi_types.UUID                               `json:"cluster_id"`
-	Namespace      string                                           `json:"namespace"`
-	Operation      *PostCatalogApplicationsPreviewJSONBodyOperation `json:"operation,omitempty"`
-	ValuesOverride *string                                          `json:"values_override,omitempty"`
+	ChartVersionId openapi_types.UUID `json:"chart_version_id"`
+	ClusterId      openapi_types.UUID `json:"cluster_id"`
+
+	// FromChartVersionId Installed chart version used to evaluate catalog upgrade constraints.
+	FromChartVersionId *openapi_types.UUID                              `json:"from_chart_version_id,omitempty"`
+	Namespace          string                                           `json:"namespace"`
+	Operation          *PostCatalogApplicationsPreviewJSONBodyOperation `json:"operation,omitempty"`
+	ValuesOverride     *string                                          `json:"values_override,omitempty"`
 }
 
 // PostCatalogApplicationsPreviewJSONBodyOperation defines parameters for PostCatalogApplicationsPreview.
@@ -12497,9 +12542,18 @@ type GetCatalogChartsByIdVersionsParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
 	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
-	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset    *int                `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// SelectedVersionId Preserve an existing selection outside the curated set; the ID must belong to this authorized chart.
+	SelectedVersionId *openapi_types.UUID `form:"selected_version_id,omitempty" json:"selected_version_id,omitempty"`
+
+	// View Use curated for reviewed catalog versions resolved before pagination; all (default) includes other upstream versions without assurance.
+	View   *GetCatalogChartsByIdVersionsParamsView `form:"view,omitempty" json:"view,omitempty"`
+	Limit  *int                                    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int                                    `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// GetCatalogChartsByIdVersionsParamsView defines parameters for GetCatalogChartsByIdVersions.
+type GetCatalogChartsByIdVersionsParamsView string
 
 // GetCatalogInstalledParams defines parameters for GetCatalogInstalled.
 type GetCatalogInstalledParams struct {
@@ -12599,7 +12653,7 @@ type PostCatalogRepositoriesJSONBody struct {
 	// AuthConfig Credential document for a chart repository. This is the ONLY place
 	// credentials are accepted; the top level of the request body is not.
 	//
-	// At rest the secret-valued keys live in a Fernet envelope
+	// At rest the secret-valued keys live in an age-sealed column
 	// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
 	// non-secret keys stay queryable as JSONB. Responses replace every
 	// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -12629,7 +12683,7 @@ type PutCatalogRepositoriesByIdJSONBody struct {
 	// AuthConfig Credential document for a chart repository. This is the ONLY place
 	// credentials are accepted; the top level of the request body is not.
 	//
-	// At rest the secret-valued keys live in a Fernet envelope
+	// At rest the secret-valued keys live in an age-sealed column
 	// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
 	// non-secret keys stay queryable as JSONB. Responses replace every
 	// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -48923,6 +48977,38 @@ func NewGetCatalogChartsByIdVersionsRequest(server string, id openapi_types.UUID
 		if params.ClusterId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.SelectedVersionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "selected_version_id", runtime.ParamLocationQuery, *params.SelectedVersionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.View != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "view", runtime.ParamLocationQuery, *params.View); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

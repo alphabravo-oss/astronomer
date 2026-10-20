@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -396,7 +398,7 @@ func persistentVolumeComponent(
 	} else if len(drivers) > 1 {
 		driver = "multiple"
 	}
-	total := int32(len(claims))
+	total := safeconv.Int32(len(claims))
 	return protocol.SystemComponent{
 		ID: "cluster/core/persistentvolumeclaims", Name: "Persistent volume claims",
 		Category: "storage", Owner: "cluster", ManagementMethod: "csi",

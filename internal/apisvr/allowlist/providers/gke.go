@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+
+	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // GKEProvider patches a GKE cluster's master-authorized-networks-config

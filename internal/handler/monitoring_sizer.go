@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	corev1 "k8s.io/api/core/v1"
@@ -606,7 +608,7 @@ func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) ([]sizerCl
 		for _, cluster := range rows {
 			all = append(all, sizerCluster{Cluster: cluster, LastHeartbeat: liveness[cluster.ID]})
 		}
-		if int32(len(rows)) < page {
+		if safeconv.Int32(len(rows)) < page {
 			return all, nil
 		}
 	}

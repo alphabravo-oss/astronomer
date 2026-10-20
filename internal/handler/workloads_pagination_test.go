@@ -10,11 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 type listEnvelope struct {

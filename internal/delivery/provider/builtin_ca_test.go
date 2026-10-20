@@ -14,12 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func fixtureCA(t *testing.T) []byte {
@@ -45,8 +46,8 @@ func builtinOCIRow(t *testing.T) sqlc.ListClusterDeliveryAssignmentsRow {
 	row.SourceType = string(model.SourceHelmOCI)
 	row.Url = "oci://10.20.30.40/builtins/charts"
 	row.AuthMode = string(model.AuthNone)
-	row.CredentialEncrypted = ""
-	row.CaBundleEncrypted = ""
+	row.CredentialKeyID, row.CredentialAlgorithm, row.CredentialCiphertext, row.CredentialNonce = "", "", nil, nil
+	row.CaBundleKeyID, row.CaBundleAlgorithm, row.CaBundleCiphertext, row.CaBundleNonce = "", "", nil, nil
 	row.CredentialEpoch = 0
 	row.ResolvedRevision = "1.0.0"
 	row.Renderer = string(model.RendererHelm)

@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 func (h *RBACHandler) getGlobalRole(w http.ResponseWriter, r *http.Request) (sqlc.GlobalRole, bool) {
@@ -21,7 +22,7 @@ func (h *RBACHandler) getGlobalRole(w http.ResponseWriter, r *http.Request) (sql
 	}
 	role, err := h.queries.GetGlobalRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Global role not found")
 		return sqlc.GlobalRole{}, false
 	}
 	return role, true
@@ -36,7 +37,7 @@ func (h *RBACHandler) guardGlobalBinding(w http.ResponseWriter, r *http.Request,
 	}
 	role, err := h.queries.GetGlobalRoleByID(r.Context(), roleID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Global role not found")
 		return false
 	}
 	return h.enforceNoEscalation(w, r, role.Rules, uuid.UUID{}, uuid.UUID{}, "")
@@ -51,7 +52,7 @@ func (h *RBACHandler) guardClusterBinding(w http.ResponseWriter, r *http.Request
 	}
 	role, err := h.queries.GetClusterRoleByID(r.Context(), roleID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster role not found")
 		return false
 	}
 	return h.enforceNoEscalation(w, r, role.Rules, clusterID, uuid.UUID{}, namespace)
@@ -64,7 +65,7 @@ func (h *RBACHandler) guardProjectBinding(w http.ResponseWriter, r *http.Request
 	}
 	role, err := h.queries.GetProjectRoleByID(r.Context(), roleID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project role not found")
 		return false
 	}
 	return h.enforceNoEscalation(w, r, role.Rules, uuid.UUID{}, projectID, "")
@@ -79,7 +80,7 @@ func (h *RBACHandler) guardProjectBinding(w http.ResponseWriter, r *http.Request
 func (h *RBACHandler) guardGlobalRoleRules(w http.ResponseWriter, r *http.Request, id uuid.UUID, rules json.RawMessage) bool {
 	existing, err := h.queries.GetGlobalRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Global role not found")
 		return false
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
@@ -99,7 +100,7 @@ func (h *RBACHandler) guardGlobalRoleRules(w http.ResponseWriter, r *http.Reques
 func (h *RBACHandler) guardClusterRoleRules(w http.ResponseWriter, r *http.Request, id uuid.UUID, rules json.RawMessage) bool {
 	existing, err := h.queries.GetClusterRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster role not found")
 		return false
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
@@ -115,7 +116,7 @@ func (h *RBACHandler) guardClusterRoleRules(w http.ResponseWriter, r *http.Reque
 func (h *RBACHandler) guardProjectRoleRules(w http.ResponseWriter, r *http.Request, id uuid.UUID, rules json.RawMessage) bool {
 	existing, err := h.queries.GetProjectRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project role not found")
 		return false
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
@@ -161,7 +162,7 @@ func rejectBuiltinRoleWrite(w http.ResponseWriter, r *http.Request, isBuiltin bo
 	if !isBuiltin {
 		return false
 	}
-	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 		"Built-in roles cannot be modified or deleted")
 	return true
 }
@@ -186,24 +187,24 @@ func (h *RBACHandler) enforceNoEscalation(w http.ResponseWriter, r *http.Request
 	targetRules, err := decodeRoleRules(rawRules)
 	if err != nil {
 		// A role whose rules we cannot parse cannot be safely granted; fail closed.
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to decode target role rules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to decode target role rules")
 		return false
 	}
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to grant this role")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to grant this role")
 		return false
 	}
 	callerBindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load caller bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load caller bindings")
 		return false
 	}
 	for _, rule := range targetRules {
 		if rule.IsCRDGrant() {
 			for _, group := range rule.CRDAPIGroups() {
 				if escalationGroups[strings.ToLower(strings.TrimSpace(group))] {
-					RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+					apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 						"CRD grants cannot target privilege-escalation API groups")
 					return false
 				}
@@ -212,7 +213,7 @@ func (h *RBACHandler) enforceNoEscalation(w http.ResponseWriter, r *http.Request
 					for _, verb := range rbac.NormalizeNativeVerbs(rule.Verbs) {
 						for _, mapped := range charged {
 							if !h.engine.CheckPermission(callerBindings, mapped, rbac.Verb(verb), clusterID, projectID, namespace) {
-								RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot grant a role that includes permissions you do not hold")
+								apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Cannot grant a role that includes permissions you do not hold")
 								return false
 							}
 						}
@@ -223,7 +224,7 @@ func (h *RBACHandler) enforceNoEscalation(w http.ResponseWriter, r *http.Request
 		}
 		for _, verb := range rule.Verbs {
 			if !h.engine.CheckPermission(callerBindings, rbac.Resource(rule.Resource), rbac.Verb(verb), clusterID, projectID, namespace) {
-				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot grant a role that includes permissions you do not hold")
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Cannot grant a role that includes permissions you do not hold")
 				return false
 			}
 		}
@@ -238,7 +239,7 @@ func rejectGlobalCRDGrants(w http.ResponseWriter, r *http.Request, raw json.RawM
 	}
 	for _, rule := range rules {
 		if rule.IsCRDGrant() {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody,
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody,
 				"CRD grants belong on cluster or project roles, not global roles")
 			return true
 		}
@@ -262,7 +263,7 @@ func decodeRoleRules(raw json.RawMessage) ([]rbac.Rule, error) {
 func parseUUIDURLParam(w http.ResponseWriter, r *http.Request, param, label string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(chi.URLParam(r, param))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid "+label+" ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid "+label+" ID")
 		return uuid.UUID{}, false
 	}
 	return id, true
@@ -281,12 +282,12 @@ func roleDocuments(w http.ResponseWriter, r *http.Request, req roleRequest) (jso
 
 	var permissionObject map[string]json.RawMessage
 	if err := json.Unmarshal(permissions, &permissionObject); err != nil || permissionObject == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Role permissions must be a JSON object")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Role permissions must be a JSON object")
 		return nil, nil, false
 	}
 	var ruleArray []json.RawMessage
 	if err := json.Unmarshal(rules, &ruleArray); err != nil || ruleArray == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Role rules must be a JSON array")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Role rules must be a JSON array")
 		return nil, nil, false
 	}
 	return permissions, rules, true
@@ -304,7 +305,7 @@ func roleDocuments(w http.ResponseWriter, r *http.Request, req roleRequest) (jso
 // false means the binding carries a concrete user_id and may proceed.
 func rejectGroupBinding(w http.ResponseWriter, r *http.Request, userID, group string) bool {
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(group) != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 			"group bindings are managed via identity group mappings, not the manual binding API")
 		return true
 	}
@@ -314,7 +315,7 @@ func rejectGroupBinding(w http.ResponseWriter, r *http.Request, userID, group st
 func parseBindingRefs(w http.ResponseWriter, r *http.Request, roleIDValue, userIDValue string) (uuid.UUID, pgtype.UUID, bool) {
 	roleID, err := uuid.Parse(roleIDValue)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Role ID is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Role ID is required")
 		return uuid.UUID{}, pgtype.UUID{}, false
 	}
 	if userIDValue == "" {
@@ -322,7 +323,7 @@ func parseBindingRefs(w http.ResponseWriter, r *http.Request, roleIDValue, userI
 	}
 	userID, err := uuid.Parse(userIDValue)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return uuid.UUID{}, pgtype.UUID{}, false
 	}
 	return roleID, pgtype.UUID{Bytes: userID, Valid: true}, true

@@ -6,10 +6,11 @@ import (
 	"net"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 )
 
 func TestRuntimeActivatorCreatesDormantThenAgentSecrets(t *testing.T) {

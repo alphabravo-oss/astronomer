@@ -16,6 +16,13 @@ export const ADMIN_EMAIL =
 export const ADMIN_PASSWORD =
   process.env.LIVE_ADMIN_PASSWORD || "e2e-live-password";
 
+import { fileURLToPath } from "node:url";
+
+/** storageState written by live-auth.setup.ts after a REAL login. */
+export const LIVE_ADMIN_AUTH_STATE = fileURLToPath(
+  new URL("../../playwright/.auth/live-admin.json", import.meta.url),
+);
+
 export const SESSION_COOKIE = "astronomer_session";
 export const CSRF_COOKIE = "astronomer_csrf";
 export const CSRF_HEADER = "X-CSRF-Token";

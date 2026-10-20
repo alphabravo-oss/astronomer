@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (h *CloudCredentialHandler) canonicaliseTargetRefs(ctx context.Context, projectID uuid.UUID, in []TargetRef, credName string) ([]TargetRef, error) {
@@ -158,7 +159,7 @@ func stageCloudCredentialMaterializationDelete(ctx context.Context, q cloudCrede
 // dedupe key. dataVersion is a short fingerprint of the credential's current
 // encrypted value (empty for deletes). Folding it in is what makes a credential
 // *rotation* re-materialize: without it, an UPDATE that changes only
-// data_encrypted (secret_name and refs unchanged) produced the identical key, so
+// data_* sealed (secret_name and refs unchanged) produced the identical key, so
 // the already-'delivered' outbox row and 'applied' materialization row both
 // deduped the change away and the in-cluster Secret silently kept the old value.
 // A changed value now yields a new key → a fresh 'pending' outbox row → the
@@ -175,10 +176,10 @@ func cloudCredentialMaterializeDedupeKey(credentialID uuid.UUID, ref TargetRef, 
 }
 
 // cloudCredentialDataVersion is a short, stable fingerprint of a credential's
-// current encrypted payload. data_encrypted is re-written (freshly Fernet-
-// encrypted) on every credential update, so this changes whenever the stored
+// current encrypted payload. the data_* family is re-written (freshly
+// sealed) on every credential update, so this changes whenever the stored
 // value changes — exactly when a re-materialize must fire.
 func cloudCredentialDataVersion(cred sqlc.CloudCredential) string {
-	sum := sha256.Sum256([]byte(cred.DataEncrypted))
+	sum := sha256.Sum256(append([]byte(cred.DataKeyID+":"), cred.DataCiphertext...))
 	return hex.EncodeToString(sum[:6])
 }

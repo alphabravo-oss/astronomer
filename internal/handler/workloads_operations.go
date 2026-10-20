@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type idempotentWorkloadOperationCreator interface {
@@ -20,9 +21,9 @@ type idempotentWorkloadOperationCreator interface {
 
 var errWorkloadOperationIdempotencyConflict = errors.New("workload operation idempotency key identifies a different operation")
 
-func respondWorkloadMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode, fallbackMessage string) {
+func respondWorkloadMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, errWorkloadOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different workload operation")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different workload operation")
 		return
 	}
 	respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)

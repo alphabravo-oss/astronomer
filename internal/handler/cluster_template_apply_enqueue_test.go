@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
 )
 
 type invalidTemplateTaskWriter struct{ calls int }

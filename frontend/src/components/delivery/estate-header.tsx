@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/ui/page";
 export function EstateHeader() {
   return (
     <PageHeader
-      title="Estate"
-      description="All environments. Click a cluster to open its Flux workspace — Sources, Bundles, Targets, Rollouts, and Deployments live there."
+      title="Fleet"
+      description="All environments. Click a cluster to open its Flux workspace — Sources, Bundles, Targets, Rollouts, and Releases live there."
     />
   );
 }

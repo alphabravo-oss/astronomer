@@ -12,19 +12,20 @@ import (
 	"testing"
 	"time"
 
-	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/email"
-	"github.com/alphabravocompany/astronomer-go/internal/webhook"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+
+	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/email"
+	"github.com/alphabravocompany/astronomer-go/internal/webhook"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func testLogger() *slog.Logger {
@@ -256,18 +257,6 @@ func (*workerDispatchQueries) ListAllClusterRegistryConfigs(context.Context) ([]
 }
 func (*workerDispatchQueries) UpdateClusterRegistryConfig(context.Context, sqlc.UpdateClusterRegistryConfigParams) (sqlc.ClusterRegistryConfig, error) {
 	return sqlc.ClusterRegistryConfig{}, nil
-}
-func (*workerDispatchQueries) ListHelmRepositoriesWithLegacyAuthConfig(context.Context, sqlc.ListHelmRepositoriesWithLegacyAuthConfigParams) ([]sqlc.HelmRepository, error) {
-	return nil, nil
-}
-func (*workerDispatchQueries) SealHelmRepositoryAuthConfig(context.Context, sqlc.SealHelmRepositoryAuthConfigParams) error {
-	return nil
-}
-func (*workerDispatchQueries) ListMonitoringBackendsWithLegacyAuthConfig(context.Context, sqlc.ListMonitoringBackendsWithLegacyAuthConfigParams) ([]sqlc.MonitoringBackend, error) {
-	return nil, nil
-}
-func (*workerDispatchQueries) SealMonitoringBackendAuthConfig(context.Context, sqlc.SealMonitoringBackendAuthConfigParams) error {
-	return nil
 }
 func (*workerDispatchQueries) ListCRDOwnedClusters(context.Context, int32) ([]sqlc.FleetOwnership, error) {
 	return nil, nil
@@ -560,11 +549,11 @@ func (workerManagementBackupExecutor) ExecuteManagementBackupOperation(context.C
 }
 
 func testTunnelRuntime() TunnelRuntime {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		panic(err)
 	}
@@ -612,11 +601,11 @@ func testTunnelRuntime() TunnelRuntime {
 func testStandaloneRuntime() StandaloneRuntime {
 	stub := &workerDeliveryStub{}
 	queries := &workerDispatchQueries{}
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		panic(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		panic(err)
 	}
@@ -641,8 +630,7 @@ func testStandaloneRuntime() StandaloneRuntime {
 	}, Alerts: tasks.CharlieAlertRuntime{
 		Queries: queries, WriteFence: charlie.NewWriteFence(), Reconciler: workerAlertReconciler{},
 	}, Maintenance: tasks.MaintenanceRuntime{
-		AgentTokens:          tasks.AgentTokenRotateDeps{Queries: queries},
-		PlaintextCredentials: tasks.PlaintextCredentialMigrationDeps{Queries: queries, Encryptor: encryptor},
+		AgentTokens: tasks.AgentTokenRotateDeps{Queries: queries},
 	}, Allowlists: tasks.ApiserverAllowlistRuntime{Deps: tasks.ApiserverAllowlistReconcileDeps{
 		Queries: queries, Registry: allowlistRegistry,
 		ClusterShaper: allowlistproviders.ClusterFromSQLC, AuditWriter: queries,
@@ -759,7 +747,6 @@ func TestNewWorkerBindsRuntimeHandlersIntoCompositionGraph(t *testing.T) {
 		tasks.CharlieAlertDispatchTaskType:           false,
 		tasks.CharlieAlertReconcileType:              false,
 		tasks.AgentTokenRotateSweepType:              false,
-		tasks.PlaintextCredentialMigrationType:       false,
 		tasks.ApiserverAllowlistReconcileType:        false,
 		tasks.ApiserverAllowlistReconcileAllType:     false,
 		tasks.ApiserverAllowlistCleanupSnapshotsType: false,

@@ -162,7 +162,7 @@ function ManagedToolsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Cluster Tools"
+        title="Tools"
         description="Manage operational tools across your clusters"
       />
       <QueryStates

@@ -3,52 +3,27 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-const (
-	requestIDHeader     = "X-Request-ID"
-	correlationIDHeader = "X-Correlation-Id"
-)
-
-// maxRequestIDLen is the maximum allowed length for an X-Request-ID header value.
-const maxRequestIDLen = 256
-
-// isValidRequestID checks that the request ID is within the length cap and
-// contains no control characters. This prevents log injection attacks.
-func isValidRequestID(id string) bool {
-	if len(id) > maxRequestIDLen {
-		return false
-	}
-	for _, c := range id {
-		if c < 0x20 || c == 0x7f {
-			return false
-		}
-	}
-	return true
-}
-
-// RequestID prefers an incoming X-Correlation-Id header, then X-Request-ID.
-// If neither header is present and valid it generates a new UUID. The shared
-// identifier is stored in the request context and echoed back in both response
-// headers so downstream systems can use either convention.
+// RequestID establishes the request correlation id (guide ch.05): the W3C
+// traceparent trace-id when the inbound header is valid, else a valid
+// X-Correlation-ID, else a valid X-Request-ID, else a new UUID. The id is
+// stored in the request context (reqctx and pkg/logging) and echoed in both
+// X-Correlation-ID and X-Request-ID response headers.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get(correlationIDHeader)
-		if id == "" {
-			id = r.Header.Get(requestIDHeader)
-		}
-		generated := false
-		if id == "" || !isValidRequestID(id) {
+		id, inbound := logging.InboundCorrelationID(r.Header)
+		if !inbound {
 			id = uuid.New().String()
-			generated = true
 		}
-
-		ctx := reqctx.WithRequestID(r.Context(), id, generated)
-		w.Header().Set(requestIDHeader, id)
-		w.Header().Set(correlationIDHeader, id)
+		ctx := reqctx.WithRequestID(r.Context(), id, !inbound)
+		ctx = logging.WithCorrelationID(ctx, id)
+		w.Header().Set(logging.RequestIDHeader, id)
+		w.Header().Set(logging.CorrelationIDHeader, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

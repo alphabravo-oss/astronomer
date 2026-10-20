@@ -11,8 +11,6 @@ func TestChartRendersHardenedHookSecurityContexts(t *testing.T) {
 	out := helmTemplate(t)
 
 	assertRenderedContains(t, out,
-		"name: astronomer-migrate",
-		"name: migrate",
 		"name: astronomer-preflight",
 		"name: preflight",
 		"runAsNonRoot: true",

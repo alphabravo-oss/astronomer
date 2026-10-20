@@ -78,7 +78,7 @@ func (q *Queries) DeleteUserTOTPEnrollment(ctx context.Context, userID uuid.UUID
 
 const getUserTOTPEnrollment = `-- name: GetUserTOTPEnrollment :one
 
-SELECT user_id, secret_encrypted, label, confirmed_at, last_used_at, created_at, updated_at FROM user_totp_enrollments WHERE user_id = $1
+SELECT user_id, label, confirmed_at, last_used_at, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce FROM user_totp_enrollments WHERE user_id = $1
 `
 
 // TOTP / 2FA queries (migration 043). Drives the per-user enrollment
@@ -93,12 +93,15 @@ func (q *Queries) GetUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) (
 	var i UserTotpEnrollment
 	err := row.Scan(
 		&i.UserID,
-		&i.SecretEncrypted,
 		&i.Label,
 		&i.ConfirmedAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SecretKeyID,
+		&i.SecretAlgorithm,
+		&i.SecretCiphertext,
+		&i.SecretNonce,
 	)
 	return i, err
 }
@@ -177,25 +180,31 @@ func (q *Queries) TouchUserTOTPLastUsed(ctx context.Context, arg TouchUserTOTPLa
 }
 
 const upsertUserTOTPEnrollment = `-- name: UpsertUserTOTPEnrollment :one
-INSERT INTO user_totp_enrollments (user_id, secret_encrypted, label, confirmed_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO user_totp_enrollments (user_id, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce, label, confirmed_at)
+VALUES ($1, $2, $5, $6, $7, $3, $4)
 ON CONFLICT (user_id) DO UPDATE SET
-    secret_encrypted = EXCLUDED.secret_encrypted,
+    secret_key_id = EXCLUDED.secret_key_id,
+    secret_algorithm = EXCLUDED.secret_algorithm,
+    secret_ciphertext = EXCLUDED.secret_ciphertext,
+    secret_nonce = EXCLUDED.secret_nonce,
     label            = EXCLUDED.label,
     confirmed_at     = EXCLUDED.confirmed_at,
     last_used_at     = NULL,
     updated_at       = now()
-RETURNING user_id, secret_encrypted, label, confirmed_at, last_used_at, created_at, updated_at
+RETURNING user_id, label, confirmed_at, last_used_at, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce
 `
 
 type UpsertUserTOTPEnrollmentParams struct {
-	UserID          uuid.UUID `json:"user_id"`
-	SecretEncrypted string    `json:"secret_encrypted"`
-	Label           string    `json:"label"`
-	ConfirmedAt     time.Time `json:"confirmed_at"`
+	UserID           uuid.UUID `json:"user_id"`
+	SecretKeyID      string    `json:"secret_key_id"`
+	Label            string    `json:"label"`
+	ConfirmedAt      time.Time `json:"confirmed_at"`
+	SecretAlgorithm  string    `json:"secret_algorithm"`
+	SecretCiphertext []byte    `json:"secret_ciphertext"`
+	SecretNonce      []byte    `json:"secret_nonce"`
 }
 
-// Persists a freshly-confirmed enrollment. Caller passes the Fernet-
+// Persists a freshly-confirmed enrollment. Caller passes the age-
 // encrypted secret in $2 — the plaintext must NEVER reach this query.
 // ON CONFLICT lets the user re-enroll (lost device, new authenticator)
 // without first calling DeleteUserTOTPEnrollment. confirmed_at is
@@ -203,19 +212,25 @@ type UpsertUserTOTPEnrollmentParams struct {
 func (q *Queries) UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error) {
 	row := q.db.QueryRow(ctx, upsertUserTOTPEnrollment,
 		arg.UserID,
-		arg.SecretEncrypted,
+		arg.SecretKeyID,
 		arg.Label,
 		arg.ConfirmedAt,
+		arg.SecretAlgorithm,
+		arg.SecretCiphertext,
+		arg.SecretNonce,
 	)
 	var i UserTotpEnrollment
 	err := row.Scan(
 		&i.UserID,
-		&i.SecretEncrypted,
 		&i.Label,
 		&i.ConfirmedAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SecretKeyID,
+		&i.SecretAlgorithm,
+		&i.SecretCiphertext,
+		&i.SecretNonce,
 	)
 	return i, err
 }

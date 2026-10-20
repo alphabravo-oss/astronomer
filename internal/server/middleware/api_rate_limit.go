@@ -21,13 +21,13 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -334,13 +334,13 @@ func apiRateLimitMiddleware(limiter *apiRateLimiter, class APIRateLimitClass) fu
 			// request the cluster gate would reject anyway.
 			clusterID := apiRateLimitClusterID(r)
 			if d := limiter.allowClusterCeiling(class, clusterID); !d.allowed {
-				writeRateLimited(w, d)
+				writeRateLimited(w, r, d)
 				return
 			}
 			key := apiRateLimitKey(r)
 			d := limiter.allow(class, key)
 			if !d.allowed {
-				writeRateLimited(w, d)
+				writeRateLimited(w, r, d)
 				return
 			}
 			// Advertise the per-caller quota on the success path so clients
@@ -365,15 +365,10 @@ func setRateLimitHeaders(w http.ResponseWriter, d rateLimitDecision) {
 	h.Set("RateLimit-Reset", strconv.Itoa(d.reset))
 }
 
-func writeRateLimited(w http.ResponseWriter, d rateLimitDecision) {
+func writeRateLimited(w http.ResponseWriter, r *http.Request, d rateLimitDecision) {
 	setRateLimitHeaders(w, d)
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", formatAPIRetryAfter(d.wait))
-	w.WriteHeader(http.StatusTooManyRequests)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"code":    "rate_limited",
-		"message": "Too many requests for this endpoint class",
-	})
+	apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.RateLimited, "Too many requests for this endpoint class")
 }
 
 // apiRateLimitKey derives a stable per-caller key. Authenticated user ID

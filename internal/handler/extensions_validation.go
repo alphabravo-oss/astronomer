@@ -11,7 +11,8 @@ import (
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -35,7 +36,7 @@ var extensionNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 func (h *ExtensionHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	manifest, err := decodeExtensionManifest(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidManifest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidManifest, err.Error())
 		return
 	}
 	validation := validateExtensionManifest(manifest, h.current)

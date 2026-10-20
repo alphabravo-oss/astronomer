@@ -4,7 +4,7 @@
 #
 # Used by `make images.txt` to regenerate deploy/chart/images.txt. Release CI
 # resolves this inventory to exact digests; air-gapped operators consume the
-# signed release manifest through scripts/mirror-release.py.
+# signed release manifest through `astro airgap plan`/`mirror`.
 #
 # Usage:
 #   ./scripts/extract-images.sh > deploy/chart/images.txt
@@ -63,7 +63,7 @@ extract_images() {
     helm template astronomer "$CHART_DIR" \
         --kube-version 1.35.0 \
         --set secrets.secretKey=extract-images-render-only \
-        --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= \
+        --set secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U \
         $@ \
         | grep -oE 'image(Name)?: "?[^"]+"?' \
         | sed -E 's/^image(Name)?: //; s/^"//; s/"$//'
@@ -165,8 +165,8 @@ cat <<EOF
 #                  $BUNDLE_CATALOG
 #
 # Air-gapped install procedure: verify the tagged release-manifest signature,
-# then use scripts/mirror-release.py to resolve the complete immutable copy
-# plan, verify destination digests, sign the mapping, and emit Helm overrides.
+# then run "astro airgap plan" and "astro airgap mirror --to <registry>" to copy
+# every image (digests, multi-arch indexes and signatures preserved).
 #
 # See docs/airgapped-install.md for the full operator procedure.
 EOF

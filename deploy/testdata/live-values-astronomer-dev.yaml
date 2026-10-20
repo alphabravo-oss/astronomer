@@ -1,0 +1,299 @@
+# Sanitized `helm get values astronomer -n astronomer` of the live astronomer-dev
+# release (rev 255, 2026-10-20: cosign-verified GHCR v2.0.1 images, CNPG + Barman
+# Cloud plugin to off-host RustFS, management-plane DR enabled). Every secret value
+# is replaced with a lint-only placeholder; everything else is verbatim. Used by
+# live_values_compat_render_test.go to prove the chart still renders these values.
+bootstrap:
+  email: admin@alphabravo.io
+  password: live-values-test-bootstrap-password
+  username: admin
+catalog:
+  digest: sha256:084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c
+  enabled: true
+  sourceURL: https://raw.githubusercontent.com/alphabravo-oss/astronomer-catalog/3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5/catalog.json
+config:
+  agentImageRepository: ghcr.io/alphabravo-oss/astronomer-go-agent@sha256:97839a048a0d74ddc2e0cc7a0af005d1775b3608863310a9d844a7b7876c91ce
+  agentImageTag: v2.0.1
+  apiK8sProxyRateLimitBurst: 1000
+  apiK8sProxyRateLimitRPS: 500
+  corsAllowedOrigins: https://astronomer.dev.alphabravo.io
+  debug: "false"
+  env: development
+  logLevel: info
+  serverURL: https://astronomer.dev.alphabravo.io
+  trustedProxyCIDRs:
+  - 10.42.0.0/16
+delivery:
+  artifacts:
+    builtInBundles:
+      digest: ""
+      ociRepository: ""
+    fluxDistribution:
+      digest: ""
+      ociRepository: ""
+      trustPolicy:
+        certificateIdentity: https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/v2.0.1
+        oidcIssuer: https://token.actions.githubusercontent.com
+        requireSignature: true
+  sourceResolution:
+    trustKeys:
+      existingSecret: astronomer-delivery-trust
+dex:
+  image:
+    digest: sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462
+    pullPolicy: IfNotPresent
+    registry: ""
+    repository: docker.io/dexidp/dex
+    tag: v2.45.1
+frontend:
+  enabled: true
+  image:
+    digest: sha256:03587d4d2868b5070dfe7269ce73b07fc65a8f085a018ddb3cdb73d4d8a5cd2d
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-frontend
+    tag: v2.0.1
+  podDisruptionBudget:
+    enabled: false
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 25m
+      memory: 64Mi
+gateway:
+  enabled: false
+image:
+  agent:
+    digest: sha256:97839a048a0d74ddc2e0cc7a0af005d1775b3608863310a9d844a7b7876c91ce
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-go-agent
+    tag: v2.0.1
+  allowSchemaSkew: false
+  migrate:
+    digest: sha256:c55ad5608bc20815badd075bafce5e876e20ee6226f787463417cc6aa59e2607
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-go-migrate
+    tag: v2.0.1
+  pullPolicy: IfNotPresent
+  registry: ""
+  requireDigest: true
+  server:
+    digest: sha256:7c42ad5c844eb48031c5e0176a0eae5a0345204fc27e4b75ea5d75b71cab1e23
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-go-server
+    tag: v2.0.1
+  worker:
+    digest: sha256:c2e6301c37269ad71bb261e85845991bfdcb8f79c08960ed9cf1769e6e4acda2
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-go-worker
+    tag: v2.0.1
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/custom-headers: astronomer/astronomer-browser-headers
+  className: nginx
+  enabled: true
+  host: astronomer.dev.alphabravo.io
+kubectlShell:
+  enabled: true
+  image: ghcr.io/alphabravo-oss/astronomer-shell@sha256:1e939126481e0a6c46c2fc78c9e991cdb450c6ce22c9f1d7b2a1d745bc145cd8
+managementBackup:
+  enabled: true
+  encryption:
+    sourceIdentity: astronomer-dev-1-mj/astronomer/900db10f-b2cd-41e4-9603-0fa4d3fc8657
+    wrappingSecretRef:
+      key: passphrase
+      name: astronomer-mgmt-backup-wrap
+  encryptionKeyBackup:
+    enabled: true
+    keyPrefix: keys
+  image:
+    digest: sha256:47ea2f611576b9a20afacd70b1184b61f06d6949af1a0823760004a7b4104c5f
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-dr
+    tag: v2.0.1
+  immutability:
+    minimumRetentionDays: 30
+    mode: objectLock
+  retention:
+    credentialsSecretRef:
+      key: credentials
+      name: astronomer-mgmt-backup-s3
+    dryRun: true
+    enabled: true
+  s3:
+    bucket: astronomer-mgmt-backup
+    credentialsSecretRef:
+      key: credentials
+      name: astronomer-mgmt-backup-s3
+    endpoint: http://100.118.107.29:9000
+    prefix: astronomer-pg
+    region: us-east-1
+  schedule: 0 3 * * *
+managementLogging:
+  image:
+    digest: sha256:c5542543523c9678398dd78d927c05e8425ec15b038f226b67b3b019b1a70845
+    pullPolicy: IfNotPresent
+    registry: ""
+    repository: docker.io/fluent/fluent-bit
+    tag: 5.1.3
+managementRestoreDrill:
+  enabled: true
+  image:
+    digest: sha256:47ea2f611576b9a20afacd70b1184b61f06d6949af1a0823760004a7b4104c5f
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-dr
+    tag: v2.0.1
+  schedule: 0 4 * * 1
+  sidecar:
+    image:
+      digest: sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+      pullPolicy: IfNotPresent
+      registry: ""
+      repository: docker.io/library/postgres
+      tag: 16-alpine
+metrics:
+  dashboards:
+    enabled: true
+  prometheusRule:
+    enabled: true
+    labels:
+      release: astronomer-monitoring
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: astronomer-monitoring
+migrate:
+  enabled: true
+postgres:
+  bundled:
+    enabled: false
+    maxConnections: 800
+  cloudNativePG:
+    barmanCloud:
+      enabled: true
+      objectStoreName: offhost-archive
+      pluginName: barman-cloud.cloudnative-pg.io
+      scheduledBackup:
+        backupOwnerReference: self
+        enabled: true
+        schedule: 0 0 3 * * *
+    clusterName: astronomer-cnpg
+    imageName: ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1
+    instances: 1
+    parameters:
+      max_connections: "100"
+      shared_buffers: 128MB
+    resources:
+      limits:
+        cpu: "2"
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    synchronousReplication:
+      enabled: false
+  image:
+    digest: sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    pullPolicy: IfNotPresent
+    registry: ""
+    repository: docker.io/library/postgres
+    tag: 16-alpine
+  mode: cloudNativePG
+  password: live-values-test-postgres-password
+  pool:
+    maxConns: 12
+    minConns: 2
+preflight:
+  databaseSchema:
+    minimumUpgradeVersion: 1
+    # live captured 81; the chart pins this to the embedded schema (deploy: drop it or set 84)
+    targetVersion: 84
+  enabled: true
+  image:
+    digest: sha256:1e939126481e0a6c46c2fc78c9e991cdb450c6ce22c9f1d7b2a1d745bc145cd8
+    pullPolicy: IfNotPresent
+    registry: ghcr.io/alphabravo-oss
+    repository: astronomer-shell
+    tag: v2.0.1
+redis:
+  bundled:
+    enabled: true
+  image:
+    digest: sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
+    pullPolicy: IfNotPresent
+    registry: ""
+    repository: docker.io/valkey/valkey
+    tag: 8-alpine
+  mode: standalone
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+release:
+  # The 2.0.1 release manifest captured here cannot be rendered by the 2.1.0
+  # chart (it binds the chart and binary version); 2.1.0 deploys without one.
+  manifest: ""
+secrets:
+  # Placeholder: the live release still carries a Fernet key; the deploy must switch to an age identity.
+  encryptionKey: AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9
+  internalPSK: live-values-test-internal-psk-0000000000000000000000000000000000
+  internalPSKKey: ASTRONOMER_INTERNAL_PSK
+  internalPSKPrevious: ""
+  internalPSKPreviousKey: ASTRONOMER_INTERNAL_PSK_PREVIOUS
+  secretKey: live-values-test-jwt-signing-key-00000000000000000000000000000000
+server:
+  env:
+    NATIVE_RBAC_ENABLED: "true"
+  podDisruptionBudget:
+    enabled: false
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: "2"
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+tls:
+  letsEncrypt:
+    cloudflare:
+      apiTokenSecretKey: api-token
+      apiTokenSecretName: astronomer-cloudflare-dns
+    email: admin@alphabravo.io
+    environment: production
+    ingressClassName: nginx
+  secretName: astronomer-tls
+  source: letsEncrypt
+toolUI:
+  domain: tools.astronomer.dev.alphabravo.io
+utilities:
+  busybox:
+    digest: sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    pullPolicy: IfNotPresent
+    registry: ""
+    repository: docker.io/library/busybox
+    tag: "1.36"
+worker:
+  concurrency: 8
+  podDisruptionBudget:
+    enabled: false
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: "2"
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi

@@ -8,8 +8,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 var immutableDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -19,8 +21,10 @@ var keywordSSLModePattern = regexp.MustCompile(`(?:^|\s)sslmode\s*=`)
 // either of these has not been configured with real secrets and must fail fast
 // rather than run with a guessable signing/encryption key.
 const (
-	devSecretKey     = "local-dev-secret-key-change-in-production"
-	devEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+	devSecretKey = "local-dev-secret-key-change-in-production"
+	// devEncryptionKey is the age identity scripts/dev.sh and .env.dev hand the
+	// local stack.
+	devEncryptionKey = "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7"
 )
 
 // Every other key literal published in this repository. The chart no longer
@@ -45,8 +49,9 @@ var (
 	}
 	publishedEncryptionKeys = []string{
 		devEncryptionKey,
-		"3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo=",
-		"I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=",
+		"AGE-SECRET-KEY-1PP9QEMWWYX3L0L80VA7062GN8NMHTGEYCZW80TL7PJKGUH6PKWZQ6H6DAA",
+		"AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U",
+		"AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9", // Makefile HELM_LINT_ARGS (render-only)
 	}
 )
 
@@ -121,7 +126,7 @@ func DevSentinelsInUse(cfg *Config) []string {
 	if slices.Contains(publishedSecretKeys, strings.TrimSpace(cfg.SecretKey)) {
 		inUse = append(inUse, DevSentinelSecretKey)
 	}
-	if slices.Contains(publishedEncryptionKeys, strings.TrimSpace(cfg.EncryptionKey)) {
+	if usesPublishedEncryptionKey(cfg) {
 		inUse = append(inUse, DevSentinelEncryptionKey)
 	}
 	return inUse
@@ -134,7 +139,7 @@ func DevSentinelsInUse(cfg *Config) []string {
 // a no-op (returns nil) outside production so dev/local stacks come up unchanged.
 //
 // encryptorReady lets the caller keep the auth-package dependency out of this
-// package: pass true when auth.NewEncryptor(cfg.EncryptionKey) succeeded.
+// package: pass true when cfg.LoadEncryptor() succeeded.
 //
 // Both the server (internal/server) and the worker (cmd/worker) call this so a
 // typo'd key or dirty config crashes BOTH processes loudly instead of leaving the
@@ -157,8 +162,8 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		}
 		encryptionKey := strings.TrimSpace(cfg.EncryptionKey)
 		switch {
-		case encryptionKey == "":
-			errs = append(errs, "astronomer_encryption_key is empty")
+		case encryptionKey == "" && strings.TrimSpace(cfg.EncryptionKeyFile) == "":
+			errs = append(errs, "astronomer_encryption_key and astronomer_encryption_key_file are both empty")
 		case slices.Contains(sentinels, DevSentinelEncryptionKey):
 			errs = append(errs, "astronomer_encryption_key is still the known development value")
 		case !encryptorReady:
@@ -258,4 +263,35 @@ func constantTimeStringEqual(left, right string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+}
+
+// publishedRecipients holds the public age recipients of every key literal in
+// publishedEncryptionKeys. Detection compares recipients, not strings, so a
+// published identity is caught whatever label it carries and whether it
+// arrives inline or through ASTRONOMER_ENCRYPTION_KEY_FILE.
+var publishedRecipients = func() map[string]bool {
+	out := make(map[string]bool, len(publishedEncryptionKeys))
+	for _, k := range publishedEncryptionKeys {
+		enc, err := crypto.NewEncryptor(k)
+		if err != nil {
+			panic(fmt.Sprintf("config: published encryption key literal does not parse: %v", err))
+		}
+		out[enc.KeyInventory()[0].Recipient] = true
+	}
+	return out
+}()
+
+// usesPublishedEncryptionKey reports whether ANY key in the configured keyring
+// (current or previous) is one published in this repository.
+func usesPublishedEncryptionKey(cfg *Config) bool {
+	enc, err := cfg.LoadEncryptor()
+	if err != nil {
+		return false
+	}
+	for _, k := range enc.KeyInventory() {
+		if publishedRecipients[k.Recipient] {
+			return true
+		}
+	}
+	return false
 }

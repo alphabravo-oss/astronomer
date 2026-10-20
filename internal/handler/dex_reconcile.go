@@ -28,6 +28,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -189,94 +191,53 @@ func (h *DexHandler) astronomerPublicClients(ctx context.Context, settings sqlc.
 	return clients, settings, nil
 }
 
-func (h *DexHandler) encryptPublicClients(clients []map[string]any) (string, error) {
+func (h *DexHandler) encryptPublicClients(clients []map[string]any) (crypto.Sealed, error) {
 	if len(clients) == 0 {
-		return "", nil
+		return crypto.Sealed{}, nil
 	}
 	if h == nil || h.encryptor == nil {
-		return "", fmt.Errorf("encrypt Dex static clients: encryptor is not configured")
+		return crypto.Sealed{}, fmt.Errorf("encrypt Dex static clients: encryptor is not configured")
 	}
 	raw, err := json.Marshal(clients)
 	if err != nil {
-		return "", fmt.Errorf("encode Dex static clients: %w", err)
+		return crypto.Sealed{}, fmt.Errorf("encode Dex static clients: %w", err)
 	}
-	value, err := h.encryptor.Encrypt(string(raw))
+	value, err := h.encryptor.Encrypt(raw)
+	clear(raw)
 	if err != nil {
-		return "", fmt.Errorf("encrypt Dex static clients: %w", err)
+		return crypto.Sealed{}, fmt.Errorf("encrypt Dex static clients: %w", err)
 	}
 	return value, nil
 }
 
-// loadPublicClients uses the compatibility copy until the durable cutover
-// marker is set. Before cutover it opportunistically backfills (but never
-// scrubs) the envelope. After cutover only the envelope is authoritative.
-func (h *DexHandler) loadPublicClients(ctx context.Context, row sqlc.DexSetting) ([]map[string]any, sqlc.DexSetting, error) {
+// loadPublicClients opens the sealed public_clients family, the only copy of
+// the Dex static clients. A zero sealed value is an empty client list.
+func (h *DexHandler) loadPublicClients(_ context.Context, row sqlc.DexSetting) ([]map[string]any, sqlc.DexSetting, error) {
 	if row.RuntimeSecretName == "" {
 		row.RuntimeSecretName = "astronomer-dex-runtime"
 	}
-	decode := func(raw []byte) ([]map[string]any, error) {
-		clients := make([]map[string]any, 0)
-		if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			return clients, nil
-		}
-		if err := json.Unmarshal(raw, &clients); err != nil {
-			return nil, fmt.Errorf("decode Dex static clients: %w", err)
-		}
-		if err := validatePublicClients(clients); err != nil {
-			return nil, fmt.Errorf("validate Dex static clients")
-		}
-		return clients, nil
+	clients := make([]map[string]any, 0)
+	if row.PublicClientsKeyID == "" {
+		return clients, row, nil
 	}
-	// Before the explicit cutover, public_clients is the compatibility source of
-	// truth because a previous binary may still update it. New binaries dual-write
-	// the envelope but never scrub while old replicas can be serving.
-	if !row.PublicClientsCutoverAt.Valid {
-		clients, err := decode(row.PublicClients)
-		if err != nil || len(clients) == 0 || row.PublicClientsEncrypted != "" {
-			return clients, row, err
-		}
-		encrypted, err := h.encryptPublicClients(clients)
-		if err != nil {
-			return nil, row, err
-		}
-		backfilled, err := h.queries.BackfillDexPublicClientsEnvelope(ctx, sqlc.BackfillDexPublicClientsEnvelopeParams{
-			ID: row.ID, PublicClientsEncrypted: encrypted, LegacyPublicClients: row.PublicClients,
-		})
-		if err == nil {
-			if backfilled.RuntimeSecretName == "" {
-				backfilled.RuntimeSecretName = row.RuntimeSecretName
-			}
-			return clients, backfilled, nil
-		}
-		latest, readErr := h.queries.GetDexSettings(ctx, row.ID)
-		if readErr != nil {
-			return nil, row, fmt.Errorf("backfill Dex static-client envelope")
-		}
-		latestClients, decodeErr := decode(latest.PublicClients)
-		return latestClients, latest, decodeErr
+	if h == nil || h.encryptor == nil {
+		return nil, row, fmt.Errorf("decrypt Dex static clients: encryptor is not configured")
 	}
-	if row.PublicClientsEncrypted != "" {
-		if h == nil || h.encryptor == nil {
-			return nil, row, fmt.Errorf("decrypt Dex static clients: encryptor is not configured")
-		}
-		plain, err := h.encryptor.Decrypt(row.PublicClientsEncrypted)
-		if err != nil {
-			return nil, row, fmt.Errorf("decrypt Dex static clients: %w", err)
-		}
-		clients, err := decode([]byte(plain))
-		return clients, row, err
-	}
-	// Empty ciphertext is the canonical encoding for an empty client array.
-	// The cutover constraint guarantees the compatibility copy is also empty.
-	return []map[string]any{}, row, nil
-}
-
-func mustDexJSON(value any, fallback []byte) json.RawMessage {
-	raw, err := json.Marshal(value)
+	plain, err := h.encryptor.Decrypt(crypto.FromParts(row.PublicClientsKeyID, row.PublicClientsAlgorithm, row.PublicClientsCiphertext, row.PublicClientsNonce))
 	if err != nil {
-		return json.RawMessage(fallback)
+		return nil, row, fmt.Errorf("decrypt Dex static clients: %w", err)
 	}
-	return raw
+	defer clear(plain)
+	if len(bytes.TrimSpace(plain)) == 0 || bytes.Equal(bytes.TrimSpace(plain), []byte("null")) {
+		return clients, row, nil
+	}
+	if err := json.Unmarshal(plain, &clients); err != nil {
+		return nil, row, fmt.Errorf("decode Dex static clients: %w", err)
+	}
+	if err := validatePublicClients(clients); err != nil {
+		return nil, row, fmt.Errorf("validate Dex static clients")
+	}
+	return clients, row, nil
 }
 
 func mergePublicClientSecrets(existing, requested []map[string]any) []map[string]any {

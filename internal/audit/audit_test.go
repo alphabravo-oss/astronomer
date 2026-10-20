@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"io"
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/jackc/pgx/v5/pgtype"
 

@@ -10,20 +10,23 @@
 
 -- name: InsertSSOSession :exec
 -- Called by the SSO Callback after the Astronomer JWT pair is minted.
--- jti is the access JWT's JTI; upstream_id_token_encrypted is Fernet-
+-- jti is the access JWT's JTI; upstream_id_token_{key_id,algorithm,ciphertext,nonce} is age-
 -- ciphertext (the caller wraps before calling). ON CONFLICT replaces
 -- the row so a fresh login re-uses the JTI key (which it shouldn't —
 -- JTIs are uuid.New per token — but the upsert protects against a
 -- pathological repeat without an extra round-trip).
 INSERT INTO sso_sessions (
-    jti, user_id, provider_name, upstream_id_token_encrypted,
+    jti, user_id, provider_name, upstream_id_token_key_id, upstream_id_token_algorithm, upstream_id_token_ciphertext, upstream_id_token_nonce,
     end_session_endpoint, expires_at
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $7, $8, $9, $5, $6)
 ON CONFLICT (jti) DO UPDATE SET
     user_id                     = EXCLUDED.user_id,
     provider_name               = EXCLUDED.provider_name,
-    upstream_id_token_encrypted = EXCLUDED.upstream_id_token_encrypted,
+    upstream_id_token_key_id = EXCLUDED.upstream_id_token_key_id,
+    upstream_id_token_algorithm = EXCLUDED.upstream_id_token_algorithm,
+    upstream_id_token_ciphertext = EXCLUDED.upstream_id_token_ciphertext,
+    upstream_id_token_nonce = EXCLUDED.upstream_id_token_nonce,
     end_session_endpoint        = EXCLUDED.end_session_endpoint,
     expires_at                  = EXCLUDED.expires_at;
 

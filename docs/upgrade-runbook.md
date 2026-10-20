@@ -1,5 +1,7 @@
 # Astronomer v1 upgrade and rollback
 
+> **Note (2026-10 realignment):** `scripts/upgrade-release.sh` was removed with the CI tooling sweep; the upgrade driver it wrapped lives in `internal/ops/upgradecli` and is exposed through the `astro` CLI in Phase 1. Until then use `git show 4904e8c:scripts/upgrade-release.sh`.
+
 This runbook upgrades an existing, healthy Astronomer v1 Helm release to one
 exact tagged v1 release. The supported path is ordinary Helm ownership of the
 dependency-free management-plane chart. Flux controllers remain agent-managed
@@ -252,6 +254,36 @@ Then:
 6. verify backup, audit, identity, and alerting integrations; and
 7. hold the release until normal latency and error budgets remain stable for
    the enterprise observation window.
+
+### Required: promote the delivery-system release
+
+A new server version stages its signed delivery-system release (the Flux
+distribution and the matching agent version) as a **draft**. It is not
+delivered to any managed cluster until a system rollout promotes it; until
+then the fleet keeps running the previous release and the new release stays
+`draft`. This step is part of every upgrade:
+
+```bash
+# The pending (draft) release and any rollout in flight.
+astro delivery system-rollout status
+
+# Start the rollout of the pending release. Default strategy: one cluster at a
+# time, pause on the first failure. Override with --strategy @strategy.json;
+# --release <uuid> picks a release other than the pending one.
+astro delivery system-rollout start
+
+# Approve the gated rollout (uses the current rollout's fencing generation).
+astro delivery system-rollout approve
+
+# Follow progress until state is `succeeded`; inspect per-cluster phases.
+astro delivery system-rollout status
+astro delivery system-rollout status <rollout-id> --clusters
+```
+
+When the rollout succeeds the release becomes `released` and `status` reports
+no pending release. A paused rollout (a cluster failed) is inspected with
+`--clusters` and continued or rolled back through the REST endpoints under
+`/api/v1/delivery/system/rollouts/{id}/` (`resume`, `retry`, `rollback`).
 
 ## Rollback
 

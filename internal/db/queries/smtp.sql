@@ -9,7 +9,7 @@
 --
 -- The smtp_settings row is a singleton — every read/write targets the
 -- same well-known id. The application code (NOT this query layer) is
--- responsible for Fernet-encrypting/decrypting password_encrypted; we
+-- responsible for age-encrypting/decrypting password_{key_id,algorithm,ciphertext,nonce}; we
 -- store and return the ciphertext verbatim.
 
 -- name: GetSMTPSettings :one
@@ -22,17 +22,20 @@ SELECT * FROM smtp_settings WHERE id = $1;
 -- ON CONFLICT lets the first PUT create the row and every subsequent
 -- one update it without a separate INSERT/UPDATE branch.
 INSERT INTO smtp_settings (
-    id, enabled, host, port, username, password_encrypted,
+    id, enabled, host, port, username, password_key_id, password_algorithm, password_ciphertext, password_nonce,
     from_address, from_name, auth_mechanism, encryption,
     require_tls, timeout_seconds
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+VALUES ($1, $2, $3, $4, $5, $6, $13, $14, $15, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (id) DO UPDATE SET
     enabled             = EXCLUDED.enabled,
     host                = EXCLUDED.host,
     port                = EXCLUDED.port,
     username            = EXCLUDED.username,
-    password_encrypted  = EXCLUDED.password_encrypted,
+    password_key_id = EXCLUDED.password_key_id,
+    password_algorithm = EXCLUDED.password_algorithm,
+    password_ciphertext = EXCLUDED.password_ciphertext,
+    password_nonce = EXCLUDED.password_nonce,
     from_address        = EXCLUDED.from_address,
     from_name           = EXCLUDED.from_name,
     auth_mechanism      = EXCLUDED.auth_mechanism,

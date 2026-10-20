@@ -14,10 +14,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // optionalClusterID parses an optional UUID string into a pgtype.UUID. Empty
@@ -35,36 +38,37 @@ func (h *BackupHandler) optionalClusterID(s string) (pgtype.UUID, error) {
 }
 
 // encryptCredentials encrypts an aws-style access/secret pair using the
-// configured Fernet encryptor. Credential-bearing writes fail closed when the
-// encryptor is unavailable so new plaintext secrets can never enter the legacy
-// columns.
-func (h *BackupHandler) encryptCredentials(access, secret string) (string, error) {
+// configured encryptor. Credential-bearing writes fail closed when the
+// encryptor is unavailable.
+func (h *BackupHandler) encryptCredentials(access, secret string) (crypto.Sealed, error) {
 	if access == "" && secret == "" {
-		return "", nil
+		return crypto.Sealed{}, nil
 	}
 	if h == nil || h.encryptor == nil {
-		return "", fmt.Errorf("backup credential encryption is not configured")
+		return crypto.Sealed{}, fmt.Errorf("backup credential encryption is not configured")
 	}
 	payload, err := json.Marshal(map[string]string{
 		"access_key": access,
 		"secret_key": secret,
 	})
 	if err != nil {
-		return "", err
+		return crypto.Sealed{}, err
 	}
-	return h.encryptor.Encrypt(string(payload))
+	return h.encryptor.Encrypt(payload)
 }
 
-func legacyBackupCredentialColumns(_, _, _ string) (string, string) {
-	return "", ""
-}
-
-// decryptCredentials returns the access/secret pair for a storage config,
-// preferring the encrypted column when available and falling back to the
-// legacy plaintext columns when no encryptor is configured.
+// decryptCredentials returns the access/secret pair for a storage config from
+// the sealed credentials family. A row without it has no credentials; a sealed
+// row without an encryptor fails closed.
 func (h *BackupHandler) decryptCredentials(cfg sqlc.BackupStorageConfig) (string, string, error) {
-	if h != nil && h.encryptor != nil && cfg.EncryptedCredentials != "" {
-		plaintext, err := h.encryptor.Decrypt(cfg.EncryptedCredentials)
+	if cfg.CredentialsKeyID == "" {
+		return "", "", nil
+	}
+	if h == nil || h.encryptor == nil {
+		return "", "", fmt.Errorf("backup credentials are encrypted but no encryption key is configured")
+	}
+	{
+		plaintext, err := h.encryptor.DecryptString(crypto.FromParts(cfg.CredentialsKeyID, cfg.CredentialsAlgorithm, cfg.CredentialsCiphertext, cfg.CredentialsNonce))
 		if err != nil {
 			return "", "", err
 		}
@@ -77,7 +81,6 @@ func (h *BackupHandler) decryptCredentials(cfg sqlc.BackupStorageConfig) (string
 		}
 		return creds.AccessKey, creds.SecretKey, nil
 	}
-	return cfg.AccessKey, cfg.SecretKey, nil
 }
 
 // storageResponse builds the API representation of a storage config. The
@@ -96,7 +99,7 @@ func (h *BackupHandler) storageResponse(c sqlc.BackupStorageConfig) map[string]a
 		"bsl_name":         veleroBSLNameFor(c),
 		"created_at":       c.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":       c.UpdatedAt.UTC().Format(time.RFC3339),
-		"has_credentials":  c.EncryptedCredentials != "" || c.AccessKey != "",
+		"has_credentials":  c.CredentialsKeyID != "",
 	}
 	if c.ClusterID.Valid {
 		out["cluster_id"] = uuid.UUID(c.ClusterID.Bytes).String()

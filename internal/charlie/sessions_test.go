@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"k8s.io/apimachinery/pkg/version"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type sessionQueriesFake struct {

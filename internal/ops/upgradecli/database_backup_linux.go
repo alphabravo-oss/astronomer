@@ -16,7 +16,7 @@ import (
 
 // These constants preserve the remote POSTGRES_* expansion used by the legacy
 // bundled-database adapter. No secret is expanded locally or placed in argv.
-const databaseStateScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" -AtF "|" -c "SELECT current_database(), current_setting('server_version_num')::bigint / 10000, count(*), COALESCE(max(version),0), COALESCE(bool_or(dirty),false) FROM schema_migrations"`
+const databaseStateScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" -AtF "|" -c "SELECT current_database(), current_setting('server_version_num')::bigint / 10000, 1, COALESCE(max(version_id) FILTER (WHERE is_applied),0), COALESCE(bool_or(NOT is_applied),false) FROM goose_db_version"`
 const databaseDumpScript = `pg_dump --format=custom --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"`
 
 const databasePodTemplate = `{{.metadata.uid}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{.metadata.namespace}}{{"\t"}}{{index .metadata.labels "app.kubernetes.io/instance"}}{{"\t"}}{{index .metadata.labels "app.kubernetes.io/component"}}{{"\t"}}{{if .metadata.deletionTimestamp}}deleted{{else}}live{{end}}`

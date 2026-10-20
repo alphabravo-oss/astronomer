@@ -7,14 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type RolloutQueries interface {
@@ -93,31 +95,31 @@ type rolloutSummary struct {
 func (h *RolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 	expected, err := requireIfMatch(r)
 	if err != nil || expected < 1 {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", "If-Match must contain the current positive target generation")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, "If-Match must contain the current positive target generation")
 		return
 	}
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request startRolloutRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	targetID, err := pathUUID(r, "id", "targetID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.planner == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery rollout planner is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery rollout planner is unavailable")
 		return
 	}
 	actor := rolloutActor(r)
@@ -131,11 +133,11 @@ func (h *RolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 		Actor: actor, IdempotencyKey: key, Audit: auditIntent,
 	})
 	if err != nil {
-		respondRolloutError(w, err)
+		respondRolloutError(w, r, err)
 		return
 	}
 	if plan.ProjectID != projectID {
-		respondError(w, http.StatusNotFound, "not_found", "delivery resource not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "delivery resource not found")
 		return
 	}
 	events.PublishChanged(h.bus, "delivery_rollout", "", plan.ID.String(), map[string]any{"project_id": projectID.String(), "action": "created"})
@@ -146,44 +148,44 @@ func (h *RolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 func (h *RolloutHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	state, err := rolloutStateFilter(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, err.Error())
 		return
 	}
 	targetID, err := optionalUUIDFilter(r, "target_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery rollout persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery rollout persistence is unavailable")
 		return
 	}
 	params := sqlc.ListDeliveryRolloutsParams{ProjectID: projectID, TargetID: targetID, State: state, QueryLimit: limit, QueryOffset: offset}
 	rows, err := h.queries.ListDeliveryRollouts(r.Context(), params)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountDeliveryRollouts(r.Context(), sqlc.CountDeliveryRolloutsParams{ProjectID: projectID, TargetID: targetID, State: state})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	items := make([]rolloutSummary, 0, len(rows))
 	for _, row := range rows {
 		item, err := rolloutFromRow(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored rollout is invalid")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored rollout is invalid")
 			return
 		}
 		items = append(items, item)
@@ -197,27 +199,27 @@ func (h *RolloutHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery rollout persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery rollout persistence is unavailable")
 		return
 	}
 	row, err := h.queries.GetDeliveryRollout(r.Context(), sqlc.GetDeliveryRolloutParams{ID: rolloutID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	summary, err := rolloutFromRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored rollout is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored rollout is invalid")
 		return
 	}
 	approvals, err := h.queries.ListDeliveryRolloutApprovals(r.Context(), rolloutID)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	eventsRows, err := h.queries.ListDeliveryRolloutEvents(r.Context(), sqlc.ListDeliveryRolloutEventsParams{RolloutID: rolloutID, ProjectID: projectID, QueryLimit: 50, QueryOffset: 0})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.FencingGeneration)
@@ -233,17 +235,17 @@ func (h *RolloutHandler) Clusters(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	rows, err := h.queries.ListDeliveryRolloutClusters(r.Context(), sqlc.ListDeliveryRolloutClustersParams{RolloutID: rolloutID, ProjectID: projectID, QueryLimit: limit, QueryOffset: offset})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountDeliveryRolloutClusters(r.Context(), sqlc.CountDeliveryRolloutClustersParams{RolloutID: rolloutID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
@@ -256,17 +258,17 @@ func (h *RolloutHandler) Events(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	rows, err := h.queries.ListDeliveryRolloutEvents(r.Context(), sqlc.ListDeliveryRolloutEventsParams{RolloutID: rolloutID, ProjectID: projectID, QueryLimit: limit, QueryOffset: offset})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountDeliveryRolloutEvents(r.Context(), sqlc.CountDeliveryRolloutEventsParams{RolloutID: rolloutID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
@@ -291,31 +293,31 @@ func (h *RolloutHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 func (h *RolloutHandler) action(w http.ResponseWriter, r *http.Request, action deliveryrollout.Action) {
 	expected, err := requireIfMatch(r)
 	if err != nil || expected < 1 {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", "If-Match must contain the current positive rollout fencing generation")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, "If-Match must contain the current positive rollout fencing generation")
 		return
 	}
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request rolloutActionRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	rolloutID, err := pathUUID(r, "id", "rolloutID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.controller == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery rollout controls are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery rollout controls are unavailable")
 		return
 	}
 	auditIntent := newAuditIntent(r, deliveryAuditEvent{
@@ -327,7 +329,7 @@ func (h *RolloutHandler) action(w http.ResponseWriter, r *http.Request, action d
 		ActorID: reqctx.UserUUID(r.Context()), ReasonCode: request.ReasonCode, IdempotencyKey: key, Audit: auditIntent,
 	})
 	if err != nil {
-		respondRolloutError(w, err)
+		respondRolloutError(w, r, err)
 		return
 	}
 	if !result.Replayed {
@@ -341,31 +343,31 @@ func (h *RolloutHandler) action(w http.ResponseWriter, r *http.Request, action d
 func (h *RolloutHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	expected, err := requireIfMatch(r)
 	if err != nil || expected < 1 {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", "If-Match must contain the current positive rollout fencing generation")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, "If-Match must contain the current positive rollout fencing generation")
 		return
 	}
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request rolloutApprovalRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	rolloutID, err := pathUUID(r, "id", "rolloutID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.controller == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery rollout controls are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery rollout controls are unavailable")
 		return
 	}
 	auditIntent := newAuditIntent(r, deliveryAuditEvent{
@@ -381,7 +383,7 @@ func (h *RolloutHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		ActorID: reqctx.UserUUID(r.Context()), ExpiresAt: request.ExpiresAt, IdempotencyKey: key, Audit: auditIntent,
 	})
 	if err != nil {
-		respondRolloutError(w, err)
+		respondRolloutError(w, r, err)
 		return
 	}
 	if !result.Replayed {
@@ -435,12 +437,12 @@ func rolloutFromRow(row sqlc.DeliveryRollout) (rolloutSummary, error) {
 func rolloutScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	rolloutID, err := pathUUID(r, "id", "rolloutID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, rolloutID, true

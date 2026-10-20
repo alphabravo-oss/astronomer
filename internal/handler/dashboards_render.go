@@ -10,17 +10,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Dashboard store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Dashboard store not configured")
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
@@ -28,7 +31,7 @@ func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) 
 		ScopeID: uuid.Nil,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := h.renderRows(r.Context(), rows, map[string]string{})
@@ -38,7 +41,7 @@ func (h *DashboardHandler) RenderGlobal(w http.ResponseWriter, r *http.Request) 
 // RenderCluster handles GET /api/v1/dashboards/clusters/{id}/.
 func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Dashboard store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Dashboard store not configured")
 		return
 	}
 	id, ok := parseClusterIDParam(w, r, "id")
@@ -48,10 +51,10 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 	clusterUID, err := h.queries.GetClusterUIDForID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
@@ -59,7 +62,7 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 		ScopeID: id,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := h.renderRows(r.Context(), rows, map[string]string{
@@ -72,12 +75,12 @@ func (h *DashboardHandler) RenderCluster(w http.ResponseWriter, r *http.Request)
 // RenderProject handles GET /api/v1/dashboards/projects/{id}/.
 func (h *DashboardHandler) RenderProject(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Dashboard store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Dashboard store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	rows, err := h.queries.ListWidgetsForScope(r.Context(), sqlc.ListWidgetsForScopeParams{
@@ -85,7 +88,7 @@ func (h *DashboardHandler) RenderProject(w http.ResponseWriter, r *http.Request)
 		ScopeID: id,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := h.renderRows(r.Context(), rows, map[string]string{
@@ -252,13 +255,13 @@ func (h *DashboardHandler) resolveDatasource(row sqlc.PrometheusDatasource) (das
 		URL:           row.Url,
 		TLSSkipVerify: row.TlsSkipVerify,
 	}
-	if row.AuthEncrypted == "" {
+	if row.AuthKeyID == "" {
 		return out, nil
 	}
 	if h.encryptor == nil {
 		return out, fmt.Errorf("datasource has stored auth but encryptor not configured")
 	}
-	plaintext, err := h.encryptor.Decrypt(row.AuthEncrypted)
+	plaintext, err := h.encryptor.DecryptString(crypto.FromParts(row.AuthKeyID, row.AuthAlgorithm, row.AuthCiphertext, row.AuthNonce))
 	if err != nil {
 		return out, fmt.Errorf("auth decrypt: %w", err)
 	}
@@ -273,14 +276,14 @@ func (h *DashboardHandler) resolveDatasource(row sqlc.PrometheusDatasource) (das
 }
 
 // sealAuth is the inverse of resolveDatasource — JSON-encode the
-// three auth fields and Fernet-encrypt the blob. Returns an empty
+// three auth fields and age-encrypt the blob. Returns an empty
 // string when none of the fields are set (encoded as "no auth").
-func (h *DashboardHandler) sealAuth(req DatasourceRequest) (string, error) {
+func (h *DashboardHandler) sealAuth(req DatasourceRequest) (crypto.Sealed, error) {
 	if req.BasicAuthUser == "" && req.BasicAuthPass == "" && req.BearerToken == "" {
-		return "", nil
+		return crypto.Sealed{}, nil
 	}
 	if h.encryptor == nil {
-		return "", fmt.Errorf("encryptor not configured; cannot store datasource auth")
+		return crypto.Sealed{}, fmt.Errorf("encryptor not configured; cannot store datasource auth")
 	}
 	blob := authBlob{
 		BasicAuthUser: req.BasicAuthUser,
@@ -289,9 +292,9 @@ func (h *DashboardHandler) sealAuth(req DatasourceRequest) (string, error) {
 	}
 	b, err := json.Marshal(blob)
 	if err != nil {
-		return "", err
+		return crypto.Sealed{}, err
 	}
-	return h.encryptor.Encrypt(string(b))
+	return h.encryptor.Encrypt(b)
 }
 
 // ── Validation ────────────────────────────────────────────────────────

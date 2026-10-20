@@ -9,9 +9,10 @@ import (
 	"strconv"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestStateMetricProjectionIncludesMaintainedInformers(t *testing.T) {

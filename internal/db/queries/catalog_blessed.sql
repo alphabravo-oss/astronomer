@@ -149,14 +149,20 @@ ORDER BY featured DESC, display_name ASC;
 -- recent releases.  A verified application pin is part of the product's
 -- install contract, so retain it even after newer upstream releases push it
 -- outside that window.
-SELECT b.chart_name, COALESCE(b.artifact->>'version', '')::text AS version
+SELECT DISTINCT b.chart_name, pin.version::text AS version
 FROM catalog_blessed_charts b
 JOIN helm_repositories r
   ON r.id = sqlc.arg(repository_id)
  AND rtrim(b.repo_url, '/') = rtrim(r.url, '/')
-WHERE b.source = 'catalog-v1'
-  AND NOT b.revoked
-  AND COALESCE(b.artifact->>'version', '') <> ''
+CROSS JOIN LATERAL (
+  SELECT COALESCE(b.artifact->>'version', '') AS version
+  UNION
+  SELECT record->>'version' AS version
+  FROM jsonb_array_elements(COALESCE(b.artifact->'versions', '[]'::jsonb)) record
+  WHERE COALESCE((record->>'available')::boolean, false)
+    AND NOT COALESCE((record->>'revoked')::boolean, false)
+) pin
+WHERE b.source = 'catalog-v1' AND NOT b.revoked AND pin.version <> ''
 ORDER BY b.chart_name, version;
 
 -- name: ListApplicationCatalogSources :many

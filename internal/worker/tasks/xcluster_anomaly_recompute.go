@@ -22,6 +22,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
@@ -147,7 +149,7 @@ func RunXClusterAnomalyRecompute(ctx context.Context, q xclusterRecomputeQuerier
 		if _, err := q.UpsertXClusterAnomalyBaseline(ctx, sqlc.UpsertXClusterAnomalyBaselineParams{
 			MetricName:        key.metric,
 			WindowSeconds:     key.window,
-			ClusterCount:      int32(len(members)),
+			ClusterCount:      safeconv.Int32(len(members)),
 			PopulationMean:    stats.Mean,
 			PopulationStddev:  stats.Stddev,
 			PopulationMin:     stats.Min,

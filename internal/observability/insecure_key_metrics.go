@@ -2,7 +2,7 @@
 //
 //   - astronomer_insecure_dev_key_in_use{key}
 //
-// The chart used to ship a working JWT signing key and Fernet key as its
+// The chart used to ship a working JWT signing key and encryption key as its
 // defaults, and the runtime accepted both outside production without a word.
 // Both the server and the worker now report the live state on every boot, in
 // every environment, so an install that came up on a published key is visible

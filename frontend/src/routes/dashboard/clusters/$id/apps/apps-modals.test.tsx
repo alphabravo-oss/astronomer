@@ -2,11 +2,8 @@ import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { AppsModals } from "./-apps-modals";
 
-vi.mock("@/components/clusters/app-install-modal", () => ({
-  AppInstallModal: ({ projectId }: { projectId: string }) => (
-    <div role="dialog">Install in {projectId}</div>
-  ),
-  AppUninstallModal: () => null,
+vi.mock("@/components/clusters/app-uninstall-modal", () => ({
+  AppUninstallModal: () => <div role="dialog">Confirm uninstall</div>,
 }));
 vi.mock("../../../catalog/-add-repository-modal", () => ({
   AddRepositoryModal: () => null,
@@ -23,12 +20,9 @@ const allowed = {
   requestAccessHint: "",
 };
 const props: ComponentProps<typeof AppsModals> = {
-  modal: { kind: "install", chartId: "chart", chartName: "Chart" },
-  projectId: "project-225",
+  modal: { kind: "none" },
   clusterId: "cluster-1",
   onCloseModal: vi.fn(),
-  catalogCreateDecision: allowed,
-  catalogUpdateDecision: allowed,
   catalogDeleteDecision: allowed,
   uninstallPending: false,
   onConfirmUninstall: vi.fn(),
@@ -40,25 +34,20 @@ const props: ComponentProps<typeof AppsModals> = {
   deleteFailedPending: false,
   onConfirmDeleteFailed: vi.fn(),
 };
-it.each(["install", "upgrade"] as const)(
-  "hides an open %s dialog when the project scope becomes unavailable",
-  (kind) => {
-    const modal: typeof props.modal =
-      kind === "install"
-        ? props.modal
-        : {
-            kind,
-            chartId: "chart",
-            chartName: "Chart",
-            installedChartId: "release",
-            currentVersionId: "v1",
-            currentValues: "",
-            releaseName: "app",
-            namespace: "default",
-          };
-    const view = render(<AppsModals {...props} modal={modal} />);
-    expect(screen.getByRole("dialog")).toHaveTextContent("project-225");
-    view.rerender(<AppsModals {...props} modal={modal} projectId="" />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  },
-);
+it("uses the modal layer only for confirmation actions", () => {
+  const view = render(<AppsModals {...props} />);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  view.rerender(
+    <AppsModals
+      {...props}
+      modal={{
+        kind: "uninstall",
+        installedChartId: "release",
+        releaseName: "loki",
+        chartName: "loki",
+        namespace: "logs",
+      }}
+    />,
+  );
+  expect(screen.getByRole("dialog")).toHaveTextContent("Confirm uninstall");
+});

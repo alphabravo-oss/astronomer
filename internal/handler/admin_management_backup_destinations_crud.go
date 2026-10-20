@@ -4,13 +4,16 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 func (h *AdminDrillHandler) GetDestination(w http.ResponseWriter, r *http.Request) {
@@ -19,16 +22,16 @@ func (h *AdminDrillHandler) GetDestination(w http.ResponseWriter, r *http.Reques
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid destination ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid destination ID")
 		return
 	}
 	row, err := h.queries.GetManagementBackupDestination(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Destination not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Destination not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load destination")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load destination")
 		return
 	}
 	RespondJSON(w, http.StatusOK, destinationView(row))
@@ -45,12 +48,12 @@ func (h *AdminDrillHandler) CreateDestination(w http.ResponseWriter, r *http.Req
 	}
 	req.normalize()
 	if req.AccessKey == "" || req.SecretKey == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Access key and secret key are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Access key and secret key are required")
 		return
 	}
 	encrypted, err := h.encryptDestinationCredentials(req.AccessKey, req.SecretKey)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt credentials")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt credentials")
 		return
 	}
 	createdBy := pgtype.UUID{}
@@ -60,25 +63,25 @@ func (h *AdminDrillHandler) CreateDestination(w http.ResponseWriter, r *http.Req
 		}
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "management backup transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "management backup transaction runner is not configured")
 		return
 	}
 	var row sqlc.ManagementBackupDestination
 	err = h.runTx(r.Context(), func(q ManagementBackupMutationTx) error {
 		var createErr error
 		row, createErr = q.CreateManagementBackupDestination(r.Context(), sqlc.CreateManagementBackupDestinationParams{
-			Name:                 req.Name,
-			Bucket:               req.Bucket,
-			Prefix:               req.Prefix,
-			Region:               req.Region,
-			EndpointUrl:          req.EndpointURL,
-			EncryptedCredentials: encrypted,
-			Schedule:             req.Schedule,
-			Enabled:              derefBool(req.Enabled, true),
-			KeepDaily:            derefInt32(req.KeepDaily, 30),
-			KeepWeekly:           derefInt32(req.KeepWeekly, 12),
-			KeepMonthly:          derefInt32(req.KeepMonthly, 6),
-			CreatedByID:          createdBy,
+			Name:             req.Name,
+			Bucket:           req.Bucket,
+			Prefix:           req.Prefix,
+			Region:           req.Region,
+			EndpointUrl:      req.EndpointURL,
+			CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
+			Schedule:    req.Schedule,
+			Enabled:     derefBool(req.Enabled, true),
+			KeepDaily:   derefInt32(req.KeepDaily, 30),
+			KeepWeekly:  derefInt32(req.KeepWeekly, 12),
+			KeepMonthly: derefInt32(req.KeepMonthly, 6),
+			CreatedByID: createdBy,
 		})
 		if createErr != nil {
 			return createErr
@@ -102,7 +105,7 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid destination ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid destination ID")
 		return
 	}
 	var req ManagementBackupDestinationWrite
@@ -111,7 +114,7 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 	}
 	req.normalize()
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "management backup transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "management backup transaction runner is not configured")
 		return
 	}
 	var row sqlc.ManagementBackupDestination
@@ -126,7 +129,7 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 		if existing.ReconcileStatus == "applying" {
 			return errManagementBackupReconcileActive
 		}
-		encrypted := existing.EncryptedCredentials
+		encrypted := crypto.FromParts(existing.CredentialsKeyID, existing.CredentialsAlgorithm, existing.CredentialsCiphertext, existing.CredentialsNonce)
 		access, secret, decErr := h.decryptDestinationCredentials(existing)
 		if decErr != nil {
 			return decErr
@@ -144,15 +147,15 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 			}
 		}
 		row, loadErr = q.UpdateManagementBackupDestination(r.Context(), sqlc.UpdateManagementBackupDestinationParams{
-			ID:                   id,
-			Name:                 req.Name,
-			Bucket:               req.Bucket,
-			Prefix:               req.Prefix,
-			Region:               req.Region,
-			EndpointUrl:          req.EndpointURL,
-			EncryptedCredentials: encrypted,
-			Schedule:             req.Schedule,
-			Enabled:              derefBool(req.Enabled, existing.Enabled), KeepDaily: derefInt32(req.KeepDaily, existing.KeepDaily), KeepWeekly: derefInt32(req.KeepWeekly, existing.KeepWeekly), KeepMonthly: derefInt32(req.KeepMonthly, existing.KeepMonthly),
+			ID:               id,
+			Name:             req.Name,
+			Bucket:           req.Bucket,
+			Prefix:           req.Prefix,
+			Region:           req.Region,
+			EndpointUrl:      req.EndpointURL,
+			CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
+			Schedule: req.Schedule,
+			Enabled:  derefBool(req.Enabled, existing.Enabled), KeepDaily: derefInt32(req.KeepDaily, existing.KeepDaily), KeepWeekly: derefInt32(req.KeepWeekly, existing.KeepWeekly), KeepMonthly: derefInt32(req.KeepMonthly, existing.KeepMonthly),
 		})
 		if loadErr != nil {
 			return loadErr
@@ -164,7 +167,7 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Destination not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Destination not found")
 			return
 		}
 		h.respondDestinationWriteError(w, r, err)
@@ -183,11 +186,11 @@ func (h *AdminDrillHandler) DeleteDestination(w http.ResponseWriter, r *http.Req
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid destination ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid destination ID")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "management backup transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "management backup transaction runner is not configured")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "admin_management_backup_destination_delete"))
@@ -196,7 +199,7 @@ func (h *AdminDrillHandler) DeleteDestination(w http.ResponseWriter, r *http.Req
 		DestinationID string `json:"destination_id"`
 	}{Action: "delete", DestinationID: id.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode destination deletion request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode destination deletion request")
 		return
 	}
 	var deleted sqlc.ManagementBackupDestination
@@ -241,19 +244,19 @@ func (h *AdminDrillHandler) DeleteDestination(w http.ResponseWriter, r *http.Req
 		return attachOperationReceipt(r.Context(), idemQ, "management_backup_destination_deletes", id, digest, receipt)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Destination not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Destination not found")
 		return
 	}
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different management backup destination deletion")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different management backup destination deletion")
 			return
 		}
 		if errors.Is(err, errManagementBackupReconcileActive) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Destination reconciliation is active; retry after the current generation settles")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Destination reconciliation is active; retry after the current generation settles")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist destination deletion")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to persist destination deletion")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/admin/management-backup/destinations/"+receipt.DestinationID+"/", receipt)

@@ -17,8 +17,8 @@ import (
 	"github.com/google/uuid"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func loadDefaultBaselineSlugs() ([]string, error) {
@@ -87,7 +87,7 @@ func (h *PlatformBaselineCoverageHandler) Coverage(w http.ResponseWriter, r *htt
 	ctx := r.Context()
 	expectedSlugs, err := loadDefaultBaselineSlugs()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Built-in bundle catalog is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Built-in bundle catalog is invalid")
 		return
 	}
 

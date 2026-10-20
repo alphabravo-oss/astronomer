@@ -622,6 +622,11 @@ func TestHandleProjectReconcile_RemoveOpDeletesRow(t *testing.T) {
 
 func TestReconcileProjectNamespace_PropagatesRegistrySecretAndServiceAccount(t *testing.T) {
 	projectID := uuid.New()
+	enc := resourceTaskEncryptor(t)
+	sealedPassword, err := enc.EncryptString("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
 	clusterID := uuid.New()
 	q := &fakeProjectQuerier{
 		project: sqlc.Project{
@@ -634,14 +639,14 @@ func TestReconcileProjectNamespace_PropagatesRegistrySecretAndServiceAccount(t *
 			ClusterID:          clusterID,
 			PrivateRegistryUrl: "https://registry.example.com/team",
 			RegistryUsername:   "alice",
-			RegistryPassword:   "secret",
 		},
 	}
+	q.registryConfig.RegistryPasswordKeyID, q.registryConfig.RegistryPasswordAlgorithm, q.registryConfig.RegistryPasswordCiphertext, q.registryConfig.RegistryPasswordNonce = sealedPassword.Parts()
 	r := &fakeProjectRequester{
 		defaultServiceAccountPullSecrets: []string{"existing-secret"},
 	}
 
-	if err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
+	if err := (ProjectRuntime{Deps: ProjectReconcileDeps{Encryptor: enc}}).reconcileProjectNamespace(context.Background(), q, r, q.project, clusterID, "team-a"); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 

@@ -3,17 +3,18 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/rs/zerolog"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
 
-func (c *productionComposition) composeCharlieLifecycles(cfg *config.Config, logger *slog.Logger, deps RouterDependencies) (*charlieLifecycleGroup, error) {
+func (c *productionComposition) composeCharlieLifecycles(cfg *config.Config, logger zerolog.Logger, deps RouterDependencies) (*charlieLifecycleGroup, error) {
 	leaseOwner := strings.TrimSpace(cfg.ProcessHostname)
 	if leaseOwner == "" {
 		leaseOwner = "astronomer-server-" + uuid.NewString()

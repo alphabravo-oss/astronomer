@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"k8s.io/client-go/dynamic/fake"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 type memoryCheckpointStore struct{ value checkpoint }

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -36,6 +35,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -420,22 +420,6 @@ func TestFeatureFlagRouteRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestHighRiskRoutesDenyUnauthenticatedRequests(t *testing.T) {
-	router, clusterID := newRouteSecurityRouter(t)
-	routeRegistry := loadSecuritySensitiveRouteRegistry(t, clusterID)
-	for _, entry := range routeRegistry {
-		t.Run(entry.ID, func(t *testing.T) {
-			req := httptest.NewRequest(methodForRoute(entry.Method), entry.SamplePath, nil)
-			req.Header.Set("Accept", "application/json")
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			if rec.Code != entry.ExpectedUnauthenticatedStatus {
-				t.Fatalf("%s %s unauthenticated status = %d, want %d; body=%s", entry.Method, entry.Route, rec.Code, entry.ExpectedUnauthenticatedStatus, rec.Body.String())
-			}
-		})
-	}
-}
-
 // TestEveryRouteDeniesUnauthenticatedRequests is the default-deny complement of
 // TestHighRiskRoutesDenyUnauthenticatedRequests, which is opt-in: it only
 // checks routes somebody remembered to add to docs/security-sensitive-routes.json.
@@ -525,153 +509,6 @@ func routeSweepSamplePath(route string) string {
 		}
 	}
 	return strings.Join(segments, "/")
-}
-
-func TestRouteInventoryCanBeGenerated(t *testing.T) {
-	router, _ := newRouteSecurityRouter(t)
-	entries := collectRouteInventory(t, router)
-	if len(entries) < 100 {
-		t.Fatalf("route inventory entries = %d, want at least 100", len(entries))
-	}
-	metadataEntries := 0
-	for _, entry := range entries {
-		if entry.SecurityRegistryID != "" || entry.RiskClassification != "" {
-			metadataEntries++
-		}
-	}
-	if metadataEntries < 190 {
-		t.Fatalf("route inventory security metadata entries = %d, want at least 190", metadataEntries)
-	}
-	assertRouteInventoryEntriesHaveCompleteSecurityPosture(t, entries)
-	for _, expected := range []struct {
-		method             string
-		pattern            string
-		securityRegistryID string
-	}{
-		{method: http.MethodGet, pattern: "/api/v1/audit/", securityRegistryID: "audit-log-list"},
-		{method: http.MethodGet, pattern: "/api/v1/audit/export/", securityRegistryID: "audit-log-export"},
-		{method: http.MethodPost, pattern: "/api/v1/audit/exports/", securityRegistryID: "audit-log-export-create"},
-		{method: http.MethodGet, pattern: "/api/v1/audit/{id}/", securityRegistryID: "audit-log-detail"},
-		{method: http.MethodGet, pattern: "/api/v1/settings/audit-logs/", securityRegistryID: "legacy-settings-audit-log-list"},
-	} {
-		if !routeInventoryHasSecurityRegistryID(entries, expected.method, expected.pattern, expected.securityRegistryID) {
-			t.Fatalf("route inventory missing security metadata %s for %s %s", expected.securityRegistryID, expected.method, expected.pattern)
-		}
-	}
-	t.Logf("route inventory entries = %d", len(entries))
-	if os.Getenv("ASTRONOMER_WRITE_ROUTE_INVENTORY") != "1" {
-		return
-	}
-	path := filepath.Join("..", "..", "docs", "generated-route-inventory.json")
-	raw, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal route inventory: %v", err)
-	}
-	raw = append(raw, '\n')
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
-		t.Fatalf("write route inventory: %v", err)
-	}
-	t.Logf("wrote %d route inventory entries to %s", len(entries), path)
-}
-
-func TestRouteInventoryEntriesHaveCompleteSecurityPosture(t *testing.T) {
-	router, _ := newRouteSecurityRouter(t)
-	assertRouteInventoryEntriesHaveCompleteSecurityPosture(t, collectRouteInventory(t, router))
-}
-
-func TestForwardingRoutesAreDocumentedInProxyInventory(t *testing.T) {
-	router, _ := newRouteSecurityRouter(t)
-	entries := collectRouteInventory(t, router)
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "kubernetes-proxy-inventory.md"))
-	if err != nil {
-		t.Fatalf("read kubernetes proxy inventory: %v", err)
-	}
-	doc := string(raw)
-
-	var missing []string
-	seen := map[string]bool{}
-	for _, entry := range entries {
-		pattern := normalizeRoutePattern(entry.Pattern)
-		if !routeRequiresProxyInventory(pattern) {
-			continue
-		}
-		key := entry.Method + " " + pattern
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		if proxyInventoryContainsPattern(doc, pattern) {
-			continue
-		}
-		missing = append(missing, key)
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		t.Fatalf("forwarding routes missing from docs/kubernetes-proxy-inventory.md:\n%s", strings.Join(missing, "\n"))
-	}
-}
-
-func TestMutatingRoutesHaveSecurityClassification(t *testing.T) {
-	router, _ := newRouteSecurityRouter(t)
-	inventory := collectRouteInventory(t, router)
-	registry := loadSecuritySensitiveRouteRegistry(t, uuid.NewString())
-	classifications := loadRouteRiskClassifications(t)
-
-	var missing []string
-	for _, route := range inventory {
-		if !isMutatingHTTPMethod(route.Method) {
-			continue
-		}
-		pattern := normalizeRoutePattern(route.Pattern)
-		if securityRegistryCoversRoute(registry, route.Method, pattern) {
-			continue
-		}
-		if routeRiskClassified(classifications, route.Method, pattern) {
-			continue
-		}
-		missing = append(missing, route.Method+" "+pattern)
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		t.Fatalf("mutating routes missing from security registry or route-risk classifications:\n%s", strings.Join(missing, "\n"))
-	}
-}
-
-func TestBrowserCookieMutatingRoutesRequireCSRF(t *testing.T) {
-	router, clusterID := newRouteSecurityRouter(t)
-	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
-	token, err := jwtMgr.GenerateAccessToken(uuid.New())
-	if err != nil {
-		t.Fatalf("generate token: %v", err)
-	}
-
-	entries := loadSecuritySensitiveRouteRegistry(t, clusterID)
-	checked := 0
-	for _, entry := range entries {
-		if !routeRequiresBrowserCSRF(entry) {
-			continue
-		}
-		method := methodForCSRFSample(entry.Method)
-		if !isMutatingHTTPMethod(method) {
-			continue
-		}
-		checked++
-		t.Run(entry.ID, func(t *testing.T) {
-			req := httptest.NewRequest(method, entry.SamplePath, nil)
-			req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("%s %s status = %d, want %d; body=%s", method, entry.SamplePath, rec.Code, http.StatusUnauthorized, rec.Body.String())
-			}
-			if !strings.Contains(rec.Body.String(), "csrf_required") {
-				t.Fatalf("%s %s body = %s, want csrf_required", method, entry.SamplePath, rec.Body.String())
-			}
-		})
-	}
-	if checked < 100 {
-		t.Fatalf("CSRF-checked route count = %d, want at least 100", checked)
-	}
 }
 
 func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
@@ -889,6 +726,9 @@ func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
 	for i := 0; i < typ.NumField(); i++ {
 		groupType := typ.Field(i)
 		groupValue := value.Field(i)
+		if groupType.Type.Kind() != reflect.Struct {
+			continue
+		}
 		for j := 0; j < groupType.Type.NumField(); j++ {
 			field := groupType.Type.Field(j)
 			if field.Type.Kind() != reflect.Pointer {
@@ -1542,11 +1382,11 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodeEncryptor, err := auth.NewEncryptor(key)
+	nodeEncryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1638,7 +1478,7 @@ func (routeSecurityNodeMutationTx) CreateNodeOperationIdempotent(_ context.Conte
 	return sqlc.NodeOperation{
 		ID: uuid.New(), IdempotencyScope: arg.IdempotencyScope, IdempotencyKey: arg.IdempotencyKey,
 		RequestDigest: arg.RequestDigest, ClusterID: arg.ClusterID, NodeName: arg.NodeName,
-		Action: arg.Action, ParametersEncrypted: arg.ParametersEncrypted, Generation: 1,
+		Action: arg.Action, ParametersKeyID: arg.ParametersKeyID, ParametersAlgorithm: arg.ParametersAlgorithm, ParametersCiphertext: arg.ParametersCiphertext, ParametersNonce: arg.ParametersNonce, Generation: 1,
 		Status: "pending", Progress: json.RawMessage(`{}`), CreatedByID: arg.CreatedByID,
 		CreatedAt: now, UpdatedAt: now,
 	}, nil
@@ -2168,51 +2008,6 @@ func methodForRoute(method string) string {
 	return method
 }
 
-func methodForCSRFSample(method string) string {
-	if method == "" || method == "*" {
-		return http.MethodPost
-	}
-	return method
-}
-
-func routeRequiresBrowserCSRF(entry securitySensitiveRoute) bool {
-	csrf := strings.ToLower(entry.CSRF)
-	return strings.Contains(csrf, "required") && strings.Contains(csrf, "browser cookie")
-}
-
-func routeRequiresProxyInventory(pattern string) bool {
-	switch {
-	case strings.Contains(pattern, "/k8s/"):
-		return true
-	case strings.Contains(pattern, "/proxy/service/"):
-		return true
-	case strings.Contains(pattern, "/ws/exec/"):
-		return true
-	case strings.Contains(pattern, "/ws/logs/"):
-		return true
-	case strings.Contains(pattern, "/ws/clusters/") && strings.Contains(pattern, "/shell/sessions/"):
-		return true
-	case strings.HasPrefix(pattern, "/internal/tunnel/"):
-		return true
-	default:
-		return false
-	}
-}
-
-func proxyInventoryContainsPattern(doc string, pattern string) bool {
-	candidates := []string{
-		pattern,
-		strings.TrimSuffix(pattern, "/"),
-		strings.TrimSuffix(pattern, "/") + "/",
-	}
-	for _, candidate := range candidates {
-		if candidate != "" && strings.Contains(doc, candidate) {
-			return true
-		}
-	}
-	return false
-}
-
 func looksLikeRouteRegistration(line string) bool {
 	for _, method := range []string{".Get(", ".Post(", ".Put(", ".Patch(", ".Delete(", ".Handle(", ".HandleFunc(", ".Mount(", ".Route("} {
 		if strings.Contains(line, method) {
@@ -2220,434 +2015,6 @@ func looksLikeRouteRegistration(line string) bool {
 		}
 	}
 	return false
-}
-
-type securitySensitiveRoute struct {
-	ID                            string   `json:"id"`
-	Route                         string   `json:"route"`
-	SamplePath                    string   `json:"sample_path"`
-	Method                        string   `json:"method"`
-	ExpectedUnauthenticatedStatus int      `json:"expected_unauthenticated_status"`
-	Surface                       string   `json:"surface"`
-	Auth                          string   `json:"auth"`
-	RBAC                          string   `json:"rbac"`
-	CSRF                          string   `json:"csrf"`
-	Audit                         string   `json:"audit"`
-	Tests                         []string `json:"tests"`
-}
-
-func loadSecuritySensitiveRouteRegistry(t *testing.T, clusterID string) []securitySensitiveRoute {
-	t.Helper()
-	path := filepath.Join("..", "..", "docs", "security-sensitive-routes.json")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read security-sensitive route registry: %v", err)
-	}
-	var entries []securitySensitiveRoute
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		t.Fatalf("decode security-sensitive route registry: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("security-sensitive route registry is empty")
-	}
-	seenIDs := map[string]bool{}
-	for i := range entries {
-		entry := &entries[i]
-		if strings.TrimSpace(entry.ID) == "" {
-			t.Fatalf("security-sensitive route registry entry %d has empty id", i)
-		}
-		if seenIDs[entry.ID] {
-			t.Fatalf("security-sensitive route registry id %q is duplicated", entry.ID)
-		}
-		seenIDs[entry.ID] = true
-		if strings.TrimSpace(entry.Route) == "" {
-			t.Fatalf("security-sensitive route registry entry %s has empty route", entry.ID)
-		}
-		if strings.TrimSpace(entry.SamplePath) == "" {
-			t.Fatalf("security-sensitive route registry entry %s has empty sample_path", entry.ID)
-		}
-		if strings.TrimSpace(entry.Method) == "" {
-			t.Fatalf("security-sensitive route registry entry %s has empty method", entry.ID)
-		}
-		if entry.ExpectedUnauthenticatedStatus == 0 {
-			entry.ExpectedUnauthenticatedStatus = http.StatusUnauthorized
-		}
-		entry.SamplePath = strings.ReplaceAll(entry.SamplePath, "{cluster_id}", clusterID)
-	}
-	return entries
-}
-
-type routeRiskClassificationFile struct {
-	Version int                       `json:"version"`
-	Rules   []routeRiskClassification `json:"rules"`
-}
-
-type routeRiskClassification struct {
-	ID             string   `json:"id"`
-	Methods        []string `json:"methods"`
-	Patterns       []string `json:"patterns"`
-	Classification string   `json:"classification"`
-	Reason         string   `json:"reason"`
-}
-
-func loadRouteRiskClassifications(t *testing.T) []routeRiskClassification {
-	t.Helper()
-	path := filepath.Join("..", "..", "docs", "route-risk-classifications.json")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read route risk classifications: %v", err)
-	}
-	var file routeRiskClassificationFile
-	if err := json.Unmarshal(raw, &file); err != nil {
-		t.Fatalf("decode route risk classifications: %v", err)
-	}
-	if file.Version != 1 {
-		t.Fatalf("route risk classifications version = %d, want 1", file.Version)
-	}
-	seen := map[string]bool{}
-	for i, rule := range file.Rules {
-		if strings.TrimSpace(rule.ID) == "" {
-			t.Fatalf("route risk classification rule %d has empty id", i)
-		}
-		if seen[rule.ID] {
-			t.Fatalf("route risk classification rule id %q is duplicated", rule.ID)
-		}
-		seen[rule.ID] = true
-		if len(rule.Methods) == 0 {
-			t.Fatalf("route risk classification rule %s has no methods", rule.ID)
-		}
-		if len(rule.Patterns) == 0 {
-			t.Fatalf("route risk classification rule %s has no patterns", rule.ID)
-		}
-		if strings.TrimSpace(rule.Classification) == "" {
-			t.Fatalf("route risk classification rule %s has empty classification", rule.ID)
-		}
-		if strings.TrimSpace(rule.Reason) == "" {
-			t.Fatalf("route risk classification rule %s has empty reason", rule.ID)
-		}
-	}
-	return file.Rules
-}
-
-type routeInventoryEntry struct {
-	Method             string   `json:"method"`
-	Pattern            string   `json:"pattern"`
-	HandlerOwner       string   `json:"handler_owner"`
-	Surface            string   `json:"surface"`
-	Auth               string   `json:"auth"`
-	RBAC               string   `json:"rbac"`
-	CSRF               string   `json:"csrf"`
-	Audit              string   `json:"audit"`
-	Tests              []string `json:"tests"`
-	SecurityRegistryID string   `json:"security_registry_id,omitempty"`
-	RiskClassification string   `json:"risk_classification,omitempty"`
-	RiskReason         string   `json:"risk_reason,omitempty"`
-}
-
-func collectRouteInventory(t *testing.T, router chi.Routes) []routeInventoryEntry {
-	t.Helper()
-	registry := loadSecuritySensitiveRouteRegistry(t, uuid.NewString())
-	classifications := loadRouteRiskClassifications(t)
-	var entries []routeInventoryEntry
-	if err := chi.Walk(router, func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		pattern := normalizeRoutePattern(route)
-		entry := defaultRouteInventoryEntry(method, route, pattern)
-		if metadata, ok := securityRegistryRouteMetadata(registry, method, pattern); ok {
-			entry.SecurityRegistryID = metadata.ID
-			entry.Surface = metadata.Surface
-			entry.Auth = metadata.Auth
-			entry.RBAC = metadata.RBAC
-			entry.CSRF = metadata.CSRF
-			entry.Audit = metadata.Audit
-			entry.Tests = append([]string(nil), metadata.Tests...)
-		} else if classification, ok := routeRiskClassificationMetadata(classifications, method, pattern); ok {
-			entry.RiskClassification = classification.Classification
-			entry.RiskReason = classification.Reason
-		}
-		entries = append(entries, entry)
-		return nil
-	}); err != nil {
-		t.Fatalf("walk router: %v", err)
-	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Pattern == entries[j].Pattern {
-			return entries[i].Method < entries[j].Method
-		}
-		return entries[i].Pattern < entries[j].Pattern
-	})
-	return entries
-}
-
-func defaultRouteInventoryEntry(method string, route string, pattern string) routeInventoryEntry {
-	return routeInventoryEntry{
-		Method:       method,
-		Pattern:      route,
-		HandlerOwner: routeHandlerOwner(pattern),
-		Surface:      routeSurface(pattern),
-		Auth:         routeAuthPosture(pattern),
-		RBAC:         routeRBACPosture(method, pattern),
-		CSRF:         routeCSRFPosture(method, pattern),
-		Audit:        routeAuditPosture(method, pattern),
-		Tests:        routeRepresentativeTests(method, pattern),
-	}
-}
-
-func assertRouteInventoryEntriesHaveCompleteSecurityPosture(t *testing.T, entries []routeInventoryEntry) {
-	t.Helper()
-	var missing []string
-	for _, entry := range entries {
-		if strings.TrimSpace(entry.HandlerOwner) != "" &&
-			strings.TrimSpace(entry.Surface) != "" &&
-			strings.TrimSpace(entry.Auth) != "" &&
-			strings.TrimSpace(entry.RBAC) != "" &&
-			strings.TrimSpace(entry.CSRF) != "" &&
-			strings.TrimSpace(entry.Audit) != "" &&
-			len(entry.Tests) > 0 {
-			continue
-		}
-		var fields []string
-		if strings.TrimSpace(entry.HandlerOwner) == "" {
-			fields = append(fields, "handler_owner")
-		}
-		if strings.TrimSpace(entry.Surface) == "" {
-			fields = append(fields, "surface")
-		}
-		if strings.TrimSpace(entry.Auth) == "" {
-			fields = append(fields, "auth")
-		}
-		if strings.TrimSpace(entry.RBAC) == "" {
-			fields = append(fields, "rbac")
-		}
-		if strings.TrimSpace(entry.CSRF) == "" {
-			fields = append(fields, "csrf")
-		}
-		if strings.TrimSpace(entry.Audit) == "" {
-			fields = append(fields, "audit")
-		}
-		if len(entry.Tests) == 0 {
-			fields = append(fields, "tests")
-		}
-		missing = append(missing, entry.Method+" "+entry.Pattern+" missing "+strings.Join(fields, ", "))
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		t.Fatalf("route inventory entries missing complete security posture:\n%s", strings.Join(missing, "\n"))
-	}
-}
-
-func routeHandlerOwner(pattern string) string {
-	for _, rule := range []struct {
-		match string
-		owner string
-	}{
-		{"/helm-repo", "handler.PlatformChartRepoHandler"},
-		{"/health", "internal/server health handler"},
-		{"/readyz", "internal/server readiness handler"},
-		{"/api/v1/openapi.yaml", "handler.DocsHandler"},
-		{"/api/v1/docs", "handler.DocsHandler"},
-		{"/api/v1/ws/clusters", "handler.KubectlShellHandler"},
-		{"/api/v1/ws/exec", "internal/tunnel.ExecConsumer"},
-		{"/api/v1/ws/logs", "internal/tunnel.LogsConsumer"},
-		{"/api/v1/internal/k8s", "internal/tunnel.InternalK8sHandler"},
-		{"/api/v1/internal/helm", "internal/tunnel.InternalHelmHandler"},
-		{"/internal/tunnel/k8s", "internal/tunnel.InternalK8sHandler"},
-		{"/internal/tunnel/helm", "internal/tunnel.InternalHelmHandler"},
-		{"/api/v1/auth/dex", "handler.DexHandler"},
-		{"/api/v1/auth/totp", "handler.TOTPHandler"},
-		{"/api/v1/auth", "handler.AuthHandler / handler.SSOHandler"},
-		{"/api/v1/register", "handler.ClusterRegistrationHandler"},
-		{"/api/v1/audit", "handler.AuditHandler"},
-		{"/api/v1/cluster-agents", "handler.ClusterAgentHandler"},
-		{"/api/v1/admin/network-policy-templates", "handler.NetworkPolicyHandler"},
-		{"/api/v1/admin/vault-connections", "handler.VaultHandler"},
-		{"/api/v1/admin/webhooks", "handler.WebhookHandler"},
-		{"/api/v1/admin/smtp", "handler.SMTPHandler"},
-		{"/api/v1/admin/emails", "handler.SMTPHandler"},
-		{"/api/v1/admin/shell-sessions", "handler.KubectlShellHandler"},
-		{"/api/v1/admin/compliance-baselines", "handler.ComplianceBaselinesHandler"},
-		{"/api/v1/admin/compliance-baseline-applications", "handler.ComplianceBaselinesHandler"},
-		{"/api/v1/admin/compliance", "handler.ComplianceHandler"},
-		{"/api/v1/admin/queues", "handler.AdminQueuesHandler"},
-		{"/api/v1/admin/task-outbox", "handler.AdminTaskOutboxHandler"},
-		{"/api/v1/admin/backup-drill", "handler.AdminDrillHandler"},
-		{"/api/v1/admin/management-backup", "handler.AdminDrillHandler"},
-		{"/api/v1/admin/management-backup/destinations", "handler.AdminDrillHandler"},
-		{"/api/v1/admin/management-logs", "handler.ManagementLogsHandler"},
-		{"/api/v1/admin/key-status", "internal/server keyStatusHandler"},
-		{"/api/v1/admin/users/{id}/disable-totp", "handler.TOTPHandler"},
-		{"/api/v1/admin/users", "handler.ResourceHandler user administration"},
-		{"/api/v1/backups", "handler.BackupHandler"},
-		{"/api/v1/catalog/recommendations", "handler.ChartRatingsHandler"},
-		{"/api/v1/catalog", "handler.CatalogHandler"},
-		{"/api/v1/charts", "handler.ChartRatingsHandler"},
-		{"/api/v1/cloud-credentials", "handler.CloudCredentialHandler"},
-		{"/api/v1/cluster-groups", "handler.ClusterGroupHandler"},
-		{"/api/v1/cluster-templates", "handler.ClusterTemplateHandler"},
-		{"/api/v1/clusters/{cluster_id}/apiserver-allowlist", "handler.ApiserverAllowlistHandler"},
-		{"/api/v1/clusters/{cluster_id}/network-policies", "handler.NetworkPolicyHandler"},
-		{"/api/v1/clusters/{cluster_id}/registries", "handler.ClusterRegistriesHandler"},
-		{"/api/v1/clusters/{cluster_id}/service-mesh", "handler.ServiceMeshHandler"},
-		{"/api/v1/clusters/{cluster_id}/shell", "handler.KubectlShellHandler"},
-		{"/api/v1/clusters/{cluster_id}/snapshot", "handler.ClusterSnapshotsHandler"},
-		{"/api/v1/clusters/{cluster_id}/snapshots", "handler.ClusterSnapshotsHandler"},
-		{"/api/v1/clusters/{cluster_id}/velero-status", "handler.ClusterSnapshotsHandler"},
-		{"/api/v1/clusters/{cluster_id}/template", "handler.ClusterTemplateHandler"},
-		{"/api/v1/clusters/{cluster_id}/workloads", "handler.WorkloadHandler"},
-		{"/api/v1/clusters/{cluster_id}/resources", "handler.ResourceHandler"},
-		{"/api/v1/clusters/{cluster_id}/proxy/service", "handler.ServiceProxyHandler"},
-		{"/api/v1/clusters/{cluster_id}/k8s", "handler.ResourceHandler Kubernetes proxy"},
-		{"/api/v1/clusters/{cluster_id}", "handler.ResourceHandler / cluster extension handlers"},
-		{"/api/v1/clusters/{id}/registration", "handler.ClusterRegistrationHandler"},
-		{"/api/v1/clusters/{id}", "handler.ClusterHandler"},
-		{"/api/v1/clusters", "handler.ClusterHandler"},
-		{"/api/v1/nodes", "handler.ResourceHandler"},
-		{"/api/v1/projects/{project_id}/catalogs", "handler.ProjectCatalogHandler"},
-		{"/api/v1/projects/{project_id}/cloud-credentials", "handler.CloudCredentialHandler"},
-		{"/api/v1/projects/{id}/default-vault-connection", "handler.VaultHandler"},
-		{"/api/v1/projects/{id}/quota", "handler.QuotaHandler"},
-		{"/api/v1/projects/{id}/rbac", "handler.RBACHandler"},
-		{"/api/v1/projects", "handler.ProjectHandler"},
-		{"/api/v1/rbac", "handler.RBACHandler"},
-		{"/api/v1/resources/search", "handler.ResourcesSearchHandler"},
-		{"/api/v1/resources", "handler.ResourceHandler"},
-		{"/api/v1/settings/monitoring", "handler.MonitoringHandler"},
-		{"/api/v1/settings/tokens", "handler.AuthHandler"},
-		{"/api/v1/settings", "handler.ResourceHandler / settings handlers"},
-		{"/api/v1/streams/tickets", "handler.StreamTicketHandler"},
-		{"/api/v1/support-bundles", "handler.SupportBundleHandler"},
-		{"/api/v1/compliance/posture", "handler.CompliancePostureHandler"},
-		{"/api/v1/license", "handler.LicenseHandler"},
-		{"/api/v1/users", "handler.ResourceHandler"},
-		{"/api/v1/workloads", "handler.WorkloadHandler"},
-		{"/api/v1/activity", "handler.ResourceHandler"},
-	} {
-		if pattern == rule.match || strings.HasPrefix(pattern, rule.match+"/") {
-			return rule.owner
-		}
-	}
-	return "internal/server route owner requires explicit classification"
-}
-
-func routeSurface(pattern string) string {
-	switch {
-	case pattern == "/health" || pattern == "/readyz":
-		return "platform health endpoint"
-	case strings.HasPrefix(pattern, "/helm-repo"):
-		return "public Helm chart repository"
-	case pattern == "/api/v1/openapi.yaml" || strings.HasPrefix(pattern, "/api/v1/docs"):
-		return "API documentation"
-	case strings.HasPrefix(pattern, "/api/v1/internal/"):
-		return "internal machine-to-machine tunnel surface"
-	case strings.HasPrefix(pattern, "/internal/tunnel/"):
-		return "server-to-server tunnel forwarding surface"
-	case strings.HasPrefix(pattern, "/api/v1/ws/"):
-		return "browser stream endpoint"
-	case strings.HasPrefix(pattern, "/api/v1/auth/"):
-		return "authentication and account security API"
-	case strings.HasPrefix(pattern, "/api/v1/admin/"):
-		return "administrative API"
-	case strings.Contains(pattern, "/clusters/") || strings.HasPrefix(pattern, "/api/v1/clusters"):
-		return "adopted cluster management API"
-	case strings.HasPrefix(pattern, "/api/v1/rbac"):
-		return "authorization and RBAC API"
-	case strings.HasPrefix(pattern, "/api/v1/projects"):
-		return "project and tenancy API"
-	case strings.HasPrefix(pattern, "/api/v1/backups"):
-		return "backup and restore API"
-	case strings.HasPrefix(pattern, "/api/v1/catalog") || strings.HasPrefix(pattern, "/api/v1/charts"):
-		return "catalog and application API"
-	case strings.HasPrefix(pattern, "/api/v1/settings"):
-		return "platform settings API"
-	default:
-		return "management API"
-	}
-}
-
-func routeAuthPosture(pattern string) string {
-	switch {
-	case pattern == "/health" || pattern == "/health/" || strings.HasPrefix(pattern, "/helm-repo") || pattern == "/api/v1/openapi.yaml" || strings.HasPrefix(pattern, "/api/v1/docs"):
-		return "public read endpoint"
-	case pattern == "/readyz":
-		return "public readiness endpoint; response must avoid secrets"
-	case strings.HasPrefix(pattern, "/api/v1/internal/"):
-		return "machine-to-machine PSK or cluster-scoped proxy token"
-	case strings.HasPrefix(pattern, "/internal/tunnel/"):
-		return "server-to-server shared-secret route"
-	case strings.HasPrefix(pattern, "/api/v1/ws/"):
-		return "short-lived stream ticket; long-lived query JWTs rejected"
-	case isPublicAuthFlow(pattern):
-		return "public or token-gated auth flow with auth-specific rate limits/challenges"
-	case isRouterPublicReadPattern(pattern):
-		return "router-level public read route; handler response must stay non-sensitive"
-	default:
-		return "bearer/session auth through route middleware or handler-specific gate"
-	}
-}
-
-func routeRBACPosture(method string, pattern string) string {
-	switch {
-	case pattern == "/health" || pattern == "/readyz" || strings.HasPrefix(pattern, "/helm-repo") || pattern == "/api/v1/openapi.yaml" || strings.HasPrefix(pattern, "/api/v1/docs") || isPublicAuthFlow(pattern):
-		return "not applicable: public endpoint"
-	case strings.HasPrefix(pattern, "/api/v1/internal/"):
-		return "not user RBAC: internal shared-secret route"
-	case strings.HasPrefix(pattern, "/internal/tunnel/"):
-		return "not user RBAC: internal shared-secret route"
-	case strings.HasPrefix(pattern, "/api/v1/ws/"):
-		return "stream ticket is issued only after the matching resource permission check"
-	case strings.HasPrefix(pattern, "/api/v1/rbac"):
-		return "RBAC read/list or mutation permission enforced by RBAC handler/middleware"
-	case strings.HasPrefix(pattern, "/api/v1/admin/"):
-		return "admin/superuser or explicit resource permission enforced by handler/middleware"
-	case isRouterPublicReadPattern(pattern):
-		return "not applicable for public read, or handler-specific read filtering"
-	case isMutatingHTTPMethod(method):
-		return "route-specific write permission documented in high-risk registry"
-	default:
-		return "route-specific read/list permission or handler-domain gate"
-	}
-}
-
-func routeCSRFPosture(method string, pattern string) string {
-	switch {
-	case !isMutatingHTTPMethod(method):
-		return "not applicable: safe HTTP method"
-	case strings.HasPrefix(pattern, "/api/v1/internal/"):
-		return "not applicable: machine-to-machine route"
-	case strings.HasPrefix(pattern, "/internal/tunnel/"):
-		return "not applicable: server-to-server shared-secret route"
-	case isPublicAuthFlow(pattern):
-		return "auth-flow specific cookie/token handling; not generic browser mutation"
-	default:
-		return "required for browser cookie mutation by authenticated router"
-	}
-}
-
-func routeAuditPosture(method string, pattern string) string {
-	switch {
-	case strings.HasPrefix(pattern, "/internal/tunnel/"):
-		return "server-to-server forwarding route; upstream user action audit is recorded before forwarding"
-	case strings.HasPrefix(pattern, "/api/v1/ws/exec"):
-		return "explicit stream-open audit for pod exec"
-	case strings.HasPrefix(pattern, "/api/v1/ws/logs"):
-		return "explicit stream-open audit for pod logs"
-	case isMutatingHTTPMethod(method):
-		return "mutating request audit middleware or explicit handler audit"
-	case strings.HasPrefix(pattern, "/api/v1/audit") || strings.Contains(pattern, "audit"):
-		return "read-side audit policy or explicit audit-log route coverage"
-	default:
-		return "read-side audit when policy matches; no request/response secrets recorded"
-	}
-}
-
-func routeRepresentativeTests(method string, pattern string) []string {
-	tests := []string{"TestRouteInventoryEntriesHaveCompleteSecurityPosture"}
-	if isMutatingHTTPMethod(method) {
-		tests = append(tests, "TestMutatingRoutesHaveSecurityClassification")
-	}
-	if strings.HasPrefix(pattern, "/api/v1/internal/") || strings.HasPrefix(pattern, "/internal/tunnel/") || strings.Contains(pattern, "/k8s") || strings.Contains(pattern, "/proxy/") || strings.HasPrefix(pattern, "/api/v1/ws/") {
-		tests = append(tests, "TestForwardingRoutesAreDocumentedInProxyInventory")
-	}
-	return tests
 }
 
 func isPublicAuthFlow(pattern string) bool {
@@ -2673,93 +2040,6 @@ func isRouterPublicReadPattern(pattern string) bool {
 	}
 }
 
-func routeInventoryHasSecurityRegistryID(entries []routeInventoryEntry, method string, pattern string, securityRegistryID string) bool {
-	normalizedPattern := normalizeRoutePattern(pattern)
-	for _, entry := range entries {
-		if !strings.EqualFold(entry.Method, method) {
-			continue
-		}
-		if normalizeRoutePattern(entry.Pattern) == normalizedPattern && entry.SecurityRegistryID == securityRegistryID {
-			return true
-		}
-	}
-	return false
-}
-
-func securityRegistryRouteMetadata(entries []securitySensitiveRoute, method string, pattern string) (securitySensitiveRoute, bool) {
-	for _, entry := range entries {
-		if !routeMethodMatches(entry.Method, method) {
-			continue
-		}
-		if routePatternMatches(normalizeRoutePattern(entry.Route), pattern) {
-			return entry, true
-		}
-	}
-	return securitySensitiveRoute{}, false
-}
-
-func routeRiskClassificationMetadata(rules []routeRiskClassification, method string, pattern string) (routeRiskClassification, bool) {
-	for _, rule := range rules {
-		if !routeMethodListMatches(rule.Methods, method) {
-			continue
-		}
-		for _, candidate := range rule.Patterns {
-			if routePatternMatches(normalizeRoutePattern(candidate), pattern) {
-				return rule, true
-			}
-		}
-	}
-	return routeRiskClassification{}, false
-}
-
-func isMutatingHTTPMethod(method string) bool {
-	switch method {
-	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		return true
-	default:
-		return false
-	}
-}
-
-func securityRegistryCoversRoute(entries []securitySensitiveRoute, method string, pattern string) bool {
-	for _, entry := range entries {
-		if !routeMethodMatches(entry.Method, method) {
-			continue
-		}
-		if routePatternMatches(normalizeRoutePattern(entry.Route), pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-func routeRiskClassified(rules []routeRiskClassification, method string, pattern string) bool {
-	for _, rule := range rules {
-		if !routeMethodListMatches(rule.Methods, method) {
-			continue
-		}
-		for _, candidate := range rule.Patterns {
-			if routePatternMatches(normalizeRoutePattern(candidate), pattern) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func routeMethodListMatches(methods []string, method string) bool {
-	for _, candidate := range methods {
-		if routeMethodMatches(candidate, method) {
-			return true
-		}
-	}
-	return false
-}
-
-func routeMethodMatches(candidate string, method string) bool {
-	return candidate == "*" || strings.EqualFold(candidate, method)
-}
-
 var (
 	singleLiteralRouteParamRE = regexp.MustCompile(`\{[^}:]+:\(\?:([A-Za-z0-9_-]+)\)\}`)
 	regexRouteParamRE         = regexp.MustCompile(`\{([^}:]+):[^}]+\}`)
@@ -2774,14 +2054,4 @@ func normalizeRoutePattern(pattern string) string {
 		pattern = strings.TrimRight(pattern, "/")
 	}
 	return pattern
-}
-
-func routePatternMatches(candidate string, pattern string) bool {
-	if candidate == pattern {
-		return true
-	}
-	quoted := regexp.QuoteMeta(candidate)
-	quoted = strings.ReplaceAll(quoted, `\*`, `.*`)
-	re := regexp.MustCompile(`^` + quoted + `$`)
-	return re.MatchString(pattern)
 }

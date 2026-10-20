@@ -7,11 +7,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/google/uuid"
 )
 
 func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.Request) {
@@ -25,11 +26,11 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	r = r.WithContext(withOperationIdempotency(r, "cluster-snapshot-restore"))
 	snapshot, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || snapshot.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Snapshot not found")
 		return
 	}
 	if snapshot.Phase != "Completed" && snapshot.Phase != "PartiallyFailed" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SnapshotNotReady, "Snapshot is not yet Completed; cannot restore")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.SnapshotNotReady, "Snapshot is not yet Completed; cannot restore")
 		return
 	}
 
@@ -40,14 +41,14 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		Spec            RestoreSpec `json:"spec"`
 	}
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	targetID := clusterID
 	if strings.TrimSpace(req.TargetClusterID) != "" {
 		parsed, err := uuid.Parse(strings.TrimSpace(req.TargetClusterID))
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid target_cluster_id")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid target_cluster_id")
 			return
 		}
 		targetID = parsed
@@ -57,7 +58,7 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	}
 	target, err := h.queries.GetClusterByID(r.Context(), targetID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Target cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Target cluster not found")
 		return
 	}
 
@@ -77,11 +78,11 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	if targetID != clusterID {
 		bsls, vErr := listVeleroBSLs(r.Context(), h.requester, targetID.String(), namespace)
 		if vErr != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.VeleroUnreachable, fmt.Sprintf("could not check Velero on target cluster: %v", vErr))
+			apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.VeleroUnreachable, fmt.Sprintf("could not check Velero on target cluster: %v", vErr))
 			return
 		}
 		if len(bsls) == 0 {
-			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Target cluster has no Velero BackupStorageLocation; install Velero before cross-cluster restore")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.VeleroMissingOnTarget, "Target cluster has no Velero BackupStorageLocation; install Velero before cross-cluster restore")
 			return
 		}
 
@@ -97,23 +98,23 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		}
 		srcBSLs, sErr := listVeleroBSLs(r.Context(), h.requester, clusterID.String(), srcNamespace)
 		if sErr != nil {
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.VeleroUnreachable, fmt.Sprintf("could not check Velero on source cluster: %v", sErr))
+			apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.VeleroUnreachable, fmt.Sprintf("could not check Velero on source cluster: %v", sErr))
 			return
 		}
 		src, resolved := resolveBSLStore(srcBSLs, decodeSpec(snapshot.Spec).StorageLocation)
 		if !resolved || strings.TrimSpace(src.Bucket) == "" {
-			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Cannot verify the source snapshot object store; restore was not queued")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.VeleroMissingOnTarget, "Cannot verify the source snapshot object store; restore was not queued")
 			return
 		}
 		if !targetHasMatchingStore(bsls, src) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Target cluster has no BackupStorageLocation matching the source snapshot object store")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.VeleroMissingOnTarget, "Target cluster has no BackupStorageLocation matching the source snapshot object store")
 			return
 		}
 
 	}
 
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "snapshot transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "snapshot transaction runner is not configured")
 		return
 	}
 
@@ -178,10 +179,10 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different snapshot restore")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different snapshot restore")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create restore intent")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create restore intent")
 		return
 	}
 	row := result.row

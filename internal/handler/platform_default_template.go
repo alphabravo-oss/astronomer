@@ -44,16 +44,17 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // PlatformDefaultTemplateQuerier is the narrow DB surface this handler
@@ -148,12 +149,12 @@ func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Platform configuration not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Platform configuration not available")
 		return
 	}
 	cfg, err := h.queries.GetPlatformConfig(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	resp := defaultTemplateResponseFor(cfg, nil)
@@ -177,7 +178,7 @@ func (h *PlatformDefaultTemplateHandler) Get(w http.ResponseWriter, r *http.Requ
 			RespondJSON(w, http.StatusOK, resp)
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	resp = defaultTemplateResponseFor(cfg, &tmpl)
@@ -207,13 +208,13 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Platform configuration not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Platform configuration not available")
 		return
 	}
 
 	var req putRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -222,7 +223,7 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 	if req.TemplateID != nil && *req.TemplateID != "" {
 		parsed, err := uuid.Parse(*req.TemplateID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id must be a UUID or null")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "template_id must be a UUID or null")
 			return
 		}
 		parsedTarget = parsed
@@ -253,7 +254,7 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 		return updateResult{config: updated, template: tmpl}, err
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "platform default template transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "platform default template transaction runner is not configured")
 		return
 	}
 	var result updateResult
@@ -278,11 +279,11 @@ func (h *PlatformDefaultTemplateHandler) Update(w http.ResponseWriter, r *http.R
 		})
 	})
 	if errors.Is(err, errTemplateNotFound) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "template_id does not reference an existing cluster_templates row")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "template_id does not reference an existing cluster_templates row")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to update platform default cluster template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to update platform default cluster template")
 		return
 	}
 	RespondJSON(w, http.StatusOK, defaultTemplateResponseFor(result.config, result.template))
@@ -299,7 +300,7 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Platform configuration not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Platform configuration not available")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -339,7 +340,7 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		return loadErr
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "platform default template transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "platform default template transaction runner is not configured")
 		return
 	}
 	err := h.runTx(r.Context(), func(q PlatformDefaultTemplateMutationTx) error {
@@ -372,19 +373,19 @@ func (h *PlatformDefaultTemplateHandler) Reapply(w http.ResponseWriter, r *http.
 		})
 	})
 	if errors.Is(err, errClusterNotFound) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	if errors.Is(err, errNoDefault) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.NoDefault, "No platform default cluster template is configured. Set one via PUT /admin/platform-settings/default-cluster-template/ first.")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.NoDefault, "No platform default cluster template is configured. Set one via PUT /admin/platform-settings/default-cluster-template/ first.")
 		return
 	}
 	if errors.Is(err, errStaleDefault) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.StaleDefault, "Platform default cluster template no longer exists. Pick a new one.")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.StaleDefault, "Platform default cluster template no longer exists. Pick a new one.")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to reapply platform default cluster template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to reapply platform default cluster template")
 		return
 	}
 

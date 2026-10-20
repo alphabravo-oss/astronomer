@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TestLostDatabaseBaseRevocationCannotSelectAnotherPhysicalBinding(t *testing.T) {

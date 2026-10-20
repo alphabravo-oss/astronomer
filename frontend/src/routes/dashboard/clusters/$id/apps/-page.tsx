@@ -15,13 +15,13 @@ import { getRouteApi } from "@tanstack/react-router";
  *      helm_repositories so every row carries display name, version,
  *      icon, and repo provenance without N+1.
  *   2. Browse — wraps GET /api/v1/catalog/charts/. Cards link into the
- *      install modal (sprint 27).
+ *      installation page (sprint 27).
  *   3. Recommended — GET /catalog/recommendations/popular/. Same card
  *      layout as Browse.
  *   4. Repositories — fleet-wide Helm sources (Astronomer repos are
  *      global, unlike Rancher ClusterRepo CRs).
  *
- * Tool-installed rows (source_kind="tool") get a "Managed by Tools"
+ * Tool-installed rows (source_kind="tool") get a "Managed by Platform Tools"
  * pivot pill so the Tools tab remains the canonical place to manage
  * Platform Baseline installs while everything still appears here. This
  * matches the explicit decision in the planning conversation: Apps +
@@ -77,7 +77,7 @@ export function ClusterAppsPage() {
   const navigate = useNavigate();
   // Deep-link support: feature pages (image-scans, monitoring, etc.)
   // can drop the user here with ?install=<chartName> to auto-open the
-  // install modal for that chart. Reads the search params once and
+  // installation page for that chart. Reads the search params once and
   // resolves the chart on browse-data arrival.
   const searchParams = new URLSearchParams(
     useLocation({ select: (location) => location.searchStr }),
@@ -170,9 +170,9 @@ export function ClusterAppsPage() {
   const deleteRepo = useDeleteHelmRepository();
 
   // Deep-link auto-open: when ?install=<chartName> is present and we
-  // haven't already opened a modal (so refreshes/re-navigations don't
-  // re-trigger), look up the chart in browse results and pop the
-  // install modal. Strips the query param after consuming so a manual
+  // haven't already navigated (so refreshes/re-navigations don't
+  // re-trigger), look up the chart in browse results and open the
+  // installation page. Strips the query param after consuming so a manual
   // refresh doesn't replay the auto-open.
   useEffect(() => {
     if (!requestedInstall) return;
@@ -193,10 +193,9 @@ export function ClusterAppsPage() {
         return;
       }
       const frame = requestAnimationFrame(() => {
-        setModal({ kind: "install", chartId: match.id, chartName: match.name });
         // Drop the query param so a back-button + re-navigate doesn't loop.
         void navigate({
-          to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
+          to: `/dashboard/catalog/configure?chart=${encodeURIComponent(match.id)}&project=${encodeURIComponent(projectId)}&cluster=${encodeURIComponent(clusterId)}&origin=cluster`,
           replace: true,
         });
       });
@@ -213,12 +212,14 @@ export function ClusterAppsPage() {
     catalogCreateDecision,
   ]);
 
-  const openInstall = (chartId: string, chartName: string) => {
+  const openInstall = (chartId: string) => {
     if (!catalogCreateDecision.allowed) {
       toastPermissionDenied(catalogCreateDecision);
       return;
     }
-    setModal({ kind: "install", chartId, chartName });
+    void navigate({
+      to: `/dashboard/catalog/configure?chart=${encodeURIComponent(chartId)}&project=${encodeURIComponent(projectId)}&cluster=${encodeURIComponent(clusterId)}&origin=cluster`,
+    });
   };
 
   const openUpgrade = (row: ClusterAppRow) => {
@@ -226,15 +227,8 @@ export function ClusterAppsPage() {
       toastPermissionDenied(catalogUpdateDecision);
       return;
     }
-    setModal({
-      kind: "upgrade",
-      installedChartId: row.id,
-      chartId: row.chartId,
-      chartName: row.chartName || row.toolSlug || row.releaseName,
-      currentVersionId: row.chartVersionId,
-      currentValues: row.valuesOverride,
-      releaseName: row.releaseName,
-      namespace: row.namespace,
+    void navigate({
+      to: `/dashboard/catalog/configure?release=${encodeURIComponent(row.id)}&project=${encodeURIComponent(projectId)}&cluster=${encodeURIComponent(clusterId)}&origin=cluster`,
     });
   };
 
@@ -265,7 +259,7 @@ export function ClusterAppsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Apps"
+        title="Applications"
         description={
           <AppsDescription clusterId={clusterId} name={cluster?.displayName} />
         }
@@ -313,7 +307,7 @@ export function ClusterAppsPage() {
         }))}
         value={section}
         onChange={setSection}
-        aria-label="Apps"
+        aria-label="Applications"
       />
 
       <AppsTabContent
@@ -348,12 +342,8 @@ export function ClusterAppsPage() {
       )}
       <AppsModals
         modal={modal}
-        onOperationStarted={onOperationStarted}
         onCloseModal={() => setModal({ kind: "none" })}
-        projectId={projectId}
         clusterId={clusterId}
-        catalogCreateDecision={catalogCreateDecision}
-        catalogUpdateDecision={catalogUpdateDecision}
         catalogDeleteDecision={catalogDeleteDecision}
         uninstallPending={uninstall.isPending}
         onConfirmUninstall={(installedChartId) =>
@@ -386,13 +376,14 @@ function AppsDescription({
   return (
     <>
       Browse, install, and manage Helm applications on {name || "this cluster"}.
-      Releases installed by Cluster Tools are marked Managed by Tools. See the{" "}
+      Releases installed through Tools are marked Managed by Tools.
+      See the{" "}
       <RouterLink
         to="/dashboard/clusters/$id/tools"
         params={{ id: clusterId }}
         className="underline"
       >
-        Tools tab
+        Tools page
       </RouterLink>
       .
     </>

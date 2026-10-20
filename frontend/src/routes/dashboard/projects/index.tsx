@@ -238,7 +238,7 @@ function ProjectsPage() {
             icon={<Plus className="h-4 w-4" />}
             onClick={() => setShowCreateModal(true)}
           >
-            Create Project
+            Create project
           </ActionButton>
         }
       />
@@ -296,7 +296,7 @@ function ProjectsPage() {
         />
       </QueryStates>
 
-      {/* Create Project Modal */}
+      {/* Create project Modal */}
       {showCreateModal && (
         <CreateProjectModal onClose={() => setShowCreateModal(false)} />
       )}
@@ -306,7 +306,7 @@ function ProjectsPage() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDeleteProject}
-        title="Delete Project"
+        title="Delete project"
         description={`Delete the project "${deleteTarget?.displayName || deleteTarget?.name}"? This action cannot be undone.`}
         confirmText="Delete"
         variant="destructive"
@@ -317,7 +317,7 @@ function ProjectsPage() {
 }
 
 // ============================================================
-// Create Project Modal
+// Create project Modal
 // ============================================================
 
 function CreateProjectModal({ onClose }: { onClose: () => void }) {
@@ -381,7 +381,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
-      title="Create Project"
+      title="Create project"
       onClose={onClose}
       size="md"
       footerClassName="flex items-center justify-end gap-2"
@@ -394,7 +394,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
             disabled={createProject.isPending || !name || !displayName}
             loading={createProject.isPending}
           >
-            Create Project
+            Create project
           </ActionButton>
         </>
       }

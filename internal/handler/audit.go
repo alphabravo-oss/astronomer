@@ -13,14 +13,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 type auditReaderV1 interface {
@@ -168,7 +169,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	offset := queryOffset32(r)
 	filter, filterErr := auditFilterFromRequest(r, limit, offset)
 	if filterErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, filterErr.Error())
 		return
 	}
 
@@ -191,7 +192,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		page, pageErr := filterReader.ListAuditLogV1FilteredPage(r.Context(), filter)
 		err = pageErr
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		logs = page.Logs
@@ -204,7 +205,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset:      offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.queries.CountAuditLogV1ByActionClass(r.Context(), actionClass)
@@ -212,7 +213,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	case sinceIDStr != "":
 		sinceID, parseErr := uuid.Parse(sinceIDStr)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince, "Invalid since cursor")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidSince, "Invalid since cursor")
 			return
 		}
 		logs, err = h.listAuditLogsSince(r.Context(), sqlc.ListAuditLogsSinceParams{
@@ -220,14 +221,14 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Limit:   limit,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		total = int64(len(logs))
 	case userIDStr != "":
 		uid, parseErr := uuid.Parse(userIDStr)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user_id")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user_id")
 			return
 		}
 		pgtypeUID := pgtype.UUID{Bytes: uid, Valid: true}
@@ -237,7 +238,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogsByUser(r.Context(), pgtypeUID)
@@ -249,7 +250,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset:       offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogs(r.Context())
@@ -261,7 +262,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogs(r.Context())
@@ -272,14 +273,14 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list audit logs")
 			return
 		}
 		total, err = h.countAuditLogs(r.Context())
 	}
 
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count audit logs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count audit logs")
 		return
 	}
 	if pagination == nil && total >= int64(filter.CountLimit) && filter.CountLimit > 0 {
@@ -308,12 +309,12 @@ func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
 	filter.CountLimit = int32(auditExportMaxRows + 1)
 	total, err := filterReader.CountAuditLogV1Filtered(r.Context(), filter)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to size audit export")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to size audit export")
 		return
 	}
 	if total > auditExportMaxRows {
 		w.Header().Set("Link", `</api/v1/audit/exports/>; rel="create"`)
-		RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidFilter, "Audit export exceeds the synchronous limit; create a durable export operation")
+		apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidFilter, "Audit export exceeds the synchronous limit; create a durable export operation")
 		return
 	}
 
@@ -345,35 +346,35 @@ func (h *AuditHandler) validatedAuditExportFilter(w http.ResponseWriter, r *http
 		format = "csv"
 	}
 	if format != "csv" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "Only 'csv' export format is supported")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFormat, "Only 'csv' export format is supported")
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 
 	filter, filterErr := auditFilterFromRequest(r, auditCSVExportPageSize, 0)
 	if filterErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, filterErr.Error())
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 	sinceIDStr := r.URL.Query().Get("since")
 	if sinceIDStr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince, "since cursor export is not supported")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidSince, "since cursor export is not supported")
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 	if !filter.HasFrom || !filter.HasTo {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, "audit export requires explicit from and to timestamps")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, "audit export requires explicit from and to timestamps")
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 	if !filter.To.After(filter.From) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, "audit export to must be after from")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, "audit export to must be after from")
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 	if filter.To.Sub(filter.From) > auditExportMaxRange {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, "audit export range cannot exceed 31 days")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, "audit export range cannot exceed 31 days")
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 	filterReader, ok := h.queries.(auditFilterReader)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ListError, "Audit export is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ListError, "Audit export is not configured")
 		return sqlc.AuditLogFilterParams{}, nil, false
 	}
 	return filter, filterReader, true
@@ -397,19 +398,19 @@ type AuditExportOperationResponse struct {
 
 func (h *AuditHandler) acceptAuditExport(w http.ResponseWriter, r *http.Request, filter sqlc.AuditLogFilterParams, idempotencyKey string) {
 	if h.runTx == nil || h.operations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Audit export operation store is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Audit export operation store is not configured")
 		return
 	}
 	caller := currentUserUUID(r)
 	if !caller.Valid || caller.Bytes == uuid.Nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Invalid caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Invalid caller")
 		return
 	}
 	filter.Offset, filter.CountLimit, filter.HasBefore = 0, 0, false
 	filter.BeforeTime, filter.BeforeID = time.Time{}, uuid.Nil
 	spec, err := json.Marshal(audit.ExportSpec{Filter: filter})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidRequest, "Failed to encode audit export")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidRequest, "Failed to encode audit export")
 		return
 	}
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(idempotencyKey)))
@@ -439,10 +440,10 @@ func (h *AuditHandler) acceptAuditExport(w http.ResponseWriter, r *http.Request,
 	})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different audit export")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different audit export")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist audit export operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to persist audit export operation")
 		return
 	}
 	RespondAcceptedOperation(w, auditExportStatusURL(row.ID), auditExportResponse(row.ID, row.Status, row.AttemptCount, row.ErrorCode, row.Filename, row.ArtifactSha256, row.ArtifactSize, row.ExpiresAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt))
@@ -454,20 +455,20 @@ func (h *AuditHandler) GetExportOperation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if h.operations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Audit export operation store is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Audit export operation store is not configured")
 		return
 	}
 	row, err := h.operations.GetAuditExportOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Audit export operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Audit export operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get audit export operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to get audit export operation")
 		return
 	}
 	if !auditExportOwnedByCaller(r, row.RequestedBy) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Audit export operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Audit export operation not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, auditExportResponse(row.ID, row.Status, row.AttemptCount, row.ErrorCode, row.Filename, row.ArtifactSha256, row.ArtifactSize, row.ExpiresAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt))
@@ -479,20 +480,20 @@ func (h *AuditHandler) DownloadExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.operations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Audit export operation store is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Audit export operation store is not configured")
 		return
 	}
 	row, err := h.operations.GetAuditExportArtifact(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Completed audit export not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Completed audit export not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get audit export artifact")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to get audit export artifact")
 		return
 	}
 	if !auditExportOwnedByCaller(r, row.RequestedBy) || !row.ExpiresAt.After(time.Now().UTC()) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Completed audit export not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Completed audit export not found")
 		return
 	}
 	w.Header().Set("Content-Type", row.ArtifactContentType)
@@ -679,8 +680,8 @@ func auditFilterFromRequest(r *http.Request, limit, offset int32) (sqlc.AuditLog
 		return filter, fmt.Errorf("result must be success, failure, or error")
 	}
 	if statusCodeStr := strings.TrimSpace(q.Get("status_code")); statusCodeStr != "" {
-		statusCode, err := strconv.Atoi(statusCodeStr)
-		if err != nil || statusCode < 0 || statusCode > 599 {
+		statusCode, err := strconv.ParseInt(statusCodeStr, 10, 32)
+		if err != nil || statusCode < 100 || statusCode > 599 {
 			return filter, fmt.Errorf("invalid status_code")
 		}
 		filter.StatusCode = int32(statusCode)
@@ -718,13 +719,13 @@ func (h *AuditHandler) Get(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid audit log ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid audit log ID")
 		return
 	}
 
 	auditLog, err := h.getAuditLogByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Audit log entry not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Audit log entry not found")
 		return
 	}
 

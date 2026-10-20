@@ -5,13 +5,14 @@ package upgradecli
 import (
 	"context"
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
-	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
+	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
 
 // These fixtures qualify real private ownership/reconciliation and one owned

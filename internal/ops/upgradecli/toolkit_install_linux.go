@@ -14,10 +14,10 @@ import (
 	"runtime"
 	"strings"
 
-	canonical "github.com/alphabravocompany/astronomer-go/deploy/toolchain"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
+	canonical "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli/toolchain"
 )
 
 // InstallUpgradeToolkit is called by an independently trusted compiled installer,

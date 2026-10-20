@@ -1,3 +1,5 @@
+import { CatalogOfferingSupport } from "@/components/catalog/catalog-offering-support";
+import { Link } from "@tanstack/react-router";
 import type { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { CatalogIcon } from "@/components/catalog/catalog-icon";
@@ -30,17 +32,6 @@ export function BrowseView({
   onInstall: (chartId: string, chartName: string) => void;
 }) {
   const charts = q.data?.data ?? [];
-
-  // Build a name→releases index so each Browse card knows whether
-  // it's already on this cluster (and via what install path). This
-  // is the cheap version of "drift detection" — we don't reconcile
-  // helm releases, we just notice when the catalog browse offers
-  // something the cluster already has.
-  const installedByChart = new Map<string, ClusterAppRow>();
-  for (const r of installed) {
-    if (r.chartName) installedByChart.set(r.chartName, r);
-    else if (r.toolSlug) installedByChart.set(r.toolSlug, r);
-  }
 
   return (
     <div className="space-y-3">
@@ -80,7 +71,13 @@ export function BrowseView({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {charts.map((c) => {
-            const existing = installedByChart.get(c.name);
+            // Chart IDs establish catalog identity; Tools may only retain names.
+            // Name-only matches are advisory and never suppress installation.
+            const existing =
+              installed.find((row) => row.chartId === c.id) ??
+              installed.find(
+                (row) => row.sourceKind === "tool" && row.chartName === c.name,
+              );
             return (
               <article
                 key={c.id}
@@ -103,38 +100,62 @@ export function BrowseView({
                       </span>
                     )}
                   </div>
+                  <CatalogOfferingSupport
+                    chart={c.name}
+                    repositoryId={c.repositoryId}
+                  />
                   {c.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2">
                       {c.description}
                     </p>
                   )}
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    {existing ? (
-                      <span className="text-11 text-status-success font-medium inline-flex items-center gap-1">
-                        Installed
-                        {existing.sourceKind === "tool" && (
-                          <span className="text-muted-foreground font-normal">
-                            (via Tools)
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <BareButton
-                        tooltip={
-                          !installDecision.allowed ? undefined : "Install chart"
-                        }
-                        disabledReason={
-                          !installDecision.allowed
-                            ? permissionDeniedReason(installDecision)
-                            : undefined
-                        }
-                        className="text-11 inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline font-normal"
-                        disabled={!installDecision.allowed}
-                        onClick={() => onInstall(c.id, c.name)}
-                      >
-                        Install →
-                      </BareButton>
+                    {existing && (
+                      <div className="space-y-1 text-11">
+                        <p>
+                          {existing.chartId === c.id
+                            ? "Installed"
+                            : "Related Tools release"}{" "}
+                          in {existing.namespace} as {existing.releaseName}
+                        </p>
+                        <Link
+                          to={
+                            existing.sourceKind === "tool"
+                              ? "/dashboard/clusters/$id/tools"
+                              : "/dashboard/clusters/$id/apps"
+                          }
+                          params={{ id: existing.clusterId }}
+                          search={
+                            existing.sourceKind === "tool"
+                              ? {}
+                              : { section: "installed" }
+                          }
+                          className="text-primary underline"
+                        >
+                          Manage in{" "}
+                          {existing.sourceKind === "tool"
+                            ? "Tools"
+                            : "Applications"}
+                        </Link>
+                      </div>
                     )}
+                    <BareButton
+                      tooltip={
+                        !installDecision.allowed ? undefined : "Install chart"
+                      }
+                      disabledReason={
+                        !installDecision.allowed
+                          ? permissionDeniedReason(installDecision)
+                          : undefined
+                      }
+                      className="text-11 inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline font-normal"
+                      disabled={!installDecision.allowed}
+                      onClick={() => onInstall(c.id, c.name)}
+                    >
+                      {existing?.chartId === c.id
+                        ? "Install another release →"
+                        : "Install →"}
+                    </BareButton>
                     {c.homeUrl && (
                       <a
                         href={c.homeUrl}

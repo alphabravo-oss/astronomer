@@ -148,7 +148,6 @@ function NewSCIMTokenPage() {
           Back to SCIM tokens
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · Auth · SCIM · New"
           title="Mint SCIM token"
         />
         <NewSCIMTokenForm />

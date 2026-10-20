@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -79,7 +79,7 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 			RespondJSON(w, http.StatusOK, map[string]any{})
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load cluster monitoring config")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to load cluster monitoring config")
 		return
 	}
 	RespondJSON(w, http.StatusOK, clusterMonitoringConfigResponse(cfg))
@@ -87,7 +87,7 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 
 func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring store not configured")
 		return
 	}
 	clusterID, ok := parseClusterIDParam(w, r, "id")
@@ -96,7 +96,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 	}
 	var req UpdateClusterMonitoringConfigRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	var backendID uuid.UUID
@@ -105,7 +105,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 	} else {
 		backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.MonitoringError, "Default monitoring backend is not configured")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MonitoringError, "Default monitoring backend is not configured")
 			return
 		}
 		backendID = backend.ID
@@ -156,7 +156,7 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 			}}
 		})
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save cluster monitoring config")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to save cluster monitoring config")
 		return
 	}
 	RespondJSON(w, http.StatusOK, clusterMonitoringConfigResponse(clusterCfg))
@@ -178,7 +178,7 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 	baselineOwnership := h.clusterMetricsBaselineOwnership(r.Context(), clusterID)
 	operatorConflicts, conflictErr := h.clusterMonitoringOperatorConflicts(r.Context(), clusterID, req.Namespace, req.ReleaseName)
 	if conflictErr != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError,
 			"Could not verify Prometheus operator ownership: "+conflictErr.Error())
 		return
 	}
@@ -234,7 +234,7 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 	}
 	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "installing", "install", "monitoring.stack.install")
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack installation")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to stage monitoring stack installation")
 		return
 	}
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
@@ -256,7 +256,7 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 	}
 	cfg, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
 	if loadErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, loadErr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, loadErr.Error())
 		return
 	}
 	if replaceRequired, reasons := clusterMonitoringReplaceRequired(cfg, ok, req); replaceRequired {
@@ -270,7 +270,7 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 	}
 	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "updating", "upgrade", "monitoring.stack.upgrade")
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack upgrade")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to stage monitoring stack upgrade")
 		return
 	}
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
@@ -291,12 +291,12 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if _, _, loadErr := h.loadStackConfig(r.Context(), clusterID); loadErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, loadErr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, loadErr.Error())
 		return
 	}
 	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "reinstalled", "replace", "monitoring.stack.replace")
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack replacement")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to stage monitoring stack replacement")
 		return
 	}
 	RespondJSON(w, http.StatusAccepted, monitoringOperationResponse(op))
@@ -304,7 +304,7 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 
 func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Request) {
 	if h.helm == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "helm requester not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.HelmError, "helm requester not configured")
 		return
 	}
 	id, ok := parseClusterIDParam(w, r, "id")
@@ -315,7 +315,7 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 	clusterID := id.String()
 	cfg, _, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	configParams := sqlc.UpsertClusterMonitoringConfigParams{
@@ -345,7 +345,7 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 			}}
 		})
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack uninstall")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to stage monitoring stack uninstall")
 		return
 	}
 	h.TriggerReconcile()
@@ -360,7 +360,7 @@ func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Reques
 	clusterID := id.String()
 	cfg, ok, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if !ok {

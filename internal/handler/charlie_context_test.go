@@ -6,8 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 )
 
 type contextSearcherFake struct {

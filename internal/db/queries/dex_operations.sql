@@ -1,10 +1,10 @@
 -- name: ReserveDexOperation :one
 INSERT INTO dex_operations (
     id, action, target_id, idempotency_scope, idempotency_key,
-    request_digest, payload_encrypted, created_by
+    request_digest, payload_key_id, payload_algorithm, payload_ciphertext, payload_nonce, created_by
 ) VALUES (
     sqlc.arg(id), sqlc.arg(action), sqlc.arg(target_id), sqlc.arg(idempotency_scope),
-    sqlc.arg(idempotency_key), sqlc.arg(request_digest), sqlc.arg(payload_encrypted),
+    sqlc.arg(idempotency_key), sqlc.arg(request_digest), sqlc.arg(payload_key_id), sqlc.arg(payload_algorithm), sqlc.arg(payload_ciphertext), sqlc.arg(payload_nonce),
     sqlc.arg(created_by)
 )
 ON CONFLICT (idempotency_scope, idempotency_key) DO UPDATE

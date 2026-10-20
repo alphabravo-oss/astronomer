@@ -277,9 +277,9 @@ func (h *Hub) Locator() *Locator {
 
 // MirrorIngester is the narrow handler-side interface the Hub calls
 // when an agent emits a MIRROR_EVENT frame. The implementation lives in
-// internal/crd (RouteMirrorEvent) and depends on *sqlc.Queries; we keep
+// internal/operator/mirror (RouteMirrorEvent) and depends on *sqlc.Queries; we keep
 // the surface as an interface so the tunnel package doesn't import
-// internal/crd directly (which would drag controller-runtime into the
+// internal/operator/mirror directly (which would drag controller-runtime into the
 // tunnel build path).
 type MirrorIngester interface {
 	RouteMirrorEvent(ctx context.Context, clusterID uuid.UUID, payload protocol.MirrorEventPayload) error
@@ -1327,7 +1327,6 @@ func (h *Hub) rotateClusterAgentToken(ctx context.Context, clusterID uuid.UUID, 
 	token := base64.URLEncoding.EncodeToString(b)
 	row, err := h.validator.RotateClusterAgentToken(ctx, sqlc.RotateClusterAgentTokenParams{
 		ID:        current.ID,
-		Token:     "",
 		TokenHash: auth.HashOpaqueToken(token),
 	})
 	if err != nil {
@@ -1338,22 +1337,9 @@ func (h *Hub) rotateClusterAgentToken(ctx context.Context, clusterID uuid.UUID, 
 }
 
 func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) (string, error) {
-	// NOTE (A3 residual): this early-return returns an EXISTING plaintext durable
-	// (token != "") without re-minting, so it does NOT reset adopted_at — for a
-	// legacy plaintext durable a re-import token stays replayable within its TTL
-	// (the gate anchor never advances). Modern durables are hash-only (token ==
-	// ""), so they fall through to the upsert below, which resets adopted_at = NULL
-	// and re-closes the temporal gate. There are 0 plaintext durables in current
-	// deployments; if legacy ones reappear, reset adopted_at on this path too.
-	if tok, err := h.validator.GetClusterAgentTokenByClusterID(ctx, clusterID); err == nil && tok.Token != "" {
-		if err := h.validator.TouchClusterAgentToken(ctx, tok.ID); err != nil {
-			h.log.Warn("failed to touch existing cluster agent token",
-				slog.String("cluster_id", clusterID.String()),
-				slog.String("error", err.Error()),
-			)
-		}
-		return tok.Token, nil
-	}
+	// Durable agent tokens are stored hash-only (the plaintext token column was
+	// dropped in migration 00082), so every call mints a fresh token; the upsert
+	// resets adopted_at = NULL and re-closes the A3 registration-replay gate.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -1367,9 +1353,6 @@ func (h *Hub) ensureClusterAgentToken(ctx context.Context, clusterID uuid.UUID) 
 		return "", err
 	}
 	h.recordAgentTokenRotated(ctx, clusterID, row)
-	if row.Token != "" {
-		return row.Token, nil
-	}
 	return token, nil
 }
 
@@ -1476,7 +1459,7 @@ func (h *Hub) recordAgentTokenRotated(ctx context.Context, clusterID uuid.UUID, 
 			"new_credential_type":      "durable_agent_token",
 			"token_hash_prefix":        hashPrefix,
 			"hash_algorithm":           "sha256",
-			"plaintext_stored":         row.Token != "",
+			"plaintext_stored":         false,
 			"source":                   "registration_token_exchange",
 		},
 	})

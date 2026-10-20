@@ -7,8 +7,13 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	agecrypto "github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func testCosignPublicKey(t *testing.T) string {
@@ -59,7 +64,7 @@ func TestValidateProductionSecurity_WorkerRefusesEmptyOrDevKey(t *testing.T) {
 	empty.EncryptionKey = ""
 	if err := ValidateProductionSecurity(empty, false); err == nil {
 		t.Fatal("expected production error for empty encryption key")
-	} else if !strings.Contains(err.Error(), "astronomer_encryption_key is empty") {
+	} else if !strings.Contains(err.Error(), "astronomer_encryption_key and astronomer_encryption_key_file are both empty") {
 		t.Fatalf("error did not mention empty key: %v", err)
 	}
 
@@ -113,7 +118,7 @@ func TestValidateProductionSecurity_InternalPSKRotationWindow(t *testing.T) {
 func TestValidateProductionSecurity_InternalPSKMustBeDedicated(t *testing.T) {
 	for name, key := range map[string]func(*Config) string{
 		"JWT signing key": func(cfg *Config) string { return cfg.SecretKey },
-		"Fernet key":      func(cfg *Config) string { return cfg.EncryptionKey },
+		"encryption key":  func(cfg *Config) string { return cfg.EncryptionKey },
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := prodBase()
@@ -253,7 +258,7 @@ func TestDevSentinelsInUse(t *testing.T) {
 
 	onlyEncryption := &Config{Env: "development", SecretKey: "a-real-unique-secret", EncryptionKey: devEncryptionKey}
 	if got := DevSentinelsInUse(onlyEncryption); len(got) != 1 || got[0] != DevSentinelEncryptionKey {
-		t.Fatalf("DevSentinelsInUse(dev fernet key only) = %v, want [%s]", got, DevSentinelEncryptionKey)
+		t.Fatalf("DevSentinelsInUse(dev encryption key only) = %v, want [%s]", got, DevSentinelEncryptionKey)
 	}
 
 	if got := DevSentinelsInUse(prodBase()); len(got) != 0 {
@@ -261,5 +266,29 @@ func TestDevSentinelsInUse(t *testing.T) {
 	}
 	if got := DevSentinelsInUse(nil); len(got) != 0 {
 		t.Fatalf("DevSentinelsInUse(nil) = %v, want empty", got)
+	}
+}
+
+// A published dev identity is detected whatever label it carries, as a
+// previous key in a keyring, and when it arrives through the key file.
+func TestDevSentinelDetectsPublishedAgeKeyInAnyPosition(t *testing.T) {
+	t.Parallel()
+	fresh, err := agecrypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	labelledPrevious := &Config{EncryptionKey: "new:" + fresh + "\nold:" + devEncryptionKey}
+	if got := DevSentinelsInUse(labelledPrevious); !slices.Contains(got, DevSentinelEncryptionKey) {
+		t.Fatalf("published key as previous keyring entry not detected: %v", got)
+	}
+	path := filepath.Join(t.TempDir(), "keys")
+	if err := os.WriteFile(path, []byte("dev:"+devEncryptionKey+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := DevSentinelsInUse(&Config{EncryptionKeyFile: path}); !slices.Contains(got, DevSentinelEncryptionKey) {
+		t.Fatalf("published key in key file not detected: %v", got)
+	}
+	if got := DevSentinelsInUse(&Config{EncryptionKey: fresh}); slices.Contains(got, DevSentinelEncryptionKey) {
+		t.Fatalf("fresh key flagged as published: %v", got)
 	}
 }

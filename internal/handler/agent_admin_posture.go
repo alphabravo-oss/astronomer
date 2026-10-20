@@ -20,9 +20,11 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // clusterAdminPostureItem is the wire shape for a single cluster whose
@@ -51,7 +53,7 @@ type clusterAdminPostureResponse struct {
 // the cluster-admin `admin` profile.
 func (h *ClusterAgentHandler) ClusterAdminPosture(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
@@ -72,7 +74,7 @@ func (h *ClusterAgentHandler) ClusterAdminPosture(w http.ResponseWriter, r *http
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters")
 			return
 		}
 		total += len(clusters)
@@ -89,7 +91,7 @@ func (h *ClusterAgentHandler) ClusterAdminPosture(w http.ResponseWriter, r *http
 				PrivilegeProfile: profile,
 			})
 		}
-		if int32(len(clusters)) < pageSize {
+		if safeconv.Int32(len(clusters)) < pageSize {
 			break
 		}
 	}

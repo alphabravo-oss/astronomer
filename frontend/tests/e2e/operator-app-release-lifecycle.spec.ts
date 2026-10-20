@@ -273,12 +273,15 @@ test("upgrade keeps saved values and follows the wrapped operation receipt", asy
     `/dashboard/clusters/${clusterId}/apps?section=installed&project=${projectId}`,
   );
   await page.getByRole("button", { name: "Upgrade", exact: true }).click();
-  const dialog = page.getByRole("dialog", {
-    name: "Upgrade checkout",
-    exact: true,
-  });
+  await expect(page).toHaveURL(/catalog\/configure/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const dialog = page.getByRole("main");
   await expect(dialog.locator("textarea")).toHaveValue(savedValues);
   await dialog.getByRole("button", { name: "Upgrade", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm upgrade", exact: true })
+    .click();
   await expect(page).toHaveURL(new RegExp(`operation=${operationId}`));
   expect(writes).toHaveLength(1);
   expect(writes[0].method).toBe("PUT");
@@ -340,6 +343,17 @@ async function catalogCheckout(page: Page) {
       default_values: "replicaCount: 1\n",
     },
   });
+  await jsonRoute(page, `/api/v1/catalog/charts/${release.chart_id}`, {
+    data: {
+      id: release.chart_id,
+      repository_id: "repository-checkout",
+      created_at: now,
+      updated_at: now,
+      name: "checkout",
+      keywords: [],
+      deprecated: false,
+    },
+  });
   return projectId;
 }
 
@@ -396,10 +410,9 @@ test("install follows its accepted receipt through navigation, refresh and relea
   await page.goto(
     `/dashboard/clusters/${clusterId}/apps?project=${projectId}&install=checkout`,
   );
-  const dialog = page.getByRole("dialog", {
-    name: "Install checkout",
-    exact: true,
-  });
+  await expect(page).toHaveURL(/catalog\/configure/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const dialog = page.getByRole("main");
   await expect(dialog.locator("textarea")).toHaveValue("replicaCount: 1");
   await dialog
     .getByLabel("Release name", { exact: true })
@@ -407,7 +420,13 @@ test("install follows its accepted receipt through navigation, refresh and relea
   await dialog.getByLabel("Namespace", { exact: true }).fill(release.namespace);
   await dialog.locator("textarea").fill(savedValues);
   await dialog.getByRole("button", { name: "Install", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm installation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Install checkout", exact: true }),
+  ).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`operation=${operationId}`));
   await expect(page).toHaveURL(/section=installed/);
   await expect(page).not.toHaveURL(/install=checkout/);

@@ -20,12 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	sigstorebundle "github.com/sigstore/sigstore-go/pkg/bundle"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
+
+	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
 
 // Real offline signatures for all seven pinned image subjects and the target

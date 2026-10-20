@@ -48,7 +48,7 @@ func verifyChecksums(root string, manifest []byte) error {
 		if !exists {
 			return fmt.Errorf("unpinned Charlie contract file %q", rel)
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(path) // #nosec G122 -- walks the checked-in, read-only pinned contract directory embedded at build time
 		if err != nil {
 			return err
 		}

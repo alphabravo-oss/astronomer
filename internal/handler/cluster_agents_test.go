@@ -12,6 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
@@ -20,9 +24,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeClusterAgentQuerier struct {

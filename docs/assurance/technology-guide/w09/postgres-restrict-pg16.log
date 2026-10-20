@@ -1,4 +1,0 @@
-=== RUN   TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted
---- PASS: TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted (0.05s)
-PASS
-ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	0.052s

@@ -410,27 +410,30 @@ func (q *Queries) CreateHelmChartVersion(ctx context.Context, arg CreateHelmChar
 }
 
 const createHelmRepository = `-- name: CreateHelmRepository :one
-INSERT INTO helm_repositories (name, url, repo_type, description, is_default, auth_type, auth_config, auth_config_encrypted, enabled, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted
+INSERT INTO helm_repositories (name, url, repo_type, description, is_default, auth_type, auth_config, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce, enabled, created_by_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $11, $12, $13, $9, $10)
+RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 `
 
 type CreateHelmRepositoryParams struct {
-	Name                string          `json:"name"`
-	Url                 string          `json:"url"`
-	RepoType            string          `json:"repo_type"`
-	Description         string          `json:"description"`
-	IsDefault           bool            `json:"is_default"`
-	AuthType            string          `json:"auth_type"`
-	AuthConfig          json.RawMessage `json:"auth_config"`
-	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
-	Enabled             bool            `json:"enabled"`
-	CreatedByID         pgtype.UUID     `json:"created_by_id"`
+	Name                 string          `json:"name"`
+	Url                  string          `json:"url"`
+	RepoType             string          `json:"repo_type"`
+	Description          string          `json:"description"`
+	IsDefault            bool            `json:"is_default"`
+	AuthType             string          `json:"auth_type"`
+	AuthConfig           json.RawMessage `json:"auth_config"`
+	AuthConfigKeyID      string          `json:"auth_config_key_id"`
+	Enabled              bool            `json:"enabled"`
+	CreatedByID          pgtype.UUID     `json:"created_by_id"`
+	AuthConfigAlgorithm  string          `json:"auth_config_algorithm"`
+	AuthConfigCiphertext []byte          `json:"auth_config_ciphertext"`
+	AuthConfigNonce      []byte          `json:"auth_config_nonce"`
 }
 
 // auth_config carries only the non-secret projection (username, charts,
-// allow_catalog); the complete document, secrets included, is the Fernet token
-// in auth_config_encrypted. Migration 145.
+// allow_catalog); the complete document, secrets included, is the age ciphertext
+// in auth_config_{key_id,algorithm,ciphertext,nonce}. Migration 145.
 func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmRepositoryParams) (HelmRepository, error) {
 	row := q.db.QueryRow(ctx, createHelmRepository,
 		arg.Name,
@@ -440,9 +443,12 @@ func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmReposi
 		arg.IsDefault,
 		arg.AuthType,
 		arg.AuthConfig,
-		arg.AuthConfigEncrypted,
+		arg.AuthConfigKeyID,
 		arg.Enabled,
 		arg.CreatedByID,
+		arg.AuthConfigAlgorithm,
+		arg.AuthConfigCiphertext,
+		arg.AuthConfigNonce,
 	)
 	var i HelmRepository
 	err := row.Scan(
@@ -462,7 +468,10 @@ func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmReposi
 		&i.OwnerProjectID,
 		&i.LastSyncError,
 		&i.LastSyncAttemptedAt,
-		&i.AuthConfigEncrypted,
+		&i.AuthConfigKeyID,
+		&i.AuthConfigAlgorithm,
+		&i.AuthConfigCiphertext,
+		&i.AuthConfigNonce,
 	)
 	return i, err
 }
@@ -702,7 +711,7 @@ func (q *Queries) GetHelmChartVersionByID(ctx context.Context, id uuid.UUID) (He
 
 const getHelmRepositoryByID = `-- name: GetHelmRepositoryByID :one
 
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted FROM helm_repositories WHERE id = $1
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce FROM helm_repositories WHERE id = $1
 `
 
 // Helm Repositories
@@ -726,7 +735,10 @@ func (q *Queries) GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (Helm
 		&i.OwnerProjectID,
 		&i.LastSyncError,
 		&i.LastSyncAttemptedAt,
-		&i.AuthConfigEncrypted,
+		&i.AuthConfigKeyID,
+		&i.AuthConfigAlgorithm,
+		&i.AuthConfigCiphertext,
+		&i.AuthConfigNonce,
 	)
 	return i, err
 }
@@ -1101,7 +1113,7 @@ func (q *Queries) ListChartsByRepositoryIDs(ctx context.Context, arg ListChartsB
 }
 
 const listEnabledHelmRepositories = `-- name: ListEnabledHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted FROM helm_repositories WHERE enabled = true ORDER BY name ASC
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce FROM helm_repositories WHERE enabled = true ORDER BY name ASC
 `
 
 func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error) {
@@ -1130,7 +1142,10 @@ func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmReposi
 			&i.OwnerProjectID,
 			&i.LastSyncError,
 			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
+			&i.AuthConfigKeyID,
+			&i.AuthConfigAlgorithm,
+			&i.AuthConfigCiphertext,
+			&i.AuthConfigNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -1143,7 +1158,7 @@ func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmReposi
 }
 
 const listGlobalHelmRepositories = `-- name: ListGlobalHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted FROM helm_repositories
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce FROM helm_repositories
 WHERE owner_project_id IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
@@ -1185,7 +1200,10 @@ func (q *Queries) ListGlobalHelmRepositories(ctx context.Context, arg ListGlobal
 			&i.OwnerProjectID,
 			&i.LastSyncError,
 			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
+			&i.AuthConfigKeyID,
+			&i.AuthConfigAlgorithm,
+			&i.AuthConfigCiphertext,
+			&i.AuthConfigNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -1244,7 +1262,7 @@ func (q *Queries) ListHelmCharts(ctx context.Context, arg ListHelmChartsParams) 
 }
 
 const listHelmRepositories = `-- name: ListHelmRepositories :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListHelmRepositoriesParams struct {
@@ -1278,79 +1296,10 @@ func (q *Queries) ListHelmRepositories(ctx context.Context, arg ListHelmReposito
 			&i.OwnerProjectID,
 			&i.LastSyncError,
 			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listHelmRepositoriesWithLegacyAuthConfig = `-- name: ListHelmRepositoriesWithLegacyAuthConfig :many
-SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted FROM helm_repositories
-WHERE auth_config_encrypted = ''
-  AND auth_config IS NOT NULL
-  AND EXISTS (
-        SELECT 1
-        FROM unnest(ARRAY[
-            'password', 'token', 'bearer', 'secret',
-            'client_secret', 'access_token', 'refresh_token'
-        ]) AS secret_key
-        WHERE jsonb_typeof(auth_config -> secret_key) = 'string'
-          AND auth_config ->> secret_key <> ''
-      )
-ORDER BY id
-LIMIT $1 OFFSET $2
-`
-
-type ListHelmRepositoriesWithLegacyAuthConfigParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-// Rows that still hold their credential as plaintext JSONB, for the
-// security:migrate_plaintext_credentials sweep. Empty ciphertext is the only
-// marker of a pre-145 row.
-//
-// The EXISTS clause is what makes "returned by this query" mean "has something
-// to seal", and it must stay in step with catalog.hasAuthConfigSecret: a
-// non-empty STRING under one of catalog.AuthConfigSecretKeys. A looser
-// predicate (auth_config <> '{}', or a bare key-existence test) also matches
-// rows the sweep can never seal — an OCI repo whose auth_config is just
-// {"charts":[...]}, or a repo with only a username. Those rows never leave the
-// result set, so a full page of them ahead of a credentialed row would make
-// the sweep re-read the same page forever and never reach the credential.
-func (q *Queries) ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, arg ListHelmRepositoriesWithLegacyAuthConfigParams) ([]HelmRepository, error) {
-	rows, err := q.db.Query(ctx, listHelmRepositoriesWithLegacyAuthConfig, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []HelmRepository{}
-	for rows.Next() {
-		var i HelmRepository
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Url,
-			&i.RepoType,
-			&i.Description,
-			&i.IsDefault,
-			&i.AuthType,
-			&i.AuthConfig,
-			&i.Enabled,
-			&i.LastSyncedAt,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.OwnerProjectID,
-			&i.LastSyncError,
-			&i.LastSyncAttemptedAt,
-			&i.AuthConfigEncrypted,
+			&i.AuthConfigKeyID,
+			&i.AuthConfigAlgorithm,
+			&i.AuthConfigCiphertext,
+			&i.AuthConfigNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -1645,29 +1594,6 @@ func (q *Queries) ReleaseInstalledChartDriftClaim(ctx context.Context, arg Relea
 	return result.RowsAffected(), nil
 }
 
-const sealHelmRepositoryAuthConfig = `-- name: SealHelmRepositoryAuthConfig :exec
-UPDATE helm_repositories
-   SET auth_config_encrypted = $2,
-       auth_config = $3
- WHERE id = $1
-   AND auth_config_encrypted = ''
-`
-
-type SealHelmRepositoryAuthConfigParams struct {
-	ID                  uuid.UUID       `json:"id"`
-	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
-	AuthConfig          json.RawMessage `json:"auth_config"`
-}
-
-// Compare-and-set on the empty ciphertext: two schedulers (server + dedicated
-// worker both run this task) racing on the same row must not have the loser
-// overwrite a freshly-sealed envelope with a re-encryption of a document it
-// read before the winner stripped it.
-func (q *Queries) SealHelmRepositoryAuthConfig(ctx context.Context, arg SealHelmRepositoryAuthConfigParams) error {
-	_, err := q.db.Exec(ctx, sealHelmRepositoryAuthConfig, arg.ID, arg.AuthConfigEncrypted, arg.AuthConfig)
-	return err
-}
-
 const setCatalogChartFavorite = `-- name: SetCatalogChartFavorite :one
 INSERT INTO catalog_user_discovery (
     user_id, chart_id, favorite, favorite_at
@@ -1717,23 +1643,29 @@ UPDATE helm_repositories SET
     is_default = $6,
     auth_type = $7,
     auth_config = $8,
-    auth_config_encrypted = $9,
+    auth_config_key_id = $9,
+    auth_config_algorithm = $11,
+    auth_config_ciphertext = $12,
+    auth_config_nonce = $13,
     enabled = $10
 WHERE id = $1
-RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted
+RETURNING id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_key_id, auth_config_algorithm, auth_config_ciphertext, auth_config_nonce
 `
 
 type UpdateHelmRepositoryParams struct {
-	ID                  uuid.UUID       `json:"id"`
-	Name                string          `json:"name"`
-	Url                 string          `json:"url"`
-	RepoType            string          `json:"repo_type"`
-	Description         string          `json:"description"`
-	IsDefault           bool            `json:"is_default"`
-	AuthType            string          `json:"auth_type"`
-	AuthConfig          json.RawMessage `json:"auth_config"`
-	AuthConfigEncrypted string          `json:"auth_config_encrypted"`
-	Enabled             bool            `json:"enabled"`
+	ID                   uuid.UUID       `json:"id"`
+	Name                 string          `json:"name"`
+	Url                  string          `json:"url"`
+	RepoType             string          `json:"repo_type"`
+	Description          string          `json:"description"`
+	IsDefault            bool            `json:"is_default"`
+	AuthType             string          `json:"auth_type"`
+	AuthConfig           json.RawMessage `json:"auth_config"`
+	AuthConfigKeyID      string          `json:"auth_config_key_id"`
+	Enabled              bool            `json:"enabled"`
+	AuthConfigAlgorithm  string          `json:"auth_config_algorithm"`
+	AuthConfigCiphertext []byte          `json:"auth_config_ciphertext"`
+	AuthConfigNonce      []byte          `json:"auth_config_nonce"`
 }
 
 func (q *Queries) UpdateHelmRepository(ctx context.Context, arg UpdateHelmRepositoryParams) (HelmRepository, error) {
@@ -1746,8 +1678,11 @@ func (q *Queries) UpdateHelmRepository(ctx context.Context, arg UpdateHelmReposi
 		arg.IsDefault,
 		arg.AuthType,
 		arg.AuthConfig,
-		arg.AuthConfigEncrypted,
+		arg.AuthConfigKeyID,
 		arg.Enabled,
+		arg.AuthConfigAlgorithm,
+		arg.AuthConfigCiphertext,
+		arg.AuthConfigNonce,
 	)
 	var i HelmRepository
 	err := row.Scan(
@@ -1767,7 +1702,10 @@ func (q *Queries) UpdateHelmRepository(ctx context.Context, arg UpdateHelmReposi
 		&i.OwnerProjectID,
 		&i.LastSyncError,
 		&i.LastSyncAttemptedAt,
-		&i.AuthConfigEncrypted,
+		&i.AuthConfigKeyID,
+		&i.AuthConfigAlgorithm,
+		&i.AuthConfigCiphertext,
+		&i.AuthConfigNonce,
 	)
 	return i, err
 }

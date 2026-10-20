@@ -225,7 +225,7 @@ export function PhaseBadge({
         ? "applying baseline"
         : phase;
   return (
-    <span className={`text-xs font-medium uppercase tracking-wide ${colour}`}>
+    <span className={`text-xs font-medium ${colour}`}>
       Phase: {label}
     </span>
   );

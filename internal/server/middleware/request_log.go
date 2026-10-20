@@ -4,17 +4,16 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/rs/zerolog"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type loggingResponseWriter struct {
@@ -71,41 +70,43 @@ func (w *loggingResponseWriter) Push(target string, opts *http.PushOptions) erro
 	return pusher.Push(target, opts)
 }
 
-func RequestLogger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		fields := &requestLogFields{}
-		r = r.WithContext(context.WithValue(r.Context(), requestLogFieldsKey{}, fields))
-		rec := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		next.ServeHTTP(rec, r)
+// RequestLogger emits exactly one request-summary line per request, at
+// info, after the response: route (chi pattern), method, status,
+// duration_ms, correlation_id, trace_id and principal (the authenticated
+// user id). Paths, query strings, headers and bodies are never logged.
+func RequestLogger(base zerolog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			fields := &requestLogFields{}
+			r = r.WithContext(context.WithValue(r.Context(), requestLogFieldsKey{}, fields))
+			rec := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			next.ServeHTTP(rec, r)
 
-		routeTemplate := "unknown"
-		if ctx := chi.RouteContext(r.Context()); ctx != nil {
-			if pattern := ctx.RoutePattern(); pattern != "" {
-				routeTemplate = pattern
+			route := "unknown"
+			if ctx := chi.RouteContext(r.Context()); ctx != nil {
+				if pattern := ctx.RoutePattern(); pattern != "" {
+					route = pattern
+				}
 			}
-		}
-
-		requestID := reqctx.RequestID(r.Context())
-		log := observability.WithTraceID(
-			observability.WithRequestID(
-				observability.WithCorrelationID(
-					observability.WithEvent(slog.Default(), "http_request"),
-					reqctx.CorrelationID(r.Context()),
-				),
-				requestID,
-			),
-			r.Context(),
-		)
-		log = observability.WithActorAuthMethod(observability.WithActorID(log, fields.actorID), fields.actorAuthMethod)
-		log = observability.WithOperationID(observability.WithClusterID(log, requestLogClusterID(r, routeTemplate)), requestLogOperationID(r, routeTemplate))
-		log.Info("http request completed",
-			"method", r.Method,
-			"route_template", routeTemplate,
-			"status_code", rec.statusCode,
-			"duration_ms", time.Since(start).Milliseconds(),
-		)
-	})
+			event := logging.Ctx(r.Context(), base).Info().
+				Str("event", "http_request").
+				Str("route", route).
+				Str("method", r.Method).
+				Int("status", rec.statusCode).
+				Int64("duration_ms", time.Since(start).Milliseconds())
+			if fields.actorID != "" {
+				event = event.Str("principal", fields.actorID).Str("auth_method", fields.actorAuthMethod)
+			}
+			if clusterID := requestLogClusterID(r, route); clusterID != "" {
+				event = event.Str("cluster_id", clusterID)
+			}
+			if operationID := requestLogOperationID(r, route); operationID != "" {
+				event = event.Str("operation_id", operationID)
+			}
+			event.Msg("http request completed")
+		})
+	}
 }
 
 func requestLogClusterID(r *http.Request, routeTemplate string) string {

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm reconnectStormConfig, duration time.Duration, log *slog.Logger) {
@@ -50,7 +52,7 @@ func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm
 	if rec != nil {
 		rec.beginReconnectStorm(limit)
 	}
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- synthetic load-test traffic shaping, not security material
 	for i := 0; i < limit; i++ {
 		agent := agents[i]
 		delay := time.Duration(rng.Int63n(int64(jitter)))
@@ -284,7 +286,7 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 		return min(maximum, int(math.Ceil(elapsed.Seconds()*rate)))
 	}
 	scs := defaultScenarios()
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- synthetic load-test traffic shaping, not security material
 	client := cfg.workloadClient
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
@@ -308,7 +310,7 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 				if scheduleCtx.Err() != nil {
 					return
 				}
-				index := uint64(scheduled)
+				index := safeconv.Uint64(scheduled)
 				scheduled++
 				inflight.Add(1)
 				go func() { defer inflight.Done(); cfg.workloadRequest(requestCtx, index) }()

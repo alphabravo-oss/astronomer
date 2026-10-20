@@ -23,7 +23,7 @@
   drill to even resolve a backup to restore.
 
   Companion bits:
-    - internal/db/migrations/041_backup_drill.up.sql  (status table)
+    - internal/db/migrations (backup_drill_results status table)
     - internal/handler/admin_drill.go                 (read-side endpoint)
     - deploy/chart/templates/prometheus-rules.yaml    (staleness alert)
     - docs/runbooks/backup-restore-drill-failed.md    (when this fails)
@@ -80,7 +80,7 @@ spec:
               securityContext:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
-              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.sidecar.image.repository "tag" .Values.managementRestoreDrill.sidecar.image.tag "digest" .Values.managementRestoreDrill.sidecar.image.digest "registry" .Values.managementRestoreDrill.sidecar.image.registry "fallback" .Values.image.registry) | quote }}
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.sidecar.image.repository "tag" .Values.managementRestoreDrill.sidecar.image.tag "digest" .Values.managementRestoreDrill.sidecar.image.digest "registry" .Values.managementRestoreDrill.sidecar.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
               imagePullPolicy: {{ .Values.managementRestoreDrill.sidecar.image.pullPolicy | default "IfNotPresent" }}
               restartPolicy: Always
               env:
@@ -115,7 +115,7 @@ spec:
               securityContext:
                 {{- toYaml . | nindent 16 }}
               {{- end }}
-              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.image.repository "tag" .Values.managementRestoreDrill.image.tag "digest" .Values.managementRestoreDrill.image.digest "registry" .Values.managementRestoreDrill.image.registry "fallback" .Values.image.registry) | quote }}
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementRestoreDrill.image.repository "tag" .Values.managementRestoreDrill.image.tag "digest" .Values.managementRestoreDrill.image.digest "registry" .Values.managementRestoreDrill.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
               imagePullPolicy: {{ .Values.managementRestoreDrill.image.pullPolicy | default "IfNotPresent" }}
               command: ["/bin/sh", "-eu", "-c"]
               args:
@@ -243,16 +243,16 @@ spec:
 
                   # --- Schema-sanity check -----------------------------------
                   ROW="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
-                    "SELECT version || '|' || dirty FROM schema_migrations ORDER BY version DESC LIMIT 1;" \
+                    "SELECT max(version_id) FILTER (WHERE is_applied) || '|' || bool_or(NOT is_applied) FROM public.goose_db_version;" \
                     2>/dev/null || true)"
                   if [ -z "${ROW}" ]; then
-                    fail_and_exit "schema_migrations is empty in restored DB"
+                    fail_and_exit "goose_db_version is empty in restored DB"
                   fi
                   SCHEMA_VERSION="${ROW%%|*}"
                   DIRTY="${ROW##*|}"
-                  echo "schema_migrations latest: version=${SCHEMA_VERSION} dirty=${DIRTY}"
+                  echo "goose_db_version latest: version=${SCHEMA_VERSION} rolled_back_rows=${DIRTY}"
                   if [ "${DIRTY}" = "t" ] || [ "${DIRTY}" = "true" ]; then
-                    fail_and_exit "schema_migrations.dirty=true (version=${SCHEMA_VERSION})"
+                    fail_and_exit "goose_db_version has rolled-back rows (version=${SCHEMA_VERSION})"
                   fi
                   if [ "${SCHEMA_VERSION}" -lt "${EXPECTED_MIN_SCHEMA_VERSION}" ]; then
                     fail_and_exit "schema_version ${SCHEMA_VERSION} < expected min ${EXPECTED_MIN_SCHEMA_VERSION}"
@@ -301,23 +301,23 @@ spec:
                       fail_and_exit "ASTRONOMER_ENCRYPTION_KEY absent from restored key bundle"
                     fi
                     SAMPLE="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
-                      "SELECT ${DECRYPT_COLUMN} FROM ${DECRYPT_TABLE} WHERE ${DECRYPT_COLUMN} IS NOT NULL AND ${DECRYPT_COLUMN} <> '' LIMIT 1;" \
-                      2>/dev/null || echo '')"
+                      "SELECT encode(${DECRYPT_COLUMN}_ciphertext, 'base64') FROM ${DECRYPT_TABLE} WHERE ${DECRYPT_COLUMN}_key_id <> '' LIMIT 1;" \
+                      2>/dev/null | tr -d '\n' || echo '')"
                     if [ -z "${SAMPLE}" ]; then
                       echo "  no encrypted rows in ${DECRYPT_TABLE}.${DECRYPT_COLUMN} yet — nothing to prove on this install; skipping decrypt (key backup itself is verified above)"
                     else
-                      # Fernet HMAC verification: base64url-decode the key + token,
-                      # HMAC-SHA256 over token[:-32] with signing_key=key[:16] and
-                      # compare to the trailing 32-byte tag. A match proves the
-                      # backed-up key signed this ciphertext == it decrypts. The
-                      # verifier is a pure-stdlib python3 script (base64/hmac/
-                      # hashlib — no third-party crypto lib), base64-encoded here
-                      # so it survives the YAML block scalar as one line.
-                      export SAMPLE_TOKEN="${SAMPLE}"
-                      echo 'aW1wb3J0IGJhc2U2NCwgaG1hYywgaGFzaGxpYiwgb3MsIHN5cwprZXkgPSBiYXNlNjQudXJsc2FmZV9iNjRkZWNvZGUob3BlbihzeXMuYXJndlsxXSkucmVhZCgpLnN0cmlwKCkpCmlmIGxlbihrZXkpICE9IDMyOgogICAgc3lzLmV4aXQoImZlcm5ldCBrZXkgaXMgbm90IDMyIGJ5dGVzIGFmdGVyIGRlY29kZSIpCnNpZyA9IGtleVs6MTZdCnRvayA9IGJhc2U2NC51cmxzYWZlX2I2NGRlY29kZShvcy5lbnZpcm9uWyJTQU1QTEVfVE9LRU4iXS5zdHJpcCgpKQppZiBsZW4odG9rKSA8IDQxIG9yIHRva1swXSAhPSAweDgwOgogICAgc3lzLmV4aXQoInNhbXBsZWQgdmFsdWUgaXMgbm90IGEgZmVybmV0IHRva2VuIikKbWFjID0gaG1hYy5uZXcoc2lnLCB0b2tbOi0zMl0sIGhhc2hsaWIuc2hhMjU2KS5kaWdlc3QoKQpzeXMuZXhpdCgwIGlmIGhtYWMuY29tcGFyZV9kaWdlc3QobWFjLCB0b2tbLTMyOl0pIGVsc2UgImhtYWMgbWlzbWF0Y2g6IGtleSBkb2VzIG5vdCBtYXRjaCBjaXBoZXJ0ZXh0IikK' \
-                        | base64 -d | python3 - /tmp/keys/ASTRONOMER_ENCRYPTION_KEY \
-                        || fail_and_exit "restored ${DECRYPT_TABLE}.${DECRYPT_COLUMN} did NOT verify under the backed-up key — DR is broken"
-                      unset SAMPLE_TOKEN
+                      # age decryption with the restored keyring: strip the
+                      # optional "label:" prefix from every entry, hand the
+                      # identities to the age CLI and decrypt the sampled
+                      # ciphertext (plaintext discarded). Success proves the
+                      # backed-up keyring opens application ciphertext.
+                      tr ',' '\n' < /tmp/keys/ASTRONOMER_ENCRYPTION_KEY \
+                        | sed -n 's/^[[:space:]]*\([A-Za-z0-9._-]*:\)\{0,1\}\(AGE-SECRET-KEY-1[0-9A-Z]*\)[[:space:]]*$/\2/p' \
+                        > /tmp/keys/age-identities
+                      printf '%s' "${SAMPLE}" | base64 -d \
+                        | age --decrypt -i /tmp/keys/age-identities > /dev/null \
+                        || fail_and_exit "restored ${DECRYPT_TABLE}.${DECRYPT_COLUMN} did NOT decrypt under the backed-up key — DR is broken"
+                      rm -f /tmp/keys/age-identities
                       echo "  decrypt check OK: ${DECRYPT_TABLE}.${DECRYPT_COLUMN} verifies under the backed-up key"
                     fi
                   fi
@@ -366,7 +366,7 @@ spec:
                 - name: DECRYPT_TABLE
                   value: {{ .Values.managementRestoreDrill.decryptCheck.table | default "delivery_sources" | quote }}
                 - name: DECRYPT_COLUMN
-                  value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "credential_encrypted" | quote }}
+                  value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "credential" | quote }}
                 {{- end }}
                 - name: DRILL_PASSWORD
                   value: {{ .Values.managementRestoreDrill.sidecar.password | quote }}

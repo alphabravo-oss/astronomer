@@ -142,7 +142,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
               key={type}
               onClick={() => form.setFieldValue("repoType", type)}
               className={cn(
-                "px-4 py-1.5 rounded-md text-xs font-medium transition-colors uppercase",
+"px-4 py-1.5 rounded-md text-xs font-medium transition-colors",
                 repoType === type
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground",

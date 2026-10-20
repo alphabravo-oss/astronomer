@@ -7,11 +7,12 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 // BuiltinCAAuthorizer binds a candidate to the same verified catalog used by
@@ -42,7 +43,7 @@ func validBuiltinCA(ca []byte) bool {
 
 func builtinCAEligible(row sqlc.ListClusterDeliveryAssignmentsRow) bool {
 	return row.Scope == string(model.ScopePlatform) && row.SourceType == string(model.SourceHelmOCI) &&
-		row.AuthMode == string(model.AuthNone) && row.CredentialEncrypted == "" && row.CaBundleEncrypted == ""
+		row.AuthMode == string(model.AuthNone) && row.CredentialKeyID == "" && row.CaBundleKeyID == ""
 }
 
 func (p *Provider) applyBuiltinCAMetadata(ctx context.Context, row sqlc.ListClusterDeliveryAssignmentsRow, assignment *protocol.DeliveryAssignmentV2) (string, error) {

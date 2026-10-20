@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -437,42 +438,52 @@ func TestRegistrationWizard_RequiresClustersUpdateOnWrites(t *testing.T) {
 	if !strings.Contains(content, `Post("/{id}/registration/confirm/"`) {
 		t.Error("POST /registration/confirm/ route missing")
 	}
-	// Each write route must have a writeClusters middleware AND a
-	// VerbUpdate permission check.
+	// Each write route must keep its writeClusters token scope, and the
+	// route authorizer's table must require clusters:update (writes) and
+	// clusters:read (status) with {id} naming the cluster.
 	for _, op := range []string{"options", "confirm", "retry", "cancel"} {
-		// crude but effective: locate the route line and check both
-		// markers appear before it.
 		anchor := "registration/" + op
 		idx := strings.Index(content, anchor)
 		if idx < 0 {
 			t.Errorf("route for %s not found", op)
 			continue
 		}
-		// Slice back to the preceding 400 chars and check.
 		start := idx - 400
 		if start < 0 {
 			start = 0
 		}
-		windowed := content[start:idx]
-		if !strings.Contains(windowed, "writeClusters") {
+		if !strings.Contains(content[start:idx], "writeClusters") {
 			t.Errorf("route %s missing writeClusters middleware", op)
 		}
-		if !strings.Contains(windowed, "VerbUpdate") {
-			t.Errorf("route %s missing VerbUpdate permission gate", op)
+	}
+	table, err := os.ReadFile(filepath.Join(filepath.Dir(dirsFirstMatch(dirs)), "server", "route_permissions_table.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []string{
+		`"PUT /api/v1/clusters/{id}/registration/options/": {Resource: rbac.ResourceClusters, Verb: rbac.VerbUpdate, IDNamesCluster: true}`,
+		`"POST /api/v1/clusters/{id}/registration/confirm/": {Resource: rbac.ResourceClusters, Verb: rbac.VerbUpdate, IDNamesCluster: true}`,
+		`"POST /api/v1/clusters/{id}/registration/retry/{step_id}/": {Resource: rbac.ResourceClusters, Verb: rbac.VerbUpdate, IDNamesCluster: true}`,
+		`"POST /api/v1/clusters/{id}/registration/cancel/": {Resource: rbac.ResourceClusters, Verb: rbac.VerbUpdate, IDNamesCluster: true}`,
+		`"GET /api/v1/clusters/{id}/registration/status/": {Resource: rbac.ResourceClusters, Verb: rbac.VerbRead, IDNamesCluster: true}`,
+	} {
+		if !strings.Contains(squeezeSpaces(string(table)), row) {
+			t.Errorf("route permission table lacks %s", row)
 		}
 	}
-	// The read route requires VerbRead.
-	statusIdx := strings.Index(content, "registration/status")
-	if statusIdx < 0 {
-		t.Fatal("status route missing")
+}
+
+func dirsFirstMatch(dirs []string) string {
+	for _, d := range dirs {
+		if matches, _ := filepath.Glob(filepath.Join(d, "routes*.go")); len(matches) > 0 {
+			return d
+		}
 	}
-	start := statusIdx - 400
-	if start < 0 {
-		start = 0
-	}
-	if !strings.Contains(content[start:statusIdx], "VerbRead") {
-		t.Error("status route should require VerbRead")
-	}
+	return dirs[0]
+}
+
+func squeezeSpaces(s string) string {
+	return regexp.MustCompile(`":\s+\{`).ReplaceAllString(s, `": {`)
 }
 
 // TestRegistrationWizard_OptionsValidation — null body or missing

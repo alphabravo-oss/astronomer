@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 )
 
 // Scheduler manages all periodic task producers from the same typed registry

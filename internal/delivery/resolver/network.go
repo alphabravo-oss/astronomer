@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"net"
 	"net/http"
 	"net/netip"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // NetworkPolicy permits named enterprise destinations without weakening the

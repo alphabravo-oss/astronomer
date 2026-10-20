@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/handler"
 )
 
 type complianceSnapshotTestTx struct {

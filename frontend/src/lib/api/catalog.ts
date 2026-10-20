@@ -1,3 +1,6 @@
+import { requiredString } from "./catalog-version";
+import { mapHelmChartVersion } from "./catalog-version";
+export { mapHelmChartVersion } from "./catalog-version";
 export { getPopularCharts, getSimilarCharts } from "./catalog-recommendations";
 import {
   deleteCatalogInstalledById,
@@ -165,11 +168,6 @@ export async function previewCatalogInstallation(
   return requireData(response, "previewCatalogInstallation");
 }
 
-function requiredString(value: string | undefined, field: string): string {
-  if (!value) throw new Error(`Catalog API response omitted ${field}`);
-  return value;
-}
-
 function requiredNumber(value: number | undefined, field: string): number {
   if (value === undefined)
     throw new Error(`Catalog API response omitted ${field}`);
@@ -237,25 +235,6 @@ export function mapHelmChart(wire: Schemas["HelmChart"]): HelmChart {
     deprecated: wire.deprecated,
     createdAt: requiredString(wire.created_at, "chart.created_at"),
     updatedAt: requiredString(wire.updated_at, "chart.updated_at"),
-  };
-}
-
-export function mapHelmChartVersion(
-  wire: Schemas["HelmChartVersion"],
-): HelmChartVersion {
-  return {
-    id: requiredString(wire.id, "chartVersion.id"),
-    chartId: requiredString(wire.chart_id, "chartVersion.chart_id"),
-    version: requiredString(wire.version, "chartVersion.version"),
-    appVersion: wire.app_version ?? "",
-    digest: wire.digest,
-    urls: wire.urls,
-    valuesSchema: wire.values_schema,
-    defaultValues: wire.default_values,
-    readme: wire.readme,
-    createdAtUpstream: wire.created_at_upstream,
-    createdAt: requiredString(wire.created_at, "chartVersion.created_at"),
-    updatedAt: wire.updated_at,
   };
 }
 
@@ -402,7 +381,12 @@ export async function getHelmChartVersions(
   chartId: string,
   scope: "cluster" | "project" = "project",
   signal?: AbortSignal,
-  params: { limit?: number; offset?: number } = {},
+  params: {
+    limit?: number;
+    offset?: number;
+    view?: "curated" | "all";
+    selectedVersionId?: string;
+  } = {},
 ): Promise<PaginatedResponse<HelmChartVersion>> {
   const response = await getCatalogChartsByIdVersions({
     path: { id: chartId },
@@ -411,6 +395,8 @@ export async function getHelmChartVersions(
       project_id: scope === "project" ? scopeId : undefined,
       limit: params.limit ?? CATALOG_PAGE_LIMIT,
       offset: params.offset,
+      view: params.view,
+      selected_version_id: params.selectedVersionId,
     },
     signal,
   });

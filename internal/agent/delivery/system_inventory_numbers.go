@@ -4,8 +4,11 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // Dynamic CRDs may encode byte quantities as decimal strings. Preserve absent
@@ -48,7 +51,7 @@ func nestedInventoryCount32(object map[string]any, fields ...string) (int32, boo
 	if !valid || value > math.MaxInt32 {
 		return 0, false
 	}
-	return int32(value), true
+	return safeconv.Int32(value), true
 }
 
 func inventoryLength32(value int) (int32, bool) {

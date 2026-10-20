@@ -3,11 +3,12 @@ package handler
 import (
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
 )
 
 // effectiveVerbsFor derives the EffectiveVerbs bundle for the operator
@@ -78,20 +79,20 @@ func (h *KubectlShellHandler) callerIsSuperuser(r *http.Request, callerID uuid.U
 func (h *KubectlShellHandler) gateSuperuser(w http.ResponseWriter, r *http.Request) bool {
 	callerID, ok := shellCallerUUID(r)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return false
 	}
 	if h.Queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell is not configured")
 		return false
 	}
 	user, err := h.Queries.GetUserByID(r.Context(), callerID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Caller not found")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Caller not found")
 		return false
 	}
 	if !user.IsSuperuser {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Kubectl shell admin views require superuser privileges")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Kubectl shell admin views require superuser privileges")
 		return false
 	}
 	return true

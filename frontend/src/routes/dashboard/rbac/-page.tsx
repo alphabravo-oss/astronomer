@@ -82,9 +82,9 @@ const TAB_KEYS = [
 ] as const;
 
 const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
-  { key: "global-roles", label: "Global Roles", icon: Shield },
-  { key: "cluster-roles", label: "Cluster Roles", icon: Lock },
-  { key: "project-roles", label: "Project Roles", icon: Key },
+  { key: "global-roles", label: "Global roles", icon: Shield },
+  { key: "cluster-roles", label: "Cluster roles", icon: Lock },
+  { key: "project-roles", label: "Project roles", icon: Key },
   { key: "users", label: "Users", icon: Users },
   { key: "bindings", label: "Bindings", icon: Shield },
   { key: "native-rules", label: "Native grants", icon: Key },
@@ -207,7 +207,7 @@ export default function RBACPage() {
             setRoleEditorState({ mode: "create", scope: createRoleScope })
           }
         >
-          Create Role
+          Create role
         </ActionButton>
       )}
       {activeTab === "bindings" && (
@@ -225,7 +225,7 @@ export default function RBACPage() {
   return (
     <PageShell>
       <PageHeader
-        title="RBAC"
+        title="Access control"
         description="Users, roles, and bindings. Cluster and project roles can also carry CRD grants for a single Custom Resource. Effective shows what a user can actually do."
         actions={headerActions}
       />
@@ -303,7 +303,7 @@ export default function RBACPage() {
         open={!!deleteRoleTarget}
         onClose={() => setDeleteRoleTarget(null)}
         onConfirm={confirmDeleteRole}
-        title="Delete Role"
+        title="Delete role"
         description={`Delete custom role "${deleteRoleTarget ? roleTitle(deleteRoleTarget.role) : ""}"? Existing bindings to it will also be removed.`}
         confirmText="Delete"
         variant="destructive"
@@ -314,7 +314,7 @@ export default function RBACPage() {
         open={!!deleteUserTarget}
         onClose={() => setDeleteUserTarget(null)}
         onConfirm={confirmDeleteUser}
-        title="Delete User"
+        title="Delete user"
         description={`Delete user "${deleteUserTarget?.displayName || deleteUserTarget?.username}"? This action cannot be undone.`}
         confirmText="Delete"
         variant="destructive"
@@ -325,9 +325,9 @@ export default function RBACPage() {
         open={!!resetPasswordTarget}
         onClose={() => setResetPasswordTarget(null)}
         onConfirm={confirmResetPassword}
-        title="Reset Password"
+        title="Reset password"
         description={`Reset password for "${resetPasswordTarget?.displayName || resetPasswordTarget?.username}"? A new temporary password will be generated.`}
-        confirmText="Reset Password"
+        confirmText="Reset password"
         loading={resetPassword.isPending}
       />
 

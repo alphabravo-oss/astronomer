@@ -7,7 +7,7 @@ the `/api/v1/backups` API and `astro backup` commands.
 | State | Authority | Protection |
 |---|---|---|
 | Users, RBAC, audit, adopted-cluster identity, encrypted credentials, delivery and operation history | PostgreSQL | Provider PITR plus verified logical backup |
-| JWT/Fernet keys | External secret custody | Versioned AES-256-GCM key bundle and tested recovery |
+| JWT/encryption keys | External secret custody | Versioned AES-256-GCM key bundle and tested recovery |
 | Committed task/audit intent | PostgreSQL outbox tables | Included in database backup and replayed after restore |
 | Asynq queues/cache | Redis | HA/recovery policy; never treated as the only durable intent |
 | Member-cluster Kubernetes objects | Member cluster/etcd | Provider/Velero policy outside management-plane restore |
@@ -20,7 +20,7 @@ legal-hold requirements, and the location of a clean recovery environment.
 PostgreSQL PITR should normally satisfy the shortest RPO; the logical dump and
 wrapped key bundle are independent recovery and portability evidence.
 
-The Fernet key must match the ciphertext in the selected database restore
+The age encryption keyring must match the ciphertext in the selected database restore
 point. Store the key-wrapping passphrase in a different custody domain from
 the object-store credentials and dumps. Keep old wrapping keys until every
 backup encrypted with them has expired.
@@ -95,7 +95,7 @@ reconnect validation rather than relying only on the sidecar drill.
    or selective row recovery has the lowest data loss and blast radius.
 3. Identify the corruption time and select a restore point before it. Verify
    the dump, PostgreSQL major compatibility, clean `schema_migrations` state,
-   release compatibility, and matching Fernet/JWT key custody.
+   release compatibility, and matching encryption/JWT key custody.
 4. Restore into an isolated database first. Compare schema, critical row
    counts, audit continuity, delivery operations, outbox rows, and encrypted
    value decryption. Never discover an incompatible backup on the production
@@ -114,7 +114,7 @@ sequence is:
 2. stop server, worker, migration, backup, and restore-drill writers;
 3. restore the selected database into an empty target with the matching major
    version and validate it before exposure;
-4. restore the exact matching JWT/Fernet Secret from separate custody;
+4. restore the exact matching JWT/encryption-key Secret from separate custody;
 5. point the unchanged release at the recovered database, run supported
    preflight/migration only when the release contract admits the restored
    schema, and start one server and one worker canary;
@@ -123,7 +123,7 @@ sequence is:
 7. scale to normal replicas, reopen traffic, and observe the full RTO window.
 
 Do not restore a stale Redis snapshot over newer PostgreSQL intent, manually
-delete outbox rows, force migration metadata, rotate the Fernet key during the
+delete outbox rows, force migration metadata, rotate the encryption key during the
 incident, or let both original and recovered management planes accept writes.
 
 ## Member-cluster backup operations

@@ -647,7 +647,7 @@ type drillEvidenceManifest struct {
 
 func loadDrillEvidenceManifest(dir string, metadata certificationMetadata, now time.Time) (*drillEvidenceManifest, error) {
 	path := filepath.Join(dir, "drill-evidence-manifest.json")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G703 -- operator-supplied report path on a developer load-test CLI
 	if err != nil {
 		return nil, fmt.Errorf("signed drill evidence manifest is missing: %w", err)
 	}
@@ -703,7 +703,7 @@ func loadDrillEvidence(drill, profile string, metadata certificationMetadata, no
 	}
 	path := filepath.Join(dir, drill+".json")
 	suffix := " (`" + filepath.Base(path) + "`)"
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G703 -- operator-supplied report path on a developer load-test CLI
 	if err != nil {
 		return drillEvidenceResult{Status: "missing", Detail: "file is missing", Suffix: suffix}
 	}
@@ -756,7 +756,7 @@ func loadDrillEvidence(drill, profile string, metadata certificationMetadata, no
 		!regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(evidence.ExecutionEvidenceSHA256) {
 		return drillEvidenceResult{Status: "invalid", Detail: "execution evidence reference is invalid", Suffix: suffix}
 	}
-	executionRaw, executionErr := os.ReadFile(filepath.Join(dir, evidence.ExecutionEvidencePath))
+	executionRaw, executionErr := os.ReadFile(filepath.Join(dir, evidence.ExecutionEvidencePath)) // #nosec G703 -- evidence directory chosen by the operator running the load-test CLI
 	if executionErr != nil || fmt.Sprintf("%x", sha256.Sum256(executionRaw)) != evidence.ExecutionEvidenceSHA256 {
 		return drillEvidenceResult{Status: "invalid", Detail: "execution evidence log digest mismatch", Suffix: suffix}
 	}

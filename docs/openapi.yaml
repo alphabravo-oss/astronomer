@@ -6717,7 +6717,7 @@ components:
         Credential document for a chart repository. This is the ONLY place
         credentials are accepted; the top level of the request body is not.
 
-        At rest the secret-valued keys live in a Fernet envelope
+        At rest the secret-valued keys live in an age-sealed column
         (`helm_repositories.auth_config_encrypted`, migration 145) and only the
         non-secret keys stay queryable as JSONB. Responses replace every
         non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -6918,9 +6918,45 @@ components:
         artifact_digest: {type: string}
         values_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         catalog_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+    CatalogVersionConfiguration:
+      type: object
+      required: [schema, presets, defaultPreset, namespace]
+      properties:
+        schema: {type: object, additionalProperties: true}
+        namespace: {type: string}
+        defaultPreset: {type: string}
+        presets:
+          type: array
+          items:
+            type: object
+            required: [id, label, description, values]
+            properties:
+              id: {type: string}
+              label: {type: string}
+              description: {type: string}
+              values: {type: object, additionalProperties: true}
+    CatalogVersionProfile:
+      type: object
+      required: [version, available, recommended, deprecated, revoked, supportTier]
+      properties:
+        compatibility:
+          type: object
+          properties:
+            kubernetes: {type: string}
+            architectures: {type: array, items: {type: string}}
+        unavailableReason: {type: string}
+        upgradeFrom: {type: string}
+        version: {type: string}
+        available: {type: boolean}
+        recommended: {type: boolean}
+        deprecated: {type: boolean}
+        revoked: {type: boolean}
+        supportTier: {type: string}
+        configuration: {$ref: '#/components/schemas/CatalogVersionConfiguration'}
     HelmChartVersion:
       type: object
       properties:
+        catalog_version: {$ref: '#/components/schemas/CatalogVersionProfile'}
         id:
           type: string
           format: uuid
@@ -7171,6 +7207,10 @@ components:
       additionalProperties: false
       required: [charts, preset, checks]
       properties:
+        catalog_versions:
+          type: object
+          description: Exact catalog profiles keyed by namespace/release name; chart rows retain their released SDK shape.
+          additionalProperties: {$ref: '#/components/schemas/CatalogVersionProfile'}
         charts:
           type: array
           items:
@@ -11546,6 +11586,10 @@ components:
       properties:
         contract: {$ref: '#/components/schemas/DeliveryCompatibilityContract'}
         current_release:
+          allOf: [{$ref: '#/components/schemas/DeliverySystemRelease'}]
+          nullable: true
+        pending_release:
+          description: Newest draft system release above current_release (staged by a server upgrade, promoted by a system rollout).
           allOf: [{$ref: '#/components/schemas/DeliverySystemRelease'}]
           nullable: true
         current_rollout:
@@ -26899,6 +26943,7 @@ paths:
               properties:
                 cluster_id: {type: string, format: uuid}
                 chart_version_id: {type: string, format: uuid}
+                from_chart_version_id: {type: string, format: uuid, description: Installed chart version used to evaluate catalog upgrade constraints.}
                 namespace: {type: string}
                 values_override: {type: string, maxLength: 1048576}
                 operation: {type: string, enum: [install, upgrade], default: install}
@@ -27270,6 +27315,14 @@ paths:
           in: query
           required: false
           schema: {type: string, format: uuid}
+        - name: selected_version_id
+          in: query
+          description: Preserve an existing selection outside the curated set; the ID must belong to this authorized chart.
+          schema: {type: string, format: uuid}
+        - name: view
+          in: query
+          description: Use curated for reviewed catalog versions resolved before pagination; all (default) includes other upstream versions without assurance.
+          schema: {type: string, enum: [curated, all], default: all}
         - name: limit
           in: query
           schema:
@@ -36442,7 +36495,7 @@ paths:
       operationId: adminVaultConnectionsCreate
       summary: Create a Vault connection
       description: |
-        Creates a Vault connection. The `auth` map is method-specific (token / approle / kubernetes) and is Fernet-encrypted at rest. Superuser-gated. Requires the encryptor to be configured (503 otherwise).
+        Creates a Vault connection. The `auth` map is method-specific (token / approle / kubernetes) and is age-encrypted at rest. Superuser-gated. Requires the encryptor to be configured (503 otherwise).
       tags:
         - platform-admin-settings
       security:
@@ -37355,7 +37408,7 @@ paths:
       operationId: adminWebhooksCreate
       summary: Create a webhook subscription
       description: |
-        Creates a webhook subscription. The secret is required on create and is Fernet-encrypted at rest. Superuser-gated; additionally requires the api-token `admin` scope (requireScope).
+        Creates a webhook subscription. The secret is required on create and is age-encrypted at rest. Superuser-gated; additionally requires the api-token `admin` scope (requireScope).
       tags:
         - platform-admin-settings
       security:

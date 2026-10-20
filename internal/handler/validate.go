@@ -10,9 +10,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // rfc1123Subdomain is the RFC-1123 label/name shape Kubernetes (and Rancher)
@@ -81,7 +80,7 @@ func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bo
 			writeJSONFieldErrors(w, r, []fieldError{{Field: schemaErr.Field, Rule: schemaErr.Category, Message: "Invalid " + schemaErr.Field}})
 			return false
 		}
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return false
 	}
 
@@ -111,7 +110,7 @@ func decodeV1JSONBody(r *http.Request, out any) error {
 func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 	verrs, ok := err.(validator.ValidationErrors)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.ValidationError, "Request failed validation")
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.ValidationError, "Request failed validation")
 		return
 	}
 
@@ -128,17 +127,11 @@ func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func writeJSONFieldErrors(w http.ResponseWriter, r *http.Request, fields []fieldError) {
-	errObj := map[string]any{
-		"code":    apierror.ValidationError,
-		"message": "Request failed validation",
-		"fields":  fields,
+	violations := make([]apiutil.FieldViolation, 0, len(fields))
+	for _, f := range fields {
+		violations = append(violations, apiutil.FieldViolation(f))
 	}
-	if r != nil {
-		if requestID := reqctx.RequestID(r.Context()); requestID != "" {
-			errObj["request_id"] = requestID
-		}
-	}
-	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": errObj})
+	apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.ValidationError, "Request failed validation", apiutil.WithFields(violations))
 }
 
 // validationMessage renders a human-readable message for a single field error.

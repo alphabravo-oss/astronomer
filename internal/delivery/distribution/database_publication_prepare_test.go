@@ -15,9 +15,10 @@ import (
 	"testing"
 	"time"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 )
 
 // This creates a genuinely signed enabled QA profile. No consumer proof fields

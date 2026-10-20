@@ -6,12 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/google/uuid"
 )
 
 type ClusterAgentQuerier interface {
@@ -316,7 +318,7 @@ type agentLifecycleOperationResponse struct {
 
 type clusterAgentHandlerError struct {
 	status  int
-	code    string
+	code    apiutil.Code
 	message string
 }
 

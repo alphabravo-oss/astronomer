@@ -13,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 )
 
@@ -340,7 +342,7 @@ func writeBackupBytes(ctx context.Context, c *Commands, name string, raw []byte,
 		return empty, errors.New("private backup directory required")
 	}
 	owner, ok := before.Sys().(*syscall.Stat_t)
-	if !ok || owner.Uid != uint32(os.Geteuid()) {
+	if !ok || owner.Uid != safeconv.Uint32(os.Geteuid()) {
 		return empty, errors.New("private backup directory owner differs")
 	}
 	root, err := os.OpenRoot(directory)

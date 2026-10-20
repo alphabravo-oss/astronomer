@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
-	"github.com/google/uuid"
 )
 
 type inhibitionMatcher = jsoncontract.InhibitionMatcher

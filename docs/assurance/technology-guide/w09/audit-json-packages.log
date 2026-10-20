@@ -1,5 +1,0 @@
-ok  	github.com/alphabravocompany/astronomer-go/internal/audit	0.676s
-ok  	github.com/alphabravocompany/astronomer-go/internal/jsoncontract	0.251s
-ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	1.617s
-ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	5.860s
-ok  	github.com/alphabravocompany/astronomer-go/tools/json-governance	0.010s

@@ -5,13 +5,15 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"testing"
 	"time"
 
-	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
+
+	"github.com/rs/zerolog"
+
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 )
 
 func TestLocalFluxBootstrapSupportsEveryPinnedDistributionObject(t *testing.T) {
@@ -40,7 +42,7 @@ func TestLocalFluxBootstrapSupportsEveryPinnedDistributionObject(t *testing.T) {
 }
 
 func TestLocalFluxBootstrapRetriesTransientFailuresUntilApplied(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := zerolog.Nop()
 	attempts := 0
 	err := retryLocalFluxBootstrap(context.Background(), logger, time.Millisecond, func(context.Context) error {
 		attempts++
@@ -60,7 +62,7 @@ func TestLocalFluxBootstrapRetriesTransientFailuresUntilApplied(t *testing.T) {
 func TestLocalFluxBootstrapStopsCleanlyOnShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := zerolog.Nop()
 	attempts := 0
 	err := retryLocalFluxBootstrap(ctx, logger, time.Hour, func(context.Context) error {
 		attempts++

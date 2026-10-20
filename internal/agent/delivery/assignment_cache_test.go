@@ -81,7 +81,7 @@ func (f *assignmentCacheFixture) start(t *testing.T) {
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-f.done:
+		case <-f.done: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		case <-time.After(5 * time.Second):
 			t.Error("assignment cache shutdown blocked")
 		}

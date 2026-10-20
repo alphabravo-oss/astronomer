@@ -7,12 +7,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/google/uuid"
 )
 
 type ProjectNamespaceScopeResponse struct {
@@ -92,29 +93,29 @@ func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	all, clusterIDs, projectIDs, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceProjects, rbac.VerbList, rbac.NarrowedClustersExcluded)
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	q, ok := h.queries.(clusterProjectScopeQuerier)
 	if !ok {
-		RespondRequestError(w, r, 500, apierror.InternalError, "Scoped cluster project listing is not available")
+		apiutil.WriteError(w, r, 500, apiutil.InternalError, "Scoped cluster project listing is not available")
 		return
 	}
 	limit, offset := queryLimit32(r, 20), queryOffset32(r)
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	rows, err := q.ListClusterProjectsForScopes(r.Context(), sqlc.ListClusterProjectsForScopesParams{SelectedClusterID: clusterID, AllScopes: all, ClusterIds: clusterIDs, ProjectIds: projectIDs, FilterSearch: search, QueryLimit: limit, QueryOffset: offset})
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.ListError, "Failed to list projects")
+		apiutil.WriteError(w, r, 500, apiutil.ListError, "Failed to list projects")
 		return
 	}
 	total, err := q.CountClusterProjectsForScopes(r.Context(), sqlc.CountClusterProjectsForScopesParams{SelectedClusterID: clusterID, AllScopes: all, ClusterIds: clusterIDs, ProjectIds: projectIDs, FilterSearch: search})
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.CountError, "Failed to count projects")
+		apiutil.WriteError(w, r, 500, apiutil.CountError, "Failed to count projects")
 		return
 	}
 	items, err := h.projectNavigationResponses(r.Context(), rows)
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.ListError, "Failed to read project namespace scopes")
+		apiutil.WriteError(w, r, 500, apiutil.ListError, "Failed to read project namespace scopes")
 		return
 	}
 	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))

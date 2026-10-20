@@ -29,7 +29,7 @@ export function PSAExplainer() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-semibold text-muted-foreground">
             Standards (levels)
           </p>
           <ul className="space-y-1.5">
@@ -52,7 +52,7 @@ export function PSAExplainer() {
         </div>
 
         <div className="space-y-2">
-          <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-semibold text-muted-foreground">
             Modes
           </p>
           <ul className="space-y-1.5">

@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
 )
 
@@ -34,11 +34,11 @@ func preferenceUserID(r *http.Request) (uuid.UUID, bool) {
 func (h *AuthHandler) GetUserPreferences(w http.ResponseWriter, r *http.Request) {
 	userID, ok := preferenceUserID(r)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if !h.preferenceService.CanRead() {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "User preferences are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "User preferences are not configured")
 		return
 	}
 	prefs, err := h.preferenceService.Get(r.Context(), userID)
@@ -47,7 +47,7 @@ func (h *AuthHandler) GetUserPreferences(w http.ResponseWriter, r *http.Request)
 		if errors.Is(err, userpreferences.ErrInvalidStored) {
 			message = "Stored user preferences are invalid"
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, message)
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, message)
 		return
 	}
 	RespondJSON(w, http.StatusOK, prefs)
@@ -59,23 +59,23 @@ func (h *AuthHandler) GetUserPreferences(w http.ResponseWriter, r *http.Request)
 func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request) {
 	userID, ok := preferenceUserID(r)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if !h.preferenceService.CanReplace() {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "User preferences are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "User preferences are not configured")
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUserPreferencesBodyBytes)
 	var prefs userpreferences.Preferences
 	if err := decodeStrictJSONBody(r, &prefs); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid preference document")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid preference document")
 		return
 	}
 	command, err := userpreferences.Prepare(prefs)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	prefs = command.Document()
@@ -91,7 +91,7 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 	if keyed {
 		item, ok := operationIdempotencyFromContext(ctx)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Preference replay storage is not configured")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Preference replay storage is not configured")
 			return
 		}
 		replay = userpreferences.Replay{Scope: item.scope, Key: item.key, Method: r.Method, Path: r.URL.EscapedPath()}
@@ -99,14 +99,14 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 	response, err := h.preferenceService.Replace(ctx, userID, command, replay, intent)
 	if err != nil {
 		if errors.Is(err, userpreferences.ErrConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency key identifies a different preference document")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency key identifies a different preference document")
 			return
 		}
 		if errors.Is(err, userpreferences.ErrReceiptUnavailable) {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Preference replay storage is not configured")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Preference replay storage is not configured")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.InternalError, "Failed to update user preferences")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.InternalError, "Failed to update user preferences")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)

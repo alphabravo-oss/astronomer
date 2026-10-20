@@ -18,9 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 )
 
 type databasePublicationCosignFixtureSigner struct {

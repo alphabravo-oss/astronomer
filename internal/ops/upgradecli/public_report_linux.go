@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 // PublishedReport records the filesystem acknowledgement separately from Run.
@@ -58,7 +60,7 @@ func publishPublicReport(ctx context.Context, directory, name string, raw []byte
 		return result, err
 	}
 	before, err := os.Lstat(directory)
-	if err != nil || !before.IsDir() || before.Mode().Perm() != 0755 || before.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !before.IsDir() || before.Mode().Perm() != 0755 || before.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return result, errors.New("owned public directory must already exist with mode0755")
 	}
 	resolved, err := filepath.EvalSymlinks(directory)
@@ -73,7 +75,7 @@ func publishPublicReport(ctx context.Context, directory, name string, raw []byte
 	parentStable := func() error {
 		opened, e := root.Stat(".")
 		named, n := os.Lstat(directory)
-		if e != nil || n != nil || !os.SameFile(before, opened) || !os.SameFile(before, named) || named.Mode().Perm() != 0755 || named.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+		if e != nil || n != nil || !os.SameFile(before, opened) || !os.SameFile(before, named) || named.Mode().Perm() != 0755 || named.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 			return errors.New("public evidence directory identity changed")
 		}
 		return ctx.Err()
@@ -93,7 +95,7 @@ func publishPublicReport(ctx context.Context, directory, name string, raw []byte
 		}
 	}()
 	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || opened.Mode().Perm() != 0600 || opened.Sys().(*syscall.Stat_t).Nlink != 1 || opened.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !opened.Mode().IsRegular() || opened.Mode().Perm() != 0600 || opened.Sys().(*syscall.Stat_t).Nlink != 1 || opened.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return result, errors.New("public report staging identity differs")
 	}
 	if err := ctx.Err(); err != nil {

@@ -6,8 +6,9 @@ import (
 	"slices"
 	"time"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"oras.land/oras-go/v2/registry/remote"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 )
 
 // DatabasePublicationRepositories is operator retrieval/destination DATA only.

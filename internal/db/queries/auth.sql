@@ -232,8 +232,8 @@ SELECT * FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 SELECT * FROM sso_configurations WHERE is_enabled = true ORDER BY provider ASC;
 
 -- name: CreateSSOConfiguration :one
-INSERT INTO sso_configurations (provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO sso_configurations (provider, is_enabled, display_name, config, client_id, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id)
+VALUES ($1, $2, $3, $4, $5, $6, $11, $12, $13, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateSSOConfiguration :one
@@ -242,7 +242,10 @@ UPDATE sso_configurations SET
     display_name = $3,
     config = $4,
     client_id = $5,
-    client_secret_encrypted = $6,
+    client_secret_key_id = $6,
+    client_secret_algorithm = $11,
+    client_secret_ciphertext = $12,
+    client_secret_nonce = $13,
     allowed_organizations = $7,
     allowed_domains = $8,
     auto_create_users = $9,
@@ -266,19 +269,22 @@ WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931))
 ), enabled AS (
 INSERT INTO sso_configurations (
     provider, is_enabled, display_name, config, client_id,
-    client_secret_encrypted, allowed_organizations, allowed_domains,
+    client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce, allowed_organizations, allowed_domains,
     auto_create_users
 )
 SELECT
     'dex', true, sqlc.arg(display_name), sqlc.arg(config), sqlc.arg(client_id),
-    sqlc.arg(client_secret_encrypted), '[]'::jsonb, '[]'::jsonb, true
+    sqlc.arg(client_secret_key_id), sqlc.arg(client_secret_algorithm), sqlc.arg(client_secret_ciphertext), sqlc.arg(client_secret_nonce), '[]'::jsonb, '[]'::jsonb, true
 FROM current_generation
 ON CONFLICT (provider) DO UPDATE SET
     is_enabled = true,
     display_name = EXCLUDED.display_name,
     config = EXCLUDED.config,
     client_id = EXCLUDED.client_id,
-    client_secret_encrypted = EXCLUDED.client_secret_encrypted
+    client_secret_key_id = EXCLUDED.client_secret_key_id,
+    client_secret_algorithm = EXCLUDED.client_secret_algorithm,
+    client_secret_ciphertext = EXCLUDED.client_secret_ciphertext,
+    client_secret_nonce = EXCLUDED.client_secret_nonce
 WHERE EXISTS (SELECT 1 FROM current_generation)
 RETURNING *
 ), cleared AS (

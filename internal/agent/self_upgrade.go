@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )

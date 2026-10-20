@@ -19,7 +19,7 @@ SET status = 'running', phase = 'reconciling', attempt_count = attempt_count + 1
     locked_until = $1, error_code = '', updated_at = now()
 WHERE id = $2
   AND (status IN ('pending', 'retrying') OR (status = 'running' AND locked_until <= now()))
-RETURNING id, action, target_id, runtime_generation, idempotency_scope, idempotency_key, request_digest, payload_encrypted, status, phase, attempt_count, locked_until, error_code, created_by, completed_at, created_at, updated_at
+RETURNING id, action, target_id, runtime_generation, idempotency_scope, idempotency_key, request_digest, status, phase, attempt_count, locked_until, error_code, created_by, completed_at, created_at, updated_at, payload_key_id, payload_algorithm, payload_ciphertext, payload_nonce
 `
 
 type ClaimDexOperationParams struct {
@@ -38,7 +38,6 @@ func (q *Queries) ClaimDexOperation(ctx context.Context, arg ClaimDexOperationPa
 		&i.IdempotencyScope,
 		&i.IdempotencyKey,
 		&i.RequestDigest,
-		&i.PayloadEncrypted,
 		&i.Status,
 		&i.Phase,
 		&i.AttemptCount,
@@ -48,12 +47,16 @@ func (q *Queries) ClaimDexOperation(ctx context.Context, arg ClaimDexOperationPa
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PayloadKeyID,
+		&i.PayloadAlgorithm,
+		&i.PayloadCiphertext,
+		&i.PayloadNonce,
 	)
 	return i, err
 }
 
 const getDexOperation = `-- name: GetDexOperation :one
-SELECT id, action, target_id, runtime_generation, idempotency_scope, idempotency_key, request_digest, payload_encrypted, status, phase, attempt_count, locked_until, error_code, created_by, completed_at, created_at, updated_at FROM dex_operations WHERE id = $1
+SELECT id, action, target_id, runtime_generation, idempotency_scope, idempotency_key, request_digest, status, phase, attempt_count, locked_until, error_code, created_by, completed_at, created_at, updated_at, payload_key_id, payload_algorithm, payload_ciphertext, payload_nonce FROM dex_operations WHERE id = $1
 `
 
 func (q *Queries) GetDexOperation(ctx context.Context, id uuid.UUID) (DexOperation, error) {
@@ -67,7 +70,6 @@ func (q *Queries) GetDexOperation(ctx context.Context, id uuid.UUID) (DexOperati
 		&i.IdempotencyScope,
 		&i.IdempotencyKey,
 		&i.RequestDigest,
-		&i.PayloadEncrypted,
 		&i.Status,
 		&i.Phase,
 		&i.AttemptCount,
@@ -77,6 +79,10 @@ func (q *Queries) GetDexOperation(ctx context.Context, id uuid.UUID) (DexOperati
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PayloadKeyID,
+		&i.PayloadAlgorithm,
+		&i.PayloadCiphertext,
+		&i.PayloadNonce,
 	)
 	return i, err
 }
@@ -131,7 +137,7 @@ WITH operation AS (
     UPDATE dex_operations
     SET runtime_generation = $1, updated_at = now()
     WHERE dex_operations.id = $2 AND dex_operations.status = 'pending'
-    RETURNING id, action, target_id, runtime_generation, idempotency_scope, idempotency_key, request_digest, payload_encrypted, status, phase, attempt_count, locked_until, error_code, created_by, completed_at, created_at, updated_at
+    RETURNING id, action, target_id, runtime_generation, idempotency_scope, idempotency_key, request_digest, status, phase, attempt_count, locked_until, error_code, created_by, completed_at, created_at, updated_at, payload_key_id, payload_algorithm, payload_ciphertext, payload_nonce
 ), queued AS (
     INSERT INTO task_outbox (
         dedupe_key, task_type, payload, queue_name, max_retry,
@@ -144,7 +150,7 @@ WITH operation AS (
     ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
     RETURNING id
 )
-SELECT operation.id, operation.action, operation.target_id, operation.runtime_generation, operation.idempotency_scope, operation.idempotency_key, operation.request_digest, operation.payload_encrypted, operation.status, operation.phase, operation.attempt_count, operation.locked_until, operation.error_code, operation.created_by, operation.completed_at, operation.created_at, operation.updated_at FROM operation CROSS JOIN queued
+SELECT operation.id, operation.action, operation.target_id, operation.runtime_generation, operation.idempotency_scope, operation.idempotency_key, operation.request_digest, operation.status, operation.phase, operation.attempt_count, operation.locked_until, operation.error_code, operation.created_by, operation.completed_at, operation.created_at, operation.updated_at, operation.payload_key_id, operation.payload_algorithm, operation.payload_ciphertext, operation.payload_nonce FROM operation CROSS JOIN queued
 `
 
 type QueueDexOperationParams struct {
@@ -160,7 +166,6 @@ type QueueDexOperationRow struct {
 	IdempotencyScope  string             `json:"idempotency_scope"`
 	IdempotencyKey    string             `json:"idempotency_key"`
 	RequestDigest     string             `json:"request_digest"`
-	PayloadEncrypted  string             `json:"payload_encrypted"`
 	Status            string             `json:"status"`
 	Phase             string             `json:"phase"`
 	AttemptCount      int32              `json:"attempt_count"`
@@ -170,6 +175,10 @@ type QueueDexOperationRow struct {
 	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt         time.Time          `json:"created_at"`
 	UpdatedAt         time.Time          `json:"updated_at"`
+	PayloadKeyID      string             `json:"payload_key_id"`
+	PayloadAlgorithm  string             `json:"payload_algorithm"`
+	PayloadCiphertext []byte             `json:"payload_ciphertext"`
+	PayloadNonce      []byte             `json:"payload_nonce"`
 }
 
 func (q *Queries) QueueDexOperation(ctx context.Context, arg QueueDexOperationParams) (QueueDexOperationRow, error) {
@@ -183,7 +192,6 @@ func (q *Queries) QueueDexOperation(ctx context.Context, arg QueueDexOperationPa
 		&i.IdempotencyScope,
 		&i.IdempotencyKey,
 		&i.RequestDigest,
-		&i.PayloadEncrypted,
 		&i.Status,
 		&i.Phase,
 		&i.AttemptCount,
@@ -193,6 +201,10 @@ func (q *Queries) QueueDexOperation(ctx context.Context, arg QueueDexOperationPa
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PayloadKeyID,
+		&i.PayloadAlgorithm,
+		&i.PayloadCiphertext,
+		&i.PayloadNonce,
 	)
 	return i, err
 }
@@ -221,11 +233,11 @@ func (q *Queries) RecoverDexOperationOutbox(ctx context.Context, staleBefore tim
 const reserveDexOperation = `-- name: ReserveDexOperation :one
 INSERT INTO dex_operations (
     id, action, target_id, idempotency_scope, idempotency_key,
-    request_digest, payload_encrypted, created_by
+    request_digest, payload_key_id, payload_algorithm, payload_ciphertext, payload_nonce, created_by
 ) VALUES (
     $1, $2, $3, $4,
-    $5, $6, $7,
-    $8
+    $5, $6, $7, $8, $9, $10,
+    $11
 )
 ON CONFLICT (idempotency_scope, idempotency_key) DO UPDATE
 SET idempotency_key = dex_operations.idempotency_key
@@ -233,18 +245,21 @@ WHERE dex_operations.id = EXCLUDED.id
   AND dex_operations.action = EXCLUDED.action
   AND dex_operations.target_id = EXCLUDED.target_id
   AND dex_operations.request_digest = EXCLUDED.request_digest
-RETURNING dex_operations.id, dex_operations.action, dex_operations.target_id, dex_operations.runtime_generation, dex_operations.idempotency_scope, dex_operations.idempotency_key, dex_operations.request_digest, dex_operations.payload_encrypted, dex_operations.status, dex_operations.phase, dex_operations.attempt_count, dex_operations.locked_until, dex_operations.error_code, dex_operations.created_by, dex_operations.completed_at, dex_operations.created_at, dex_operations.updated_at, (xmax = 0) AS created
+RETURNING dex_operations.id, dex_operations.action, dex_operations.target_id, dex_operations.runtime_generation, dex_operations.idempotency_scope, dex_operations.idempotency_key, dex_operations.request_digest, dex_operations.status, dex_operations.phase, dex_operations.attempt_count, dex_operations.locked_until, dex_operations.error_code, dex_operations.created_by, dex_operations.completed_at, dex_operations.created_at, dex_operations.updated_at, dex_operations.payload_key_id, dex_operations.payload_algorithm, dex_operations.payload_ciphertext, dex_operations.payload_nonce, (xmax = 0) AS created
 `
 
 type ReserveDexOperationParams struct {
-	ID               uuid.UUID `json:"id"`
-	Action           string    `json:"action"`
-	TargetID         uuid.UUID `json:"target_id"`
-	IdempotencyScope string    `json:"idempotency_scope"`
-	IdempotencyKey   string    `json:"idempotency_key"`
-	RequestDigest    string    `json:"request_digest"`
-	PayloadEncrypted string    `json:"payload_encrypted"`
-	CreatedBy        uuid.UUID `json:"created_by"`
+	ID                uuid.UUID `json:"id"`
+	Action            string    `json:"action"`
+	TargetID          uuid.UUID `json:"target_id"`
+	IdempotencyScope  string    `json:"idempotency_scope"`
+	IdempotencyKey    string    `json:"idempotency_key"`
+	RequestDigest     string    `json:"request_digest"`
+	PayloadKeyID      string    `json:"payload_key_id"`
+	PayloadAlgorithm  string    `json:"payload_algorithm"`
+	PayloadCiphertext []byte    `json:"payload_ciphertext"`
+	PayloadNonce      []byte    `json:"payload_nonce"`
+	CreatedBy         uuid.UUID `json:"created_by"`
 }
 
 type ReserveDexOperationRow struct {
@@ -255,7 +270,6 @@ type ReserveDexOperationRow struct {
 	IdempotencyScope  string             `json:"idempotency_scope"`
 	IdempotencyKey    string             `json:"idempotency_key"`
 	RequestDigest     string             `json:"request_digest"`
-	PayloadEncrypted  string             `json:"payload_encrypted"`
 	Status            string             `json:"status"`
 	Phase             string             `json:"phase"`
 	AttemptCount      int32              `json:"attempt_count"`
@@ -265,6 +279,10 @@ type ReserveDexOperationRow struct {
 	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt         time.Time          `json:"created_at"`
 	UpdatedAt         time.Time          `json:"updated_at"`
+	PayloadKeyID      string             `json:"payload_key_id"`
+	PayloadAlgorithm  string             `json:"payload_algorithm"`
+	PayloadCiphertext []byte             `json:"payload_ciphertext"`
+	PayloadNonce      []byte             `json:"payload_nonce"`
 	Created           bool               `json:"created"`
 }
 
@@ -276,7 +294,10 @@ func (q *Queries) ReserveDexOperation(ctx context.Context, arg ReserveDexOperati
 		arg.IdempotencyScope,
 		arg.IdempotencyKey,
 		arg.RequestDigest,
-		arg.PayloadEncrypted,
+		arg.PayloadKeyID,
+		arg.PayloadAlgorithm,
+		arg.PayloadCiphertext,
+		arg.PayloadNonce,
 		arg.CreatedBy,
 	)
 	var i ReserveDexOperationRow
@@ -288,7 +309,6 @@ func (q *Queries) ReserveDexOperation(ctx context.Context, arg ReserveDexOperati
 		&i.IdempotencyScope,
 		&i.IdempotencyKey,
 		&i.RequestDigest,
-		&i.PayloadEncrypted,
 		&i.Status,
 		&i.Phase,
 		&i.AttemptCount,
@@ -298,6 +318,10 @@ func (q *Queries) ReserveDexOperation(ctx context.Context, arg ReserveDexOperati
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PayloadKeyID,
+		&i.PayloadAlgorithm,
+		&i.PayloadCiphertext,
+		&i.PayloadNonce,
 		&i.Created,
 	)
 	return i, err

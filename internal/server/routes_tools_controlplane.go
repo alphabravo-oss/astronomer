@@ -3,23 +3,37 @@ package server
 import (
 	"net/http"
 
-	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/handler"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
-// requireSuperuser returns middleware that admits only superusers, reusing the
-// shared handler.RequireSuperuser gate. Used for platform-admin surfaces whose
-// handlers carry no per-request authorization of their own (e.g. the
-// control-plane controllers routes).
-func requireSuperuser(deps RouterDependencies) func(http.Handler) http.Handler {
+// requireSuperuser admits only platform superusers. The rbac engine grants
+// superuser solely through the binding the RBAC store synthesizes for a user
+// whose is_superuser flag is set, so this is the engine's view of the same fact
+// the users table holds.
+func requireSuperuser(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return unavailableSecurityDependency("RBAC authorization")
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, ok := handler.RequireSuperuser(w, r, deps.CoreAuth.AuthQueries, handler.SuperuserGateConfig{
-				ForbiddenMessage: "This action requires superuser privileges",
-			}); !ok {
+			user, ok := reqctx.AuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
+				return
+			}
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
+				return
+			}
+			if !engine.CheckSuperuser(bindings) {
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "This action requires superuser privileges")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -60,19 +74,14 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		// acknowledgement, and alertmanager silences are fleet-wide.
 		// Mutations stay superuser-only; GETs require alerts:read/list so any
 		// authenticated principal cannot enumerate fleet policy (SEC-05).
-		superuserOnly := requireSuperuser(deps)
-		alertsRead := requireAnyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries,
-			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbRead},
-			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbList},
-		)
-		r.With(alertsRead).Get("/controllers/status/", deps.ClusterResources.ControlPlane.Status)
-		r.With(alertsRead).Get("/controllers/policy/", deps.ClusterResources.ControlPlane.GetPolicy)
-		r.With(superuserOnly).Put("/controllers/policy/", deps.ClusterResources.ControlPlane.UpdatePolicy)
-		r.With(alertsRead).Get("/controllers/alerts/", deps.ClusterResources.ControlPlane.ListAlerts)
-		r.With(superuserOnly).Post("/controllers/alerts/{id}/acknowledge/", deps.ClusterResources.ControlPlane.AcknowledgeAlert)
-		r.With(alertsRead).Get("/controllers/silences/", deps.ClusterResources.ControlPlane.ListSilences)
-		r.With(superuserOnly).Post("/controllers/silences/", deps.ClusterResources.ControlPlane.CreateSilence)
-		r.With(superuserOnly).Delete("/controllers/silences/{id}/", deps.ClusterResources.ControlPlane.DeleteSilence)
+		r.Get("/controllers/status/", deps.ClusterResources.ControlPlane.Status)
+		r.Get("/controllers/policy/", deps.ClusterResources.ControlPlane.GetPolicy)
+		r.Put("/controllers/policy/", deps.ClusterResources.ControlPlane.UpdatePolicy)
+		r.Get("/controllers/alerts/", deps.ClusterResources.ControlPlane.ListAlerts)
+		r.Post("/controllers/alerts/{id}/acknowledge/", deps.ClusterResources.ControlPlane.AcknowledgeAlert)
+		r.Get("/controllers/silences/", deps.ClusterResources.ControlPlane.ListSilences)
+		r.Post("/controllers/silences/", deps.ClusterResources.ControlPlane.CreateSilence)
+		r.Delete("/controllers/silences/{id}/", deps.ClusterResources.ControlPlane.DeleteSilence)
 	}
 
 	// Sprint 072 — read-only anomaly baseline inspection.
@@ -119,41 +128,33 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		// already declares the catalog:create/update/delete requirement; these
 		// gates make the code honor the doc. sync + test-connection are
 		// classified as catalog:update (they mutate/probe an existing repo).
-		catalogCreate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbCreate)
-		catalogUpdate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbUpdate)
-		catalogDelete := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
 		// SEC-01: list/get carry live auth_config (redacted) and must not be
 		// world-readable to every authenticated principal.
-		catalogRead := requireAnyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries,
-			permissionRequirement{resource: rbac.ResourceCatalog, verb: rbac.VerbRead},
-			permissionRequirement{resource: rbac.ResourceCatalog, verb: rbac.VerbList},
-		)
 		r.With(featureGate("feature.catalog", deps.CoreAuth.SettingsCache)).Route("/catalog", func(r chi.Router) {
 			r.Get("/controller/status/", deps.AdminPlatform.Catalog.ControllerStatus)
 			r.Get("/operations/", deps.AdminPlatform.Catalog.ListOperations)
 			r.Get("/operations/{id}/", deps.AdminPlatform.Catalog.GetOperation)
 			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.AdminPlatform.Catalog.RetryOperation)
-			r.With(catalogRead).Get("/repositories/", deps.AdminPlatform.Catalog.ListRepos)
-			r.With(mutationWriteScope, catalogCreate).Post("/repositories/", deps.AdminPlatform.Catalog.CreateRepo)
-			r.With(catalogRead).Get("/repositories/{id}/", deps.AdminPlatform.Catalog.GetRepo)
-			r.With(mutationWriteScope, catalogUpdate).Put("/repositories/{id}/", deps.AdminPlatform.Catalog.UpdateRepo)
-			r.With(mutationWriteScope, catalogDelete).Delete("/repositories/{id}/", deps.AdminPlatform.Catalog.DeleteRepo)
-			r.With(mutationWriteScope, catalogUpdate).Post("/repositories/{id}/sync/", deps.AdminPlatform.Catalog.SyncRepo)
-			r.With(mutationWriteScope, catalogUpdate).Post("/repositories/{id}/test-connection/", deps.AdminPlatform.Catalog.TestRepoConnection)
+			r.Get("/repositories/", deps.AdminPlatform.Catalog.ListRepos)
+			r.With(mutationWriteScope).Post("/repositories/", deps.AdminPlatform.Catalog.CreateRepo)
+			r.Get("/repositories/{id}/", deps.AdminPlatform.Catalog.GetRepo)
+			r.With(mutationWriteScope).Put("/repositories/{id}/", deps.AdminPlatform.Catalog.UpdateRepo)
+			r.With(mutationWriteScope).Delete("/repositories/{id}/", deps.AdminPlatform.Catalog.DeleteRepo)
+			r.With(mutationWriteScope).Post("/repositories/{id}/sync/", deps.AdminPlatform.Catalog.SyncRepo)
+			r.With(mutationWriteScope).Post("/repositories/{id}/test-connection/", deps.AdminPlatform.Catalog.TestRepoConnection)
 			// Chart handlers perform object-level repository visibility checks.
 			// The collection gate admits project-scoped catalog readers so the
 			// handler can bind ?project_id to the exact tenant before returning.
-			catalogBrowse := requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
-			r.With(catalogBrowse).Get("/charts/", deps.AdminPlatform.Catalog.ListCharts)
-			r.With(catalogBrowse).Get("/discovery/", deps.AdminPlatform.Catalog.ListCatalogUserDiscovery)
-			r.With(catalogBrowse).Get("/applications/", deps.AdminPlatform.Catalog.ListCatalogApplications)
-			r.With(catalogRead).Get("/application-sources/", deps.AdminPlatform.Catalog.ListApplicationCatalogSources)
-			r.With(catalogBrowse).Post("/applications/preview/", deps.AdminPlatform.Catalog.PreviewCatalogInstallation)
-			r.With(catalogBrowse).Get("/charts/{id}/", deps.AdminPlatform.Catalog.GetChart)
-			r.With(catalogBrowse, mutationWriteScope).Put("/charts/{id}/favorite/", deps.AdminPlatform.Catalog.SetCatalogChartFavorite)
-			r.With(catalogBrowse).Get("/charts/{id}/versions/", deps.AdminPlatform.Catalog.ListChartVersions)
-			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.AdminPlatform.Catalog.GetChartReadme)
-			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.AdminPlatform.Catalog.GetChartValues)
+			r.Get("/charts/", deps.AdminPlatform.Catalog.ListCharts)
+			r.Get("/discovery/", deps.AdminPlatform.Catalog.ListCatalogUserDiscovery)
+			r.Get("/applications/", deps.AdminPlatform.Catalog.ListCatalogApplications)
+			r.Get("/application-sources/", deps.AdminPlatform.Catalog.ListApplicationCatalogSources)
+			r.Post("/applications/preview/", deps.AdminPlatform.Catalog.PreviewCatalogInstallation)
+			r.Get("/charts/{id}/", deps.AdminPlatform.Catalog.GetChart)
+			r.With(mutationWriteScope).Put("/charts/{id}/favorite/", deps.AdminPlatform.Catalog.SetCatalogChartFavorite)
+			r.Get("/charts/{id}/versions/", deps.AdminPlatform.Catalog.ListChartVersions)
+			r.Get("/charts/{id}/readme/", deps.AdminPlatform.Catalog.GetChartReadme)
+			r.Get("/charts/{id}/values/", deps.AdminPlatform.Catalog.GetChartValues)
 			r.Get("/installed/", deps.AdminPlatform.Catalog.ListInstalledCharts)
 			r.Get("/installed/{id}/", deps.AdminPlatform.Catalog.GetInstalledChart)
 			// NEW-1: helm install/upgrade/uninstall are cluster-mutating (they
@@ -180,18 +181,15 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		// the admin /catalog/installed/ endpoint, but the response
 		// shape is enriched with joined chart metadata so the UI
 		// can render the list with a single fetch.
-		appsClusterRead := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
-		r.With(appsClusterRead).Get("/clusters/{cluster_id}/apps/", deps.AdminPlatform.Catalog.ListClusterApps)
+		r.Get("/clusters/{cluster_id}/apps/", deps.AdminPlatform.Catalog.ListClusterApps)
 		// Rancher-style bulk "Delete failed installs". Permission is
 		// catalog:delete (the per-row uninstall affordance) rather
 		// than clusters:update — the action only touches the
 		// installed_charts namespace for this cluster.
-		appsCatalogDelete := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
-		r.With(appsCatalogDelete).Delete("/clusters/{cluster_id}/apps/failed/", deps.AdminPlatform.Catalog.DeleteFailedClusterApps)
+		r.Delete("/clusters/{cluster_id}/apps/failed/", deps.AdminPlatform.Catalog.DeleteFailedClusterApps)
 	}
 
 	if deps.AdminPlatform.ChartRatings != nil {
-		catalogBrowse := requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
 		// Per-chart rating CRUD lives under /charts/{chart_id}/ratings/
 		// rather than nested inside the catalog block above. Reason:
 		// the catalog block is feature-gated behind feature.catalog;
@@ -207,8 +205,8 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.Delete("/{rating_id}/", deps.AdminPlatform.ChartRatings.DeleteRating)
 		})
 		r.Route("/catalog/recommendations", func(r chi.Router) {
-			r.With(catalogBrowse).Get("/popular/", deps.AdminPlatform.ChartRatings.PopularRecommendations)
-			r.With(catalogBrowse).Get("/similar/{chart_id}/", deps.AdminPlatform.ChartRatings.SimilarRecommendations)
+			r.Get("/popular/", deps.AdminPlatform.ChartRatings.PopularRecommendations)
+			r.Get("/similar/{chart_id}/", deps.AdminPlatform.ChartRatings.SimilarRecommendations)
 		})
 	}
 

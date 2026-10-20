@@ -11,12 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func (h *ToolHandler) afterToolOperationCommit(op sqlc.ToolOperation) {
@@ -37,9 +40,9 @@ type idempotentToolOperationCreator interface {
 
 var errToolOperationIdempotencyConflict = errors.New("tool operation idempotency key identifies a different operation")
 
-func respondToolMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode, fallbackMessage string) {
+func respondToolMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, errToolOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different tool operation")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different tool operation")
 		return
 	}
 	respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)
@@ -163,7 +166,7 @@ func (h *ToolHandler) processPendingOperations(ctx context.Context) {
 func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	ops, err := h.queries.ListPendingToolOperations(ctx, int32(effectiveHelmConcurrency(h.helmConcurrency)))
+	ops, err := h.queries.ListPendingToolOperations(ctx, safeconv.Int32(effectiveHelmConcurrency(h.helmConcurrency)))
 	if err != nil {
 		return nil
 	}

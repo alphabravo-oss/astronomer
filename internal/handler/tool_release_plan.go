@@ -8,8 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type toolRelease struct {

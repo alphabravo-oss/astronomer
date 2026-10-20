@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	bundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 type caCatalogFixture struct {

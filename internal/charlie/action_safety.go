@@ -10,9 +10,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
-	"github.com/jackc/pgx/v5"
 )
 
 const approvalWriteCooldown = 30 * time.Second

@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -90,7 +92,7 @@ func Allocate(cap Cap, namespaces []string) (map[string]Cap, error) {
 		allocations[namespace] = Cap{
 			CPU:    cpu[i],
 			Memory: memory[i],
-			Pods:   int32(pods[i]),
+			Pods:   safeconv.Int32(pods[i]),
 		}
 	}
 	return allocations, nil

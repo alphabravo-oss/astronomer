@@ -14,7 +14,7 @@ below:
 
 | Secret                                | Encryption surface                       | Online rotation? | Forces re-pairing? |
 |---------------------------------------|------------------------------------------|------------------|--------------------|
-| `secrets.encryptionKey` (Fernet)      | At-rest column secrets (SSO and delivery-source credentials, backup credentials, Charlie local trust, Dex connector secrets) | **yes**, with `keyrotate` | no |
+| `secrets.encryptionKey` (age keyring) | At-rest sealed columns (`sealedcols.Columns`: SSO, SMTP, delivery-source, registry, backup, cloud, webhook, SIEM, Vault credentials, Charlie local trust, Dex clients) | **yes**, with `astro admin rotate-keys` | no |
 | `secrets.secretKey` (JWT HMAC)        | Every issued access + refresh JWT        | **yes**, two-key window for one refresh-token lifetime (7d) | no |
 | Durable agent tokens                  | Per-cluster adopted-agent identity       | **yes**, ACK-delivered rotation with grace | no |
 | Admin bootstrap password              | First-login admin account                | n/a — change via the normal password-change UI | n/a |
@@ -23,7 +23,7 @@ What survives `pg_restore` from the nightly dump (cross-reference with
 `management-plane-dr-runbook.md`):
 
 - **encryptionKey ciphertexts**: the encrypted bytes are in the dump.
-  The dump is useless without the Fernet key that signed them. Keep
+  The dump is useless without the age keys that sealed them. Keep
   the current key list in a key-management system separate from the
   dump artifacts — anything stored alongside the dump is equivalent to
   the dump being unencrypted.
@@ -37,189 +37,87 @@ What survives `pg_restore` from the nightly dump (cross-reference with
 
 ---
 
-## 1. Rotating `secrets.encryptionKey` (Fernet)
+## 1. Rotating `secrets.encryptionKey` (age keyring)
 
-The encryption key wraps every column-stored reusable secret: SSO and delivery
-source credentials, S3 backup credentials, Charlie local trust/receipts, and
-Dex connector secrets (LDAP bind password, OIDC client secret, and similar).
+`secrets.encryptionKey` (env `ASTRONOMER_ENCRYPTION_KEY`, or a file named by
+`ASTRONOMER_ENCRYPTION_KEY_FILE`) is an **age keyring**: one or more entries,
+newline- or comma-separated, each `AGE-SECRET-KEY-1...` or
+`label:AGE-SECRET-KEY-1...`. The **first** entry is the current key: every
+write seals with it and stamps its id into `<col>_key_id`. Later entries are
+previous keys, used only to decrypt rows whose `<col>_key_id` names them.
+Reads select the key by `key_id`; nothing is tried by trial decryption. See
+[ADR-0010](decisions/0010-age-column-encryption.md).
 
-The chart and binary support **multi-key** Fernet from
-[`internal/auth/crypto.go`](../internal/auth/crypto.go): `encryptionKey`
-accepts a comma-separated list. Prefer explicit `key-id:key` entries; legacy
-bare keys receive a deterministic SHA-256 fingerprint ID. The first key is the
-primary (used to encrypt); every listed key remains available for reads. New
-writes use `astronomer:v1:fernet:<key-id>:<ciphertext>`. Raw Fernet rows remain
-readable only for the bounded migration and increment
-`astronomer_ciphertext_decryptions_total{format="legacy"}`.
+The key id is the label when one is given, otherwise a fingerprint of the
+public recipient (`age-<16 hex>`). Ids are stored in every row, so **never
+relabel a key that rows reference** — relabelling makes those rows look like
+they belong to an unknown key.
 
-The safe procedure is:
+The set of sealed columns is the Go table `sealedcols.Columns`
+(`internal/db/sealedcols`); an integration test fails if the schema has a
+`*_ciphertext` column that is not registered, so rotation cannot skip one.
 
 ### Step 1 — generate a new key
 
 ```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# or, if you have the keyrotate binary built:
-go run ./cmd/keyrotate -h    # the README mentions GenerateKey internally
+astro admin generate-encryption-key --label k2026b > new-key
+# or: age-keygen | grep AGE-SECRET-KEY | sed 's/^/k2026b:/' > new-key
 ```
 
-Store the new key in your secret manager. Don't lose the old one — you
-need it through the entire procedure.
-
-### Step 2 — promote new key, keep old as fallback
-
-Update the Helm values and roll the server (and worker — it shares the
-same key):
+### Step 2 — promote the new key, keep the old one as a previous key
 
 ```bash
-helm upgrade --reuse-values astronomer ./deploy/chart \
-  --set-string secrets.encryptionKey="new-2026q3:${NEW_KEY},old-2026q2:${OLD_KEY}"
+# new key FIRST, old key second
+printf '%s\n%s\n' "$(grep AGE-SECRET-KEY new-key)" "k2026a:AGE-SECRET-KEY-1...OLD" > keyring
+helm upgrade astronomer ./deploy/chart --reuse-values --set-file secrets.encryptionKey=./keyring
+kubectl -n astronomer rollout restart deploy/astronomer-server deploy/astronomer-worker
 ```
 
-Verify the server picked up two keys:
+From now on every write uses `k2026b`; rows sealed under `k2026a` still decrypt.
+`GET /api/v1/admin/key-status` reports `encryption_keys: 2` and the inventory
+(`id`, `primary`) while the rotation is pending.
+
+### Step 3 — `astro admin rotate-keys`
+
+Run it with the **same keyring** the server now uses, against the same
+database (it connects to PostgreSQL directly; the API need not be up):
 
 ```bash
-kubectl -n astronomer logs deploy/astronomer-server | grep -m1 "encryption keys loaded"
-# → should say "encryption keys loaded count=2"  (or check via /api/v1/admin)
+export DATABASE_URL='postgres://…'            # sslmode=require in production
+export ASTRONOMER_ENCRYPTION_KEY_FILE=./keyring # or ASTRONOMER_ENCRYPTION_KEY=…
+astro admin rotate-keys --dry-run              # per-column counts still sealed under old keys
+astro admin rotate-keys                        # rewrite them
+astro admin rotate-keys                        # second run must report TOTAL 0
 ```
 
-At this point:
+For every registered column it reads up to `--batch-size` rows
+`WHERE <col>_key_id = <old>` `FOR UPDATE`, decrypts each, re-encrypts with the
+current key and updates `key_id`/`algorithm`/`ciphertext`/`nonce` in the same
+transaction (compare-and-set on the old key id), until no row references an old
+key. It prints one line per column and a total. It is resumable (rerun after an
+interruption) and idempotent. `--from-key-id k2026a` limits a run to one old
+key. If any row references a key id that is not in the keyring, it refuses
+before writing anything and names the missing ids.
 
-- new ciphertexts (writes from the live server) are signed with `NEW_KEY`
-- old ciphertexts (already in the DB) still decrypt because `OLD_KEY`
-  is in the fallback list
+### Step 4 — drop the old key
 
-### Step 3 — run `keyrotate` to rewrite historical rows
+Only after `rotate-keys` reports `TOTAL 0` (and no retained backup you might
+still restore needs the old key — see §5):
 
 ```bash
-# Dry run first — reports what would change without writing.
-keyrotate \
-  --database-url "$DATABASE_URL" \
-  --encryption-key "new-2026q3:${NEW_KEY},old-2026q2:${OLD_KEY}" \
-  --dry-run
-
-# Then for real:
-keyrotate \
-  --database-url "$DATABASE_URL" \
-  --encryption-key "new-2026q3:${NEW_KEY},old-2026q2:${OLD_KEY}"
+grep -v k2026a keyring > keyring.next
+helm upgrade astronomer ./deploy/chart --reuse-values --set-file secrets.encryptionKey=./keyring.next
+kubectl -n astronomer rollout restart deploy/astronomer-server deploy/astronomer-worker
 ```
 
-The tool rewrites every row in every column-stored Fernet secret. As of this
-writing that is:
-
-- `sso_configurations.client_secret_encrypted`
-- `dex_settings.public_clients_encrypted`
-- `backup_storage_configs.encrypted_credentials`
-- `management_backup_destinations.encrypted_credentials`
-- `vault_connections.auth_encrypted`
-- `gitops_registration_sources.auth_encrypted`
-- `gitops_registration_sources.webhook_secret_encrypted`
-- `prometheus_datasources.auth_encrypted`
-- `siem_forwarders.auth_encrypted`
-- `cloud_credentials.data_encrypted`
-  - Includes every provider secret inside the encrypted JSON envelope, including
-    AWS `secret_access_key` and temporary `session_token`; neither is stored in
-    a separate plaintext column.
-- `smtp_settings.password_encrypted`
-- `cluster_registry_configs.registry_password_encrypted`
-- `webhook_subscriptions.secret_encrypted`
-- `user_totp_enrollments.secret_encrypted` (TOTP/MFA secrets)
-- `sso_sessions.upstream_id_token_encrypted`
-- `helm_repositories.auth_config_encrypted`
-- `monitoring_backends.auth_config_encrypted`
-- `charlie_connections.local_trust_material_encrypted`
-- `charlie_action_receipts.arguments_encrypted`
-- `charlie_action_receipts.result_encrypted`
-- `delivery_sources.ca_bundle_encrypted`
-- `delivery_sources.credential_encrypted`
-- `delivery_system_releases.registry_credential_encrypted`
-- `loki_ingest_tokens.token_encrypted`
-- `resource_operations.manifest_encrypted`
-- `node_operations.parameters_encrypted`
-- `dex_operations.payload_encrypted`
-
-The authoritative list is `rewriteTargets` in `cmd/keyrotate/main.go`; a build
-test (`cmd/keyrotate/coverage_test.go`) fails if a migration adds an encrypted
-column that is not swept, so this list cannot silently drift.
-
-The same run CAS-rewrites every recognized encrypted field inside
-`dex_connectors.config`. Unknown connector types, invalid ciphertext, or a CAS
-conflict are reported as failures and keep the command non-zero; do not remove
-the fallback key until a clean rerun completes.
-
-Migration 134's plaintext `dex_settings.public_clients` compatibility copy is
-not scrubbed by a normal rotation. After every old server replica is quiesced
-and only the mixed-version-aware binary remains, perform the explicit durable
-cutover with `--dex-public-clients-cutover-confirmed`. This encrypts the final
-compatibility value, CAS-scrubs it, and stamps `public_clients_cutover_at`.
-Re-running is safe and processes only unstamped rows. The database constraint
-then rejects an old binary attempting to repopulate plaintext.
-
-Rows already carrying the primary v1 envelope are counted as `skipped`; legacy
-tokens and fallback-key envelopes are counted as `rewrote`. These per-table and
-final counters are the batch-migration progress contract.
-
-Each successful CAS commits separately. A process interruption preserves those
-committed rows. A client cancellation or lost connection can return an error
-before PostgreSQL finishes an autocommit statement, so its outcome can be
-unknown; cancellation is not a rollback guarantee. Keep both keys configured,
-wait for the prior server statement to terminate, and resume the sweep. It
-reads the persisted envelopes, skips current-key rows, and CAS-rewrites remaining
-old-key rows. Require the final primary-only verification before considering
-the live sweep complete. Retained historical data still has separate key needs.
-
-After rewriting, `keyrotate` performs a second primary-only scan of every
-encrypted column, typed connector JSON credential, and static-client envelope.
-It also checks pre-cutover envelope/plaintext equality. Any CAS miss, fallback-
-only ciphertext, malformed JSON, or static-client drift increments `failed` and
-keeps the command non-zero. A final `failed=0` is necessary evidence about the
-scanned live database. It does not authorize fallback-key retirement: backup
-snapshots, delayed operations and other retained ciphertext may still need it.
-
-### Step 4 — assess retirement before dropping the old key
-
-Keep the old key independently recoverable until every backup, retained archive,
-delayed encrypted payload and supported rollback path that needs it has expired
-or been re-encrypted and verified. Inventory these retention periods explicitly;
-the live database's rotation counters cannot determine them. Verify a restored
-historical snapshot using the separately recovered key reference before claiming
-that the recovery procedure works. A newer snapshot does not replace the key
-needed by an older retained one. `keyrotate` neither deletes nor retires keys.
-
-Only after this separate retention review, remove the old key from the active
-read list. Removing it from a deployment and destroying its recoverable backup
-are separate decisions.
-
-```bash
-helm upgrade --reuse-values astronomer ./deploy/chart \
-  --set-string secrets.encryptionKey="new-2026q3:${NEW_KEY}"
-```
-
-Verify:
-
-```bash
-kubectl -n astronomer logs deploy/astronomer-server | grep -m1 "encryption keys loaded"
-# → "encryption keys loaded count=1"
-```
-
-If anything fails to decrypt after this, restore the matching old key to the
-fallback list and diagnose the ciphertext's origin. It may be a missed live row,
-a restored snapshot or a delayed operation. Re-run `keyrotate` where applicable.
+Keep the old key in your secret manager until every database backup sealed
+under it has aged out.
 
 ### Rollback
 
-Do not roll back to the old key alone: writes made after step 2 already name and
-use the new key. Before step 4, roll application writes back safely by making
-the old key primary while retaining the new key as a read fallback:
-
-```text
-encryptionKey="old-2026q2:${OLD_KEY},new-2026q3:${NEW_KEY}"
-```
-
-If `keyrotate` already rewrote rows under the new primary, run it again with
-that old-primary/new-fallback ordering and require `failed=0`; retain the new
-fallback until its backup, delayed-payload and rollback obligations also end.
-The `/api/v1/admin/key-status` response exposes non-secret
-key IDs and marks the primary, so the intended rollback ordering is auditable.
+Before Step 4 nothing is lost: put the old key back first in the keyring and
+run `rotate-keys` again; rows move back to it. After Step 4, a row sealed under
+a dropped key is unreadable until that key is loaded again as a previous key.
 
 ---
 
@@ -366,7 +264,7 @@ When you restore from the nightly dump per
 
 | In the dump          | Not in the dump (operator must supply) |
 |----------------------|----------------------------------------|
-| `users` (password hashes) | `secrets.encryptionKey` — the Fernet key that decrypts the columns the dump contains |
+| `users` (password hashes) | `secrets.encryptionKey` — the age keyring that decrypts the sealed columns the dump contains |
 | `sso_configurations` (with `client_secret_encrypted` ciphertext) | `secrets.secretKey` — the JWT signing key |
 | `delivery_sources` (with write-only credential ciphertext) | `bootstrap.password` (irrelevant once an admin exists) |
 | `cluster_registration_tokens` | Agent-side Secret in each managed cluster (the agent reads the token from its own Secret, not from the dump) |
@@ -403,20 +301,19 @@ for weeks. The recommended SLO is "no key rotation lingers more than
 14 days"; alert on `encryption_keys > 1 AND last_rotation_started_at <
 now() - 14d`.
 
-## Appendix B — `keyrotate` command reference
+## Appendix B — `astro admin rotate-keys` reference
 
 ```text
-keyrotate
-  --database-url <DSN>            (or env DATABASE_URL)
-  --encryption-key "<new>,<old>"  (or env ENCRYPTION_KEY)
-  --dry-run                       no writes, report what would change
-  --batch-size 100                scan-page size; each CAS UPDATE commits separately
+astro admin rotate-keys
+  --database-url <DSN>     (env DATABASE_URL)
+  --key-file <path>        keyring file, new key first (env ASTRONOMER_ENCRYPTION_KEY_FILE;
+                           otherwise ASTRONOMER_ENCRYPTION_KEY is read)
+  --from-key-id <id>       only rewrite rows sealed under this key (default: every non-current key)
+  --batch-size 100         rows per transaction
+  --dry-run                report per-column counts, write nothing
 ```
 
-Exit codes:
-- 0 — the selected live rotation and primary-only verification completed without
-  reported failures; dry-run reports candidate rewrites without proving a later
-  write or authorizing key retirement
-- 1 — a scan, decryption, write, concurrent CAS conflict or verification failed;
-  retain all required read keys and retry after resolving the cause
-- 2 — invalid flags or DB connection failure
+Exit status is non-zero when the keyring cannot be loaded, the database is
+unreachable, a referenced key id is missing (nothing is written), or a row
+fails to decrypt (the failing batch is rolled back; earlier batches stay
+rotated and a rerun resumes).

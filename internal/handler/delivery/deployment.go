@@ -6,14 +6,16 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	deliverydeployment "github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type DeploymentQueries interface {
@@ -42,42 +44,42 @@ type deploymentActionRequest struct {
 func (h *DeploymentHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	clusterID, err := optionalUUIDFilter(r, "cluster_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, err.Error())
 		return
 	}
 	targetID, err := optionalUUIDFilter(r, "target_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, err.Error())
 		return
 	}
 	phase, err := deploymentPhaseFilter(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery deployment persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery deployment persistence is unavailable")
 		return
 	}
 	params := sqlc.ListClusterDeploymentsParams{ProjectID: projectID, TargetID: targetID, ClusterID: clusterID, Phase: phase, QueryLimit: limit, QueryOffset: offset}
 	rows, err := h.queries.ListClusterDeployments(r.Context(), params)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountClusterDeployments(r.Context(), sqlc.CountClusterDeploymentsParams{ProjectID: projectID, TargetID: targetID, ClusterID: clusterID, Phase: phase})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
@@ -89,17 +91,17 @@ func (h *DeploymentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery deployment persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery deployment persistence is unavailable")
 		return
 	}
 	row, err := h.queries.GetClusterDeployment(r.Context(), sqlc.GetClusterDeploymentParams{ID: deploymentID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	eventRows, err := h.queries.ListClusterDeploymentEvents(r.Context(), sqlc.ListClusterDeploymentEventsParams{DeploymentID: deploymentID, ProjectID: projectID, QueryLimit: 50, QueryOffset: 0})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.DesiredGeneration)
@@ -113,17 +115,17 @@ func (h *DeploymentHandler) Events(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	rows, err := h.queries.ListClusterDeploymentEvents(r.Context(), sqlc.ListClusterDeploymentEventsParams{DeploymentID: deploymentID, ProjectID: projectID, QueryLimit: limit, QueryOffset: offset})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountClusterDeploymentEvents(r.Context(), sqlc.CountClusterDeploymentEventsParams{DeploymentID: deploymentID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
@@ -144,31 +146,31 @@ func (h *DeploymentHandler) Resume(w http.ResponseWriter, r *http.Request) {
 func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, action deliverydeployment.Action) {
 	expected, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", err.Error())
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, err.Error())
 		return
 	}
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request deploymentActionRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	deploymentID, err := pathUUID(r, "id", "deploymentID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.controller == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery deployment controls are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery deployment controls are unavailable")
 		return
 	}
 	auditIntent := newAuditIntent(r, deliveryAuditEvent{
@@ -182,14 +184,14 @@ func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, actio
 	})
 	if err != nil {
 		if errors.Is(err, asyncop.ErrConflict) {
-			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.IdempotencyConflict, err.Error())
 			return
 		}
 		if errors.Is(err, deliverydeployment.ErrStaleGeneration) {
-			respondError(w, http.StatusPreconditionFailed, "stale_generation", err.Error())
+			apiutil.WriteError(w, r, http.StatusPreconditionFailed, apiutil.StaleGeneration, err.Error())
 			return
 		}
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if !result.Replayed {
@@ -216,12 +218,12 @@ func deploymentAuditAction(action deliverydeployment.Action) string {
 func deploymentScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	deploymentID, err := pathUUID(r, "id", "deploymentID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, deploymentID, true

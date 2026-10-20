@@ -10,14 +10,16 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const maxBundleDependencies = 128
@@ -123,26 +125,26 @@ type bundleVersionMutationResult struct {
 func (h *BundleHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	rows, err := h.queries.ListComponentBundles(r.Context(), sqlc.ListComponentBundlesParams{ProjectID: projectID, QueryOffset: offset, QueryLimit: limit})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountComponentBundles(r.Context(), projectID)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	items := make([]bundleResponse, 0, len(rows))
@@ -156,25 +158,25 @@ func (h *BundleHandler) List(w http.ResponseWriter, r *http.Request) {
 // can never mutate this identity.
 func (h *BundleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request createBundleRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	if err := validateDisplayFields(request.Name, request.Description); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	actor := reqctx.UserUUID(r.Context())
@@ -192,7 +194,7 @@ func (h *BundleHandler) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	respondData(w, http.StatusCreated, bundleFromRow(row))
@@ -205,12 +207,12 @@ func (h *BundleHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	row, err := h.queries.GetComponentBundle(r.Context(), sqlc.GetComponentBundleParams{ID: bundleID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	respondData(w, http.StatusOK, bundleFromRow(row))
@@ -220,40 +222,40 @@ func (h *BundleHandler) Get(w http.ResponseWriter, r *http.Request) {
 // and cannot be mutated through this path.
 func (h *BundleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request createBundleRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	bundleID, err := pathUUID(r, "id", "bundleID", "bundle_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	current, err := h.queries.GetComponentBundle(r.Context(), sqlc.GetComponentBundleParams{ID: bundleID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	description := request.Description
 	if strings.TrimSpace(request.Name) != "" && request.Name != current.Name {
-		respondError(w, http.StatusBadRequest, "validation_error", "bundle name is immutable; create a new bundle identity")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "bundle name is immutable; create a new bundle identity")
 		return
 	}
 	if err := validateDisplayFields(current.Name, description); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	params := sqlc.UpdateComponentBundleParams{
@@ -271,7 +273,7 @@ func (h *BundleHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	respondData(w, http.StatusOK, bundleFromRow(row))
@@ -281,7 +283,7 @@ func (h *BundleHandler) Update(w http.ResponseWriter, r *http.Request) {
 // still point at it surface as a typed 409.
 func (h *BundleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	projectID, bundleID, ok := bundleScope(w, r)
@@ -289,7 +291,7 @@ func (h *BundleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	params := sqlc.DeleteComponentBundleParams{ID: bundleID, ProjectID: projectID}
@@ -311,7 +313,7 @@ func (h *BundleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -327,22 +329,22 @@ func (h *BundleHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	if _, err := h.queries.GetComponentBundle(r.Context(), sqlc.GetComponentBundleParams{ID: bundleID, ProjectID: projectID}); err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	rows, err := h.queries.ListComponentBundleVersions(r.Context(), sqlc.ListComponentBundleVersionsParams{
 		BundleID: bundleID, QueryOffset: offset, QueryLimit: limit + 1,
 	})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	hasMore := len(rows) > int(limit)
@@ -353,7 +355,7 @@ func (h *BundleHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		converted, err := bundleVersionFromRow(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery bundle version is invalid")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery bundle version is invalid")
 			return
 		}
 		items = append(items, converted)
@@ -366,65 +368,65 @@ func (h *BundleHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 // version failed instead of leaving an unclaimable resolving row.
 func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request createBundleVersionRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	bundleID, err := pathUUID(r, "id", "bundleID", "bundle_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	if err := validateVersionLabel(request.Version); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if err := request.Spec.Validate(); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if len(request.Spec.RequestedRevision) > 256 {
-		respondError(w, http.StatusBadRequest, "validation_error", "requested_revision must be at most 256 bytes")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "requested_revision must be at most 256 bytes")
 		return
 	}
 	if _, err := h.queries.GetComponentBundle(r.Context(), sqlc.GetComponentBundleParams{ID: bundleID, ProjectID: projectID}); err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	source, err := h.queries.GetDeliverySource(r.Context(), sqlc.GetDeliverySourceParams{ID: request.Spec.SourceID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if source.Status == "revoked" {
-		respondError(w, http.StatusConflict, "source_revoked", "a revoked source cannot create bundle versions")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.SourceRevoked, "a revoked source cannot create bundle versions")
 		return
 	}
 	dependencies, err := h.validateDependencies(r.Context(), projectID, bundleID, request.DependencyBundleID)
 	if err != nil {
 		if errors.Is(err, errInvalidDependencies) {
-			respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		} else {
-			respondDatabaseError(w, err)
+			respondDatabaseError(w, r, err)
 		}
 		return
 	}
 	var trust model.TrustPolicy
 	if err := decodeStrictJSON(source.TrustPolicy, &trust); err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	sourceSpecJSON, err := json.Marshal(struct {
@@ -435,7 +437,7 @@ func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 		Trust    model.TrustPolicy `json:"trust_policy"`
 	}{source.ID, model.SourceType(source.SourceType), source.Url, model.AuthMode(source.AuthMode), trust})
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "internal_error", "delivery bundle serialization failed")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "delivery bundle serialization failed")
 		return
 	}
 	if request.Spec.RequiredCapabilities == nil {
@@ -450,7 +452,7 @@ func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 		Dependencies []uuid.UUID              `json:"dependency_bundle_ids"`
 	}{Spec: request.Spec, Dependencies: dependencies})
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", "delivery bundle version cannot be canonicalized")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "delivery bundle version cannot be canonicalized")
 		return
 	}
 	actor := reqctx.UserUUID(r.Context())
@@ -493,20 +495,20 @@ func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, audit.ErrOutboxUnavailable) {
-			respondDatabaseError(w, err)
+			respondDatabaseError(w, r, err)
 			return
 		}
 		if result.version.ID == uuid.Nil {
-			respondDatabaseError(w, err)
+			respondDatabaseError(w, r, err)
 			return
 		}
-		respondError(w, http.StatusInternalServerError, "resolution_enqueue_failed", "bundle version source resolution could not be scheduled")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolutionEnqueueFailed, "bundle version source resolution could not be scheduled")
 		return
 	}
 	row := result.version
 	response, err := bundleVersionFromRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery bundle version is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery bundle version is invalid")
 		return
 	}
 	respondData(w, http.StatusCreated, response)
@@ -528,25 +530,25 @@ func (h *BundleHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	versionID, err := pathUUID(r, "versionId", "versionID", "version_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery bundle persistence is unavailable")
 		return
 	}
 	row, err := h.queries.GetComponentBundleVersion(r.Context(), sqlc.GetComponentBundleVersionParams{ID: versionID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if row.BundleID != bundleID {
-		respondError(w, http.StatusNotFound, "not_found", "delivery resource not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "delivery resource not found")
 		return
 	}
 	response, err := bundleVersionFromRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery bundle version is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery bundle version is invalid")
 		return
 	}
 	respondData(w, http.StatusOK, response)
@@ -580,12 +582,12 @@ func (h *BundleHandler) validateDependencies(ctx context.Context, projectID, bun
 func bundleScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	bundleID, err := pathUUID(r, "id", "bundleID", "bundle_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, bundleID, true

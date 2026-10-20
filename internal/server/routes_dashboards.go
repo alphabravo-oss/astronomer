@@ -1,7 +1,6 @@
 package server
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -18,8 +17,8 @@ func registerDashboardRoutes(r chi.Router, deps RouterDependencies) {
 	// auth only — anyone logged in can see the platform overview.
 	if deps.AdminPlatform.Dashboards != nil {
 		r.Get("/dashboards/global/", deps.AdminPlatform.Dashboards.RenderGlobal)
-		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/dashboards/clusters/{id}/", deps.AdminPlatform.Dashboards.RenderCluster)
-		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/dashboards/projects/{id}/", deps.AdminPlatform.Dashboards.RenderProject)
+		r.Get("/dashboards/clusters/{id}/", deps.AdminPlatform.Dashboards.RenderCluster)
+		r.Get("/dashboards/projects/{id}/", deps.AdminPlatform.Dashboards.RenderProject)
 	}
 
 }

@@ -57,7 +57,7 @@ function RuntimeDetails({ row }: { row: ContainerRow }) {
 function RuntimeList({ title, values }: { title: string; values: string[] }) {
   return (
     <div>
-      <h4 className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h4 className="mb-1.5 text-2xs font-semibold text-muted-foreground">
         {title}
       </h4>
       {values.length === 0 ? (
@@ -207,7 +207,7 @@ function ContainerFact({
 }) {
   return (
     <div className="bg-card px-4 py-2.5">
-      <p className="text-2xs uppercase tracking-wide text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         {label}
       </p>
       <p

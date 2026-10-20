@@ -19,7 +19,7 @@ func newDistributionLoader(cfg *config.Config, ca []byte) (*distribution.Loader,
 	}
 	development := !config.IsProduction(cfg) && cfg.DeliveryBundleRepository == "" && cfg.ReleaseManifestPath == ""
 	if development {
-		return distribution.New(distribution.Options{Development: true, Network: policy})
+		return distribution.New(distribution.Options{Development: true, Network: policy, LocalRegistry: cfg.RegistryLocal})
 	}
 	trust := &tls.Config{MinVersion: tls.VersionTLS12}
 	if len(ca) != 0 {
@@ -40,5 +40,5 @@ func newDistributionLoader(cfg *config.Config, ca []byte) (*distribution.Loader,
 	if err != nil {
 		return nil, err
 	}
-	return distribution.New(distribution.Options{MirrorPlan: mirrorPlan, Repository: cfg.DeliveryBundleRepository, Digest: cfg.DeliveryBundleDigest, CatalogDigest: cfg.DeliveryBundleCatalogDigest, Release: version.Version, Profile: "builtins", Policy: model.TrustPolicy{Provider: model.SignatureCosignKeyless, Identity: cfg.DeliveryBundleCertificateIdentity, Issuer: cfg.DeliveryBundleOIDCIssuer}, TrustDirectory: cfg.DeliverySourceTrustDirectory, Client: client, Network: policy})
+	return distribution.New(distribution.Options{MirrorPlan: mirrorPlan, Repository: cfg.DeliveryBundleRepository, Digest: cfg.DeliveryBundleDigest, CatalogDigest: cfg.DeliveryBundleCatalogDigest, Release: version.Version, Profile: "builtins", Policy: model.TrustPolicy{Provider: model.SignatureCosignKeyless, Identity: cfg.DeliveryBundleCertificateIdentity, Issuer: cfg.DeliveryBundleOIDCIssuer}, TrustDirectory: cfg.DeliverySourceTrustDirectory, Client: client, Network: policy, LocalRegistry: cfg.RegistryLocal})
 }

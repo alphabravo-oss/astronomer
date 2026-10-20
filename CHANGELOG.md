@@ -2,14 +2,130 @@
 
 ## Unreleased
 
-Target release: **2.0.1**.
+## 2.1.0 - 2026-10-20
 
-### Changes
+Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
+**This release has breaking deploy changes — read "Upgrading to 2.1.0" first.**
 
-- Fix offline toolkit downloads by allowing the exact GitHub release-asset redirect
-  while preserving public destination checks, TLS, digest verification and bounds.
-  The incomplete v2.0.0 publication retains its immutable tag and signed images;
-  v2.0.1 rebuilds and qualifies the complete artifact set from its own source.
+### Upgrading to 2.1.0 (breaking)
+
+- **Migrations run inside the server at boot** (goose, embedded, advisory
+  lock). The migrate image, the `migrate` Helm hook Job, the server init
+  container and the `image.migrate.*`, `image.allowSchemaSkew`, `migrate.*`
+  values are gone. Bookkeeping moves from golang-migrate `schema_migrations`
+  to `goose_db_version`; an existing 2.0.x database (schema 81) needs a
+  one-time baseline before the first 2.1.0 boot —
+  `docs/runbooks/upgrade-2.1.md`. Preflight target schema is **84**.
+- **Encryption key format changed to age.** `secrets.encryptionKey` /
+  `ASTRONOMER_ENCRYPTION_KEY` must be an age keyring
+  (`[label:]AGE-SECRET-KEY-1…`, current first); Fernet keys are rejected.
+  Migration 00082 discards every stored ciphertext: re-enter Helm repository
+  credentials, registry/git/cloud credentials, SSO client secrets, SMTP/SIEM/
+  vault/webhook secrets and Dex connectors. SSO sessions and TOTP enrolments
+  are deleted. Rotate with `astro admin rotate-keys`.
+- API: one error envelope `{"error":{code,message,request_id,fields,details}}`
+  for every error (429, quota and maintenance extras under `error.details`,
+  lost DB → 503 `db_unavailable`); authorization is decided by one static
+  route→permission table before feature/scope gates and denials write
+  `auth.authorization_denied` audit rows.
+- Logs are zerolog JSON: key `message` (not `msg`), lowercase levels,
+  request summary fields `route`/`status`. New env `LOG_FORMAT`,
+  `REGISTRY_LOCAL`, `REGISTRY_FALLBACKS`, `REGISTRY_PLAIN_HTTP`.
+- The DR image ships PostgreSQL 17 client tools and the Go `dr-crypto`
+  (envelope `ASTRODR2`); Python-format DR backups do not decrypt.
+- `branding.primary_color` defaults to `""` (unconfigured); the untouched
+  `#0066CC` seed is reset by migration 00084.
+- Release candidates are tagged `vX.Y.Z-rc.N`; the policy-controller subject
+  regex in `deploy/policy-controller/cip-astronomer.yaml` admits them.
+
+### Phase 1 — backend
+
+- Testing: testcontainers + pgtestdb substrate; every DB test is a
+  `//go:build integration` test run by `make test-integration`.
+- goose embedded migrations (ADR 0009), age column encryption with a
+  `(key_id, algorithm, ciphertext, nonce)` row shape and `astro admin
+  rotate-keys` (ADR 0010), zerolog `pkg/logging` with a slog bridge (ADR 0011),
+  `pkg/telemetry` tracer + meter provider on one `/metrics` (ADR 0012).
+- `internal/api/apiutil` error contract (259 codes) and the static route
+  authorizer (905 routes, deny-by-default) (ADR 0016).
+- Operator split into `internal/operator/{wire,lifecycle,mirror}` with per-key
+  locking and stage metrics (ADR 0013).
+- Air-gap layered registry resolver with optional in-cluster zot and
+  `astro airgap plan|mirror` (ADR 0014); Python release/mirror scripts removed.
+- Delivery fixes: `max_unavailable 0` means serial rollout, observation no
+  longer promotes `pending` assignments, version `v`-prefix normalisation,
+  `astro delivery system-rollout start|approve|status`, decommission cascades
+  to `cluster_deployments`.
+- Chart: `kubeVersion >=1.33 <1.38`, CNPG/DR NetworkPolicies (kube-apiserver,
+  Barman plugin, object-store egress), chart-managed Barman `ObjectStore`,
+  `scheduledBackup.immediate`, chart-managed Sigstore delivery trust root,
+  policy-controller values + `ClusterImagePolicy` with per-vendor authorities
+  (ADR 0015), k3s monitoring overlay.
+- gosec G115 resolved with `pkg/safeconv`; the rule exception is gone.
+- Go builder image pinned by digest (`deploy/docker/go-image.lock`).
+
+### UI — A1 Operator Console and the shared kit
+
+- Shared AlphaBravo UI kit in `frontend/src/ui/` (tokens, shell, sidebar,
+  header, palette, tables, forms, states) — `docs/ui/KIT.md`, ADR 0017.
+- Global rail of seven pillars + cluster panel with six groups; counts moved
+  from the sidebar to the cluster overview Inventory.
+- Sentence case and one vocabulary (Tools, Catalog, Tool links, Fleet,
+  Releases, Access control, Audit log, Agents, Onboarding templates).
+- Branding is a theme-level accent only; Charlie is a header icon + drawer
+  (`⌘J`), no FAB; one command palette (`/`, `⌘K`).
+- Fleet-first overview from one clusters query (verdict, clusters by health,
+  capacity, agents, delivery); full entity names in tables; humanised audit
+  actions; settings two layers deep.
+- Playwright live tier covers the shell, palette, Charlie, settings layers,
+  overview count agreement and axe (serious+critical = 0) on ten pages.
+
+### Phase 0 — realignment with the AlphaBravo Technology Selection Guide
+
+- Removed committed CI evidence, plan trees, generated inventories,
+  compatibility ledgers, qualification-only scripts, binaries, packages and 20
+  workflows (git ls-files 10,408 → ~5,100). Evidence lives in CI artifacts, not
+  git. Previous history is intact.
+- Toolchain: Go 1.27.3, Node 24.22.0 LTS, Helm 4.3.1, golangci-lint 2.15,
+  gotestsum 1.13, Air 1.67. Dependencies refreshed (`go get -u`, npm bumps:
+  React 19.3.1, TypeScript 6.0.3 (7.0.2 is blocked by typescript-eslint 8.72, whose peer range is <6.1.0 and which needs the JS compiler API the native TS 7 package does not ship), Vite 8.3.4, TanStack Query 5.104.5, vitest
+  5.0.5, Playwright 1.64.1, lucide-react 1.59, @tanstack/react-table 9.3.1, radix-ui 1.8.1; eslint stays on 9.39 because eslint-plugin-jsx-a11y 6.10 declares no eslint 10 peer support; jsdom is held at 30.1.2 and @tanstack/react-virtual at 3.14.14 because 30.1.3 / 3.14.21 break the DataTable behaviour tests — tracked for Phase 1).
+- Canonical `Makefile` (`dev build test test-integration lint vet fmt generate
+  migrate check security fips-build updates docker-build helm-lint e2e`);
+  `GO_VERSION` derived from `go.mod` for every image build.
+- Distroless multi-stage Dockerfiles (`USER 65532`), digest-pinned bases;
+  `database-cache-helper` no longer baked into the server image.
+- Air live reload per binary, `scripts/dev.sh` one-command stack, single
+  `deploy/docker-compose.yml` with Postgres 17, Redis 8, Tempo 3.1 (OTLP gRPC),
+  Loki 3.7, Grafana Alloy, Prometheus 3.15, Grafana 13.2.
+- Security gates as `make security` (gosec fail-on-HIGH SARIF, govulncheck
+  SARIF, gitleaks full history); `make fips-build` stamps `pkg/version.FIPSMode`.
+- Conformance: middleware order (recovery → request-id/tracing → logging),
+  `service_build_info` gauge, `astronomer_request_errors_total{route,reason}`,
+  OTLP gRPC exporter by default (`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
+  opt-in), session cookie takes precedence over bearer, `SERVER_ADDR`
+  configurable, standalone proxy env reads moved into `internal/config`.
+- Charlie: the artifact reconciler now persists the applied chart/image
+  digests to `charlie_connections` after a successful Helm apply and caps Helm
+  history at 5, so the agent release is no longer re-applied every interval.
+- ADRs 0001–0008 under `docs/decisions/`; `CLAUDE.md` principles with a
+  derived `AGENTS.md`.
+- Playwright live tier (`frontend/playwright.live.config.ts`) is the default
+  `npm run test:e2e`: real login persisted as storageState, cluster list,
+  settings, metrics and refresh/revocation journeys against the Air-served
+  binary. The OpenAPI-stub tier remains as `test:e2e:stubbed`.
+
+## 2.0.1 - 2026-10-11
+
+- Fix offline toolkit downloads by allowing the exact GitHub release-asset
+  redirect while preserving public destination checks, TLS, digest
+  verification and bounds. The incomplete v2.0.0 publication retains its
+  immutable tag and signed images; v2.0.1 rebuilds and qualifies the complete
+  artifact set from its own source.
+- The release owner renewed the v1.2.1 qualification deferrals and upstream
+  vulnerability risk acceptance for v2.0.1 on 2026-10-12.
+
+## 2.0.0 - 2026-10-11
 
 - Integrate the technology-guide implementation: updated toolchain and dependency
   authority, API and generated-client contracts, pagination, typed database and

@@ -25,11 +25,10 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/hibiken/asynq"
+	"github.com/rs/zerolog"
 )
 
 type fakeChartCounter struct {
@@ -56,8 +55,8 @@ func (f *fakeFirstBootEnqueuer) Enqueue(task *asynq.Task, _ ...asynq.Option) (*a
 	return &asynq.TaskInfo{ID: "test"}, nil
 }
 
-func newDiscardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+func newDiscardLogger() zerolog.Logger {
+	return zerolog.Nop()
 }
 
 func TestCatalogSeed_FirstBootSync_EnqueuesWhenChartsEmpty(t *testing.T) {

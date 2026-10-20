@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 func (h *MonitoringHandler) resolveAutoRollbackPolicy(backend sqlc.MonitoringBackend, override *bool) bool {

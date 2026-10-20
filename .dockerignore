@@ -9,7 +9,6 @@ out
 .claude
 .local-ci
 bin
-keyrotate
 worker
 screenshots
 advisor-plans

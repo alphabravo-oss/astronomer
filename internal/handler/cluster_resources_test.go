@@ -22,15 +22,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // fakeMirrorQuerier is a tiny in-memory ClusterResourcesQuerier. We
-// duplicate this rather than reuse internal/crd's test fake because
+// duplicate this rather than reuse internal/operator/mirror's test fake because
 // handler tests need a GetClusterByID branch + only the read methods.
 type fakeClusterResourcesQuerier struct {
 	mu       sync.Mutex

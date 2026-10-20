@@ -1,9 +1,0 @@
---- FAIL: TestAuthUpstreamBodiesAbsentFromJSONAndActualOTLP (0.01s)
-    upstream_diagnostics_test.go:80: raw upstream body entered final JSON logger
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/auth	0.017s
---- FAIL: TestMonitoringUpstreamBodiesAbsentFromJSONAndActualOTLP (0.00s)
-    upstream_diagnostics_test.go:83: raw upstream body entered final JSON logger
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/monitoring	0.011s
-FAIL

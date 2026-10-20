@@ -15,6 +15,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // --- Fakes -------------------------------------------------------------
@@ -135,12 +136,12 @@ func (f *fakeProjectK8sRequester) all() []k8sRequest {
 	return out
 }
 
-// fakeDecryptor passes the token through unchanged so tests can encode
-// the cleartext directly and skip a real Fernet round-trip.
+// fakeDecryptor passes the ciphertext bytes through unchanged so tests can encode
+// the cleartext directly and skip a real age round-trip.
 type fakeDecryptor struct{}
 
-func (fakeDecryptor) Decrypt(token string) (string, error) {
-	return token, nil
+func (fakeDecryptor) Decrypt(sealed crypto.Sealed) ([]byte, error) {
+	return append([]byte(nil), sealed.Ciphertext...), nil
 }
 
 // --- Tests -------------------------------------------------------------
@@ -173,11 +174,11 @@ func TestMaterialize_CreatesK8sSecret(t *testing.T) {
 		"secret_access_key": "shhh",
 	})
 	q.credentials[credID] = sqlc.CloudCredential{
-		ID:            credID,
-		Provider:      "aws",
-		Name:          "aws-prod",
-		DataEncrypted: string(blob),
-		TargetRefs:    json.RawMessage(`[]`),
+		ID:        credID,
+		Provider:  "aws",
+		Name:      "aws-prod",
+		DataKeyID: "fake", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: blob,
+		TargetRefs: json.RawMessage(`[]`),
 	}
 	q.mats[credID] = []sqlc.CloudCredentialMaterialization{{
 		ID:           matID,
@@ -279,11 +280,11 @@ func TestMaterialize_DriftReconcile(t *testing.T) {
 			"secret_access_key": "shhh",
 		})
 		q.credentials[credID] = sqlc.CloudCredential{
-			ID:            credID,
-			Provider:      "aws",
-			Name:          fmt.Sprintf("aws-%d", i),
-			DataEncrypted: string(blob),
-			TargetRefs:    json.RawMessage(`[]`),
+			ID:        credID,
+			Provider:  "aws",
+			Name:      fmt.Sprintf("aws-%d", i),
+			DataKeyID: "fake", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: blob,
+			TargetRefs: json.RawMessage(`[]`),
 		}
 		q.mats[credID] = []sqlc.CloudCredentialMaterialization{{
 			ID:           uuid.New(),
@@ -318,11 +319,11 @@ func TestMaterialize_FailureMarksRowFailed(t *testing.T) {
 		"secret_access_key": "shhh",
 	})
 	q.credentials[credID] = sqlc.CloudCredential{
-		ID:            credID,
-		Provider:      "aws",
-		Name:          "aws-x",
-		DataEncrypted: string(blob),
-		TargetRefs:    json.RawMessage(`[]`),
+		ID:        credID,
+		Provider:  "aws",
+		Name:      "aws-x",
+		DataKeyID: "fake", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: blob,
+		TargetRefs: json.RawMessage(`[]`),
 	}
 	q.mats[credID] = []sqlc.CloudCredentialMaterialization{{
 		ID:           matID,
@@ -372,11 +373,11 @@ func TestMaterialize_RBACProjectScope(t *testing.T) {
 		"secret_access_key": "shhh-from-db",
 	})
 	q.credentials[credID] = sqlc.CloudCredential{
-		ID:            credID,
-		Provider:      "aws",
-		Name:          "aws-x",
-		DataEncrypted: string(blob),
-		TargetRefs:    json.RawMessage(`[]`),
+		ID:        credID,
+		Provider:  "aws",
+		Name:      "aws-x",
+		DataKeyID: "fake", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: blob,
+		TargetRefs: json.RawMessage(`[]`),
 	}
 	// No matching materialization row — this is the "tampered payload"
 	// case. Apply still runs (the worker is tolerant of fresh rows),
@@ -402,4 +403,9 @@ func TestMaterialize_RBACProjectScope(t *testing.T) {
 	if !strings.Contains(string(got[0].Body), base64.StdEncoding.EncodeToString([]byte("AKIA-FROM-DB"))) {
 		t.Fatalf("expected DB-supplied access_key_id in body, got %s", string(got[0].Body))
 	}
+}
+
+// DecryptString lets fakeDecryptor stand in for the GitOps decryptor too.
+func (fakeDecryptor) DecryptString(sealed crypto.Sealed) (string, error) {
+	return string(sealed.Ciphertext), nil
 }

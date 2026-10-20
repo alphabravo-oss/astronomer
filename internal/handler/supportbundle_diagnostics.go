@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zip.Writer, log *sectionLog) {
@@ -21,7 +22,7 @@ func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zi
 	defer cancel()
 	var version int64
 	var dirty bool
-	err := h.db.QueryRow(lctx, "SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
+	err := h.db.QueryRow(lctx, "SELECT COALESCE(max(version_id) FILTER (WHERE is_applied), 0), COALESCE(bool_or(NOT is_applied), false) FROM goose_db_version").Scan(&version, &dirty)
 	if err != nil {
 		log.section("schema-migrations.json", err)
 		return
@@ -54,7 +55,7 @@ SELECT jsonb_build_object(
     'targets', (SELECT count(*) FROM delivery_targets WHERE deletion_state <> 'deleted'),
     'rollouts', (SELECT COALESCE(jsonb_object_agg(state, count), '{}'::jsonb) FROM (SELECT state, count(*) AS count FROM delivery_rollouts GROUP BY state) s),
     'deployments', (SELECT COALESCE(jsonb_object_agg(phase, count), '{}'::jsonb) FROM (SELECT phase, count(*) AS count FROM cluster_deployments GROUP BY phase) d),
-    'stale_deployments', (SELECT count(*) FROM cluster_deployments WHERE phase NOT IN ('pending','removed') AND (last_observed_at IS NULL OR last_observed_at < clock_timestamp() - interval '5 minutes')),
+    'stale_deployments', (SELECT count(*) FROM cluster_deployments d JOIN clusters c ON c.id = d.cluster_id AND c.decommissioned_at IS NULL WHERE d.phase NOT IN ('pending','removed') AND (d.last_observed_at IS NULL OR d.last_observed_at < clock_timestamp() - interval '5 minutes')),
     'flux_not_ready', (SELECT count(*) FROM delivery_controller_inventory WHERE NOT ready)
   )
 )`

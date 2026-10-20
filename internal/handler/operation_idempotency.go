@@ -13,10 +13,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // jsonPayloadEqual compares persisted JSON semantically. PostgreSQL jsonb may
@@ -93,7 +94,7 @@ func RequireOperationIdempotencyKey(w http.ResponseWriter, r *http.Request) bool
 	if r != nil && len(r.Header.Values("Idempotency-Key")) == 1 && validOperationIdempotencyKey(r.Header.Get("Idempotency-Key")) {
 		return true
 	}
-	RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "A valid Idempotency-Key header is required")
+	apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "A valid Idempotency-Key header is required")
 	return false
 }
 

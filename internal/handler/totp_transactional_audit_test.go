@@ -12,13 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pquerna/otp/totp"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/pquerna/otp/totp"
 )
 
 // The staged store publishes neither credential changes nor audit rows until
@@ -67,7 +70,7 @@ func (s *totpTestRunner) run(ctx context.Context, fn func(TOTPMutationTx) error)
 	return nil
 }
 
-func newTestTOTPHandler(store *fakeTOTPStore, users UserQuerier, enc *auth.Encryptor, jwt *auth.JWTManager) *TOTPHandler {
+func newTestTOTPHandler(store *fakeTOTPStore, users UserQuerier, enc *crypto.Encryptor, jwt *auth.JWTManager) *TOTPHandler {
 	h := NewTOTPHandler(store, users, enc, jwt)
 	runner := &totpTestRunner{store: store, users: users}
 	h.SetRunTx(runner.run)
@@ -192,10 +195,11 @@ func TestTOTPMutationsRequireTransactionRunner(t *testing.T) {
 }
 
 type totpMutationFixture struct {
-	handler                                      *TOTPHandler
-	runner                                       *totpTestRunner
-	user                                         sqlc.User
-	secret, encrypted, code, recovery, challenge string
+	handler                           *TOTPHandler
+	runner                            *totpTestRunner
+	user                              sqlc.User
+	secret, code, recovery, challenge string
+	encrypted                         crypto.Sealed
 }
 
 type totpInvalidations struct{ calls int }
@@ -215,7 +219,7 @@ func newTOTPMutationFixture(t *testing.T) *totpMutationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encrypted, err := enc.Encrypt(secret)
+	encrypted, err := enc.EncryptString(secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +232,7 @@ func newTOTPMutationFixture(t *testing.T) *totpMutationFixture {
 		t.Fatal(err)
 	}
 	store := newFakeTOTPStore()
-	store.enrollments[user.ID] = sqlc.UserTotpEnrollment{UserID: user.ID, SecretEncrypted: encrypted, Label: "existing"}
+	store.enrollments[user.ID] = sqlc.UserTotpEnrollment{UserID: user.ID, SecretKeyID: encrypted.KeyID, SecretAlgorithm: encrypted.Algorithm, SecretCiphertext: encrypted.Ciphertext, SecretNonce: encrypted.Nonce, Label: "existing"}
 	store.codes = []sqlc.UserTotpRecoveryCode{{ID: uuid.New(), UserID: user.ID, CodeHash: hashes[0]}}
 	store.failed[user.ID] = 4
 	users := newMockQuerier(user)

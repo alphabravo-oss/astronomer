@@ -10,8 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * they actually type a new value.
  */
 import { useEffect, useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Mail, Pencil, Plus, Save, Send } from "lucide-react";
+import { Mail, Pencil, Plus, Save, Send } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
@@ -492,15 +491,7 @@ function SmtpSettingsPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · Email"
           title="Email & SMTP"
           description="Outbound mail server, test-send, and audit log of recent emails."
         />

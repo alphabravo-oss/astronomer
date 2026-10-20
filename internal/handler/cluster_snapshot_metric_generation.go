@@ -2,9 +2,11 @@ package handler
 
 import (
 	"context"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 type clusterSnapshotMetric struct {

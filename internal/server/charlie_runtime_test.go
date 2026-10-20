@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 type runtimeDispatcherFake struct{ calls atomic.Int32 }

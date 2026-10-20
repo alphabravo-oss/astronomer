@@ -9,9 +9,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 var (

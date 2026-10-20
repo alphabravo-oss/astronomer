@@ -12,7 +12,7 @@ import pluginQuery from "@tanstack/eslint-plugin-query";
 const radixRestriction = {
   group: ["radix-ui", "radix-ui/*", "@radix-ui/*"],
   message:
-    "Import Radix only inside src/components/ui; use the ui/ primitive (Tooltip, Popover, DropdownMenu, Dialog, Sheet).",
+    "Import Radix only inside src/components/ui or src/ui (the shared kit); use the ui/ primitive (Tooltip, Popover, DropdownMenu, Dialog, Sheet).",
 };
 
 const config = [
@@ -361,8 +361,10 @@ const config = [
     },
   },
   {
-    // The only place Radix may be imported. Keeps the base `next` ban.
-    files: ["src/components/ui/**/*.{ts,tsx}"],
+    // The only places Radix may be imported: the design-system primitives and
+    // the shared AlphaBravo kit (src/ui, copied verbatim into Constellation).
+    // Keeps the base `next` ban.
+    files: ["src/components/ui/**/*.{ts,tsx}", "src/ui/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",

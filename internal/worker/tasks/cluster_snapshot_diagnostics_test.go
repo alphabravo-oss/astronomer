@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 func TestSnapshotDiagnosticsRetainTypedCategoryAndOmitServerPayload(t *testing.T) {
@@ -32,7 +33,7 @@ func TestSnapshotDiagnosticsRetainTypedCategoryAndOmitServerPayload(t *testing.T
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
-			logger := slog.New(observability.NewJSONHandler(&output, nil)).With("correlation_id", "safe-snapshot-request")
+			logger := diagnosticSlog(&output).With("correlation_id", "safe-snapshot-request")
 			logSnapshotErr(logger, "poll_snapshot", test.err)
 			if strings.Contains(output.String(), rawValue) {
 				t.Error("typed server payload escaped shipped snapshot diagnostic handler")
@@ -51,7 +52,7 @@ func TestSnapshotDiagnosticsRetainTypedCategoryAndOmitServerPayload(t *testing.T
 
 func TestSnapshotDiagnosticsKeepCancellationSuppressed(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(observability.NewJSONHandler(&output, nil))
+	logger := diagnosticSlog(&output)
 	for _, err := range []error{nil, context.Canceled, fmt.Errorf("poll: %w", context.DeadlineExceeded), errors.Join(context.Canceled, &pgconn.PgError{Code: "23505", Message: "synthetic-canceled-row"})} {
 		logSnapshotErr(logger, "poll_snapshot", err)
 	}
@@ -59,4 +60,12 @@ func TestSnapshotDiagnosticsKeepCancellationSuppressed(t *testing.T) {
 	if output.Len() != 0 {
 		t.Fatal("expected cancellation/nil logger paths to remain silent")
 	}
+}
+
+func diagnosticSlog(w io.Writer) *slog.Logger {
+	logger, err := logging.NewWithWriter(w, logging.Config{Level: "debug"})
+	if err != nil {
+		panic(err)
+	}
+	return logging.Slog(logger)
 }

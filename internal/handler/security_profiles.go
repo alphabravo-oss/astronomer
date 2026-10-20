@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // ListProfiles handles GET /api/v1/security/profiles/?cluster_id=X — returns
@@ -22,7 +23,7 @@ func (h *SecurityHandler) ListProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !present {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cluster_id query parameter is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cluster_id query parameter is required")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbRead) {
@@ -67,7 +68,7 @@ func (h *SecurityHandler) ListProfiles(w http.ResponseWriter, r *http.Request) {
 		} `json:"items"`
 	}
 	if err := parseJSONResponse(resp, &list); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.InvalidBody, "Failed to decode ClusterScanProfile list")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.InvalidBody, "Failed to decode ClusterScanProfile list")
 		return
 	}
 	items := make([]map[string]any, 0, len(list.Items))

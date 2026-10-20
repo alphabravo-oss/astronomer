@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"helm.sh/helm/v4/pkg/cli"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	"helm.sh/helm/v4/pkg/cli"
 )
 
 // caCertMountPath is where the install manifest mounts the CA Secret
@@ -64,6 +65,7 @@ type AgentConfig struct {
 	InCluster            bool               `mapstructure:"-"`                  // Captured once from the process environment
 	HelmRuntime          helmruntime.Config `mapstructure:"-"`                  // Captured Helm SDK process contract
 	OTELExporterEndpoint string             `mapstructure:"-"`
+	OTELExporterProtocol string             `mapstructure:"-"`
 	OTELExporterInsecure bool               `mapstructure:"-"`
 	OTELExporterHeaders  string             `mapstructure:"-"`
 	OTELSamplerRatio     float64            `mapstructure:"-"`
@@ -220,6 +222,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	cfg.Insecure = insecureConfigured
 	cfg.HelmRuntime = helmRuntime
 	cfg.OTELExporterEndpoint = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	cfg.OTELExporterProtocol = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL"))
 	cfg.OTELExporterInsecure, _ = strconv.ParseBool(strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_INSECURE")))
 	cfg.OTELExporterHeaders = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"))
 	cfg.OTELSamplerRatio = otelSamplerRatio

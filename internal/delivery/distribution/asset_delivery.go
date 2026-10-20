@@ -6,8 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 )
 
 // Upstream database bytes are unchanged; Astronomer endorses their immutable
@@ -31,7 +32,7 @@ func projectArtifactValues(catalog *builtinbundles.Catalog, bom BOM) error {
 		if !enabled {
 			continue
 		}
-		if _, err := rewriteDatabaseLocations(trivy, locations); err != nil {
+		if _, err := rewriteDatabaseLocations(trivy, exactTable(locations)); err != nil {
 			return err
 		}
 	}
@@ -97,7 +98,7 @@ func (loader *Loader) verifyPublishedAssets(ctx context.Context, bom BOM, member
 // Trivy splits the registry from database repository@digest. Reconstruct and
 // rewrite the exact signed subject rather than replacing strings or leaving a
 // mutable downstream fetch behind. Returned keys must not be rewritten twice.
-func rewriteDatabaseLocations(values map[string]any, locations map[string]string) (map[string]bool, error) {
+func rewriteDatabaseLocations(values map[string]any, locations locationTable) (map[string]bool, error) {
 	handled := map[string]bool{}
 	for repositoryKey, registryKey := range map[string]string{"dbRepository": "dbRegistry", "javaDbRepository": "javaDbRegistry"} {
 		raw, exists := values[repositoryKey]
@@ -123,7 +124,7 @@ func rewriteDatabaseLocations(values map[string]any, locations map[string]string
 		if registry != "" {
 			source = registry + "/" + repository
 		}
-		target, found := locations[source]
+		target, found := locations.target(source)
 		if !found {
 			return nil, blocked("vulnerability_database", "database location outside authenticated asset inventory")
 		}

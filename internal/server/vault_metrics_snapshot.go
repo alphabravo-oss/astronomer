@@ -3,12 +3,13 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/jackc/pgx/v5"
 )
 
 var errVaultMetricsBudget = errors.New("Vault metrics observation exceeds owner budget")
@@ -60,7 +61,7 @@ func collectVaultMetricsSnapshot(ctx context.Context, begin connectionMetricsBeg
 	return complete, nil
 }
 
-func runVaultMetricsCollector(ctx context.Context, begin connectionMetricsBegin, logger *slog.Logger) {
+func runVaultMetricsCollector(ctx context.Context, begin connectionMetricsBegin, logger zerolog.Logger) {
 	collect := func() {
 		started := time.Now().UTC()
 		watermark := observability.VaultMetricsWatermark()
@@ -74,9 +75,7 @@ func runVaultMetricsCollector(ctx context.Context, begin connectionMetricsBegin,
 				result = "owner_budget"
 			}
 			observability.RecordVaultMetricFailure(result)
-			if logger != nil {
-				logger.Warn("Vault metrics observation incomplete", "error_kind", "collection_failed")
-			}
+			logger.Warn().Str("error_kind", "collection_failed").Msg("Vault metrics observation incomplete")
 			return
 		}
 		if ctx.Err() != nil {

@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type operationStatusQuerier interface {

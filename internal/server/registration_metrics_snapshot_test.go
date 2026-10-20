@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 type registrationMetricsSnapshotTx struct {
@@ -126,7 +128,7 @@ func TestOwnerMetricsCanceledCommitPreservesPublishedPhase(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tx := &registrationMetricsSnapshotTx{commitCancel: cancel}
-	runRegistrationMetricsCollector(ctx, func(context.Context, pgx.TxOptions) (pgx.Tx, error) { return tx, nil }, nil)
+	runRegistrationMetricsCollector(ctx, func(context.Context, pgx.TxOptions) (pgx.Tx, error) { return tx, nil }, zerolog.Nop())
 	// A fresh complete read proving the row remains current can still update it;
 	// the canceled collector returned without publishing its fabricated ready rows.
 	watermark := observability.RegistrationMetricsWatermark()

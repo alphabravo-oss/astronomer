@@ -139,7 +139,7 @@ func joinObserverCleanup(t *testing.T, done <-chan error, cancel context.CancelF
 		}
 		cancel()
 		select {
-		case <-done:
+		case <-done: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		case <-time.After(5 * time.Second):
 			t.Error("observer fixture cleanup UNJOINED; no closure qualified")
 		}

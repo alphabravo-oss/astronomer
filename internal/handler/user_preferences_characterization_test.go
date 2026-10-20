@@ -9,10 +9,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 type preferenceIdentityRead struct{ ids []uuid.UUID }
@@ -146,7 +148,7 @@ func TestUserPreferencesCharacterizationCancelledTransactionContext(t *testing.T
 	cancel()
 	response := httptest.NewRecorder()
 	h.PutUserPreferences(response, request.WithContext(ctx))
-	if !called || response.Code != statusClientClosedRequest || response.Body.Len() != 0 {
+	if !called || response.Code != apiutil.StatusClientClosedRequest || response.Body.Len() != 0 {
 		t.Fatalf("cancelled replace status=%d, transaction invoked=%v", response.Code, called)
 	}
 }

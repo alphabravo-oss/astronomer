@@ -11,10 +11,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // fakeQuotaQuerier is the in-memory QuotaQuerier the handler tests

@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
-	"github.com/google/uuid"
 )
 
 type catalogRolloutStatusReader interface {

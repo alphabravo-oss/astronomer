@@ -10,41 +10,44 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // Webhook handles POST /api/v1/gitops/sources/{id}/webhook/. It accepts only
 // GitHub's native HMAC-SHA256 delivery format. Each source owns a distinct
-// Fernet-encrypted secret. Authenticated body digests are consumed once per
+// age-encrypted secret. Authenticated body digests are consumed once per
 // source before queuing a durable sync. GitHub does not sign its delivery ID
 // or a freshness timestamp, so receipts remain until the source is deleted.
 func (h *GitOpsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid source ID")
 		return
 	}
 	if h == nil || h.runTx == nil || h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps task outbox not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "GitOps task outbox not configured")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, gitOpsWebhookBodyLimit+1))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Failed to read webhook payload")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Failed to read webhook payload")
 		return
 	}
 	if len(body) > gitOpsWebhookBodyLimit {
-		RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Webhook payload exceeds 1 MiB")
+		apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "Webhook payload exceeds 1 MiB")
 		return
 	}
 	deliveryID := strings.TrimSpace(r.Header.Get("X-GitHub-Delivery"))
 	if !validWebhookDeliveryID(deliveryID) {
 		h.recordGitOpsWebhookRejected(r, id, "invalid_delivery_id", "", deliveryID, http.StatusUnauthorized)
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid webhook authentication")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid webhook authentication")
 		return
 	}
 
@@ -81,31 +84,31 @@ func (h *GitOpsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "GitOps source not found")
 			return
 		}
 		if errors.Is(err, errGitOpsWebhookInvalid) {
 			h.recordGitOpsWebhookRejected(r, id, "invalid_signature", source.WebhookProvider, deliveryID, http.StatusUnauthorized)
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid webhook authentication")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid webhook authentication")
 			return
 		}
 		if errors.Is(err, errGitOpsWebhookReplay) {
 			h.recordGitOpsWebhookRejected(r, id, "replay", source.WebhookProvider, deliveryID, http.StatusConflict)
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Webhook delivery already processed")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Webhook delivery already processed")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to queue GitOps source sync")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SyncError, "Failed to queue GitOps source sync")
 		return
 	}
 	RespondJSON(w, http.StatusAccepted, map[string]any{"status": "queued", "task_id": result.task.ID.String()})
 }
 
 func (h *GitOpsHandler) verifyGitHubWebhook(source sqlc.GitopsRegistrationSource, headers http.Header, body []byte) error {
-	if source.WebhookProvider != "github" || source.WebhookSecretEncrypted == "" ||
+	if source.WebhookProvider != "github" || source.WebhookSecretKeyID == "" ||
 		!strings.EqualFold(strings.TrimSpace(headers.Get("X-GitHub-Event")), "push") {
 		return errGitOpsWebhookInvalid
 	}
-	secret, err := h.encryptor.DecryptBytes(source.WebhookSecretEncrypted)
+	secret, err := h.encryptor.Decrypt(crypto.FromParts(source.WebhookSecretKeyID, source.WebhookSecretAlgorithm, source.WebhookSecretCiphertext, source.WebhookSecretNonce))
 	if err != nil {
 		return fmt.Errorf("decrypt GitOps webhook secret: %w", err)
 	}

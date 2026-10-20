@@ -6,8 +6,8 @@
 // Bitwarden, etc.) so users can pick whichever they already trust.
 //
 // Secrets themselves never live in this package after enrollment — the
-// caller wraps them through auth.Encryptor so the at-rest copy is
-// Fernet-encrypted. The plaintext only re-materialises inside VerifyCode
+// caller seals them through pkg/crypto.Encryptor so the at-rest copy is
+// age-sealed. The plaintext only re-materialises inside VerifyCode
 // for the duration of a single HMAC.
 package auth
 
@@ -25,6 +25,8 @@ import (
 	"image/png"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -76,7 +78,7 @@ var ErrTOTPSecretInvalid = errors.New("totp: stored secret is not valid base32")
 
 // GenerateSecret creates a fresh 160-bit secret + the otpauth:// URL the
 // authenticator app encodes into the QR code. The plaintext secret is
-// returned to the caller, which must wrap it via Encryptor.Encrypt
+// returned to the caller, which must seal it via pkg/crypto.Encryptor.Encrypt
 // before persisting; the URL is safe to return to the browser because
 // the secret it embeds is already destined for the user's authenticator.
 //
@@ -255,7 +257,7 @@ func randomFromAlphabet(alphabet string, length int) (string, error) {
 	if len(alphabet) == 0 || len(alphabet) > 256 {
 		return "", errors.New("alphabet size must be in (0,256]")
 	}
-	max := byte(255 - (255 % len(alphabet)))
+	max := safeconv.Byte(255 - (255 % len(alphabet)))
 	out := make([]byte, 0, length)
 	buf := make([]byte, length*2)
 	for len(out) < length {

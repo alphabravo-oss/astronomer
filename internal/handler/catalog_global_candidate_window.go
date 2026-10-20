@@ -5,10 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // This is an initial measurement cap, not a claim that a plan passes the
@@ -131,12 +132,12 @@ func writeCatalogGlobalWindow(w http.ResponseWriter, r *http.Request, q catalogG
 		err = r.Context().Err()
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to inspect catalog chart window")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to inspect catalog chart window")
 		return
 	}
 	charts, next, err := catalogGlobalWindowPage(rows, page)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Invalid catalog chart window")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Invalid catalog chart window")
 		return
 	}
 	metadata, ok := page.metadata(w, r, len(charts), next, nil)

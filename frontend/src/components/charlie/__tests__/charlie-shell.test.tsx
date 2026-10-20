@@ -21,7 +21,22 @@ import {
   subscribeCharlieSessionEvents,
 } from "@/lib/api/charlie";
 import { getCharlieMode } from "@/lib/api/charlie-admin";
-import { CharlieShell } from "../charlie-shell";
+import { CharlieShell, useCharlie } from "../charlie-shell";
+import { BareButton } from "@/components/form/bare-button";
+
+// The product opens the drawer from a header icon (and ⌘J); this stands in
+// for that icon inside the shell under test.
+function CharlieTestTrigger() {
+  const charlie = useCharlie();
+  return (
+    <BareButton
+      aria-label="Open Charlie assistant"
+      aria-expanded={charlie.open}
+      aria-controls="charlie-assistant-drawer"
+      onClick={() => charlie.setOpen(true)}
+    />
+  );
+}
 
 vi.mock("@/lib/api/charlie", () => ({
   abortCharlieSession: vi.fn(),
@@ -70,6 +85,7 @@ async function renderShell() {
     <QueryClientProvider client={client}>
       <CharlieShell>
         <main>Dashboard</main>
+        <CharlieTestTrigger />
       </CharlieShell>
     </QueryClientProvider>,
   );
@@ -235,7 +251,7 @@ describe("Charlie global shell accessibility", () => {
 
   it("opens with the non-command-palette shortcut, loads active thread, and exposes route context", async () => {
     await renderShell();
-    fireEvent.keyDown(window, { key: ".", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
     expect(
       await screen.findByRole("dialog", { name: "Charlie" }),
     ).toBeInTheDocument();

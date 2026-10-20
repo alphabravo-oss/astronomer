@@ -6,18 +6,19 @@ import (
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type repositoryServiceCipher struct{}
 
-func (repositoryServiceCipher) Encrypt(plaintext string) (string, error) {
-	return "sealed:" + plaintext, nil
+func (repositoryServiceCipher) Encrypt(plaintext []byte) (crypto.Sealed, error) {
+	return stubSealed("sealed", string(plaintext)), nil
 }
-func (repositoryServiceCipher) Decrypt(ciphertext string) (string, error) {
-	if len(ciphertext) < len("sealed:") || ciphertext[:len("sealed:")] != "sealed:" {
-		return "", errors.New("invalid ciphertext")
+func (repositoryServiceCipher) Decrypt(sealed crypto.Sealed) ([]byte, error) {
+	if sealed.KeyID != "sealed" {
+		return nil, errors.New("invalid ciphertext")
 	}
-	return ciphertext[len("sealed:"):], nil
+	return sealed.Ciphertext, nil
 }
 
 func TestRepositoryServicePrepareCreateOwnsCredentialAndRepositoryPolicy(t *testing.T) {
@@ -31,19 +32,18 @@ func TestRepositoryServicePrepareCreateOwnsCredentialAndRepositoryPolicy(t *test
 	if params.Url != "oci://registry.example.test/charts" || params.RepoType != "oci" || params.AuthType != "basic" || !params.Enabled {
 		t.Fatalf("prepared repository = %+v", params)
 	}
-	if params.AuthConfigEncrypted == "" || string(params.AuthConfig) != `{"username":"operator"}` {
-		t.Fatalf("credential envelope/projection = %q %s", params.AuthConfigEncrypted, params.AuthConfig)
+	if params.AuthConfigKeyID == "" || string(params.AuthConfig) != `{"username":"operator"}` {
+		t.Fatalf("credential envelope/projection = %q %s", params.AuthConfigKeyID, params.AuthConfig)
 	}
 }
 
 func TestRepositoryServicePrepareUpdatePreservesRedactedSecrets(t *testing.T) {
-	existing := sqlc.HelmRepository{
-		Name:                "private",
-		Url:                 "https://charts.example.test",
-		AuthType:            "basic",
-		Enabled:             true,
-		AuthConfigEncrypted: `sealed:{"username":"operator","password":"secret"}`,
-	}
+	existing := withSealed(sqlc.HelmRepository{
+		Name:     "private",
+		Url:      "https://charts.example.test",
+		AuthType: "basic",
+		Enabled:  true,
+	}, stubSealed("sealed", `{"username":"operator","password":"secret"}`))
 	config := json.RawMessage(`{"username":"operator","password":"<encrypted>"}`)
 	params, err := NewRepositoryService().PrepareUpdate(existing, RepositoryUpdateInput{
 		AuthConfig: &config, RedactedSecretValue: "<encrypted>",
@@ -51,8 +51,8 @@ func TestRepositoryServicePrepareUpdatePreservesRedactedSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decrypted, decryptErr := (repositoryServiceCipher{}).Decrypt(params.AuthConfigEncrypted)
-	if decryptErr != nil || decrypted != `{"password":"secret","username":"operator"}` {
+	decrypted, decryptErr := (repositoryServiceCipher{}).Decrypt(crypto.FromParts(params.AuthConfigKeyID, params.AuthConfigAlgorithm, params.AuthConfigCiphertext, params.AuthConfigNonce))
+	if decryptErr != nil || string(decrypted) != `{"password":"secret","username":"operator"}` {
 		t.Fatalf("redacted secret was not preserved: decrypted=%q err=%v", decrypted, decryptErr)
 	}
 }

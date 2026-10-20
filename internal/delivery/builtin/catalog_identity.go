@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 func catalogSourceIdentityForComponent(project uuid.UUID, component builtinbundles.Component, distributionIdentity string) (sourceIdentity, error) {

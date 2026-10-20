@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/hibiken/asynq"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 )
 
 // AgentManifestPayload contains parameters for generating an agent manifest.
@@ -66,6 +67,7 @@ func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, 
 		SystemOIDCIdentity:   runtimeDependencies(ctx).SystemOIDCIdentity,
 		SystemPublicKey:      append([]byte(nil), runtimeDependencies(ctx).SystemPublicKey...),
 		SystemPublicKeys:     cloneSystemPublicKeys(runtimeDependencies(ctx).SystemPublicKeys),
+		ImageRegistry:        runtimeDependencies(ctx).ImageRegistry,
 	})
 }
 

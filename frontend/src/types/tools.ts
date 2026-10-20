@@ -50,9 +50,17 @@ export type ClusterToolStatus = Omit<
   "status"
 > & { status: ToolStatus };
 
-export type ToolPreviewResponse = CamelizeKeys<
-  OpenAPIComponents["schemas"]["ToolPreview"]
->;
+type ToolPreviewWire = OpenAPIComponents["schemas"]["ToolPreview"];
+export type ToolPreviewResponse = Omit<
+  CamelizeKeys<ToolPreviewWire>,
+  "charts" | "catalogVersions"
+> & {
+  charts: Array<
+    CamelizeKeys<ToolPreviewWire["charts"][number]> & {
+      catalogVersion?: OpenAPIComponents["schemas"]["CatalogVersionProfile"];
+    }
+  >;
+};
 
 export type ToolConfiguration = CamelizeKeys<
   OpenAPIComponents["schemas"]["ToolConfiguration"]

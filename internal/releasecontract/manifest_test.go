@@ -142,10 +142,13 @@ func validManifest() Manifest {
 		ChartDigest  string   `json:"chart_digest"`
 		Images       []string `json:"images"`
 	}{Slug: "built-in"})
-	for index, name := range []string{"agent", "frontend", "migrate", "server", "shell", "worker"} {
+	for index, name := range []string{"agent", "frontend", "server", "shell", "worker"} {
 		manifest.Astronomer.Images = append(manifest.Astronomer.Images, testArtifact(name, "cdef01"[index]))
 		manifest.Astronomer.RuntimeImages = append(manifest.Astronomer.RuntimeImages, RuntimeImage{SourceReference: name + ":v1.0.0", Reference: manifest.Astronomer.Images[index].Reference})
 	}
+	// Third-party runtime images (busybox, postgres, ...) are inventoried
+	// separately from first-party images; at least six are always present.
+	manifest.Astronomer.RuntimeImages = append(manifest.Astronomer.RuntimeImages, RuntimeImage{SourceReference: "busybox:1.37", Reference: manifest.Astronomer.Images[0].Reference})
 	manifest.Astronomer.Chart = testArtifact("chart", '2')
 	manifest.Flux.Distribution = testArtifact("flux", '3')
 	manifest.BuiltInBundles.Artifact = testArtifact("bundles", '4')

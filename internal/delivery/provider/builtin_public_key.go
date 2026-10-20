@@ -7,13 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/builtin"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 type publicTrustBinding struct{ CA, SigningKey bool }

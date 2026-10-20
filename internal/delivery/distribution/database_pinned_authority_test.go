@@ -25,12 +25,13 @@ import (
 	"testing"
 	"time"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 func privateAuthorityRegistryTLS(t *testing.T, handler http.Handler) (*httptest.Server, []byte, netip.Addr) {

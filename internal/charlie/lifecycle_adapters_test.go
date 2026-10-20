@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type failingLifecycleAuditWriter struct{}
@@ -29,9 +31,9 @@ func (w *capturingLifecycleAuditWriter) CreateAuditLogV1(_ context.Context, row 
 
 func TestDBLifecycleAuditorLogsBoundedFailureWithoutPayload(t *testing.T) {
 	var output bytes.Buffer
-	prior := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
-	t.Cleanup(func() { slog.SetDefault(prior) })
+	prior := logging.Default()
+	logging.SetDefault(zerolog.New(&output))
+	t.Cleanup(func() { logging.SetDefault(*prior) })
 
 	auditor := NewDBLifecycleAuditor(failingLifecycleAuditWriter{})
 	auditor.RecordCharlieSessionLifecycle(context.Background(), SessionLifecycleAudit{
@@ -52,9 +54,9 @@ func TestDBLifecycleAuditorLogsBoundedFailureWithoutPayload(t *testing.T) {
 
 func TestDBLifecycleAuditorApprovalFailureIsReturnedAndBounded(t *testing.T) {
 	var output bytes.Buffer
-	prior := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
-	t.Cleanup(func() { slog.SetDefault(prior) })
+	prior := logging.Default()
+	logging.SetDefault(zerolog.New(&output))
+	t.Cleanup(func() { logging.SetDefault(*prior) })
 
 	auditor := NewDBLifecycleAuditor(failingLifecycleAuditWriter{})
 	err := auditor.RecordCharlieApprovalLifecycle(context.Background(), ApprovalLifecycleAudit{

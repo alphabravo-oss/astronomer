@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/google/uuid"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )

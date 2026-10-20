@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/provider"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
-	"github.com/google/uuid"
 )
 
 // DatabasePublicationCommandOptions belongs only to the protected process
@@ -63,8 +64,8 @@ func PublishDatabaseUpdate(ctx context.Context, cfg *config.Config, command Data
 	if database.SchemaHealth(bounded) != nil {
 		return empty, errors.New("database update publication schema health invalid")
 	}
-	schema, dirty, err := database.SchemaVersion(bounded)
-	if err != nil || dirty || schema != db.ExpectedSchemaVersion {
+	schema, err := database.SchemaVersion(bounded)
+	if err != nil || schema != db.ExpectedSchemaVersion {
 		return empty, errors.New("database update publication current schema required")
 	}
 	restart, err := provider.NewDatabaseRestartRevoker(database.Pool(), options)

@@ -6,13 +6,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
-	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
+	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
 
 func TestOperatorChartRouteBindsAuthenticatedArchiveAndExactHelmVersion(t *testing.T) {

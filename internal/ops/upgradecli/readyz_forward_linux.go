@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 )
 
@@ -213,7 +215,7 @@ func forwardBanner(ctx context.Context, directory, name, expected string) (bool,
 		return false, errors.New("exact private forwarder capture name required")
 	}
 	parent, err := os.Lstat(directory)
-	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return false, errors.New("private forwarder capture directory differs")
 	}
 	root, err := os.OpenRoot(directory)
@@ -234,7 +236,7 @@ func forwardBanner(ctx context.Context, directory, name, expected string) (bool,
 	}
 	defer func(close func() error) { _ = close() }(file.Close)
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) || info.Sys().(*syscall.Stat_t).Nlink != 1 || info.Size() > 64<<10 {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 || info.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) || info.Sys().(*syscall.Stat_t).Nlink != 1 || info.Size() > 64<<10 {
 		return false, errors.New("forwarder progress identity or byte bound differs")
 	}
 	raw, err := io.ReadAll(io.LimitReader(file, (64<<10)+1))
@@ -242,7 +244,7 @@ func forwardBanner(ctx context.Context, directory, name, expected string) (bool,
 		return false, errors.New("read bounded forwarder progress")
 	}
 	after, err := root.Stat(name)
-	if err != nil || !os.SameFile(info, after) || !after.Mode().IsRegular() || after.Mode().Perm() != 0o600 || after.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) || after.Sys().(*syscall.Stat_t).Nlink != 1 {
+	if err != nil || !os.SameFile(info, after) || !after.Mode().IsRegular() || after.Mode().Perm() != 0o600 || after.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) || after.Sys().(*syscall.Stat_t).Nlink != 1 {
 		return false, errors.New("forwarder capture replaced during read")
 	}
 	for _, line := range strings.Split(string(raw), "\n") {

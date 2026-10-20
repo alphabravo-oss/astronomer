@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
@@ -123,8 +124,33 @@ func TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable(t *testing.T) {
 		t.Fatalf("percentage release slots = %d, want floor(25%% of 10)=2", got)
 	}
 	strategy.MaxUnavailable.Value = 0
-	if got := systemReleaseSlots(strategy, 10, counts{}); got != 0 {
-		t.Fatalf("zero unavailable budget released %d assignments", got)
+	if got := systemReleaseSlots(strategy, 10, counts{}); got != 1 {
+		t.Fatalf("zero unavailable budget released %d assignments, want 1 (serial)", got)
+	}
+}
+
+func TestSystemReleaseSlotsZeroUnavailableIsSerialNotStalled(t *testing.T) {
+	t.Parallel()
+	strategy := model.RolloutStrategy{MaxConcurrent: 10, MaxUnavailable: model.Amount{Type: model.AmountCount, Value: 0}}
+	for _, test := range []struct {
+		name    string
+		total   int32
+		current counts
+		want    int32
+	}{
+		{name: "idle fleet releases one", total: 5, want: 1},
+		{name: "one in flight blocks the next", total: 5, current: counts{inFlight: 1}, want: 0},
+		{name: "a failure halts", total: 5, current: counts{failed: 1}, want: 0},
+		{name: "soaking ready member blocks", total: 5, current: counts{immatureReady: 1}, want: 0},
+		{name: "empty fleet", total: 0, want: 0},
+	} {
+		if got := systemReleaseSlots(strategy, test.total, test.current); got != test.want {
+			t.Errorf("%s: slots=%d want=%d", test.name, got, test.want)
+		}
+	}
+	percent := model.RolloutStrategy{MaxConcurrent: 10, MaxUnavailable: model.Amount{Type: model.AmountPercent, Value: 25}}
+	if got := systemReleaseSlots(percent, 3, counts{}); got != 1 {
+		t.Errorf("25%% of a 3-member fleet floored to %d slots, want 1", got)
 	}
 }
 

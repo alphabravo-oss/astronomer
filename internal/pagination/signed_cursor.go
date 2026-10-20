@@ -10,8 +10,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 const signedCursorPrefix = "p1."

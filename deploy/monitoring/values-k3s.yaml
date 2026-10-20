@@ -1,0 +1,182 @@
+# kube-prometheus-stack overlay: k3s / single-node profile for the Astronomer
+# monitoring stack (release astronomer-monitoring, namespace
+# astronomer-monitoring). Layer it over the values Astronomer generates for the
+# cluster (and values-single-node.yaml where the Flux baseline exporters run):
+#   helm upgrade astronomer-monitoring kube-prometheus-stack --version 61.3.2 \
+#     -n astronomer-monitoring --reuse-values -f deploy/monitoring/values-k3s.yaml
+# The namespace is spelled out in the Alertmanager URLs below; change it if the
+# stack lives elsewhere.
+
+# k3s runs controller-manager, scheduler and kube-proxy inside the k3s process
+# and exposes no endpoints for them, so the chart's Services/ServiceMonitors can
+# never scrape and their *Down alerts would fire forever. Disable them (and
+# their rules) at the source instead of silencing.
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
+defaultRules:
+  rules:
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    # Size cap below the 20Gi PVC so the TSDB never fills the volume; keep it
+    # ~75% of prometheusSpec.storageSpec's request when that changes.
+    retentionSize: 15GB
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {cpu: "1", memory: 2Gi}
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    # Mounted at /etc/alertmanager/secrets/alertmanager-slack/. The Slack
+    # webhook URL lives only in this Secret (key "url"), never in values.
+    secrets: [alertmanager-slack]
+  config:
+    global:
+      resolve_timeout: 5m
+    templates:
+      - /etc/alertmanager/config/*.tmpl
+    inhibit_rules:
+      - source_matchers: ['severity = critical']
+        target_matchers: ['severity =~ warning|info']
+        equal: [namespace, alertname]
+      - source_matchers: ['severity = warning']
+        target_matchers: ['severity = info']
+        equal: [namespace, alertname]
+      - source_matchers: ['alertname = InfoInhibitor']
+        target_matchers: ['severity = info']
+        equal: [namespace]
+      - target_matchers: ['alertname = InfoInhibitor']
+    receivers:
+      - name: "null"
+      # Durable default receiver: every notification is one JSON log line of
+      # the alert-log Deployment below
+      # (kubectl logs -n astronomer-monitoring deploy/alert-log -c echo | grep '"path":"/alert"').
+      - name: alert-log
+        webhook_configs:
+          - url: http://alert-log.astronomer-monitoring.svc:8080/alert
+            send_resolved: true
+            max_alerts: 0
+      # Put a real https://hooks.slack.com/services/... URL into Secret
+      # alertmanager-slack key "url"; nothing else changes. Until then the
+      # seeded placeholder posts to alert-log's slack-ok container, which
+      # answers the literal "ok" the Slack notifier requires.
+      - name: slack
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/url
+            channel: '#alerts'
+            send_resolved: true
+            title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})'
+            text: '{{ range .Alerts }}• {{ .Labels.namespace }}/{{ or .Labels.pod .Labels.instance .Labels.job }}: {{ or .Annotations.summary .Annotations.message .Annotations.description }}{{ "\n" }}{{ end }}'
+    route:
+      receiver: alert-log
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname = "Watchdog"']
+        - receiver: slack
+          matchers: ['severity = "critical"']
+          continue: true
+        - receiver: alert-log
+          matchers: ['severity = "critical"']
+
+# Rendered by the kube-prometheus-stack release itself (templates/extra-objects.yaml,
+# passed through tpl). The Secret entry only seeds the placeholder URL: on
+# upgrade it keeps whatever "url" the Secret already holds. Drop that entry if
+# the Secret is managed elsewhere (ExternalSecrets, SOPS).
+extraManifests:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: alertmanager-slack
+      annotations:
+        helm.sh/resource-policy: keep
+    type: Opaque
+    stringData:
+      url: '{{ $s := lookup "v1" "Secret" .Release.Namespace "alertmanager-slack" }}{{ if and $s $s.data $s.data.url }}{{ $s.data.url | b64dec }}{{ else }}http://alert-log.{{ .Release.Namespace }}.svc:8081/slack-placeholder{{ end }}'
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: alert-log-response
+    data:
+      ok.txt: ok
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: alert-log
+      labels: {app.kubernetes.io/name: alert-log}
+    spec:
+      replicas: 1
+      selector:
+        matchLabels: {app.kubernetes.io/name: alert-log}
+      template:
+        metadata:
+          labels: {app.kubernetes.io/name: alert-log}
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: echo
+              # mendhak/http-https-echo:42 (Docker Hub, 2026-10)
+              image: docker.io/mendhak/http-https-echo:42@sha256:a265f55c86cb3baead76fdf379dc8e9e6440ed121874e101e60b833e05bce8d4
+              env:
+                - {name: HTTP_PORT, value: "8080"}
+                - {name: HTTPS_PORT, value: "8443"}
+                - {name: LOG_WITHOUT_NEWLINE, value: "true"}
+                - {name: ECHO_BACK_TO_CLIENT, value: "false"}
+                - {name: LOG_IGNORE_PATH, value: "/healthz"}
+              ports:
+                - {name: http, containerPort: 8080}
+              readinessProbe:
+                httpGet: {path: /healthz, port: http}
+                periodSeconds: 10
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {cpu: 200m, memory: 128Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+            - name: slack-ok
+              image: docker.io/mendhak/http-https-echo:42@sha256:a265f55c86cb3baead76fdf379dc8e9e6440ed121874e101e60b833e05bce8d4
+              env:
+                - {name: HTTP_PORT, value: "8081"}
+                - {name: HTTPS_PORT, value: "8444"}
+                - {name: OVERRIDE_RESPONSE_BODY_FILE_PATH, value: "/ok.txt"}
+              ports:
+                - {name: slack, containerPort: 8081}
+              resources:
+                requests: {cpu: 5m, memory: 32Mi}
+                limits: {cpu: 100m, memory: 96Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - {name: ok, mountPath: /app/ok.txt, subPath: ok.txt, readOnly: true}
+          volumes:
+            - name: ok
+              configMap: {name: alert-log-response}
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: alert-log
+      labels: {app.kubernetes.io/name: alert-log}
+    spec:
+      selector: {app.kubernetes.io/name: alert-log}
+      ports:
+        - {name: http, port: 8080, targetPort: http}
+        - {name: slack, port: 8081, targetPort: slack}

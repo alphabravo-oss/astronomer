@@ -8,21 +8,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 type stubLokiAttachGate struct {
 	state    lokiAttachState
-	code     string
+	code     apiutil.Code
 	msg      string
 	ok       bool
 	capCalls int
@@ -35,9 +36,9 @@ func (s *stubLokiAttachGate) LokiAttachState(context.Context) lokiAttachState {
 	return s.state
 }
 
-func (s *stubLokiAttachGate) CheckLokiAttachCapacity(context.Context, uuid.UUID) (string, string, bool) {
+func (s *stubLokiAttachGate) CheckLokiAttachCapacity(context.Context, uuid.UUID) (apiutil.Code, string, bool) {
 	if s == nil {
-		return apierror.LokiNotReady, "gate not configured", false
+		return apiutil.LokiNotReady, "gate not configured", false
 	}
 	s.capCalls++
 	return s.code, s.msg, s.ok
@@ -60,11 +61,11 @@ func attachAstronomerReq(t *testing.T, clusterID uuid.UUID, rotate bool, binding
 	t.Helper()
 	q := newLoggingFakeQuerier()
 	h := newLoggingHandlerForTest(q)
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,8 +241,8 @@ func TestAttachAstronomerLogsFreeze409(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), apierror.DegradedCapacity) {
-		t.Fatalf("body = %s, want %s", w.Body.String(), apierror.DegradedCapacity)
+	if !strings.Contains(w.Body.String(), string(apiutil.DegradedCapacity)) {
+		t.Fatalf("body = %s, want %s", w.Body.String(), apiutil.DegradedCapacity)
 	}
 }
 
@@ -250,7 +251,7 @@ func TestAttachAstronomerLogsCap409(t *testing.T) {
 	h, _, _, req := attachAstronomerReq(t, clusterID, false, loggingCreateBinding(clusterID))
 	h.SetLokiAttachGate(&stubLokiAttachGate{
 		state: lokiAttachState{Status: "healthy", IngestPublic: true, Host: "loki-ingest.example.com"},
-		code:  apierror.IngestCapExceeded,
+		code:  apiutil.IngestCapExceeded,
 		msg:   "running mode singleBinary cannot absorb another cluster",
 		ok:    false,
 	})
@@ -259,8 +260,8 @@ func TestAttachAstronomerLogsCap409(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), apierror.IngestCapExceeded) {
-		t.Fatalf("body = %s, want %s", w.Body.String(), apierror.IngestCapExceeded)
+	if !strings.Contains(w.Body.String(), string(apiutil.IngestCapExceeded)) {
+		t.Fatalf("body = %s, want %s", w.Body.String(), apiutil.IngestCapExceeded)
 	}
 }
 

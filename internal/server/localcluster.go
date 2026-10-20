@@ -5,12 +5,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log/slog"
 	"math"
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -24,6 +26,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -102,7 +105,7 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 			if len(nodes.Items) > math.MaxInt32 {
 				return nil, fmt.Errorf("local node count exceeds the supported database range")
 			}
-			nodeCount = int32(len(nodes.Items))
+			nodeCount = safeconv.Int32(len(nodes.Items))
 		}
 	}
 
@@ -152,13 +155,10 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 // release-pinned Flux distribution as adopted clusters. It retries API and
 // controller-readiness failures so the local cluster does not report delivery
 // capability until the pinned Flux controllers and APIs are actually ready.
-func ensureLocalFluxUntilReady(ctx context.Context, logger *slog.Logger) error {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func ensureLocalFluxUntilReady(ctx context.Context, logger zerolog.Logger) error {
 	restConfig, err := rest.InClusterConfig()
 	if err != nil {
-		logger.Info("local Flux bootstrap skipped: server is not running in-cluster")
+		logger.Info().Msg("local Flux bootstrap skipped: server is not running in-cluster")
 		return nil
 	}
 	restConfig, clientset, err := newLocalAgentKubernetesClient(restConfig)
@@ -184,10 +184,7 @@ func ensureLocalFluxUntilReady(ctx context.Context, logger *slog.Logger) error {
 	})
 }
 
-func retryLocalFluxBootstrap(ctx context.Context, logger *slog.Logger, retryInterval time.Duration, apply func(context.Context) error) error {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func retryLocalFluxBootstrap(ctx context.Context, logger zerolog.Logger, retryInterval time.Duration, apply func(context.Context) error) error {
 	if retryInterval <= 0 {
 		retryInterval = 30 * time.Second
 	}
@@ -201,13 +198,13 @@ func retryLocalFluxBootstrap(ctx context.Context, logger *slog.Logger, retryInte
 			return nil
 		}
 		if err := apply(ctx); err == nil {
-			logger.Info("local Flux distribution is ready")
+			logger.Info().Msg("local Flux distribution is ready")
 			return nil
 		} else {
 			if ctx.Err() != nil {
 				return nil
 			}
-			logger.Warn("local Flux bootstrap failed; retrying", "error", err)
+			logger.Warn().Err(err).Msg("local Flux bootstrap failed; retrying")
 		}
 		select {
 		case <-ctx.Done():
@@ -227,7 +224,7 @@ func retryLocalFluxBootstrap(ctx context.Context, logger *slog.Logger, retryInte
 // fails (running outside a cluster, e.g. tests or local dev), this function
 // logs a warning and returns nil — the server still comes up, just without
 // the local cluster's data plane.
-func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) error {
+func StartLocalAgent(ctx context.Context, logger zerolog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) error {
 	run, err := buildLocalAgentRuntime(ctx, logger, queries, clusterID, helmruntime.InClusterDefaults(), localAgentDeliveryConfig{})
 	if err != nil || run == nil {
 		return err
@@ -238,16 +235,13 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 
 // buildLocalAgentRuntime performs fallible setup synchronously, then returns a
 // blocking runtime that joins the tunnel, informer, and health loops.
-func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, helmRuntime helmruntime.Config, deliveryConfig localAgentDeliveryConfig) (func(context.Context) error, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func buildLocalAgentRuntime(ctx context.Context, logger zerolog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, helmRuntime helmruntime.Config, deliveryConfig localAgentDeliveryConfig) (func(context.Context) error, error) {
 
 	// Build an in-cluster k8s client. Outside a cluster (laptop dev) this will
 	// fail; we degrade gracefully.
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {
-		logger.Warn("local agent disabled: not running in-cluster", "error", err)
+		logger.Warn().Err(err).Msg("local agent disabled: not running in-cluster")
 		return nil, nil
 	}
 
@@ -285,11 +279,11 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		PrivilegeProfile:  localAgentPrivilegeProfile,
 	}
 
-	tunnelClient := agent.NewTunnelClient(cfg, logger.With("component", "local-agent"))
+	tunnelClient := agent.NewTunnelClient(cfg, logging.Slog(logger.With().Str("component", "local-agent").Logger()))
 
 	// Wire the same handlers cmd/agent/main.go installs. We register them
 	// against the same TunnelClient instance the local goroutine uses.
-	k8sProxy, err := agent.NewK8sProxyWithConfig(restCfg, logger)
+	k8sProxy, err := agent.NewK8sProxyWithConfig(restCfg, logging.Slog(logger))
 	if err != nil {
 		return nil, fmt.Errorf("create local k8s proxy: %w", err)
 	}
@@ -298,7 +292,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	// of pinned to a single 16 MiB WS frame.
 	tunnelClient.RegisterHandler(protocol.MsgK8sRequest, agent.AdaptStreamingHandler(tunnelClient, k8sProxy.HandleRequestStreaming))
 
-	execHandler := agent.NewExecHandler(clientset, restCfg, logger)
+	execHandler := agent.NewExecHandler(clientset, restCfg, logging.Slog(logger))
 	tunnelClient.RegisterHandler(protocol.MsgExecStart, agent.AdaptStreamingHandler(tunnelClient, execHandler.HandleExecStart))
 	tunnelClient.RegisterHandler(protocol.MsgExecInput, agent.AdaptVoidHandler(execHandler.HandleExecInput))
 	tunnelClient.RegisterHandler(protocol.MsgExecResize, agent.AdaptVoidHandler(execHandler.HandleExecResize))
@@ -307,23 +301,23 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		return nil
 	}))
 
-	logHandler := agent.NewLogHandler(clientset, logger)
+	logHandler := agent.NewLogHandler(clientset, logging.Slog(logger))
 	tunnelClient.RegisterHandler(protocol.MsgLogStart, agent.AdaptStreamingHandler(tunnelClient, logHandler.HandleLogStart))
 	tunnelClient.RegisterHandler(protocol.MsgLogStop, agent.AdaptVoidHandler(logHandler.HandleLogStop))
 
-	rbacSyncer := agent.NewRBACSyncer(clientset, logger)
+	rbacSyncer := agent.NewRBACSyncer(clientset, logging.Slog(logger))
 	tunnelClient.RegisterHandler(protocol.MsgRBACSyncRequest, agent.AdaptStreamingHandler(tunnelClient, rbacSyncer.HandleSyncRequest))
 
-	svcProxy := agent.NewServiceProxy(logger)
+	svcProxy := agent.NewServiceProxy(logging.Slog(logger))
 	tunnelClient.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
-	subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
+	subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logging.Slog(logger.With().Str("component", "local-agent").Logger()))
 	// P4.6 informer expansion: metadata-only informers (extra built-in
 	// kinds, Helm release Secrets, discover-if-present CRDs).
 	if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
 		subscriber.SetMetadataClient(mc)
 	} else {
-		logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
+		logger.Warn().Err(mErr).Msg("local agent: metadata client init failed; expanded informer set disabled")
 	}
 
 	var deliveryRuntime *agentdelivery.Runtime
@@ -352,7 +346,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: true},
 			Connected:            tunnelClient.IsConnected,
 			ObservationFreshness: tunnelClient.ObservationFreshnessEnabled,
-			Logger:               logger.With("component", "local-agent-delivery"),
+			Logger:               logging.Slog(logger.With().Str("component", "local-agent-delivery").Logger()),
 		}, deliveryDynamic, deliveryStore, deliveryProbe)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery runtime: %w", err)
@@ -378,7 +372,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		tunnelClient.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
 	}
 
-	helm := agent.NewHelmHandler(logger, helmRuntime)
+	helm := agent.NewHelmHandler(logging.Slog(logger), helmRuntime)
 	tunnelClient.RegisterHandler(protocol.MsgHelmInstall, helm.HandleInstall)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUpgrade, helm.HandleUpgrade)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)
@@ -388,14 +382,14 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 
 	// Health reporter — drives the heartbeat / metrics tickers that update the
 	// cluster row's last_heartbeat / agent_version / k8s_version columns.
-	health := agent.NewHealthReporter(clientset, logger, cfg.HeartbeatInterval, cfg.MetricsInterval)
+	health := agent.NewHealthReporter(clientset, logging.Slog(logger), cfg.HeartbeatInterval, cfg.MetricsInterval)
 	health.SetAgentVersion(version.Version)
 	health.SetClusterID(cfg.ClusterID)
 	health.SetPrivilegeProfile(cfg.PrivilegeProfile)
 	if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 		health.SetMetricsClient(mc)
 	} else {
-		logger.Debug("local agent metrics client unavailable", "error", err)
+		logger.Debug().Err(err).Msg("local agent metrics client unavailable")
 	}
 
 	health.SetInventorySource(subscriber)
@@ -403,7 +397,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 
 	return func(ctx context.Context) error {
 		loops := []namedRuntimeLoop{
-			namedRuntimeLoop{name: "local-agent-observers", run: func(ctx context.Context) {
+			{name: "local-agent-observers", run: func(ctx context.Context) {
 				// Wait until the tunnel reports connected so the first heartbeat isn't
 				// dropped on the floor by the send-buffer fast path and so the informer
 				// subscriber only starts once outbound STATE_UPDATE sends can succeed.
@@ -426,15 +420,11 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 						health.Start(ctx, tunnelClient.SendFunc(ctx))
 					}},
 				); err != nil {
-					logger.Error("embedded local agent observer stopped", "error", err)
+					logger.Error().Err(err).Msg("embedded local agent observer stopped")
 				}
 			}},
-			namedRuntimeLoop{name: "local-agent-tunnel", run: func(ctx context.Context) {
-				logger.Info("starting embedded local agent",
-					"cluster_id", cfg.ClusterID,
-					"agent_id", cfg.AgentID,
-					"server_url", cfg.ServerURL,
-				)
+			{name: "local-agent-tunnel", run: func(ctx context.Context) {
+				logger.Info().Str("cluster_id", cfg.ClusterID).Str("agent_id", cfg.AgentID).Str("server_url", cfg.ServerURL).Msg("starting embedded local agent")
 				// Outer retry loop: NewApp returns before httpServer.Serve is called,
 				// so the very first dial will hit "connection refused". TunnelClient's
 				// internal reconnect only starts AFTER one successful CONNECT. Wrap the
@@ -447,10 +437,10 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 					}
 					err := tunnelClient.Connect(ctx)
 					if err == nil {
-						logger.Info("local agent shut down cleanly")
+						logger.Info().Msg("local agent shut down cleanly")
 						return
 					}
-					logger.Warn("local agent tunnel exited; retrying", "error", err, "backoff", backoff.String())
+					logger.Warn().Err(err).Str("backoff", backoff.String()).Msg("local agent tunnel exited; retrying")
 					select {
 					case <-ctx.Done():
 						return
@@ -465,7 +455,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		if deliveryRuntime != nil {
 			loops = append(loops, namedRuntimeLoop{name: "local-agent-delivery", run: func(ctx context.Context) {
 				if err := deliveryRuntime.Run(ctx, tunnelClient.SendFunc(ctx)); err != nil && ctx.Err() == nil {
-					logger.Error("local delivery runtime stopped", "error", err)
+					logger.Error().Err(err).Msg("local delivery runtime stopped")
 				}
 			}})
 		}

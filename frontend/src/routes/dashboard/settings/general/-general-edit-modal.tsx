@@ -57,7 +57,7 @@ export function GeneralEditModal({ onClose }: { onClose: () => void }) {
         if (!generalForm.store.state.isSubmitting)
           void generalForm.handleSubmit();
       }}
-      title="Platform Settings"
+      title="Platform settings"
       onClose={onClose}
       size="md"
       footer={

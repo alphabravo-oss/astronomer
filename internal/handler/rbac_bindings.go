@@ -3,12 +3,13 @@ package handler
 import (
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/google/uuid"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/quota"
 )
 
 func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Request) {
@@ -20,7 +21,7 @@ func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Requ
 	offset := queryOffset32(r)
 	items, err := h.queries.ListGlobalRoleBindings(r.Context(), sqlc.ListGlobalRoleBindingsParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global role bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list global role bindings")
 		return
 	}
 	paging.Write(w, items, paging.FromPage(int(limit), int(offset), len(items)))
@@ -59,7 +60,7 @@ func (h *RBACHandler) CreateGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role binding")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create global role binding")
 		return
 	}
 	// Targeted invalidation when this is a user-scoped binding. Group-scoped
@@ -88,7 +89,7 @@ func (h *RBACHandler) DeleteGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 			return mutationAuditEvent{action: "binding.delete", resourceType: "global_role_binding", resourceID: id.String(), status: http.StatusNoContent, detail: map[string]any{"scope": "global"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Global role binding not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Global role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
@@ -110,7 +111,7 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 	if clusterID != "" {
 		parsed, parseErr := uuid.Parse(clusterID)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 			return
 		}
 		items, err = h.queries.ListClusterRoleBindingsByCluster(r.Context(), sqlc.ListClusterRoleBindingsByClusterParams{
@@ -122,7 +123,7 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 		items, err = h.queries.ListClusterRoleBindings(r.Context(), sqlc.ListClusterRoleBindingsParams{Limit: limit, Offset: offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster role bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cluster role bindings")
 		return
 	}
 	paging.Write(w, items, paging.FromPage(int(limit), int(offset), len(items)))
@@ -142,7 +143,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Cluster ID is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Cluster ID is required")
 		return
 	}
 	// A non-empty namespace scopes the binding to a single Kubernetes namespace
@@ -150,7 +151,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 	// mirroring the preview handler (rbac_effective.go).
 	if req.Namespace != "" {
 		if errs := k8svalidation.IsDNS1123Label(req.Namespace); len(errs) > 0 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 				"namespace must be a valid Kubernetes namespace")
 			return
 		}
@@ -181,7 +182,7 @@ func (h *RBACHandler) CreateClusterRoleBinding(w http.ResponseWriter, r *http.Re
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role binding")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create cluster role binding")
 		return
 	}
 	h.invalidateUser(req.UserID)
@@ -203,7 +204,7 @@ func (h *RBACHandler) DeleteClusterRoleBinding(w http.ResponseWriter, r *http.Re
 			return mutationAuditEvent{action: "binding.delete", resourceType: "cluster_role_binding", resourceID: id.String(), status: http.StatusNoContent, detail: map[string]any{"scope": "cluster"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Cluster role binding not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Cluster role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)
@@ -225,7 +226,7 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 	if projectID != "" {
 		parsed, parseErr := uuid.Parse(projectID)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 			return
 		}
 		items, err = h.queries.ListProjectRoleBindingsByProject(r.Context(), sqlc.ListProjectRoleBindingsByProjectParams{
@@ -237,7 +238,7 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 		items, err = h.queries.ListProjectRoleBindings(r.Context(), sqlc.ListProjectRoleBindingsParams{Limit: limit, Offset: offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project role bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list project role bindings")
 		return
 	}
 	paging.Write(w, items, paging.FromPage(int(limit), int(offset), len(items)))
@@ -257,7 +258,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	}
 	projectID, err := uuid.Parse(req.ProjectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Project ID is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Project ID is required")
 		return
 	}
 
@@ -275,19 +276,19 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	if h.enforcer != nil {
 		if err := h.enforcer.CheckProjectMemberAdd(r.Context(), projectID); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate project member quota")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate project member quota")
 			return
 		}
 		if userID.Valid {
 			if err := h.enforcer.CheckUserProjectAdd(r.Context(), uuid.UUID(userID.Bytes)); err != nil {
 				if qe, ok := quota.IsQuotaExceeded(err); ok {
-					WriteQuotaExceeded(w, qe)
+					WriteQuotaExceeded(w, r, qe)
 					return
 				}
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate user project quota")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate user project quota")
 				return
 			}
 		}
@@ -313,7 +314,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role binding")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create project role binding")
 		return
 	}
 	h.invalidateUser(req.UserID)
@@ -335,7 +336,7 @@ func (h *RBACHandler) DeleteProjectRoleBinding(w http.ResponseWriter, r *http.Re
 			return mutationAuditEvent{action: "binding.delete", resourceType: "project_role_binding", resourceID: id.String(), status: http.StatusNoContent, detail: map[string]any{"scope": "project"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Project role binding not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Project role binding not found")
 		return
 	}
 	h.invalidateUser(affectedUserID)

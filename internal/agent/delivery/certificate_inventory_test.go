@@ -1,10 +1,11 @@
 package delivery
 
 import (
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"strings"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestCertificateLifecycleMetadata(t *testing.T) {

@@ -2,9 +2,13 @@ package handler
 
 import (
 	"context"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
 func (h *MonitoringHandler) backendClient(ctx context.Context, clusterID string) (*imonitoring.Client, monitoringContext, bool, error) {
@@ -21,15 +25,15 @@ func (h *MonitoringHandler) backendClient(ctx context.Context, clusterID string)
 			return client, monitoringContext{Local: true, DefaultStep: joined.DefaultStepSeconds}, true, err
 		}
 		client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-			QueryURL:            joined.QueryUrl,
-			TenantID:            joined.TenantID,
-			AuthType:            joined.AuthType,
-			AuthConfig:          joined.AuthConfig,
-			AuthConfigEncrypted: joined.AuthConfigEncrypted,
-			Decryptor:           h.monitoringDecryptor(),
-			Logger:              h.log,
-			DefaultStepSeconds:  joined.DefaultStepSeconds,
-			TimeoutSeconds:      joined.TimeoutSeconds,
+			QueryURL:           joined.QueryUrl,
+			TenantID:           joined.TenantID,
+			AuthType:           joined.AuthType,
+			AuthConfig:         joined.AuthConfig,
+			AuthConfigSealed:   crypto.FromParts(joined.AuthConfigKeyID, joined.AuthConfigAlgorithm, joined.AuthConfigCiphertext, joined.AuthConfigNonce),
+			Decryptor:          h.monitoringDecryptor(),
+			Logger:             h.log,
+			DefaultStepSeconds: joined.DefaultStepSeconds,
+			TimeoutSeconds:     joined.TimeoutSeconds,
 		})
 		if err != nil {
 			return nil, monitoringContext{}, false, err
@@ -50,15 +54,15 @@ func (h *MonitoringHandler) backendClient(ctx context.Context, clusterID string)
 		return nil, monitoringContext{}, false, err
 	}
 	client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-		QueryURL:            backend.QueryUrl,
-		TenantID:            backend.TenantID,
-		AuthType:            backend.AuthType,
-		AuthConfig:          backend.AuthConfig,
-		AuthConfigEncrypted: backend.AuthConfigEncrypted,
-		Decryptor:           h.monitoringDecryptor(),
-		Logger:              h.log,
-		DefaultStepSeconds:  backend.DefaultStepSeconds,
-		TimeoutSeconds:      backend.TimeoutSeconds,
+		QueryURL:           backend.QueryUrl,
+		TenantID:           backend.TenantID,
+		AuthType:           backend.AuthType,
+		AuthConfig:         backend.AuthConfig,
+		AuthConfigSealed:   crypto.FromParts(backend.AuthConfigKeyID, backend.AuthConfigAlgorithm, backend.AuthConfigCiphertext, backend.AuthConfigNonce),
+		Decryptor:          h.monitoringDecryptor(),
+		Logger:             h.log,
+		DefaultStepSeconds: backend.DefaultStepSeconds,
+		TimeoutSeconds:     backend.TimeoutSeconds,
 	})
 	if err != nil {
 		return nil, monitoringContext{}, false, err

@@ -11,6 +11,7 @@ import (
 )
 
 func TestLoginRouteIsRateLimited(t *testing.T) {
+	t.Parallel()
 	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{Auth: handler.NewAuthHandler(nil, nil)}})
 
 	for i := 0; i < 5; i++ {

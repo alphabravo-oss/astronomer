@@ -15,10 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -182,19 +183,19 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	if cluster.IsLocal {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Direct kubeconfig is available only for adopted clusters")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Direct kubeconfig is available only for adopted clusters")
 		return
 	}
 	if err := validateDirectAccessConfig(cluster.ApiServerUrl, cluster.CaCertificate); err != nil || strings.TrimSpace(cluster.ApiServerUrl) == "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A valid external Kubernetes API endpoint must be configured before direct access can be issued")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A valid external Kubernetes API endpoint must be configured before direct access can be issued")
 		return
 	}
 	if h.directRequester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "Direct credential issuer is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "Direct credential issuer is unavailable")
 		return
 	}
 	intentDetail := map[string]any{
@@ -204,7 +205,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 	// Persist a durable intent before either the network probe or the remote
 	// TokenRequest. Audit failure therefore guarantees zero remote calls.
 	if err := h.recordDirectKubeconfigAudit(r, cluster, "cluster.direct_kubeconfig.issue_requested", http.StatusAccepted, intentDetail); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable; no direct credential request was sent")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable; no direct credential request was sent")
 		return
 	}
 	remoteRequested := false
@@ -221,7 +222,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 			if remoteRequested {
 				message = "Mandatory audit storage became unavailable; a credential may have been minted but was not returned. Wait for the 15-minute credential window to expire before retrying"
 			}
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, message)
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, message)
 			return false
 		}
 		return true
@@ -230,7 +231,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 		if !recordOutcome("preflight_failed", http.StatusServiceUnavailable, nil) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "The configured Kubernetes API endpoint is not reachable with its configured TLS identity")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "The configured Kubernetes API endpoint is not reachable with its configured TLS identity")
 		return
 	}
 
@@ -245,14 +246,14 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 		if !recordOutcome("request_failed", http.StatusServiceUnavailable, nil) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "The connected cluster agent cannot issue a scoped direct credential")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "The connected cluster agent cannot issue a scoped direct credential")
 		return
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		if !recordOutcome("denied", http.StatusServiceUnavailable, map[string]any{"member_status": response.StatusCode}) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "The member cluster denied the scoped direct credential request; update its agent manifest")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "The member cluster denied the scoped direct credential request; update its agent manifest")
 		return
 	}
 	decoded, err := base64.StdEncoding.DecodeString(response.Body)
@@ -260,7 +261,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 		if !recordOutcome("invalid_response", http.StatusServiceUnavailable, nil) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "The member cluster returned an invalid credential response")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "The member cluster returned an invalid credential response")
 		return
 	}
 	var tokenResponse directTokenResponse
@@ -268,7 +269,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 		if !recordOutcome("invalid_response", http.StatusServiceUnavailable, nil) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "The member cluster returned an invalid credential response")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "The member cluster returned an invalid credential response")
 		return
 	}
 	now := time.Now().UTC()
@@ -277,7 +278,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 		if !recordOutcome("invalid_expiry", http.StatusServiceUnavailable, nil) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "The member cluster returned a credential outside the allowed lifetime")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "The member cluster returned a credential outside the allowed lifetime")
 		return
 	}
 
@@ -287,7 +288,7 @@ func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http
 		if !recordOutcome("render_failed", http.StatusInternalServerError, nil) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RenderError, "Failed to render kubeconfig")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.RenderError, "Failed to render kubeconfig")
 		return
 	}
 	if !recordOutcome("issued", http.StatusOK, map[string]any{"expires_at": expiresAt.Format(time.RFC3339)}) {

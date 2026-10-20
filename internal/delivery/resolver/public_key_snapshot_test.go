@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestPublicKeySnapshotAuthenticatesCapturedBytesAndRejectsUnsafeInputs(t *testing.T) {

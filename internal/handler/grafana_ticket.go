@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
@@ -75,17 +75,17 @@ type grafanaTicketRedeemRequest struct {
 // The ticket is the only credential. 401 if missing/used/expired.
 func (h *MonitoringHandler) RedeemGrafanaTicket(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.grafanaTickets == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "ticket is missing, used, or expired")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "ticket is missing, used, or expired")
 		return
 	}
 	var req grafanaTicketRedeemRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "ticket is missing")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "ticket is missing")
 		return
 	}
 	ticket, err := h.grafanaTickets.Take(req.Ticket)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "ticket is missing, used, or expired")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "ticket is missing, used, or expired")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{

@@ -10,7 +10,8 @@ package sqlc
 const deferredOperationSelectColumns = `
     id, window_id, operation_type, operation_spec, target_cluster_id,
     target_project_id, status, deferred_until, expires_at, requested_by,
-    last_error, dispatched_at, created_at, updated_at`
+    last_error, dispatched_at, created_at, updated_at,
+    sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce`
 
 func scanDeferredOperationRow(row interface {
 	Scan(dest ...any) error
@@ -31,6 +32,10 @@ func scanDeferredOperationRow(row interface {
 		&operation.DispatchedAt,
 		&operation.CreatedAt,
 		&operation.UpdatedAt,
+		&operation.SealedSpecKeyID,
+		&operation.SealedSpecAlgorithm,
+		&operation.SealedSpecCiphertext,
+		&operation.SealedSpecNonce,
 	)
 	return operation, err
 }

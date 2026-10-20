@@ -250,7 +250,7 @@ func testSSOCallbackTransaction(t *testing.T, phase, mode string) {
 	if len(durable.audits) != wantAudits {
 		t.Fatalf("audits=%v", durable.audits)
 	}
-	if durable.session.UpstreamIDTokenEncrypted == "secret-upstream-token" || durable.session.Jti == "" {
+	if string(durable.session.UpstreamIDTokenCiphertext) == "secret-upstream-token" || durable.session.Jti == "" {
 		t.Fatal("invalid persisted session")
 	}
 	accessFound, refreshFound := false, false

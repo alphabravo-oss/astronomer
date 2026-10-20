@@ -5,11 +5,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (h *SupportBundleHandler) writeMeta(ctx context.Context, zw *zip.Writer, log *sectionLog) {

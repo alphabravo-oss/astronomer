@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
@@ -183,7 +185,7 @@ func RunAnomalyBaselineRecompute(ctx context.Context, q baselineRecomputeQuerier
 			}
 			recomputedClusters[baseline.ClusterID] = true
 		}
-		if int32(len(page)) < pageSize {
+		if safeconv.Int32(len(page)) < pageSize {
 			break
 		}
 	}
@@ -228,7 +230,7 @@ func recomputeOneBaseline(ctx context.Context, q baselineRecomputeQuerier, b sql
 		ClusterID:     b.ClusterID,
 		MetricName:    b.MetricName,
 		WindowSeconds: b.WindowSeconds,
-		SampleCount:   int32(stats.Count),
+		SampleCount:   safeconv.Int32(stats.Count),
 		Mean:          stats.Mean,
 		Stddev:        stats.Stddev,
 		MinValue:      stats.Min,

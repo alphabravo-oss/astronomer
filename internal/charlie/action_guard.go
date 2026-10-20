@@ -10,12 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/gowebpki/jcs"
+	"github.com/rs/zerolog"
+
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 )
 
 const (
@@ -132,7 +133,7 @@ type ActionGuard struct {
 	executor   CapabilityExecutor
 	auditor    ActionAuditor
 	now        func() time.Time
-	logger     *slog.Logger
+	logger     zerolog.Logger
 	writeFence *WriteFence
 	findings   BlockedFindingRecorder
 	installID  string
@@ -172,7 +173,7 @@ func (g *ActionGuard) SetWriteFence(fence *WriteFence) {
 
 // SetLogger attaches the product logger before the guard is exposed to the MCP
 // listener. The logger receives only the bounded DecisionLog vocabulary.
-func (g *ActionGuard) SetLogger(logger *slog.Logger) {
+func (g *ActionGuard) SetLogger(logger zerolog.Logger) {
 	if g != nil {
 		g.logger = logger
 	}

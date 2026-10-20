@@ -1,1 +1,0 @@
-{"contentRange":"","database":"trivy-java-database","layerDigest":"sha256:1254cf73abd98d76f23b23ee716a8e65fa721e04d2da4b9a27c7de21ec45585f","observedAt":"2026-10-09T23:59:54Z","qualification":false,"redirectOrigin":"https://pkg-containers.githubusercontent.com","requestedRange":"bytes=0-0","result":"guarded-fetch-denied-or-unavailable","schemaVersion":1,"statusCode":307}

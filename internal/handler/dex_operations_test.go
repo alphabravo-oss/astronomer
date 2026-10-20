@@ -33,7 +33,7 @@ func (tx *dexOperationTxFake) ReserveDexOperation(_ context.Context, arg sqlc.Re
 	now := time.Now().UTC()
 	tx.row = sqlc.DexOperation{ID: arg.ID, Action: arg.Action, TargetID: arg.TargetID,
 		IdempotencyScope: arg.IdempotencyScope, IdempotencyKey: arg.IdempotencyKey,
-		RequestDigest: arg.RequestDigest, PayloadEncrypted: arg.PayloadEncrypted,
+		RequestDigest: arg.RequestDigest, PayloadKeyID: arg.PayloadKeyID, PayloadAlgorithm: arg.PayloadAlgorithm, PayloadCiphertext: arg.PayloadCiphertext, PayloadNonce: arg.PayloadNonce,
 		Status: "pending", Phase: "queued", CreatedBy: arg.CreatedBy, CreatedAt: now, UpdatedAt: now}
 	return reserveDexOperationRow(tx.row, true), nil
 }
@@ -48,7 +48,7 @@ func reserveDexOperationRow(row sqlc.DexOperation, created bool) sqlc.ReserveDex
 	return sqlc.ReserveDexOperationRow{
 		ID: row.ID, Action: row.Action, TargetID: row.TargetID, RuntimeGeneration: row.RuntimeGeneration,
 		IdempotencyScope: row.IdempotencyScope, IdempotencyKey: row.IdempotencyKey,
-		RequestDigest: row.RequestDigest, PayloadEncrypted: row.PayloadEncrypted,
+		RequestDigest: row.RequestDigest, PayloadKeyID: row.PayloadKeyID, PayloadAlgorithm: row.PayloadAlgorithm, PayloadCiphertext: row.PayloadCiphertext, PayloadNonce: row.PayloadNonce,
 		Status: row.Status, Phase: row.Phase, AttemptCount: row.AttemptCount, LockedUntil: row.LockedUntil,
 		ErrorCode: row.ErrorCode, CreatedBy: row.CreatedBy, CompletedAt: row.CompletedAt,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, Created: created,
@@ -75,7 +75,7 @@ func TestDexApplyQueuesDurablyWithoutKubernetesAndReplaysExactlyOnce(t *testing.
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com",
 		ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, Namespace: "dex", ReleaseName: "dex",
 		RuntimeSecretName: "runtime", DeploymentName: "dex", ServiceName: "dex", RuntimeGeneration: 4,
-		PublicClients: []byte("[]"), Expiry: []byte("{}"), Extra: []byte("{}")}
+		Expiry: []byte("{}"), Extra: []byte("{}")}
 	h := NewDexHandler(q)
 	tx := &dexOperationTxFake{}
 	h.SetRunTx(func(_ context.Context, fn func(DexMutationTx) error) error { return fn(tx) })

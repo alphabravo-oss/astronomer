@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -62,26 +63,26 @@ func newSealingCatalogHandler(q *sealingCatalogQuerier) *CatalogHandler {
 func (q *sealingCatalogQuerier) CreateHelmRepository(_ context.Context, arg sqlc.CreateHelmRepositoryParams) (sqlc.HelmRepository, error) {
 	q.created = arg
 	return sqlc.HelmRepository{
-		ID:                  uuid.New(),
-		Name:                arg.Name,
-		Url:                 arg.Url,
-		RepoType:            arg.RepoType,
-		AuthType:            arg.AuthType,
-		AuthConfig:          arg.AuthConfig,
-		AuthConfigEncrypted: arg.AuthConfigEncrypted,
-		Enabled:             arg.Enabled,
+		ID:              uuid.New(),
+		Name:            arg.Name,
+		Url:             arg.Url,
+		RepoType:        arg.RepoType,
+		AuthType:        arg.AuthType,
+		AuthConfig:      arg.AuthConfig,
+		AuthConfigKeyID: arg.AuthConfigKeyID, AuthConfigAlgorithm: arg.AuthConfigAlgorithm, AuthConfigCiphertext: arg.AuthConfigCiphertext, AuthConfigNonce: arg.AuthConfigNonce,
+		Enabled: arg.Enabled,
 	}, nil
 }
 
 func (q *sealingCatalogQuerier) UpdateHelmRepository(_ context.Context, arg sqlc.UpdateHelmRepositoryParams) (sqlc.HelmRepository, error) {
 	q.updated = arg
 	return sqlc.HelmRepository{
-		ID:                  arg.ID,
-		Name:                arg.Name,
-		Url:                 arg.Url,
-		AuthType:            arg.AuthType,
-		AuthConfig:          arg.AuthConfig,
-		AuthConfigEncrypted: arg.AuthConfigEncrypted,
+		ID:              arg.ID,
+		Name:            arg.Name,
+		Url:             arg.Url,
+		AuthType:        arg.AuthType,
+		AuthConfig:      arg.AuthConfig,
+		AuthConfigKeyID: arg.AuthConfigKeyID, AuthConfigAlgorithm: arg.AuthConfigAlgorithm, AuthConfigCiphertext: arg.AuthConfigCiphertext, AuthConfigNonce: arg.AuthConfigNonce,
 	}, nil
 }
 
@@ -102,13 +103,13 @@ func (q *sealingCatalogQuerier) CountChartsPerRepository(context.Context, []uuid
 	return nil, nil
 }
 
-func testEncryptor(t *testing.T) *auth.Encryptor {
+func testEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
@@ -116,18 +117,18 @@ func testEncryptor(t *testing.T) *auth.Encryptor {
 }
 
 // sealRepo builds a stored row in the post-145 shape.
-func sealRepo(t *testing.T, enc *auth.Encryptor, name, url, authType, doc string) sqlc.HelmRepository {
+func sealRepo(t *testing.T, enc *crypto.Encryptor, name, url, authType, doc string) sqlc.HelmRepository {
 	t.Helper()
 	ciphertext, public, err := catalog.SealAuthConfig(json.RawMessage(doc), enc)
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	if ciphertext == "" {
+	if ciphertext.IsZero() {
 		t.Fatalf("fixture %q produced no ciphertext — it has no secret to protect", doc)
 	}
 	return sqlc.HelmRepository{
 		ID: uuid.New(), Name: name, Url: url, RepoType: "helm",
-		AuthType: authType, AuthConfig: public, AuthConfigEncrypted: ciphertext,
+		AuthType: authType, AuthConfig: public, AuthConfigKeyID: ciphertext.KeyID, AuthConfigAlgorithm: ciphertext.Algorithm, AuthConfigCiphertext: ciphertext.Ciphertext, AuthConfigNonce: ciphertext.Nonce,
 	}
 }
 
@@ -194,10 +195,10 @@ func TestCreateRepoSealsCredentialAtRest(t *testing.T) {
 	}
 
 	// 2. The envelope must decrypt back to the complete document.
-	if q.created.AuthConfigEncrypted == "" {
+	if q.created.AuthConfigKeyID == "" {
 		t.Fatal("auth_config_encrypted is empty: nothing was sealed")
 	}
-	plain, err := enc.Decrypt(q.created.AuthConfigEncrypted)
+	plain, err := enc.DecryptString(crypto.FromParts(q.created.AuthConfigKeyID, q.created.AuthConfigAlgorithm, q.created.AuthConfigCiphertext, q.created.AuthConfigNonce))
 	if err != nil {
 		t.Fatalf("stored ciphertext does not decrypt: %v", err)
 	}
@@ -210,7 +211,7 @@ func TestCreateRepoSealsCredentialAtRest(t *testing.T) {
 	}
 
 	// 3. The API echo must leak neither the secret nor the ciphertext.
-	if got := rec.Body.String(); strings.Contains(got, "s3cret") || strings.Contains(got, q.created.AuthConfigEncrypted) {
+	if got := rec.Body.String(); strings.Contains(got, "s3cret") || strings.Contains(got, ciphertextB64(q.created.AuthConfigCiphertext)) {
 		t.Fatalf("create response carries the credential or its ciphertext: %s", got)
 	}
 }
@@ -241,7 +242,7 @@ func TestUpdateRepoSentinelMergesAgainstDecryptedDocument(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update: status %d body %s", rec.Code, rec.Body.String())
 	}
-	plain, err := enc.Decrypt(q.updated.AuthConfigEncrypted)
+	plain, err := enc.DecryptString(crypto.FromParts(q.updated.AuthConfigKeyID, q.updated.AuthConfigAlgorithm, q.updated.AuthConfigCiphertext, q.updated.AuthConfigNonce))
 	if err != nil {
 		t.Fatalf("updated ciphertext does not decrypt: %v", err)
 	}
@@ -313,7 +314,7 @@ func TestLegacyPlaintextRowStillAuthenticatesAfterUpgrade(t *testing.T) {
 
 // TestUndecryptableCredentialSendsNoAuthorizationHeader is the anti-regression
 // for the decryptGitAuth shape (internal/worker/tasks/gitops_sync.go), which
-// returns the CIPHERTEXT when Decrypt fails. Sending a Fernet token as a
+// returns the CIPHERTEXT when Decrypt fails. Sending a age token as a
 // password produces an upstream 401 and sends the operator hunting a
 // credential problem when the actual fault is the encryption key.
 func TestUndecryptableCredentialSendsNoAuthorizationHeader(t *testing.T) {
@@ -329,7 +330,7 @@ func TestUndecryptableCredentialSendsNoAuthorizationHeader(t *testing.T) {
 	if got := req.Header.Get("Authorization"); got != "" {
 		t.Fatalf("request must carry NO Authorization header when the credential cannot be decrypted, got %q", got)
 	}
-	if strings.Contains(req.Header.Get("Authorization"), sealedUnderOldKey.AuthConfigEncrypted) {
+	if strings.Contains(req.Header.Get("Authorization"), ciphertextB64(sealedUnderOldKey.AuthConfigCiphertext)) {
 		t.Fatal("ciphertext was sent as a credential")
 	}
 
@@ -352,7 +353,7 @@ func TestUndecryptableCredentialSendsNoAuthorizationHeader(t *testing.T) {
 // TestRedactedRepositoryResponseCarriesNeitherSecretNorCiphertext.
 //
 // GET/POST/PUT /catalog/repositories serialise sqlc.HelmRepository wholesale.
-// Before this change the model gained an auth_config_encrypted field that
+// Before this change the model gained an auth_config_* sealed field that
 // would have been marshalled straight onto the wire: every catalog reader
 // would receive an offline-crackable copy of the credential.
 func TestRedactedRepositoryResponseCarriesNeitherSecretNorCiphertext(t *testing.T) {
@@ -364,8 +365,8 @@ func TestRedactedRepositoryResponseCarriesNeitherSecretNorCiphertext(t *testing.
 		`{"username":"u","password":"s3cret","token":"b34r3r-t0k3n"}`)
 	out := h.redactHelmRepository(repo)
 
-	if out.AuthConfigEncrypted != "" {
-		t.Fatalf("API response carries the ciphertext: %q", out.AuthConfigEncrypted)
+	if out.AuthConfigKeyID != "" {
+		t.Fatalf("API response carries the ciphertext: %q", crypto.FromParts(out.AuthConfigKeyID, out.AuthConfigAlgorithm, out.AuthConfigCiphertext, out.AuthConfigNonce))
 	}
 	body, err := json.Marshal(out)
 	if err != nil {
@@ -374,7 +375,7 @@ func TestRedactedRepositoryResponseCarriesNeitherSecretNorCiphertext(t *testing.
 	if strings.Contains(string(body), "s3cret") || strings.Contains(string(body), "b34r3r-t0k3n") {
 		t.Fatalf("API response carries the credential: %s", body)
 	}
-	if strings.Contains(string(body), repo.AuthConfigEncrypted) {
+	if strings.Contains(string(body), ciphertextB64(repo.AuthConfigCiphertext)) {
 		t.Fatalf("API response carries the ciphertext: %s", body)
 	}
 	// Shape preserved: the client can still see that a secret is configured
@@ -402,7 +403,7 @@ func TestRedactionFailsClosedWhenCredentialIsUndecryptable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(body), repo.AuthConfigEncrypted) {
+	if strings.Contains(string(body), ciphertextB64(repo.AuthConfigCiphertext)) {
 		t.Fatalf("undecryptable credential leaked as ciphertext: %s", body)
 	}
 	var m map[string]any
@@ -465,7 +466,7 @@ func TestTestRepoConnectionReportsUndecryptableCredential(t *testing.T) {
 	if !strings.Contains(strings.ToLower(body.Message), "decrypt") {
 		t.Fatalf("message must name the key-management fault, not an auth failure: %q", body.Message)
 	}
-	if strings.Contains(rec.Body.String(), sealedUnderOldKey.AuthConfigEncrypted) {
+	if strings.Contains(rec.Body.String(), ciphertextB64(sealedUnderOldKey.AuthConfigCiphertext)) {
 		t.Fatal("ciphertext leaked into the response body")
 	}
 }

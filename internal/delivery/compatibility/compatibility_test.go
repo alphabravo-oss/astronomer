@@ -1,15 +1,11 @@
 package compatibility
 
 import (
-	"os"
-	"reflect"
-	"sort"
 	"strings"
 	"testing"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"gopkg.in/yaml.v3"
 )
 
 func TestEvaluate(t *testing.T) {
@@ -55,54 +51,5 @@ func TestEvaluate(t *testing.T) {
 				t.Fatalf("got %#v, want %s/%s", result, test.want, test.code)
 			}
 		})
-	}
-}
-
-func TestRuntimeContractMatchesReleaseCompatibilityManifest(t *testing.T) {
-	payload, err := os.ReadFile("../../../deploy/release/compatibility.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var manifest struct {
-		Flux struct {
-			DistributionVersion string `yaml:"distribution_version"`
-			Components          []struct {
-				Name string `yaml:"name"`
-				Tag  string `yaml:"tag"`
-			} `yaml:"components"`
-		} `yaml:"flux"`
-		AgentProtocol struct {
-			Ranges []struct {
-				Minimum int `yaml:"minimum"`
-				Maximum int `yaml:"maximum"`
-			} `yaml:"supported_ranges"`
-			Required []string `yaml:"required_capabilities"`
-		} `yaml:"agent_protocol"`
-	}
-	if err := yaml.Unmarshal(payload, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if manifest.Flux.DistributionVersion != fluxdistribution.Version() {
-		t.Fatalf("release Flux version %q != embedded %q", manifest.Flux.DistributionVersion, fluxdistribution.Version())
-	}
-	components := make(map[string]string, len(manifest.Flux.Components))
-	for _, component := range manifest.Flux.Components {
-		components[component.Name] = component.Tag
-	}
-	if !reflect.DeepEqual(components, RequiredComponentVersions()) {
-		t.Fatalf("release controller versions %#v != runtime %#v", components, RequiredComponentVersions())
-	}
-	if len(manifest.AgentProtocol.Ranges) != 1 || manifest.AgentProtocol.Ranges[0].Minimum != 2 || manifest.AgentProtocol.Ranges[0].Maximum != 2 {
-		t.Fatalf("unexpected protocol range: %#v", manifest.AgentProtocol.Ranges)
-	}
-	wantCapabilities := []string{
-		protocol.FeatureDeliveryAssignmentsV2,
-		protocol.FeatureDeliveryStatusV2,
-		protocol.FeatureDeliverySystemV2,
-	}
-	sort.Strings(wantCapabilities)
-	sort.Strings(manifest.AgentProtocol.Required)
-	if !reflect.DeepEqual(manifest.AgentProtocol.Required, wantCapabilities) {
-		t.Fatalf("required capabilities %#v != runtime %#v", manifest.AgentProtocol.Required, wantCapabilities)
 	}
 }

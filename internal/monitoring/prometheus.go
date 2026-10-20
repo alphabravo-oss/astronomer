@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type BackendConfig struct {
@@ -23,8 +25,8 @@ type BackendConfig struct {
 	// projection for a sealed row, or the complete document for a row that
 	// predates migration 146.
 	AuthConfig json.RawMessage
-	// AuthConfigEncrypted is the auth_config_encrypted column. When non-empty
-	// it is authoritative and Decryptor must be able to unwrap it.
+	// AuthConfigSealed is the auth_config_* sealed column family. When
+	// non-zero it is authoritative and Decryptor must be able to open it.
 	//
 	// Both halves live on this struct — rather than the caller resolving and
 	// passing one document — because this is the ONLY live reader of the
@@ -33,9 +35,9 @@ type BackendConfig struct {
 	// stripped projection and get an upstream 401 that reads like a wrong
 	// password; a site that cannot forget to pass a column it must copy off
 	// the same row cannot make that mistake.
-	AuthConfigEncrypted string
-	// Decryptor unwraps AuthConfigEncrypted. Nil-safe: a nil decryptor reads
-	// pre-146 rows fine and declines to authenticate sealed ones.
+	AuthConfigSealed crypto.Sealed
+	// Decryptor opens AuthConfigSealed. Nil-safe: a nil decryptor reads
+	// unsealed rows fine and declines to authenticate sealed ones.
 	Decryptor Decryptor
 	// Logger records a decrypt failure. Optional; slog.Default() otherwise.
 	Logger             *slog.Logger
@@ -65,8 +67,8 @@ func NewClient(cfg BackendConfig) (*Client, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	// Migration 146: the credential lives in the Fernet envelope whenever
-	// auth_config_encrypted is non-empty.
+	// Migration 146: the credential lives in the sealed value whenever
+	// auth_config_key_id is non-empty.
 	//
 	// A decrypt failure yields NO credential and a logged error — never the
 	// ciphertext, and never a hard failure of the client. Returning an error
@@ -76,7 +78,7 @@ func NewClient(cfg BackendConfig) (*Client, error) {
 	// problem as an upstream authentication failure. The backend answers 401,
 	// the reconciler records the backend as degraded, and the log line says
 	// what actually happened.
-	resolved, resolveErr := ResolveAuthConfig(cfg.AuthConfigEncrypted, cfg.AuthConfig, cfg.Decryptor)
+	resolved, resolveErr := ResolveAuthConfig(cfg.AuthConfigSealed, cfg.AuthConfig, cfg.Decryptor)
 	if resolveErr != nil {
 		logger := cfg.Logger
 		if logger == nil {

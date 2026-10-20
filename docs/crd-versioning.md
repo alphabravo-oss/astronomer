@@ -20,7 +20,7 @@ remaining work below.
 ## Identity conversion
 
 `v1alpha1` and `v1beta1` share the **same Go types** in
-`internal/crd/types.go` — there are no field renames, removals, or shape
+`internal/operator/lifecycle/types.go` — there are no field renames, removals, or shape
 changes between the two versions. The runtime scheme registers each kind under
 both `GroupVersion` (v1alpha1) and `GroupVersionV1Beta1`, so converting an
 object from one version to the other is the identity transform.

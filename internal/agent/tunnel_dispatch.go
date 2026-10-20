@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+
+	"go.opentelemetry.io/otel/codes"
+
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"go.opentelemetry.io/otel/codes"
 )
 
 func (tc *TunnelClient) dispatchMessage(dispatchCtx context.Context, m *protocol.Message, c dispatchClass, handler MessageHandler) {

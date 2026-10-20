@@ -396,6 +396,10 @@ GROUP BY status
 	return out, nil
 }
 
+// snapshotDeliveryMetrics counts delivery state for the alerting gauges.
+// Decommissioned clusters are excluded: their deployments and controller
+// inventory can never change again, so counting them would keep the backlog,
+// stale-status and Flux alerts firing permanently.
 func snapshotDeliveryMetrics(ctx context.Context, pool *pgxpool.Pool) (deliverymetrics.DatabaseSnapshot, error) {
 	var snapshot deliverymetrics.DatabaseSnapshot
 	rows, err := pool.Query(ctx, `
@@ -419,10 +423,12 @@ FROM delivery_rollouts GROUP BY 1, 2`)
 	rows.Close()
 
 	rows, err = pool.Query(ctx, `
-SELECT phase,
-       (observed_generation <> desired_generation OR observed_spec_digest <> desired_spec_digest) AS drift,
+SELECT d.phase,
+       (d.observed_generation <> d.desired_generation OR d.observed_spec_digest <> d.desired_spec_digest) AS drift,
        COUNT(*)::bigint
-FROM cluster_deployments GROUP BY 1, 2`)
+FROM cluster_deployments AS d
+JOIN clusters AS c ON c.id = d.cluster_id AND c.decommissioned_at IS NULL
+GROUP BY 1, 2`)
 	if err != nil {
 		return snapshot, err
 	}
@@ -468,8 +474,10 @@ GROUP BY 1, 2`)
 	rows.Close()
 
 	rows, err = pool.Query(ctx, `
-SELECT compatibility_status, ready, COUNT(*)::bigint
-FROM delivery_controller_inventory GROUP BY 1, 2`)
+SELECT i.compatibility_status, i.ready, COUNT(*)::bigint
+FROM delivery_controller_inventory AS i
+JOIN clusters AS c ON c.id = i.cluster_id AND c.decommissioned_at IS NULL
+GROUP BY 1, 2`)
 	if err != nil {
 		return snapshot, err
 	}
@@ -489,9 +497,10 @@ FROM delivery_controller_inventory GROUP BY 1, 2`)
 
 	err = pool.QueryRow(ctx, `
 SELECT COUNT(*)::bigint
-FROM cluster_deployments
-WHERE phase NOT IN ('pending','removed')
-  AND (last_observed_at IS NULL OR last_observed_at < clock_timestamp() - interval '5 minutes')`).Scan(&snapshot.StaleDeployments)
+FROM cluster_deployments AS d
+JOIN clusters AS c ON c.id = d.cluster_id AND c.decommissioned_at IS NULL
+WHERE d.phase NOT IN ('pending','removed')
+  AND (d.last_observed_at IS NULL OR d.last_observed_at < clock_timestamp() - interval '5 minutes')`).Scan(&snapshot.StaleDeployments)
 	return snapshot, err
 }
 

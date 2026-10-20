@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -41,34 +41,34 @@ func NewStreamTicketHandler(store *auth.StreamTicketStore, engine *rbac.Engine, 
 
 func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.store == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StreamTicketsUnavailable, "Stream tickets are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StreamTicketsUnavailable, "Stream tickets are not configured")
 		return
 	}
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil || user.ID == "" {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid authenticated user")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid authenticated user")
 		return
 	}
 	var req StreamTicketRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	kind := auth.NormalizeStreamKind(req.StreamType)
 	if kind == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "stream_type must be one of events, registration, logs, exec, shell")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "stream_type must be one of events, registration, logs, exec, shell")
 		return
 	}
 	var clusterID uuid.UUID
 	if kind != auth.StreamKindEvents {
 		clusterID, err = uuid.Parse(req.ClusterID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "cluster_id is required for this stream type")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "cluster_id is required for this stream type")
 			return
 		}
 		// Issuance MUST match the WEAKEST redeemer of the kind, or a
@@ -111,7 +111,7 @@ func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 			// empty-scope tokens pass through (see requireTokenScope).
 			// Logs tickets stay read-eligible.
 			if !requireTokenScope(r, auth.ScopeWriteClusters) {
-				RespondRequestError(w, r, http.StatusForbidden, apierror.ScopeDenied, "Token is missing the required scope: "+auth.ScopeWriteClusters)
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.ScopeDenied, "Token is missing the required scope: "+auth.ScopeWriteClusters)
 				return
 			}
 		}
@@ -121,7 +121,7 @@ func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	token, ticket, err := h.store.Issue(userID, kind, clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TicketError, "Failed to issue stream ticket")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TicketError, "Failed to issue stream ticket")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, StreamTicketResponse{

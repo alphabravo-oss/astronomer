@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type CharlieOperationAccess interface {
@@ -27,12 +28,12 @@ func (h *CharlieOperationHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	operationID := chi.URLParam(r, "operation_id")
 	if h == nil || h.access == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie operation status is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie operation status is unavailable")
 		return
 	}
 	receipt, err := h.access.Get(r.Context(), mustUserID(actor), operationID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie operation access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie operation access is denied")
 		return
 	}
 	response := map[string]any{

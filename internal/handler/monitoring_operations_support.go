@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 type monitoringClusterOperationWriter interface {
@@ -203,7 +204,7 @@ func (h *MonitoringHandler) authorizeMonitoringOperationUpdate(w http.ResponseWr
 func (h *MonitoringHandler) authorizeMonitoringOperation(w http.ResponseWriter, r *http.Request, op sqlc.MonitoringOperation, verb rbac.Verb) bool {
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
@@ -211,11 +212,11 @@ func (h *MonitoringHandler) authorizeMonitoringOperation(w http.ResponseWriter, 
 	}
 	allowed, err := h.canAccessMonitoringOperation(r.Context(), bindings, op, verb)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve monitoring operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve monitoring operation target")
 		return false
 	}
 	if !allowed {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to access this operation")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to access this operation")
 		return false
 	}
 	return true

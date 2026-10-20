@@ -1,3 +1,4 @@
+import { CatalogResourceField } from "./catalog-resource-field";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -58,11 +59,11 @@ export function HelmValuesForm({
       <div
         className={cn(
           "space-y-4",
-          path.length > 0 &&
+          path.length === 1 &&
             "rounded-lg border border-border/60 p-4 bg-muted/20",
         )}
       >
-        {path.length > 0 && (
+        {(path.length === 1 || (path.length > 0 && schema.title)) && (
           <div>
             <h4 className="text-sm font-medium text-foreground">
               {schema.title || path[path.length - 1]}
@@ -84,6 +85,24 @@ export function HelmValuesForm({
           const rawValue =
             objectValue[key] ?? defaultValueForSchema(childSchema);
 
+          if (childSchema["x-astronomer-advanced"] && childType === "object") {
+            return (
+              <details
+                key={childPath.join(".")}
+                className="rounded-md border border-border p-3"
+              >
+                <summary className="cursor-pointer text-sm">
+                  {childSchema.title || key} — Advanced
+                </summary>
+                <HelmValuesForm
+                  schema={childSchema}
+                  value={value}
+                  onChange={onChange}
+                  path={childPath}
+                />
+              </details>
+            );
+          }
           if (childType === "object" || childType === "array") {
             return (
               <div key={childPath.join(".")} className="space-y-2">
@@ -159,7 +178,15 @@ function ScalarField({
           </span>
         )}
       </div>
-      {type === "boolean" ? (
+      {schema["x-astronomer-resource"] ? (
+        <CatalogResourceField
+          id={id}
+          kind={schema["x-astronomer-resource"]}
+          value={String(value ?? "")}
+          required={required}
+          onChange={onChange}
+        />
+      ) : type === "boolean" ? (
         <div className="inline-flex items-center gap-2 text-sm text-foreground">
           <input
             id={id}
@@ -277,7 +304,7 @@ function ArrayField({
                 className="rounded-md border border-border/50 bg-background/70 p-3 space-y-2"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="text-xs font-medium text-muted-foreground">
                     Item {index + 1}
                   </span>
                   <ActionButton

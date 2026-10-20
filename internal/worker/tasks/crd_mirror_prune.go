@@ -20,7 +20,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/mirror"
 )
 
 // CrdMirrorPruneStaleType is the periodic task identifier registered with
@@ -35,7 +35,7 @@ func NewCrdMirrorPruneStaleTask() *asynq.Task {
 }
 
 // HandleCrdMirrorPruneStale walks the five mirrored_* tables and drops
-// rows whose last_seen_at is older than crd.StaleRetention. Cron: every
+// rows whose last_seen_at is older than mirror.StaleRetention. Cron: every
 // 30 minutes. Held under the periodic-task leader lock so only one
 // replica drops rows at a time even when several workers are deployed.
 func HandleCrdMirrorPruneStale(ctx context.Context, _ *asynq.Task) error {
@@ -43,12 +43,12 @@ func HandleCrdMirrorPruneStale(ctx context.Context, _ *asynq.Task) error {
 		if runtimeDependencies(ctx).Queries == nil {
 			return fmt.Errorf("CRD mirror prune runtime is not configured")
 		}
-		q, ok := runtimeDependencies(ctx).Queries.(crd.MirrorQuerier)
+		q, ok := runtimeDependencies(ctx).Queries.(mirror.Querier)
 		if !ok {
 			return fmt.Errorf("crd mirror prune not supported by runtime querier")
 		}
-		before := time.Now().Add(-crd.StaleRetention)
-		counts, err := crd.PruneStaleAll(ctx, q, before)
+		before := time.Now().Add(-mirror.StaleRetention)
+		counts, err := mirror.PruneStaleAll(ctx, q, before)
 		if err != nil {
 			return fmt.Errorf("crd mirror prune: %w", err)
 		}
@@ -56,11 +56,11 @@ func HandleCrdMirrorPruneStale(ctx context.Context, _ *asynq.Task) error {
 		// triage SLO dashboard can pick it up without scraping the
 		// counter directly.
 		runtimeLogger(ctx).InfoContext(ctx, "crd mirror prune sweep complete",
-			"ingress_classes", counts[crd.KindIngressClass],
-			"gateway_classes", counts[crd.KindGatewayClass],
-			"network_policies", counts[crd.KindNetworkPolicy],
-			"resource_quotas", counts[crd.KindResourceQuota],
-			"limit_ranges", counts[crd.KindLimitRange],
+			"ingress_classes", counts[mirror.KindIngressClass],
+			"gateway_classes", counts[mirror.KindGatewayClass],
+			"network_policies", counts[mirror.KindNetworkPolicy],
+			"resource_quotas", counts[mirror.KindResourceQuota],
+			"limit_ranges", counts[mirror.KindLimitRange],
 			"cutoff", before.Format(time.RFC3339),
 		)
 		return nil

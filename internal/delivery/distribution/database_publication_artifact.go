@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 )
 
 // PublishSupplierChild copies a genuinely new original supplier subject. The

@@ -1,13 +1,15 @@
 package config
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/spf13/viper"
+
+	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
 
 func bindOptionalEnvironment(v *viper.Viper) error {
 	return envconfig.BindEnv(v,
 		"astronomer_encryption_key",
+		"astronomer_encryption_key_file",
 		"astronomer_internal_psk",
 		"astronomer_internal_psk_previous",
 		"github_client_id",
@@ -18,6 +20,9 @@ func bindOptionalEnvironment(v *viper.Viper) error {
 		"oidc_client_id",
 		"oidc_client_secret",
 		"agent_image_repository",
+		"registry_local",
+		"registry_fallbacks",
+		"registry_plain_http",
 		"agent_image_tag",
 		"release_manifest_path",
 		"release_mirror_mapping_path",

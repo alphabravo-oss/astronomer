@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 type deliveryResponse struct {
@@ -41,12 +42,12 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription id")
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
@@ -56,12 +57,12 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 		Offset:         queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read deliveries")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read deliveries")
 		return
 	}
 	total, err := h.queries.CountWebhookDeliveriesBySubscription(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to count webhook deliveries")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to count webhook deliveries")
 		return
 	}
 	items := make([]deliveryResponse, 0, len(rows))
@@ -78,22 +79,22 @@ func webhookDeliveryLocation(subscriptionID, deliveryID uuid.UUID) string {
 // GetDelivery returns the exact durable delivery receipt used by test and retry.
 func (h *WebhookHandler) GetDelivery(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	subID, subOK := parseUUIDParam(r, "id")
 	deliveryID, deliveryOK := parseUUIDParam(r, "delivery_id")
 	if !subOK || !deliveryOK {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription or delivery id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription or delivery id")
 		return
 	}
 	row, err := h.queries.GetWebhookDelivery(r.Context(), deliveryID)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.SubscriptionID != subID) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Delivery not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Delivery not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read delivery")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read delivery")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toDeliveryResponse(row))
@@ -102,17 +103,17 @@ func (h *WebhookHandler) GetDelivery(w http.ResponseWriter, r *http.Request) {
 // RetryDelivery handles POST /api/v1/admin/webhooks/{id}/deliveries/{delivery_id}/retry/.
 func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	subID, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription id")
 		return
 	}
 	delID, ok := parseUUIDParam(r, "delivery_id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid delivery id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid delivery id")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -120,22 +121,22 @@ func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.queries.GetWebhookDelivery(r.Context(), delID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Delivery not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Delivery not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read delivery")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read delivery")
 		return
 	}
 	if row.SubscriptionID != subID {
 		// Refuse cross-subscription retry — keeps the URL contract clean
 		// (the {id} in the path is load-bearing for the audit + RBAC
 		// view).
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Delivery does not belong to this subscription")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Delivery does not belong to this subscription")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable webhook delivery storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Durable webhook delivery storage is unavailable")
 		return
 	}
 	params := sqlc.RetryWebhookDeliveryParams{
@@ -192,10 +193,10 @@ func (h *WebhookHandler) RetryDelivery(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different webhook delivery")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different webhook delivery")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to mark delivery for retry")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to mark delivery for retry")
 		return
 	}
 	RespondAcceptedOperation(w, webhookDeliveryLocation(subID, result.delivery.ID), toDeliveryResponse(result.delivery))

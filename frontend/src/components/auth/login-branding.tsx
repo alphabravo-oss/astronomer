@@ -18,7 +18,7 @@ export function BrandMark({
     );
   }
   return (
-    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-brand-from to-brand-to flex items-center justify-center">
       <Orbit className="h-5 w-5 text-white" />
     </div>
   );

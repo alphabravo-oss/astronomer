@@ -4,16 +4,17 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // publishTemplateBindingChanged emits the metadata-only
@@ -55,7 +56,7 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	// Migration 057: maintenance window gate on cluster_template.apply.
@@ -70,12 +71,12 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 	templateID, err := uuid.Parse(req.TemplateID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid template_id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid template_id")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), templateID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster template not found")
 		return
 	}
 
@@ -87,11 +88,11 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	// time. Cluster-scoped apply, no project context, so unqualified
 	// refs require the explicit ${vault://<connection>/...} form.
 	if _, vaultErr := vaultResolveBlob(r.Context(), h.vaultResolver, uuid.Nil, string(tmpl.Spec)); vaultErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.VaultResolveFailed, vaultErr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.VaultResolveFailed, vaultErr.Error())
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "cluster template transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "cluster template transaction runner is not configured")
 		return
 	}
 
@@ -106,7 +107,7 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		TemplateID string `json:"template_id"`
 	}{ClusterID: clusterID.String(), TemplateID: tmpl.ID.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode template application request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode template application request")
 		return
 	}
 	var receipt ClusterTemplateApplicationResponse
@@ -147,10 +148,10 @@ func (h *ClusterTemplateHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different template application")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different template application")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to bind template to cluster")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.ApplyError, "Failed to bind template to cluster")
 		return
 	}
 
@@ -169,10 +170,10 @@ func (h *ClusterTemplateHandler) GetApplication(w http.ResponseWriter, r *http.R
 	app, err := h.queries.GetClusterTemplateApplication(r.Context(), clusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No template applied to this cluster")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "No template applied to this cluster")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load template application")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to load template application")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), app.TemplateID)
@@ -197,25 +198,25 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	app, err := h.queries.GetClusterTemplateApplication(r.Context(), clusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No template applied to this cluster")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "No template applied to this cluster")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load template application")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to load template application")
 		return
 	}
 	tmpl, err := h.queries.GetClusterTemplateByID(r.Context(), app.TemplateID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Template no longer exists")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Template no longer exists")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "cluster template transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "cluster template transaction runner is not configured")
 		return
 	}
 	params := sqlc.UpsertClusterTemplateApplicationParams{
@@ -228,7 +229,7 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 		ClusterID string `json:"cluster_id"`
 	}{ClusterID: clusterID.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode template reapply request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode template reapply request")
 		return
 	}
 	var receipt ClusterTemplateApplicationResponse
@@ -269,10 +270,10 @@ func (h *ClusterTemplateHandler) Reapply(w http.ResponseWriter, r *http.Request)
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different template reapply request")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different template reapply request")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to reset template application")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.ApplyError, "Failed to reset template application")
 		return
 	}
 	if !replayed {
@@ -294,7 +295,7 @@ func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) 
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -314,7 +315,7 @@ func (h *ClusterTemplateHandler) Detach(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DetachError, "Failed to detach template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DetachError, "Failed to detach template")
 		return
 	}
 	h.publishTemplateBindingChanged(clusterID, "detached")

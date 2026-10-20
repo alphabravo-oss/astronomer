@@ -11,7 +11,7 @@ import (
 func TestDistributionMirrorPolicyAndTrustReachActualServerAndWorker(t *testing.T) {
 	directory := t.TempDir()
 	manifest := filepath.Join(directory, "manifest.json")
-	if err := os.WriteFile(manifest, []byte(`{"schema_version":1,"release":{"version":"v2.0.1"}}`), 0600); err != nil {
+	if err := os.WriteFile(manifest, []byte(`{"schema_version":1,"release":{"version":"v`+chartVersion(t)+`"}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	values := filepath.Join(directory, "values.yaml")

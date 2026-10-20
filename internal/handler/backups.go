@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // BackupQuerier abstracts the backup-related database queries needed by BackupHandler.
@@ -83,7 +85,7 @@ type backupRunTxFunc func(context.Context, func(BackupMutationTx) error) error
 // tunnel K8sRequester.
 type BackupHandler struct {
 	queries    BackupQuerier
-	encryptor  *auth.Encryptor
+	encryptor  *crypto.Encryptor
 	requester  K8sRequester
 	httpClient *http.Client
 	s3Policy   *httpclient.DestinationPolicy
@@ -152,11 +154,10 @@ func (h *BackupHandler) authorizeBackup(w http.ResponseWriter, r *http.Request, 
 	return h.authz.authorizeGlobalAction(w, r, rbac.ResourceBackups, verb)
 }
 
-// SetEncryptor wires the Fernet encryptor used to round-trip cloud credentials
-// into BackupStorageConfig.encrypted_credentials. New credential-bearing
-// writes fail closed when it is absent; legacy plaintext columns are read-only
-// compatibility data and are never populated by this handler.
-func (h *BackupHandler) SetEncryptor(e *auth.Encryptor) {
+// SetEncryptor wires the age encryptor used to round-trip cloud credentials
+// into the sealed credentials_* family of backup_storage_configs.
+// Credential-bearing writes fail closed when it is absent.
+func (h *BackupHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -200,7 +201,7 @@ func (h *BackupHandler) ControllerStatus(w http.ResponseWriter, r *http.Request)
 	}
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load backups")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load backups")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)

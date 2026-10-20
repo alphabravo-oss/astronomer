@@ -249,7 +249,7 @@ function NotificationTemplateEditor() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Default subject
           </p>
           <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap overflow-auto">
@@ -257,7 +257,7 @@ function NotificationTemplateEditor() {
               <span className="text-muted-foreground">(none)</span>
             )}
           </pre>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Default body
           </p>
           <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs font-mono whitespace-pre-wrap overflow-auto max-h-96">
@@ -267,7 +267,7 @@ function NotificationTemplateEditor() {
 
         <div className="space-y-2">
           <label
-            className="text-xs uppercase tracking-wide text-muted-foreground"
+            className="text-xs text-muted-foreground"
             htmlFor="field-4e945644-222"
           >
             Override subject
@@ -285,7 +285,7 @@ function NotificationTemplateEditor() {
             )}
           </form.Field>
           <label
-            className="text-xs uppercase tracking-wide text-muted-foreground"
+            className="text-xs text-muted-foreground"
             htmlFor="field-4e945644-236"
           >
             Override body
@@ -346,7 +346,7 @@ function NotificationTemplateEditor() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Variables
           </p>
           <div className="rounded-md border border-border overflow-hidden">
@@ -395,7 +395,7 @@ function NotificationTemplateEditor() {
 
         <div className="space-y-2">
           <label
-            className="text-xs uppercase tracking-wide text-muted-foreground"
+            className="text-xs text-muted-foreground"
             htmlFor="field-4e945644-324"
           >
             Sample variables (JSON)
@@ -446,7 +446,7 @@ function NotificationTemplateEditor() {
           {preview && (
             <div className="space-y-2">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Rendered subject
                 </p>
                 <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap">
@@ -456,7 +456,7 @@ function NotificationTemplateEditor() {
                 </pre>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Rendered body
                 </p>
                 <pre className="rounded-md border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap max-h-96 overflow-auto">

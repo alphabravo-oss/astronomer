@@ -82,13 +82,18 @@ func TestHelmInstall_UsesResolvedValues_InWireOnly(t *testing.T) {
 	const originalBlob = "password: ${vault://prod/secret/db#password}\nimage: nginx\n"
 	const secret = "hunter2-rotated"
 
+	enc := newTestEncryptor(t)
+	sealedAuth, err := enc.EncryptString(`{"token":"root"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
 	conn := sqlc.VaultConnection{
-		ID: uuid.New(), Name: "prod", AuthMethod: "token", DefaultMount: "secret",
-		Enabled: true, AuthEncrypted: `{"token":"root"}`,
+		ID: uuid.New(), Name: "prod", AuthMethod: "token", DefaultMount: "secret", Enabled: true,
+		AuthKeyID: sealedAuth.KeyID, AuthAlgorithm: sealedAuth.Algorithm, AuthCiphertext: sealedAuth.Ciphertext, AuthNonce: sealedAuth.Nonce,
 	}
 	q := &hookFakeQuerier{conn: conn}
 	client := &hookFakeClient{val: map[string]any{"password": secret}}
-	resolver := avault.NewResolverWithFactory(q, nil, func(sqlc.VaultConnection, string) (avault.Client, error) {
+	resolver := avault.NewResolverWithFactory(q, enc, func(sqlc.VaultConnection, string) (avault.Client, error) {
 		return client, nil
 	})
 

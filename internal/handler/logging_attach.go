@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -94,29 +94,29 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 		state = h.lokiAttach.LokiAttachState(r.Context())
 	}
 	if strings.EqualFold(state.Status, "degraded_capacity") {
-		RespondRequestError(w, r, http.StatusConflict, apierror.DegradedCapacity,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.DegradedCapacity,
 			"Astronomer Loki is over capacity; new attaches are frozen. Existing pipelines keep their current cap.")
 		return
 	}
 	if !strings.EqualFold(state.Status, "healthy") || !state.IngestPublic || strings.TrimSpace(state.Host) == "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.LokiNotReady,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.LokiNotReady,
 			"Astronomer Loki is not healthy with a public ingest hostname")
 		return
 	}
 	if h.lokiAttach != nil {
 		if code, msg, ok := h.lokiAttach.CheckLokiAttachCapacity(r.Context(), clusterID); !ok {
 			if code == "" {
-				code = apierror.IngestCapExceeded
+				code = apiutil.IngestCapExceeded
 			}
 			if msg == "" {
 				msg = "Attaching this cluster would exceed hosted Loki ingest capacity"
 			}
-			RespondRequestError(w, r, http.StatusConflict, code, msg)
+			apiutil.WriteError(w, r, http.StatusConflict, code, msg)
 			return
 		}
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Encryption is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Encryption is not configured")
 		return
 	}
 
@@ -125,19 +125,19 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 	if !hasToken || rotate {
 		minted, mintErr := mintLokiIngestToken()
 		if mintErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to mint ingest token")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to mint ingest token")
 			return
 		}
-		sealed, encErr := h.encryptor.Encrypt(minted)
+		sealed, encErr := h.encryptor.EncryptString(minted)
 		if encErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to encrypt ingest token")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to encrypt ingest token")
 			return
 		}
 		params := sqlc.UpsertLokiIngestTokenParams{
-			ClusterID:      clusterID,
-			TokenHash:      lokiauth.HashBearer(minted),
-			TokenEncrypted: sealed,
-			CreatedByID:    currentUserUUID(r),
+			ClusterID:  clusterID,
+			TokenHash:  lokiauth.HashBearer(minted),
+			TokenKeyID: sealed.KeyID, TokenAlgorithm: sealed.Algorithm, TokenCiphertext: sealed.Ciphertext, TokenNonce: sealed.Nonce,
+			CreatedByID: currentUserUUID(r),
 		}
 		tokenParams = &params
 		plaintext = minted
@@ -169,7 +169,7 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 			}}
 		})
 	if err != nil {
-		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to attach Astronomer logs")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to attach Astronomer logs")
 		return
 	}
 	h.afterLoggingOperationCommit(result.op)

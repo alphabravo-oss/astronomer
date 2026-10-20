@@ -18,7 +18,7 @@ SET reconcile_status = 'applying', last_error = '', updated_at = now()
 WHERE id = $1 AND desired_generation = $2
   AND (reconcile_status IN ('pending', 'retrying')
        OR (reconcile_status = 'applying' AND updated_at < now() - interval '6 minutes'))
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type ClaimManagementBackupDestinationGenerationParams struct {
@@ -36,7 +36,6 @@ func (q *Queries) ClaimManagementBackupDestinationGeneration(ctx context.Context
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -51,6 +50,10 @@ func (q *Queries) ClaimManagementBackupDestinationGeneration(ctx context.Context
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
@@ -91,7 +94,7 @@ UPDATE management_backup_destinations
 SET applied_generation = $1, reconcile_status = 'ready', last_error = '',
     last_reconciled_at = now(), updated_at = now()
 WHERE id = $2 AND desired_generation = $1
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type CompleteManagementBackupDestinationGenerationParams struct {
@@ -109,7 +112,6 @@ func (q *Queries) CompleteManagementBackupDestinationGeneration(ctx context.Cont
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -124,33 +126,38 @@ func (q *Queries) CompleteManagementBackupDestinationGeneration(ctx context.Cont
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
 
 const createManagementBackupDestination = `-- name: CreateManagementBackupDestination :one
 INSERT INTO management_backup_destinations (
-    name, bucket, prefix, region, endpoint_url, encrypted_credentials,
+    name, bucket, prefix, region, endpoint_url, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce,
     schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-)
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+) VALUES ($1, $2, $3, $4, $5, $6, $13, $14, $15, $7, $8, $9, $10, $11, $12)
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type CreateManagementBackupDestinationParams struct {
-	Name                 string      `json:"name"`
-	Bucket               string      `json:"bucket"`
-	Prefix               string      `json:"prefix"`
-	Region               string      `json:"region"`
-	EndpointUrl          string      `json:"endpoint_url"`
-	EncryptedCredentials string      `json:"encrypted_credentials"`
-	Schedule             string      `json:"schedule"`
-	Enabled              bool        `json:"enabled"`
-	KeepDaily            int32       `json:"keep_daily"`
-	KeepWeekly           int32       `json:"keep_weekly"`
-	KeepMonthly          int32       `json:"keep_monthly"`
-	CreatedByID          pgtype.UUID `json:"created_by_id"`
+	Name                  string      `json:"name"`
+	Bucket                string      `json:"bucket"`
+	Prefix                string      `json:"prefix"`
+	Region                string      `json:"region"`
+	EndpointUrl           string      `json:"endpoint_url"`
+	CredentialsKeyID      string      `json:"credentials_key_id"`
+	Schedule              string      `json:"schedule"`
+	Enabled               bool        `json:"enabled"`
+	KeepDaily             int32       `json:"keep_daily"`
+	KeepWeekly            int32       `json:"keep_weekly"`
+	KeepMonthly           int32       `json:"keep_monthly"`
+	CreatedByID           pgtype.UUID `json:"created_by_id"`
+	CredentialsAlgorithm  string      `json:"credentials_algorithm"`
+	CredentialsCiphertext []byte      `json:"credentials_ciphertext"`
+	CredentialsNonce      []byte      `json:"credentials_nonce"`
 }
 
 func (q *Queries) CreateManagementBackupDestination(ctx context.Context, arg CreateManagementBackupDestinationParams) (ManagementBackupDestination, error) {
@@ -160,13 +167,16 @@ func (q *Queries) CreateManagementBackupDestination(ctx context.Context, arg Cre
 		arg.Prefix,
 		arg.Region,
 		arg.EndpointUrl,
-		arg.EncryptedCredentials,
+		arg.CredentialsKeyID,
 		arg.Schedule,
 		arg.Enabled,
 		arg.KeepDaily,
 		arg.KeepWeekly,
 		arg.KeepMonthly,
 		arg.CreatedByID,
+		arg.CredentialsAlgorithm,
+		arg.CredentialsCiphertext,
+		arg.CredentialsNonce,
 	)
 	var i ManagementBackupDestination
 	err := row.Scan(
@@ -176,7 +186,6 @@ func (q *Queries) CreateManagementBackupDestination(ctx context.Context, arg Cre
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -191,6 +200,10 @@ func (q *Queries) CreateManagementBackupDestination(ctx context.Context, arg Cre
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
@@ -200,7 +213,7 @@ UPDATE management_backup_destinations
 SET reconcile_status = 'failed', last_error = left($1, 1024),
     last_reconciled_at = now(), updated_at = now()
 WHERE id = $2 AND desired_generation = $3
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type FailManagementBackupDestinationGenerationParams struct {
@@ -219,7 +232,6 @@ func (q *Queries) FailManagementBackupDestinationGeneration(ctx context.Context,
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -234,12 +246,16 @@ func (q *Queries) FailManagementBackupDestinationGeneration(ctx context.Context,
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
 
 const getManagementBackupDestination = `-- name: GetManagementBackupDestination :one
-SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at FROM management_backup_destinations WHERE id = $1
+SELECT id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce FROM management_backup_destinations WHERE id = $1
 `
 
 func (q *Queries) GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error) {
@@ -252,7 +268,6 @@ func (q *Queries) GetManagementBackupDestination(ctx context.Context, id uuid.UU
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -267,12 +282,16 @@ func (q *Queries) GetManagementBackupDestination(ctx context.Context, id uuid.UU
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
 
 const getManagementBackupDestinationForUpdate = `-- name: GetManagementBackupDestinationForUpdate :one
-SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at FROM management_backup_destinations WHERE id = $1 FOR UPDATE
+SELECT id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce FROM management_backup_destinations WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetManagementBackupDestinationForUpdate(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error) {
@@ -285,7 +304,6 @@ func (q *Queries) GetManagementBackupDestinationForUpdate(ctx context.Context, i
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -300,13 +318,17 @@ func (q *Queries) GetManagementBackupDestinationForUpdate(ctx context.Context, i
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
 
 const listManagementBackupDestinations = `-- name: ListManagementBackupDestinations :many
 
-SELECT id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at FROM management_backup_destinations
+SELECT id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce FROM management_backup_destinations
 ORDER BY created_at ASC
 `
 
@@ -328,7 +350,6 @@ func (q *Queries) ListManagementBackupDestinations(ctx context.Context) ([]Manag
 			&i.Prefix,
 			&i.Region,
 			&i.EndpointUrl,
-			&i.EncryptedCredentials,
 			&i.Schedule,
 			&i.Enabled,
 			&i.KeepDaily,
@@ -343,6 +364,10 @@ func (q *Queries) ListManagementBackupDestinations(ctx context.Context) ([]Manag
 			&i.ReconcileStatus,
 			&i.LastError,
 			&i.LastReconciledAt,
+			&i.CredentialsKeyID,
+			&i.CredentialsAlgorithm,
+			&i.CredentialsCiphertext,
+			&i.CredentialsNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -359,7 +384,7 @@ UPDATE management_backup_destinations
 SET desired_generation = desired_generation + 1,
     desired_state = 'deleted', reconcile_status = 'pending', last_error = '', updated_at = now()
 WHERE id = $1
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 func (q *Queries) MarkManagementBackupDestinationDeleted(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error) {
@@ -372,7 +397,6 @@ func (q *Queries) MarkManagementBackupDestinationDeleted(ctx context.Context, id
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -387,6 +411,10 @@ func (q *Queries) MarkManagementBackupDestinationDeleted(ctx context.Context, id
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
@@ -396,7 +424,7 @@ UPDATE management_backup_destinations
 SET reconcile_status = 'retrying', last_error = left($1, 1024),
     last_reconciled_at = now(), updated_at = now()
 WHERE id = $2 AND desired_generation = $3
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type RetryManagementBackupDestinationGenerationParams struct {
@@ -415,7 +443,6 @@ func (q *Queries) RetryManagementBackupDestinationGeneration(ctx context.Context
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -430,6 +457,10 @@ func (q *Queries) RetryManagementBackupDestinationGeneration(ctx context.Context
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
@@ -441,7 +472,10 @@ UPDATE management_backup_destinations SET
     prefix = $4,
     region = $5,
     endpoint_url = $6,
-    encrypted_credentials = $7,
+    credentials_key_id = $7,
+    credentials_algorithm = $13,
+    credentials_ciphertext = $14,
+    credentials_nonce = $15,
     schedule = $8,
     enabled = $9,
     keep_daily = $10,
@@ -453,22 +487,25 @@ UPDATE management_backup_destinations SET
     last_error = '',
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, bucket, prefix, region, endpoint_url, encrypted_credentials, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at
+RETURNING id, name, bucket, prefix, region, endpoint_url, schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id, created_at, updated_at, desired_generation, applied_generation, desired_state, reconcile_status, last_error, last_reconciled_at, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type UpdateManagementBackupDestinationParams struct {
-	ID                   uuid.UUID `json:"id"`
-	Name                 string    `json:"name"`
-	Bucket               string    `json:"bucket"`
-	Prefix               string    `json:"prefix"`
-	Region               string    `json:"region"`
-	EndpointUrl          string    `json:"endpoint_url"`
-	EncryptedCredentials string    `json:"encrypted_credentials"`
-	Schedule             string    `json:"schedule"`
-	Enabled              bool      `json:"enabled"`
-	KeepDaily            int32     `json:"keep_daily"`
-	KeepWeekly           int32     `json:"keep_weekly"`
-	KeepMonthly          int32     `json:"keep_monthly"`
+	ID                    uuid.UUID `json:"id"`
+	Name                  string    `json:"name"`
+	Bucket                string    `json:"bucket"`
+	Prefix                string    `json:"prefix"`
+	Region                string    `json:"region"`
+	EndpointUrl           string    `json:"endpoint_url"`
+	CredentialsKeyID      string    `json:"credentials_key_id"`
+	Schedule              string    `json:"schedule"`
+	Enabled               bool      `json:"enabled"`
+	KeepDaily             int32     `json:"keep_daily"`
+	KeepWeekly            int32     `json:"keep_weekly"`
+	KeepMonthly           int32     `json:"keep_monthly"`
+	CredentialsAlgorithm  string    `json:"credentials_algorithm"`
+	CredentialsCiphertext []byte    `json:"credentials_ciphertext"`
+	CredentialsNonce      []byte    `json:"credentials_nonce"`
 }
 
 func (q *Queries) UpdateManagementBackupDestination(ctx context.Context, arg UpdateManagementBackupDestinationParams) (ManagementBackupDestination, error) {
@@ -479,12 +516,15 @@ func (q *Queries) UpdateManagementBackupDestination(ctx context.Context, arg Upd
 		arg.Prefix,
 		arg.Region,
 		arg.EndpointUrl,
-		arg.EncryptedCredentials,
+		arg.CredentialsKeyID,
 		arg.Schedule,
 		arg.Enabled,
 		arg.KeepDaily,
 		arg.KeepWeekly,
 		arg.KeepMonthly,
+		arg.CredentialsAlgorithm,
+		arg.CredentialsCiphertext,
+		arg.CredentialsNonce,
 	)
 	var i ManagementBackupDestination
 	err := row.Scan(
@@ -494,7 +534,6 @@ func (q *Queries) UpdateManagementBackupDestination(ctx context.Context, arg Upd
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.EncryptedCredentials,
 		&i.Schedule,
 		&i.Enabled,
 		&i.KeepDaily,
@@ -509,6 +548,10 @@ func (q *Queries) UpdateManagementBackupDestination(ctx context.Context, arg Upd
 		&i.ReconcileStatus,
 		&i.LastError,
 		&i.LastReconciledAt,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }

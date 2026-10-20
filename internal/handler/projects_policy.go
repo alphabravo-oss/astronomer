@@ -5,38 +5,39 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
-	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
+	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 )
 
 func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 
 	var req UpdateProjectPolicyRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.normalizeLegacyQuotaFields()
 
 	existing, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to check project ownership")
 		return
 	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, blocked)
 		return
 	}
 
@@ -48,11 +49,11 @@ func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 		NetworkPolicyMode:        req.NetworkPolicyMode,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project policy")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project policy")
 		return
 	}
 	h.recordProjectAudit(r, "project.update_policy", updated, map[string]any{
@@ -83,23 +84,23 @@ func (h *ProjectHandler) QuotaUsage(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable, "Cluster tunnel is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TunnelUnavailable, "Cluster tunnel is not configured")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 
 	rows, err := h.queries.ListProjectNamespaces(r.Context(), project.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project namespaces")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list project namespaces")
 		return
 	}
 
@@ -127,7 +128,7 @@ func (h *ProjectHandler) QuotaUsage(w http.ResponseWriter, r *http.Request) {
 	projectCap := projectquota.Cap{CPU: project.ResourceQuotaCpuLimit, Memory: project.ResourceQuotaMemoryLimit, Pods: project.ResourceQuotaPodCount}
 	allocations, allocationErr := projectquota.Allocate(projectCap, namespaces)
 	if allocationErr != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Project resource cap is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Project resource cap is invalid")
 		return
 	}
 	clusterNameCache := map[uuid.UUID]string{}

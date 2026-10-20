@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -16,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -46,7 +47,7 @@ func (tx *resourceOperationMutationTx) CreateResourceOperationIdempotent(_ conte
 		ID: uuid.New(), IdempotencyScope: arg.IdempotencyScope, IdempotencyKey: arg.IdempotencyKey,
 		RequestDigest: arg.RequestDigest, ClusterID: arg.ClusterID, ResourceType: arg.ResourceType,
 		Namespace: arg.Namespace, ResourceName: arg.ResourceName, Action: arg.Action,
-		ApiPath: arg.ApiPath, RequiredVerb: arg.RequiredVerb, ManifestEncrypted: arg.ManifestEncrypted, ForceApply: arg.ForceApply,
+		ApiPath: arg.ApiPath, RequiredVerb: arg.RequiredVerb, ManifestKeyID: arg.ManifestKeyID, ManifestAlgorithm: arg.ManifestAlgorithm, ManifestCiphertext: arg.ManifestCiphertext, ManifestNonce: arg.ManifestNonce, ForceApply: arg.ForceApply,
 		Generation: 1, Status: "pending", CreatedByID: arg.CreatedByID, CreatedAt: now, UpdatedAt: now,
 	}
 	return tx.operation, nil
@@ -84,13 +85,13 @@ func (p *resourceOperationRequesterProbe) Do(context.Context, string, string, st
 	return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: "e30="}, nil
 }
 
-func resourceOperationEncryptor(t *testing.T) *auth.Encryptor {
+func resourceOperationEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +131,10 @@ func TestResourceCreateCommitsEncryptedOperationIdentifierTaskAndAuditBefore202(
 	if len(tx.creates) != 1 || len(tx.tasks) != 1 || len(tx.audits) != 1 {
 		t.Fatalf("operation/task/audit=%d/%d/%d", len(tx.creates), len(tx.tasks), len(tx.audits))
 	}
-	if strings.Contains(tx.creates[0].ManifestEncrypted, sentinel) || tx.creates[0].ManifestEncrypted == manifest {
+	if strings.Contains(string(tx.creates[0].ManifestCiphertext), sentinel) || string(tx.creates[0].ManifestCiphertext) == manifest {
 		t.Fatalf("manifest was not encrypted at rest")
 	}
-	plaintext, err := enc.DecryptBytes(tx.creates[0].ManifestEncrypted)
+	plaintext, err := enc.Decrypt(crypto.FromParts(tx.creates[0].ManifestKeyID, tx.creates[0].ManifestAlgorithm, tx.creates[0].ManifestCiphertext, tx.creates[0].ManifestNonce))
 	if err != nil || string(plaintext) != manifest {
 		t.Fatalf("handler ciphertext is not worker-compatible: err=%v", err)
 	}

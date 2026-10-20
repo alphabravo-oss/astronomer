@@ -7,7 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 const (
@@ -22,11 +22,11 @@ func readAdminDLQPage(w http.ResponseWriter, r *http.Request) (int, bool, bool) 
 	// ParseQuery, unlike URL.Query, reports malformed escaping and separators.
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "queue pagination query is malformed")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "queue pagination query is malformed")
 		return 0, false, false
 	}
 	if query.Has("cursor") || query.Has("offset") || query.Has("limit") {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "this queue supports fixed-size native page pagination")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "this queue supports fixed-size native page pagination")
 		return 0, false, false
 	}
 	values, supplied := query["page"]
@@ -34,12 +34,12 @@ func readAdminDLQPage(w http.ResponseWriter, r *http.Request) (int, bool, bool) 
 		return 1, false, true
 	}
 	if len(values) != 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "page must be one integer in 1..10000")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "page must be one integer in 1..10000")
 		return 0, true, false
 	}
 	page, parseErr := strconv.ParseUint(values[0], 10, 14)
 	if parseErr != nil || page < 1 || page > maxAdminDLQPage {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "page must be one integer in 1..10000")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "page must be one integer in 1..10000")
 		return 0, true, false
 	}
 	return int(page), true, true
@@ -54,7 +54,7 @@ func validAdminQueueInfo(info *asynq.QueueInfo) bool {
 // after it returns; cancellation cannot interrupt an in-flight vendor call.
 func adminQueueRequestActive(w http.ResponseWriter, r *http.Request) bool {
 	if r.Context().Err() != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection no longer active")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InspectorUnavailable, "queue inspection no longer active")
 		return false
 	}
 	return true

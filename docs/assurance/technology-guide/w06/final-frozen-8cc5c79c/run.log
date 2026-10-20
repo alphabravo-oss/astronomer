@@ -1,7 +1,0 @@
-type-check pass 4.309
-lint pass 39.525
-code-health pass 13.688
-full-vitest pass 604.778
-production-build-csp pass 13.413
-bundle-budget pass 0.554
-browser-components pass 24.367

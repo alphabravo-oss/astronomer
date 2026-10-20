@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit(t *testing.T) {
@@ -18,7 +19,7 @@ func TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit(t *testing.T) {
 		code     string
 		status   int
 		response string
-	}{{"23503", http.StatusConflict, "resource_in_use"}, {"23001", http.StatusConflict, "resource_in_use"}, {"08006", http.StatusInternalServerError, "internal_error"}} {
+	}{{"23503", http.StatusConflict, "resource_in_use"}, {"23001", http.StatusConflict, "resource_in_use"}, {"08006", http.StatusServiceUnavailable, "db_unavailable"}} {
 		t.Run(item.code, func(t *testing.T) {
 			project, id := uuid.New(), uuid.New()
 			calls, commits := 0, 0

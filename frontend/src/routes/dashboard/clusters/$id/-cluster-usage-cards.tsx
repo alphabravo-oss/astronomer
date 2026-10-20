@@ -4,6 +4,7 @@ import type { useClusterMetricsSummary } from "@/lib/hooks/workloads";
 import { formatBytes, formatCPU } from "@/lib/utils";
 import type { Cluster } from "@/types";
 import { usageCardView } from "./-cluster-status";
+import { useClusterInventoryCounts } from "@/components/layout/use-sidebar-resource-counts";
 
 /**
  * Overview metric cards. When neither the live summary nor the cached cluster
@@ -21,6 +22,13 @@ export function ClusterUsageCards({
   metricsSummary: ReturnType<typeof useClusterMetricsSummary>["data"];
   metricsError: boolean;
 }) {
+  // Nodes/Pods read from the same inventory counts the Inventory section
+  // (and formerly the sidebar) uses, so the KPI can never contradict them.
+  const inventory = useClusterInventoryCounts(clusterId);
+  const nodeCount =
+    inventory.nodes ?? metricsSummary?.nodeCount ?? cluster.nodeCount ?? null;
+  const podCount =
+    inventory.pods ?? metricsSummary?.podCount ?? cluster.podCount ?? null;
   const cpuPct = metricsSummary?.cpuPercentage ?? cluster.cpuPercentage ?? null;
   const cpuUsage = metricsSummary?.cpuUsage ?? cluster.cpuUsage ?? null;
   const cpuCap = metricsSummary?.cpuCapacity ?? cluster.cpuCapacity ?? null;
@@ -60,7 +68,7 @@ export function ClusterUsageCards({
       ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="CPU Usage"
+          title="CPU usage"
           href={`/dashboard/clusters/${clusterId}/metrics`}
           value={cpuView.value}
           percentage={cpuView.percentage}
@@ -68,7 +76,7 @@ export function ClusterUsageCards({
           icon={<Cpu className="h-4 w-4" />}
         />
         <MetricCard
-          title="Memory Usage"
+          title="Memory usage"
           href={`/dashboard/clusters/${clusterId}/metrics`}
           value={memView.value}
           percentage={memView.percentage}
@@ -78,13 +86,13 @@ export function ClusterUsageCards({
         <MetricCard
           title="Nodes"
           href={`/dashboard/clusters/${clusterId}/nodes`}
-          value={metricsSummary?.nodeCount ?? cluster.nodeCount ?? 0}
+          value={nodeCount ?? "—"}
           icon={<Server className="h-4 w-4" />}
         />
         <MetricCard
           title="Pods"
           href={`/dashboard/clusters/${clusterId}/pods`}
-          value={metricsSummary?.podCount ?? cluster.podCount ?? 0}
+          value={podCount ?? "—"}
           subtitle={
             metricsSummary && Number.isFinite(metricsSummary.podCapacity)
               ? `of ${metricsSummary.podCapacity} capacity`

@@ -14,7 +14,7 @@
 //
 // Auth: a short-lived HMAC envelope over the request path, body, cluster,
 // nonce and originating user. Every server replica reads the same dedicated
-// ASTRONOMER_INTERNAL_PSK; the Fernet key is never reused for this purpose.
+// ASTRONOMER_INTERNAL_PSK; the column-encryption key is never reused for this purpose.
 
 package tunnel
 

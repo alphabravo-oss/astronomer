@@ -4,8 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 func TestManagementBackupObservationUsesBoundedRetryCadence(t *testing.T) {

@@ -8,12 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 type mcpRuntimeQueries interface {
@@ -48,7 +49,7 @@ type MCPRuntime struct {
 	safety   LiveActionSafety
 	executor CapabilityExecutor
 	receipts *AmbiguousReceiptReconciler
-	logger   *slog.Logger
+	logger   zerolog.Logger
 
 	lifecycle  sync.Mutex
 	mu         sync.Mutex
@@ -58,7 +59,7 @@ type MCPRuntime struct {
 	ticker     func(time.Duration) runtimeTicker
 }
 
-func NewMCPRuntime(config MCPRuntimeConfig, features featureReader, queries mcpRuntimeQueries, bindings LiveBindingResolver, safety LiveActionSafety, executor CapabilityExecutor, logger *slog.Logger) (*MCPRuntime, error) {
+func NewMCPRuntime(config MCPRuntimeConfig, features featureReader, queries mcpRuntimeQueries, bindings LiveBindingResolver, safety LiveActionSafety, executor CapabilityExecutor, logger zerolog.Logger) (*MCPRuntime, error) {
 	if strings.TrimSpace(config.Listener.Address) == "" {
 		return nil, nil
 	}
@@ -69,9 +70,6 @@ func NewMCPRuntime(config MCPRuntimeConfig, features featureReader, queries mcpR
 	}
 	if config.PollInterval <= 0 {
 		config.PollInterval = 5 * time.Second
-	}
-	if logger == nil {
-		logger = slog.Default()
 	}
 	if config.WriteFence == nil {
 		config.WriteFence = NewWriteFence()
@@ -243,7 +241,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	r.connection = connectionKey
 	r.material = material
 	r.mu.Unlock()
-	go r.serve(listener)
+	go r.serve(listener) // #nosec G118 -- MCP listener lifecycle goroutine is owned by the runtime manager, not by a request
 	if hadListener {
 		observeMCPListener("restarted")
 	} else {

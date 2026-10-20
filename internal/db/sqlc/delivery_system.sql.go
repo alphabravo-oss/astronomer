@@ -86,39 +86,42 @@ WITH assigned AS (
     ORDER BY generation DESC
     LIMIT 1
 )
-SELECT r.id, r.release_sequence, r.version, r.artifact_url, r.artifact_digest, r.distribution_digest, r.agent_version, r.agent_image, r.minimum_kubernetes, r.maximum_kubernetes, r.crd_storage_version, r.previous_storage_version, r.interval, r.timeout, r.verification_policy, r.registry_credential_encrypted, r.credential_key_version, r.credential_epoch, r.spec_digest, r.state, r.released_at, r.retired_at, r.created_by, r.created_at, selected.generation AS assignment_generation,
+SELECT r.id, r.release_sequence, r.version, r.artifact_url, r.artifact_digest, r.distribution_digest, r.agent_version, r.agent_image, r.minimum_kubernetes, r.maximum_kubernetes, r.crd_storage_version, r.previous_storage_version, r.interval, r.timeout, r.verification_policy, r.credential_key_version, r.credential_epoch, r.spec_digest, r.state, r.released_at, r.retired_at, r.created_by, r.created_at, r.registry_credential_key_id, r.registry_credential_algorithm, r.registry_credential_ciphertext, r.registry_credential_nonce, selected.generation AS assignment_generation,
        selected.phase AS assignment_phase
 FROM selected
 JOIN delivery_system_releases r ON r.id = selected.release_id
 `
 
 type GetClusterDeliverySystemReleaseRow struct {
-	ID                          uuid.UUID          `json:"id"`
-	ReleaseSequence             int64              `json:"release_sequence"`
-	Version                     string             `json:"version"`
-	ArtifactUrl                 string             `json:"artifact_url"`
-	ArtifactDigest              string             `json:"artifact_digest"`
-	DistributionDigest          string             `json:"distribution_digest"`
-	AgentVersion                string             `json:"agent_version"`
-	AgentImage                  string             `json:"agent_image"`
-	MinimumKubernetes           string             `json:"minimum_kubernetes"`
-	MaximumKubernetes           string             `json:"maximum_kubernetes"`
-	CrdStorageVersion           string             `json:"crd_storage_version"`
-	PreviousStorageVersion      string             `json:"previous_storage_version"`
-	Interval                    string             `json:"interval"`
-	Timeout                     string             `json:"timeout"`
-	VerificationPolicy          json.RawMessage    `json:"verification_policy"`
-	RegistryCredentialEncrypted string             `json:"registry_credential_encrypted"`
-	CredentialKeyVersion        int32              `json:"credential_key_version"`
-	CredentialEpoch             int64              `json:"credential_epoch"`
-	SpecDigest                  string             `json:"spec_digest"`
-	State                       string             `json:"state"`
-	ReleasedAt                  pgtype.Timestamptz `json:"released_at"`
-	RetiredAt                   pgtype.Timestamptz `json:"retired_at"`
-	CreatedBy                   pgtype.UUID        `json:"created_by"`
-	CreatedAt                   time.Time          `json:"created_at"`
-	AssignmentGeneration        int64              `json:"assignment_generation"`
-	AssignmentPhase             string             `json:"assignment_phase"`
+	ID                           uuid.UUID          `json:"id"`
+	ReleaseSequence              int64              `json:"release_sequence"`
+	Version                      string             `json:"version"`
+	ArtifactUrl                  string             `json:"artifact_url"`
+	ArtifactDigest               string             `json:"artifact_digest"`
+	DistributionDigest           string             `json:"distribution_digest"`
+	AgentVersion                 string             `json:"agent_version"`
+	AgentImage                   string             `json:"agent_image"`
+	MinimumKubernetes            string             `json:"minimum_kubernetes"`
+	MaximumKubernetes            string             `json:"maximum_kubernetes"`
+	CrdStorageVersion            string             `json:"crd_storage_version"`
+	PreviousStorageVersion       string             `json:"previous_storage_version"`
+	Interval                     string             `json:"interval"`
+	Timeout                      string             `json:"timeout"`
+	VerificationPolicy           json.RawMessage    `json:"verification_policy"`
+	CredentialKeyVersion         int32              `json:"credential_key_version"`
+	CredentialEpoch              int64              `json:"credential_epoch"`
+	SpecDigest                   string             `json:"spec_digest"`
+	State                        string             `json:"state"`
+	ReleasedAt                   pgtype.Timestamptz `json:"released_at"`
+	RetiredAt                    pgtype.Timestamptz `json:"retired_at"`
+	CreatedBy                    pgtype.UUID        `json:"created_by"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	RegistryCredentialKeyID      string             `json:"registry_credential_key_id"`
+	RegistryCredentialAlgorithm  string             `json:"registry_credential_algorithm"`
+	RegistryCredentialCiphertext []byte             `json:"registry_credential_ciphertext"`
+	RegistryCredentialNonce      []byte             `json:"registry_credential_nonce"`
+	AssignmentGeneration         int64              `json:"assignment_generation"`
+	AssignmentPhase              string             `json:"assignment_phase"`
 }
 
 func (q *Queries) GetClusterDeliverySystemRelease(ctx context.Context, clusterID uuid.UUID) (GetClusterDeliverySystemReleaseRow, error) {
@@ -140,7 +143,6 @@ func (q *Queries) GetClusterDeliverySystemRelease(ctx context.Context, clusterID
 		&i.Interval,
 		&i.Timeout,
 		&i.VerificationPolicy,
-		&i.RegistryCredentialEncrypted,
 		&i.CredentialKeyVersion,
 		&i.CredentialEpoch,
 		&i.SpecDigest,
@@ -149,6 +151,10 @@ func (q *Queries) GetClusterDeliverySystemRelease(ctx context.Context, clusterID
 		&i.RetiredAt,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.RegistryCredentialKeyID,
+		&i.RegistryCredentialAlgorithm,
+		&i.RegistryCredentialCiphertext,
+		&i.RegistryCredentialNonce,
 		&i.AssignmentGeneration,
 		&i.AssignmentPhase,
 	)
@@ -200,7 +206,7 @@ type ListDeliverySystemReleasesRow struct {
 }
 
 // Signed downstream delivery-system releases and staged rollout state.
-// Public projections deliberately omit registry_credential_encrypted.
+// Public projections deliberately omit registry_credential_{key_id,algorithm,ciphertext,nonce}.
 func (q *Queries) ListDeliverySystemReleases(ctx context.Context, arg ListDeliverySystemReleasesParams) ([]ListDeliverySystemReleasesRow, error) {
 	rows, err := q.db.Query(ctx, listDeliverySystemReleases, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
@@ -254,18 +260,17 @@ WITH seeded AS (
     FROM delivery_system_releases r
     WHERE r.state = 'released'
     ON CONFLICT (cluster_id) DO NOTHING
-), current AS (
-    SELECT a.cluster_id, a.phase
-    FROM delivery_system_cluster_assignments a
-    WHERE a.cluster_id = $1
-    FOR UPDATE
 ), updated AS (
     UPDATE delivery_system_cluster_assignments a
     SET observed_distribution_digest = $2::text,
         observed_agent_version = $3::text,
         last_observed_at = $4,
         acknowledged_at = COALESCE(acknowledged_at, $4),
+        -- pending (cohort not yet released by ReleaseSystemRolloutNextCohort)
+        -- and aborted assignments only record the observation: promoting them
+        -- would count an unreleased cluster as done and stall the engine.
         phase = CASE
+            WHEN a.phase IN ('pending','aborted') THEN a.phase
             WHEN $5::boolean
              AND $2::text = r.distribution_digest
              AND $3::text = r.agent_version
@@ -280,6 +285,7 @@ WITH seeded AS (
             ELSE 'applying'
         END,
         ready_at = CASE
+            WHEN a.phase IN ('pending','aborted') THEN a.ready_at
             WHEN $5::boolean
              AND $2::text = r.distribution_digest
              AND $3::text = r.agent_version
@@ -289,12 +295,19 @@ WITH seeded AS (
              AND $2::text = r.distribution_digest
              AND $3::text = r.agent_version THEN ''
             ELSE $7::text END
-    FROM delivery_system_releases r
+    -- prev captures the pre-update phase inside the UPDATE itself. A separate
+    -- ` + "`" + `SELECT ... FOR UPDATE` + "`" + ` CTE joined afterwards skips the row this same
+    -- command already updated, so the statement returned no row at all.
+    FROM delivery_system_releases r,
+         (SELECT p.cluster_id, p.phase
+          FROM delivery_system_cluster_assignments p
+          WHERE p.cluster_id = $1
+          FOR UPDATE) prev
     WHERE a.cluster_id = $1 AND r.id = a.desired_release_id
-    RETURNING a.cluster_id, a.desired_release_id, a.previous_release_id, a.rollout_id, a.generation, a.cohort, a.release_order, a.phase, a.fence, a.released_at, a.acknowledged_at, a.ready_at, a.deadline, a.observed_distribution_digest, a.observed_agent_version, a.last_error_code, a.last_observed_at, a.created_at, a.updated_at
+      AND prev.cluster_id = a.cluster_id
+    RETURNING a.cluster_id, a.desired_release_id, a.previous_release_id, a.rollout_id, a.generation, a.cohort, a.release_order, a.phase, a.fence, a.released_at, a.acknowledged_at, a.ready_at, a.deadline, a.observed_distribution_digest, a.observed_agent_version, a.last_error_code, a.last_observed_at, a.created_at, a.updated_at, prev.phase AS previous_phase
 )
-SELECT updated.cluster_id, updated.desired_release_id, updated.previous_release_id, updated.rollout_id, updated.generation, updated.cohort, updated.release_order, updated.phase, updated.fence, updated.released_at, updated.acknowledged_at, updated.ready_at, updated.deadline, updated.observed_distribution_digest, updated.observed_agent_version, updated.last_error_code, updated.last_observed_at, updated.created_at, updated.updated_at, current.phase AS previous_phase
-FROM updated JOIN current USING (cluster_id)
+SELECT cluster_id, desired_release_id, previous_release_id, rollout_id, generation, cohort, release_order, phase, fence, released_at, acknowledged_at, ready_at, deadline, observed_distribution_digest, observed_agent_version, last_error_code, last_observed_at, created_at, updated_at, previous_phase FROM updated
 `
 
 type ObserveDeliverySystemAssignmentParams struct {

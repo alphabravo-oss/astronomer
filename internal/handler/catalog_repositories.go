@@ -11,15 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/catalog"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // --- Helm Repositories ---
@@ -50,12 +51,12 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 	if pidRaw := r.URL.Query().Get("project_id"); pidRaw != "" {
 		pid, err := uuid.Parse(pidRaw)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project_id query param")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project_id query param")
 			return
 		}
 		rows, err := h.queries.ListCatalogsForProject(r.Context(), pid)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project catalogs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list project catalogs")
 			return
 		}
 		// ListCatalogsForProject returns the full authorized set.
@@ -69,12 +70,12 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 			Offset: offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalogs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list catalogs")
 			return
 		}
 		total, err := h.queries.CountHelmRepositories(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count repositories")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count repositories")
 			return
 		}
 		paging.Write(w, helmRepositoriesToResponse(h.redactHelmRepositories(rows), h.chartCountsFor(r.Context(), rows)), paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(rows)))
@@ -91,13 +92,13 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list repositories")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list repositories")
 		return
 	}
 
 	total, err := h.queries.CountGlobalHelmRepositories(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count repositories")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count repositories")
 		return
 	}
 
@@ -152,7 +153,7 @@ func rejectMisplacedCredentials(w http.ResponseWriter, r *http.Request, f mispla
 	if f.Username == "" && f.Password == "" && f.Token == "" {
 		return true
 	}
-	RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+	apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 		`Credentials belong in auth_config, not at the top level of the request: `+
 			`{"auth_type":"basic","auth_config":{"username":"...","password":"..."}}`)
 	return false
@@ -175,12 +176,12 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, catalog.ErrRepositoryCredentialEncryptionUnavailable):
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Repository credential encryption is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CryptoError, "Repository credential encryption is unavailable")
 		case catalog.IsValidationError(err):
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		default:
 			h.log.Error("prepare chart repository credential", "repository", req.Name, "error", err)
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to secure repository credentials")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to secure repository credentials")
 		}
 		return
 	}
@@ -194,7 +195,7 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 			}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create repository")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create repository")
 		return
 	}
 
@@ -208,13 +209,13 @@ func (h *CatalogHandler) CreateRepo(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) GetRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid repository ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid repository ID")
 		return
 	}
 
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Repository not found")
 		return
 	}
 
@@ -254,7 +255,7 @@ type UpdateRepoRequest struct {
 func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid repository ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid repository ID")
 		return
 	}
 
@@ -270,7 +271,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	// omitted field falls back to.
 	existing, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Repository not found")
 		return
 	}
 
@@ -282,16 +283,16 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 	if prepareErr != nil {
 		switch {
 		case errors.Is(prepareErr, catalog.ErrRepositoryCredentialEncryptionUnavailable):
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Repository credential encryption is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CryptoError, "Repository credential encryption is unavailable")
 		case catalog.IsValidationError(prepareErr):
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, prepareErr.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, prepareErr.Error())
 		case errors.Is(prepareErr, catalog.ErrAuthConfigUnavailable):
 			h.log.Error("decrypt chart repository credential for update", "repository", existing.Name, "error", prepareErr)
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError,
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError,
 				"Failed to read existing repository credentials; check the platform encryption key")
 		default:
 			h.log.Error("prepare chart repository credential", "repository", existing.Name, "error", prepareErr)
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to secure repository credentials")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to secure repository credentials")
 		}
 		return
 	}
@@ -305,7 +306,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 			}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update repository")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update repository")
 		return
 	}
 
@@ -317,7 +318,7 @@ func (h *CatalogHandler) UpdateRepo(w http.ResponseWriter, r *http.Request) {
 func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid repository ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid repository ID")
 		return
 	}
 
@@ -331,7 +332,7 @@ func (h *CatalogHandler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 			return mutationAuditEvent{action: "catalog.repo.delete", resourceType: "helm_repository", resourceID: rowID.String(), resourceName: repoName, status: http.StatusNoContent}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete repository")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete repository")
 		return
 	}
 
@@ -351,12 +352,12 @@ func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid repository ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid repository ID")
 		return
 	}
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Repository not found")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "catalog_repository_sync"))
@@ -365,16 +366,16 @@ func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 		RepositoryID string `json:"repository_id"`
 	}{Action: "sync", RepositoryID: id.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode repository sync request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode repository sync request")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Catalog sync transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Catalog sync transaction runner is not configured")
 		return
 	}
 	task, taskErr := tasks.NewCatalogSyncTask(tasks.CatalogSyncPayload{RepositoryID: repo.ID.String()})
 	if taskErr != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EnqueueError, "Failed to build repository sync request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EnqueueError, "Failed to build repository sync request")
 		return
 	}
 	requestKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
@@ -412,10 +413,10 @@ func (h *CatalogHandler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different catalog repository sync")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different catalog repository sync")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue repository sync")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.EnqueueError, "Failed to enqueue repository sync")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/catalog/repositories/"+receipt.RepositoryID+"/", receipt)

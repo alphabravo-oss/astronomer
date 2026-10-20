@@ -48,7 +48,7 @@ func ClassifyActionClass(action, source, stored string) string {
 	switch {
 	case strings.HasPrefix(a, "auth.") || strings.HasPrefix(a, "sso."):
 		return ClassAuth
-	case strings.HasPrefix(a, "read.") || a == "charlie.http.read":
+	case strings.HasPrefix(a, "read.") || a == "charlie.http.read" || strings.HasSuffix(a, ".viewed"):
 		return ClassRead
 	case s == "worker",
 		strings.HasPrefix(a, "agent."),
@@ -89,7 +89,7 @@ const SystemActivitySQL = `(
 // historical rows that were stored as the mutation default.
 const EffectiveClassSQL = `(CASE
 	WHEN a.action LIKE 'auth.%' OR a.action LIKE 'sso.%' THEN 'auth'
-	WHEN a.action LIKE 'read.%' OR a.action = 'charlie.http.read' OR a.action_class = 'read' THEN 'read'
+	WHEN a.action LIKE 'read.%' OR a.action LIKE '%.viewed' OR a.action = 'charlie.http.read' OR a.action_class = 'read' THEN 'read'
 	WHEN a.action_class = 'system' OR a.source = 'worker' OR a.action LIKE 'agent.%' OR a.action LIKE 'audit_log%' OR a.action LIKE '%sync_failed' THEN 'system'
 	ELSE 'mutation'
 END)`

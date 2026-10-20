@@ -22,20 +22,21 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 // hard-coded skip list — paths that should never participate in read
@@ -107,7 +108,7 @@ func (e *PolicyEvaluator) ListPolicies(ctx context.Context) []sqlc.ReadAuditPoli
 		// Soft-fail: keep the previous cache. The next request retries.
 		// We don't want a DB blip to disable audit silently — but we
 		// also don't want to block on retries.
-		slog.Default().Warn("read-audit policy refresh failed", "error", err)
+		logging.Default().Warn().Err(err).Msg("read-audit policy refresh failed")
 		return e.policies
 	}
 	e.policies = rows
@@ -266,11 +267,7 @@ func (q *readAuditQueue) drain() {
 				// pin the worker indefinitely.
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				if err := q.enq.CreateAuditLogV1(ctx, row); err != nil {
-					slog.Default().Warn("read-audit insert failed",
-						"action", row.Action,
-						"path", row.Path,
-						"error", err,
-					)
+					logging.Default().Warn().Str("action", row.Action).Str("path", row.Path).Err(err).Msg("read-audit insert failed")
 					recordReadAuditEmission(row.Action, "error")
 				} else {
 					recordReadAuditEmission(row.Action, "recorded")
@@ -294,11 +291,7 @@ func (q *readAuditQueue) enqueue(row sqlc.CreateAuditLogV1Params) bool {
 	default:
 		n := q.drops.Add(1)
 		if n == 1 || n%1000 == 0 {
-			slog.Default().Warn("read-audit queue full — dropping event",
-				"action", row.Action,
-				"path", row.Path,
-				"total_drops", n,
-			)
+			logging.Default().Warn().Str("action", row.Action).Str("path", row.Path).Uint64("total_drops", n).Msg("read-audit queue full — dropping event")
 		}
 		recordReadAuditEmission(row.Action, "dropped")
 		return false
@@ -407,7 +400,7 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 			ActorAuthMethod: authMethod(r.Context()),
 			Action:          "charlie.http.read",
 			ResourceType:    "charlie_http_request",
-			StatusCode:      int32(status),
+			StatusCode:      safeconv.Int32(status),
 			RequestID:       reqctx.RequestID(r.Context()),
 			Detail:          detail,
 			ActionClass:     "read",
@@ -435,7 +428,7 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 		ResourceName:    "",
 		HTTPMethod:      r.Method,
 		Path:            r.URL.Path,
-		StatusCode:      int32(status),
+		StatusCode:      safeconv.Int32(status),
 		DurationMs:      0,
 		RequestID:       reqctx.RequestID(r.Context()),
 		IpAddress:       reqctx.ClientIP(r),

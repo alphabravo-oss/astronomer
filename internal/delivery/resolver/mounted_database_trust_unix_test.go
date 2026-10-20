@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"golang.org/x/sys/unix"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 func TestMountedSigningInspectorClassifiesPreOpenSwapWithoutBlocking(t *testing.T) {

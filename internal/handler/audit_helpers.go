@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type auditWriterV1 interface {
@@ -142,13 +142,13 @@ func recordAuditOutboxAs(r *http.Request, q audit.OutboxQuerier, userID pgtype.U
 // respondTransactionalMutationError preserves the handler's ordinary error
 // contract while giving audit-intent failures a truthful fail-closed response.
 // In particular, a rolled-back DELETE must never be reported as "not found".
-func respondTransactionalMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+func respondTransactionalMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, audit.ErrOutboxUnavailable) {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 			"Mandatory audit storage is unavailable; mutation success was not confirmed")
 		return
 	}
-	RespondRequestError(w, r, fallbackStatus, fallbackCode, fallbackMessage)
+	apiutil.WriteError(w, r, fallbackStatus, fallbackCode, fallbackMessage)
 }
 
 // recordAuditAs is the variant used when the user_id has to be resolved

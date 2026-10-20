@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -150,7 +151,7 @@ func HandleNodeOperation(ctx context.Context, task *asynq.Task) error {
 	if err != nil {
 		return errors.New("claim node operation failed")
 	}
-	plain, err := deps.ResourceDecryptor.DecryptBytes(operation.ParametersEncrypted)
+	plain, err := deps.ResourceDecryptor.Decrypt(crypto.FromParts(operation.ParametersKeyID, operation.ParametersAlgorithm, operation.ParametersCiphertext, operation.ParametersNonce))
 	if err != nil {
 		return failNodeOperation(ctx, queries, operation, nodeOperationProgress{}, "decrypt_failed", true)
 	}

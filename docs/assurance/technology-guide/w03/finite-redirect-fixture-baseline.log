@@ -1,5 +1,0 @@
---- FAIL: TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop (0.02s)
-    redirect_pairs_test.go:166: unapproved origin or mixed DNS set reached connection: scenario=2 dials=2 prior=2
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/httpclient	0.084s
-FAIL

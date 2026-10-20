@@ -11,15 +11,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/email"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/email"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // activeBaselineRequiresSMTP returns (slug, true) when the active
@@ -92,7 +96,7 @@ const PasswordSentinelEncrypted = "<encrypted>"
 // Superuser-gated inside the handler so non-admins get a clean 403.
 type SMTPHandler struct {
 	queries   SMTPQuerier
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	branding  email.BrandingProvider
 	// provider is the cache-invalidation hook into the Sender's
 	// SettingsProvider. Optional — when nil, settings changes pick
@@ -109,7 +113,7 @@ type SMTPHandler struct {
 }
 
 // NewSMTPHandler wires the production handler.
-func NewSMTPHandler(queries SMTPQuerier, encryptor *auth.Encryptor, log *slog.Logger) *SMTPHandler {
+func NewSMTPHandler(queries SMTPQuerier, encryptor *crypto.Encryptor, log *slog.Logger) *SMTPHandler {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -183,7 +187,7 @@ type smtpSettingsResponse struct {
 // configured (PasswordConfigured carries that bit).
 func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
@@ -202,7 +206,7 @@ func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SMTP settings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SMTP settings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, smtpSettingsResponse{
@@ -211,7 +215,7 @@ func (h *SMTPHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Port:               int(row.Port),
 		Username:           row.Username,
 		Password:           PasswordSentinelEncrypted,
-		PasswordConfigured: row.PasswordEncrypted != "",
+		PasswordConfigured: row.PasswordKeyID != "",
 		FromAddress:        row.FromAddress,
 		FromName:           row.FromName,
 		AuthMechanism:      row.AuthMechanism,
@@ -244,12 +248,12 @@ type smtpSettingsUpdate struct {
 // Update handles PUT /api/v1/admin/smtp/.
 func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	var req smtpSettingsUpdate
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 
@@ -257,17 +261,17 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// below is straightforward.
 	existing, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SMTP settings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SMTP settings")
 		return
 	}
 
 	merged, err := h.mergeUpdate(existing, req)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if vErr := h.validate(merged); vErr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, vErr)
 		return
 	}
 	// T6.064 — refuse to disable SMTP (or blank the host) when the
@@ -277,7 +281,7 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if !merged.Enabled || merged.Host == "" {
 		if slug, required := activeBaselineRequiresSMTP(r.Context(), h.queries); required {
 			if !baselineOverrideAllowed(h.override, r) {
-				RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
+				apiutil.WriteError(w, r, http.StatusConflict, apiutil.BaselineRequired,
 					fmt.Sprintf("SMTP is required by the active compliance baseline %q; cannot disable.", slug))
 				return
 			}
@@ -288,18 +292,18 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Encrypt the password if the admin sent a fresh value (anything
 	// other than the sentinel). Sentinel → keep existing ciphertext.
-	encryptedPassword := existing.PasswordEncrypted
+	encryptedPassword := crypto.FromParts(existing.PasswordKeyID, existing.PasswordAlgorithm, existing.PasswordCiphertext, existing.PasswordNonce)
 	if req.Password != nil && *req.Password != PasswordSentinelEncrypted {
 		if *req.Password == "" {
-			encryptedPassword = ""
+			encryptedPassword = crypto.Sealed{}
 		} else {
 			if h.encryptor == nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor is not configured; cannot store SMTP password")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor is not configured; cannot store SMTP password")
 				return
 			}
-			enc, err := h.encryptor.Encrypt(*req.Password)
+			enc, err := h.encryptor.EncryptString(*req.Password)
 			if err != nil {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt password")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt password")
 				return
 			}
 			encryptedPassword = enc
@@ -307,22 +311,22 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := sqlc.UpsertSMTPSettingsParams{
-		ID:                email.SingletonSettingsID,
-		Enabled:           merged.Enabled,
-		Host:              merged.Host,
-		Port:              merged.Port,
-		Username:          merged.Username,
-		PasswordEncrypted: encryptedPassword,
-		FromAddress:       merged.FromAddress,
-		FromName:          merged.FromName,
-		AuthMechanism:     merged.AuthMechanism,
-		Encryption:        merged.Encryption,
-		RequireTls:        merged.RequireTLS,
-		TimeoutSeconds:    merged.TimeoutSeconds,
+		ID:            email.SingletonSettingsID,
+		Enabled:       merged.Enabled,
+		Host:          merged.Host,
+		Port:          merged.Port,
+		Username:      merged.Username,
+		PasswordKeyID: encryptedPassword.KeyID, PasswordAlgorithm: encryptedPassword.Algorithm, PasswordCiphertext: encryptedPassword.Ciphertext, PasswordNonce: encryptedPassword.Nonce,
+		FromAddress:    merged.FromAddress,
+		FromName:       merged.FromName,
+		AuthMechanism:  merged.AuthMechanism,
+		Encryption:     merged.Encryption,
+		RequireTls:     merged.RequireTLS,
+		TimeoutSeconds: merged.TimeoutSeconds,
 	}
 	var saved sqlc.SmtpSettings
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "SMTP transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "SMTP transaction runner is not configured")
 		return
 	}
 	err = h.runTx(r.Context(), func(q SMTPMutationTx) error {
@@ -332,12 +336,12 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return mutationErr
 		}
 		return recordAuditOutbox(r, q, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", http.StatusOK, map[string]any{
-			"enabled": saved.Enabled, "password_set": saved.PasswordEncrypted != "",
+			"enabled": saved.Enabled, "password_set": saved.PasswordKeyID != "",
 			"auth_mechanism": saved.AuthMechanism, "encryption": saved.Encryption, "require_tls": saved.RequireTls,
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to save SMTP settings")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to save SMTP settings")
 		return
 	}
 	if h.provider != nil {
@@ -405,7 +409,7 @@ func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUp
 		out.Host = strings.TrimSpace(*req.Host)
 	}
 	if req.Port != nil {
-		out.Port = int32(*req.Port)
+		out.Port = safeconv.Int32(*req.Port)
 	}
 	if req.Username != nil {
 		out.Username = *req.Username
@@ -426,7 +430,7 @@ func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUp
 		out.RequireTLS = *req.RequireTLS
 	}
 	if req.TimeoutSeconds != nil {
-		out.TimeoutSeconds = int32(*req.TimeoutSeconds)
+		out.TimeoutSeconds = safeconv.Int32(*req.TimeoutSeconds)
 	}
 	return out, nil
 }
@@ -481,7 +485,7 @@ type TestRequest struct {
 // from doing the same thing) and send a templated test message.
 func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	var req TestRequest
@@ -492,11 +496,11 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 
 	row, err := h.queries.GetSMTPSettings(r.Context(), email.SingletonSettingsID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "SMTP settings are not configured yet")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "SMTP settings are not configured yet")
 		return
 	}
 	if !row.Enabled {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.SMTPDisabled, "SMTP is disabled; enable it before sending a test message")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.SMTPDisabled, "SMTP is disabled; enable it before sending a test message")
 		return
 	}
 
@@ -512,10 +516,10 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 		RequireTLS:    row.RequireTls,
 		Timeout:       time.Duration(row.TimeoutSeconds) * time.Second,
 	}
-	if row.PasswordEncrypted != "" && h.encryptor != nil {
-		plain, err := h.encryptor.Decrypt(row.PasswordEncrypted)
+	if row.PasswordKeyID != "" && h.encryptor != nil {
+		plain, err := h.encryptor.DecryptString(crypto.FromParts(row.PasswordKeyID, row.PasswordAlgorithm, row.PasswordCiphertext, row.PasswordNonce))
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored SMTP password")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DecryptError, "Failed to decrypt stored SMTP password")
 			return
 		}
 		cfg.Password = plain
@@ -536,17 +540,17 @@ func (h *SMTPHandler) Test(w http.ResponseWriter, r *http.Request) {
 		}
 		if h.audit != nil {
 			if auditErr := recordMandatoryAudit(r, h.audit, "admin.smtp.test_failed", "smtp", row.ID.String(), recipient, map[string]any{"result": "send_failed"}); auditErr != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 					"Mandatory audit storage is unavailable; the SMTP test result was not returned")
 				return
 			}
 		}
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.TestFailed, "SMTP test send failed")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.TestFailed, "SMTP test send failed")
 		return
 	}
 	if h.audit != nil {
 		if auditErr := recordMandatoryAudit(r, h.audit, "admin.smtp.test", "smtp", row.ID.String(), recipient, nil); auditErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 				"Mandatory audit storage is unavailable; the SMTP test result was not returned")
 			return
 		}
@@ -581,7 +585,7 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
@@ -591,12 +595,12 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read email messages")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read email messages")
 		return
 	}
 	total, err := h.queries.CountEmailMessages(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to count email messages")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to count email messages")
 		return
 	}
 
@@ -638,7 +642,7 @@ func (h *SMTPHandler) writeResponseFromRow(w http.ResponseWriter, row sqlc.SmtpS
 		Port:               int(row.Port),
 		Username:           row.Username,
 		Password:           PasswordSentinelEncrypted,
-		PasswordConfigured: row.PasswordEncrypted != "",
+		PasswordConfigured: row.PasswordKeyID != "",
 		FromAddress:        row.FromAddress,
 		FromName:           row.FromName,
 		AuthMechanism:      row.AuthMechanism,

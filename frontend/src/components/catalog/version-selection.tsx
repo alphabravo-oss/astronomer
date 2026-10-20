@@ -13,14 +13,20 @@ export function useCatalogVersionSelection(
   chartId: string,
   value: string,
   onChange: (id: string) => void,
+  clusterId?: string,
 ) {
-  const scope = `${projectId}:${chartId}`;
-  const control = useOffsetPagination(scope);
+  const [view, setView] = useState<"curated" | "all">("curated");
+  const scope = `${projectId}:${clusterId ?? ""}:${chartId}`;
+  const control = useOffsetPagination(`${scope}:${view}`);
   const query = useHelmChartVersions(
-    projectId,
+    clusterId || projectId,
     chartId,
-    "project",
-    control.params,
+    clusterId ? "cluster" : "project",
+    {
+      ...control.params,
+      view,
+      selectedVersionId: value || undefined,
+    },
   );
   const [held, setHeld] = useState<{ scope: string; row: HelmChartVersion }>();
   const current = query.data?.data.find((row) => row.id === value);
@@ -33,7 +39,11 @@ export function useCatalogVersionSelection(
   )
     setHeld({ scope, row: current });
   useEffect(() => {
-    const first = query.data?.data[0];
+    const first = query.data?.data.find(
+      (row) =>
+        !row.catalogVersion ||
+        (row.catalogVersion.available && !row.catalogVersion.revoked),
+    );
     if (!value && !query.isError && control.page === 1 && first) {
       onChange(first.id);
     }
@@ -50,7 +60,7 @@ export function useCatalogVersionSelection(
     setHeld(row ? { scope, row } : undefined);
     onChange(id);
   };
-  return { query, control, selected, value, choose };
+  return { query, control, selected, value, choose, view, setView };
 }
 
 export function CatalogVersionSelect({
@@ -64,6 +74,23 @@ export function CatalogVersionSelect({
   const rows = query.isError ? [] : (query.data?.data ?? []);
   return (
     <div className="space-y-2">
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={selection.view === "all"}
+          onChange={(event) =>
+            selection.setView(event.target.checked ? "all" : "curated")
+          }
+        />
+        Include other upstream versions
+      </label>
+      {selection.view === "all" && (
+        <p className="text-xs text-muted-foreground">
+          Other upstream versions have no Astronomer configuration assurance.
+          Use at your own risk.
+        </p>
+      )}
+
       <Select
         id={id}
         aria-label="Version"
@@ -76,8 +103,29 @@ export function CatalogVersionSelect({
           <option value={value}>{selected?.version ?? value}</option>
         )}
         {rows.map((row) => (
-          <option key={row.id} value={row.id}>
+          <option
+            key={row.id}
+            value={row.id}
+            disabled={
+              !!row.catalogVersion &&
+              (!row.catalogVersion.available || row.catalogVersion.revoked)
+            }
+          >
             {row.version}
+            {row.catalogVersion?.supportTier === "upstream"
+              ? " — Community"
+              : row.catalogVersion?.supportTier === "experimental"
+                ? " — Experimental"
+                : ""}
+            {row.catalogVersion?.recommended ? " — Recommended" : ""}
+            {row.catalogVersion?.deprecated ? " — Deprecated" : ""}
+            {row.catalogVersion &&
+            (!row.catalogVersion.available || row.catalogVersion.revoked)
+              ? " — Unavailable"
+              : ""}
+            {row.catalogVersion?.unavailableReason
+              ? ` (${row.catalogVersion.unavailableReason})`
+              : ""}
             {row.appVersion ? ` (app ${row.appVersion})` : ""}
           </option>
         ))}

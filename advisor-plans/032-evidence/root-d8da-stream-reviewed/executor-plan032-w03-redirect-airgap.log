@@ -1,7 +1,0 @@
-.airgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values
-airgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values
-......
-----------------------------------------------------------------------
-Ran 7 tests in 0.162s
-
-OK

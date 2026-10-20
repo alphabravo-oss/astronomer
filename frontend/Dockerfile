@@ -1,17 +1,17 @@
 # syntax=docker/dockerfile:1.6
 
-# Stage 1: build the SPA (Node 26, matching local development and CI).
-FROM node:26.11.1-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS build
+# Stage 1: build the SPA (Node 24 LTS, matching .node-version and CI).
+FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm install --global npm@12.2.0 && npm ci
+RUN npm ci
 
 COPY . .
 
 # Baked into the bundle via the Vite `define` (__APP_VERSION__); the release
 # workflow passes VERSION to every component build.
-ARG VERSION=2.0.1
+ARG VERSION=2.1.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 ENV VERSION=$VERSION \
@@ -35,7 +35,7 @@ RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
 FROM nginx-base
 
-ARG VERSION=2.0.1
+ARG VERSION=2.1.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="astronomer-frontend" \

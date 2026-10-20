@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/toolui"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/toolui"
 )
 
 func (h *MonitoringHandler) SetToolUIDomain(domain string) { h.toolUIDomain = domain }

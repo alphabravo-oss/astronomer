@@ -16,7 +16,7 @@ import (
 func Serve(ctx context.Context, srv *http.Server, listener net.Listener, timeout time.Duration, onShutdownError func(error)) error {
 	serveDone := make(chan struct{})
 	shutdownDone := make(chan struct{})
-	go func() {
+	go func() { // #nosec G118 -- listener lifecycle goroutine is owned by the process, not by a request; it is stopped through Shutdown
 		defer close(shutdownDone)
 		select {
 		case <-ctx.Done():

@@ -1,9 +1,9 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -50,12 +50,12 @@ func APITokenScopeEnforce(required string) func(http.Handler) http.Handler {
 				// a platform-side data integrity issue, not a normal
 				// client error.
 				auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("scope")...).Inc()
-				scopeDenied(w, "Invalid scope metadata on this token")
+				scopeDenied(w, r, "Invalid scope metadata on this token")
 				return
 			}
 			if !auth.ScopeAllowsRequest(scopes, required) {
 				auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("scope")...).Inc()
-				scopeDenied(w, "Token is missing the required scope: "+required)
+				scopeDenied(w, r, "Token is missing the required scope: "+required)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -103,7 +103,7 @@ func RequireWriteScopeForMutations(required string) func(http.Handler) http.Hand
 				if tok, ok := auth.AuthenticatedAPIToken(r.Context()); ok && tok != nil {
 					if scopes, err := auth.ParseTokenScopes(tok.Scopes); err == nil && auth.IsReadOnlyScopeSet(scopes) {
 						auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("scope")...).Inc()
-						scopeDenied(w, "Read-only token cannot perform a mutating request")
+						scopeDenied(w, r, "Read-only token cannot perform a mutating request")
 						return
 					}
 				}
@@ -125,13 +125,6 @@ func isMutatingScopeMethod(method string) bool {
 	}
 }
 
-func scopeDenied(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusForbidden)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]string{
-			"code":    "scope_denied",
-			"message": msg,
-		},
-	})
+func scopeDenied(w http.ResponseWriter, r *http.Request, msg string) {
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.ScopeDenied, msg)
 }

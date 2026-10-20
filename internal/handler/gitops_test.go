@@ -22,13 +22,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type fakeGitOpsHandlerQuerier struct {
@@ -70,12 +73,12 @@ func (f *fakeGitOpsHandlerQuerier) ListGitOpsSourcesPage(_ context.Context, arg 
 	for _, s := range all[start:end] {
 		out = append(out, sqlc.ListGitOpsSourcesPageRow{
 			ID: s.ID, Name: s.Name, RepoUrl: s.RepoUrl, Branch: s.Branch,
-			PathPrefix: s.PathPrefix, AuthMode: s.AuthMode, AuthConfigured: s.AuthEncrypted != "",
+			PathPrefix: s.PathPrefix, AuthMode: s.AuthMode, AuthConfigured: s.AuthKeyID != "",
 			SyncMode: s.SyncMode, SyncIntervalSeconds: s.SyncIntervalSeconds, OnDelete: s.OnDelete,
 			LastSyncedAt: s.LastSyncedAt, LastSyncedSha: s.LastSyncedSha, LastError: s.LastError,
 			Enabled: s.Enabled, CreatedBy: s.CreatedBy, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 			AllowMassDecommission: s.AllowMassDecommission, WebhookProvider: s.WebhookProvider,
-			WebhookConfigured: s.WebhookSecretEncrypted != "",
+			WebhookConfigured: s.WebhookSecretKeyID != "",
 		})
 	}
 	return out, nil
@@ -100,20 +103,20 @@ func (f *fakeGitOpsHandlerQuerier) GetGitOpsSourceByName(_ context.Context, name
 }
 func (f *fakeGitOpsHandlerQuerier) CreateGitOpsSource(_ context.Context, arg sqlc.CreateGitOpsSourceParams) (sqlc.GitopsRegistrationSource, error) {
 	row := sqlc.GitopsRegistrationSource{
-		ID:                     uuid.New(),
-		Name:                   arg.Name,
-		RepoUrl:                arg.RepoUrl,
-		Branch:                 arg.Branch,
-		PathPrefix:             arg.PathPrefix,
-		AuthMode:               arg.AuthMode,
-		AuthEncrypted:          arg.AuthEncrypted,
-		SyncMode:               arg.SyncMode,
-		SyncIntervalSeconds:    arg.SyncIntervalSeconds,
-		OnDelete:               arg.OnDelete,
-		Enabled:                arg.Enabled,
-		CreatedBy:              arg.CreatedBy,
-		WebhookProvider:        arg.WebhookProvider,
-		WebhookSecretEncrypted: arg.WebhookSecretEncrypted,
+		ID:         uuid.New(),
+		Name:       arg.Name,
+		RepoUrl:    arg.RepoUrl,
+		Branch:     arg.Branch,
+		PathPrefix: arg.PathPrefix,
+		AuthMode:   arg.AuthMode,
+		AuthKeyID:  arg.AuthKeyID, AuthAlgorithm: arg.AuthAlgorithm, AuthCiphertext: arg.AuthCiphertext, AuthNonce: arg.AuthNonce,
+		SyncMode:            arg.SyncMode,
+		SyncIntervalSeconds: arg.SyncIntervalSeconds,
+		OnDelete:            arg.OnDelete,
+		Enabled:             arg.Enabled,
+		CreatedBy:           arg.CreatedBy,
+		WebhookProvider:     arg.WebhookProvider,
+		WebhookSecretKeyID:  arg.WebhookSecretKeyID, WebhookSecretAlgorithm: arg.WebhookSecretAlgorithm, WebhookSecretCiphertext: arg.WebhookSecretCiphertext, WebhookSecretNonce: arg.WebhookSecretNonce,
 	}
 	f.sources[row.ID] = row
 	return row, nil
@@ -125,14 +128,14 @@ func (f *fakeGitOpsHandlerQuerier) UpdateGitOpsSource(_ context.Context, arg sql
 	row.Branch = arg.Branch
 	row.PathPrefix = arg.PathPrefix
 	row.AuthMode = arg.AuthMode
-	row.AuthEncrypted = arg.AuthEncrypted
+	row.AuthKeyID, row.AuthAlgorithm, row.AuthCiphertext, row.AuthNonce = arg.AuthKeyID, arg.AuthAlgorithm, arg.AuthCiphertext, arg.AuthNonce
 	row.SyncMode = arg.SyncMode
 	row.SyncIntervalSeconds = arg.SyncIntervalSeconds
 	row.OnDelete = arg.OnDelete
 	row.Enabled = arg.Enabled
 	row.AllowMassDecommission = arg.AllowMassDecommission
 	row.WebhookProvider = arg.WebhookProvider
-	row.WebhookSecretEncrypted = arg.WebhookSecretEncrypted
+	row.WebhookSecretKeyID, row.WebhookSecretAlgorithm, row.WebhookSecretCiphertext, row.WebhookSecretNonce = arg.WebhookSecretKeyID, arg.WebhookSecretAlgorithm, arg.WebhookSecretCiphertext, arg.WebhookSecretNonce
 	f.sources[arg.ID] = row
 	return row, nil
 }
@@ -366,8 +369,8 @@ func TestHandler_CreateGetPreviewRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse id: %v", err)
 	}
-	if stored := q.sources[id].WebhookSecretEncrypted; stored == "" || strings.Contains(stored, "github-webhook-secret") {
-		t.Fatalf("webhook secret was not encrypted at rest: %q", stored)
+	if stored := crypto.FromParts(q.sources[id].WebhookSecretKeyID, q.sources[id].WebhookSecretAlgorithm, q.sources[id].WebhookSecretCiphertext, q.sources[id].WebhookSecretNonce); stored.IsZero() || strings.Contains(string(stored.Ciphertext), "github-webhook-secret") {
+		t.Fatalf("webhook secret was not encrypted at rest: %q", stored.KeyID)
 	}
 	if strings.Contains(w.Body.String(), "github-webhook-secret") {
 		t.Fatal("webhook plaintext leaked in create response")
@@ -392,13 +395,13 @@ func TestGitOpsSyncAndWebhookQueueDurableIntent(t *testing.T) {
 	sourceID := uuid.New()
 	encryptor := testEncryptor(t)
 	webhookSecret := "github-webhook-secret-32-characters-minimum"
-	sealedSecret, err := encryptor.Encrypt(webhookSecret)
+	sealedSecret, err := encryptor.EncryptString(webhookSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
 	q.sources[sourceID] = sqlc.GitopsRegistrationSource{
 		ID: sourceID, Name: "platform", RepoUrl: "https://github.com/example/platform", Enabled: true,
-		WebhookProvider: "github", WebhookSecretEncrypted: sealedSecret,
+		WebhookProvider: "github", WebhookSecretKeyID: sealedSecret.KeyID, WebhookSecretAlgorithm: sealedSecret.Algorithm, WebhookSecretCiphertext: sealedSecret.Ciphertext, WebhookSecretNonce: sealedSecret.Nonce,
 	}
 	runner := &fakeRunner{}
 	h := NewGitOpsHandler(q, runner, nil)
@@ -469,13 +472,13 @@ func TestGitOpsWebhookRejectsMissingOrInvalidNativeSignature(t *testing.T) {
 	q := newFakeHandlerQuerier()
 	sourceID := uuid.New()
 	encryptor := testEncryptor(t)
-	sealed, err := encryptor.Encrypt("github-webhook-secret-32-characters-minimum")
+	sealed, err := encryptor.EncryptString("github-webhook-secret-32-characters-minimum")
 	if err != nil {
 		t.Fatal(err)
 	}
 	q.sources[sourceID] = sqlc.GitopsRegistrationSource{
 		ID: sourceID, Name: "platform", RepoUrl: "https://github.com/example/platform",
-		WebhookProvider: "github", WebhookSecretEncrypted: sealed, Enabled: true,
+		WebhookProvider: "github", WebhookSecretKeyID: sealed.KeyID, WebhookSecretAlgorithm: sealed.Algorithm, WebhookSecretCiphertext: sealed.Ciphertext, WebhookSecretNonce: sealed.Nonce, Enabled: true,
 	}
 	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	h.SetEncryptor(encryptor)
@@ -536,12 +539,12 @@ func TestHandler_UpdatePreservesAuthOnSentinel(t *testing.T) {
 	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
 	id := uuid.New()
 	q.sources[id] = sqlc.GitopsRegistrationSource{
-		ID:                  id,
-		Name:                "demo",
-		RepoUrl:             "https://example/demo",
-		Branch:              "main",
-		AuthMode:            "https_token",
-		AuthEncrypted:       "original-secret",
+		ID:        id,
+		Name:      "demo",
+		RepoUrl:   "https://example/demo",
+		Branch:    "main",
+		AuthMode:  "https_token",
+		AuthKeyID: "test-key", AuthAlgorithm: crypto.AlgorithmAgeX25519, AuthCiphertext: []byte("original-secret"),
 		SyncMode:            "interval",
 		SyncIntervalSeconds: 60,
 		OnDelete:            "log",
@@ -565,8 +568,8 @@ func TestHandler_UpdatePreservesAuthOnSentinel(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("update status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if q.sources[id].AuthEncrypted != "original-secret" {
-		t.Fatalf("auth must be preserved when sentinel echoed; got %q", q.sources[id].AuthEncrypted)
+	if string(q.sources[id].AuthCiphertext) != "original-secret" {
+		t.Fatalf("auth must be preserved when sentinel echoed; got %q", crypto.FromParts(q.sources[id].AuthKeyID, q.sources[id].AuthAlgorithm, q.sources[id].AuthCiphertext, q.sources[id].AuthNonce))
 	}
 	if q.sources[id].OnDelete != "tombstone" {
 		t.Fatalf("on_delete update lost; got %q", q.sources[id].OnDelete)

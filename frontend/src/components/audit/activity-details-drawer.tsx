@@ -27,7 +27,7 @@ export function ActivityDetailsDrawer({
       <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
         {fields.map((field) => (
           <div key={String(field.label)} className="min-w-0">
-            <div className="text-2xs font-medium uppercase text-muted-foreground">
+            <div className="text-2xs font-medium text-muted-foreground">
               {field.label}
             </div>
             <div className="mt-1 break-words font-mono text-xs text-foreground">

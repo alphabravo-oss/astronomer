@@ -117,6 +117,9 @@ dashboard can perform, this CLI can — and vice versa.`,
 		newSettingsCmd(),
 		newAuditCmd(),
 
+		// Offline release operations (no API session).
+		newAirgapCmd(),
+
 		// CLI meta.
 		newDocsCmd(),
 		newConfigCmd(),

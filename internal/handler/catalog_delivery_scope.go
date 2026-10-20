@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // platformCatalogProject selects Delivery ownership for an installation whose

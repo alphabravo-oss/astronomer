@@ -142,7 +142,7 @@ SELECT jsonb_build_object(
   'configured', EXISTS(SELECT 1 FROM smtp_settings),
   'enabled', COALESCE((SELECT enabled FROM smtp_settings LIMIT 1), false),
   'host_configured', COALESCE((SELECT host <> '' FROM smtp_settings LIMIT 1), false),
-  'credentials_configured', COALESCE((SELECT username <> '' OR password_encrypted <> '' FROM smtp_settings LIMIT 1), false),
+  'credentials_configured', COALESCE((SELECT username <> '' OR password_key_id <> '' FROM smtp_settings LIMIT 1), false),
   'require_tls', COALESCE((SELECT require_tls FROM smtp_settings LIMIT 1), true),
   'encryption', COALESCE((SELECT encryption FROM smtp_settings LIMIT 1), ''),
   'messages_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM email_messages GROUP BY status) grouped), '{}'::jsonb),
@@ -155,7 +155,7 @@ const webhookHealthQuery = `
 SELECT jsonb_build_object(
   'subscriptions', (SELECT count(*)::bigint FROM webhook_subscriptions),
   'enabled_subscriptions', (SELECT count(*)::bigint FROM webhook_subscriptions WHERE enabled),
-  'subscriptions_without_encrypted_secret', (SELECT count(*)::bigint FROM webhook_subscriptions WHERE enabled AND secret_encrypted = ''),
+  'subscriptions_without_encrypted_secret', (SELECT count(*)::bigint FROM webhook_subscriptions WHERE enabled AND secret_key_id = ''),
   'enabled_non_https_subscriptions', (SELECT count(*)::bigint FROM webhook_subscriptions WHERE enabled AND url !~* '^https://'),
   'deliveries_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM webhook_deliveries GROUP BY status) grouped), '{}'::jsonb),
   'oldest_pending_age_seconds', COALESCE((SELECT extract(epoch FROM now() - min(created_at))::bigint FROM webhook_deliveries WHERE status IN ('queued','failed')), 0),
@@ -167,7 +167,7 @@ const siemHealthQuery = `
 SELECT jsonb_build_object(
   'forwarders', (SELECT count(*)::bigint FROM siem_forwarders),
   'enabled_forwarders', (SELECT count(*)::bigint FROM siem_forwarders WHERE enabled),
-  'enabled_without_auth', (SELECT count(*)::bigint FROM siem_forwarders WHERE enabled AND auth_encrypted = '' AND transport IN ('splunk_hec','ndjson_https')),
+  'enabled_without_auth', (SELECT count(*)::bigint FROM siem_forwarders WHERE enabled AND auth_key_id = '' AND transport IN ('splunk_hec','ndjson_https')),
   'tls_verification_disabled', (SELECT count(*)::bigint FROM siem_forwarders WHERE enabled AND tls_skip_verify),
   'plaintext_transports', (SELECT count(*)::bigint FROM siem_forwarders WHERE enabled AND transport IN ('syslog_udp','syslog_tcp')),
   'queue_depth', (SELECT count(*)::bigint FROM siem_forward_queue),
@@ -205,7 +205,7 @@ SELECT jsonb_build_object(
   'backends_by_type', COALESCE((SELECT jsonb_object_agg(backend_type, total) FROM (SELECT backend_type, count(*)::bigint total FROM monitoring_backends GROUP BY backend_type) grouped), '{}'::jsonb),
   'missing_query_endpoint', (SELECT count(*)::bigint FROM monitoring_backends WHERE query_url = ''),
   'credentialed_backends', (SELECT count(*)::bigint FROM monitoring_backends WHERE auth_type <> 'none'),
-  'legacy_unsealed_credentials', (SELECT count(*)::bigint FROM monitoring_backends WHERE auth_config_encrypted = '' AND auth_config <> '{}'::jsonb),
+  'legacy_unsealed_credentials', (SELECT count(*)::bigint FROM monitoring_backends WHERE auth_config_key_id = '' AND auth_config <> '{}'::jsonb),
   'alertmanager_configured', (SELECT count(*)::bigint FROM monitoring_backends WHERE alertmanager_url <> ''),
   'cluster_config_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM cluster_monitoring_configs GROUP BY status) grouped), '{}'::jsonb),
   'operations_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM monitoring_operations GROUP BY status) grouped), '{}'::jsonb)
@@ -239,7 +239,7 @@ SELECT jsonb_build_object(
   'unused_totp_recovery_codes', (SELECT count(*)::bigint FROM user_totp_recovery_codes WHERE used_at IS NULL),
   'active_sso_sessions', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now()),
   'expired_sso_sessions_pending_cleanup', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at <= now()),
-  'active_sso_sessions_without_encrypted_upstream_token', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now() AND upstream_id_token_encrypted = ''),
+  'active_sso_sessions_without_encrypted_upstream_token', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now() AND upstream_id_token_key_id = ''),
   'active_sso_sessions_with_upstream_logout', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now() AND end_session_endpoint <> ''),
   'active_password_reset_tokens', (SELECT count(*)::bigint FROM password_reset_tokens WHERE used_at IS NULL AND expires_at > now()),
   'expired_password_reset_tokens_pending_cleanup', (SELECT count(*)::bigint FROM password_reset_tokens WHERE used_at IS NULL AND expires_at <= now())
@@ -273,7 +273,7 @@ SELECT jsonb_build_object(
   'enabled_vault_connections', (SELECT count(*)::bigint FROM vault_connections WHERE enabled),
   'unhealthy_vault_connections', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND NOT last_health_ok),
   'vault_tls_verification_disabled', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND tls_skip_verify),
-  'monitoring_legacy_unsealed_credentials', (SELECT count(*)::bigint FROM monitoring_backends WHERE auth_config_encrypted = '' AND auth_config <> '{}'::jsonb),
+  'monitoring_legacy_unsealed_credentials', (SELECT count(*)::bigint FROM monitoring_backends WHERE auth_config_key_id = '' AND auth_config <> '{}'::jsonb),
   'siem_tls_verification_disabled', (SELECT count(*)::bigint FROM siem_forwarders WHERE enabled AND tls_skip_verify),
   'prometheus_tls_verification_disabled', (SELECT count(*)::bigint FROM prometheus_datasources WHERE enabled AND tls_skip_verify),
   'active_compliance_baselines', (SELECT count(*)::bigint FROM compliance_baseline_applications WHERE status = 'applied'),
@@ -285,14 +285,14 @@ const credentialsHealthQuery = `
 SELECT jsonb_build_object(
   'project_cloud_credentials', (SELECT count(*)::bigint FROM cloud_credentials),
   'cloud_credentials_by_provider', COALESCE((SELECT jsonb_object_agg(provider, total) FROM (SELECT provider, count(*)::bigint total FROM cloud_credentials GROUP BY provider) grouped), '{}'::jsonb),
-  'cloud_credentials_without_encrypted_material', (SELECT count(*)::bigint FROM cloud_credentials WHERE data_encrypted = ''),
+  'cloud_credentials_without_encrypted_material', (SELECT count(*)::bigint FROM cloud_credentials WHERE data_key_id = ''),
   'cloud_credential_materializations_by_status', COALESCE((SELECT jsonb_object_agg(status, total) FROM (SELECT status, count(*)::bigint total FROM cloud_credential_materializations GROUP BY status) grouped), '{}'::jsonb),
   'stale_pending_materializations', (SELECT count(*)::bigint FROM cloud_credential_materializations WHERE status = 'pending' AND updated_at < now() - interval '15 minutes'),
   'failed_materializations', (SELECT count(*)::bigint FROM cloud_credential_materializations WHERE status = 'failed'),
   'vault_connections', (SELECT count(*)::bigint FROM vault_connections),
   'enabled_vault_connections', (SELECT count(*)::bigint FROM vault_connections WHERE enabled),
   'vault_connections_by_auth_method', COALESCE((SELECT jsonb_object_agg(auth_method, total) FROM (SELECT auth_method, count(*)::bigint total FROM vault_connections GROUP BY auth_method) grouped), '{}'::jsonb),
-  'enabled_vault_connections_without_encrypted_auth', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND auth_encrypted = ''),
+  'enabled_vault_connections_without_encrypted_auth', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND auth_key_id = ''),
   'unhealthy_vault_connections', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND NOT last_health_ok),
   'stale_vault_health_checks', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND (last_health_at IS NULL OR last_health_at < now() - interval '1 hour')),
   'vault_tls_verification_disabled', (SELECT count(*)::bigint FROM vault_connections WHERE enabled AND tls_skip_verify)
@@ -401,7 +401,7 @@ SELECT jsonb_build_object(
   'never_synchronized_sources', (SELECT count(*)::bigint FROM gitops_registration_sources WHERE enabled AND last_synced_at IS NULL),
   'stale_interval_sources', (SELECT count(*)::bigint FROM gitops_registration_sources WHERE enabled AND sync_mode = 'interval' AND (last_synced_at IS NULL OR last_synced_at < now() - make_interval(secs => greatest(sync_interval_seconds * 3, 300)))),
   'credentialed_sources', (SELECT count(*)::bigint FROM gitops_registration_sources WHERE auth_mode <> 'none'),
-  'credentialed_sources_without_envelope', (SELECT count(*)::bigint FROM gitops_registration_sources WHERE auth_mode <> 'none' AND auth_encrypted = ''),
+  'credentialed_sources_without_envelope', (SELECT count(*)::bigint FROM gitops_registration_sources WHERE auth_mode <> 'none' AND auth_key_id = ''),
   'dangerous_delete_policy_sources', (SELECT count(*)::bigint FROM gitops_registration_sources WHERE enabled AND on_delete = 'decommission'),
   'registered_clusters', (SELECT count(*)::bigint FROM gitops_registered_clusters)
 )`
@@ -464,7 +464,7 @@ SELECT jsonb_build_object(
   'widgets_by_scope', COALESCE((SELECT jsonb_object_agg(scope, total) FROM (SELECT scope, count(*)::bigint total FROM dashboard_widgets GROUP BY scope) grouped), '{}'::jsonb),
   'prometheus_datasources', (SELECT count(*)::bigint FROM prometheus_datasources),
   'enabled_prometheus_datasources', (SELECT count(*)::bigint FROM prometheus_datasources WHERE enabled),
-  'credentialed_prometheus_datasources', (SELECT count(*)::bigint FROM prometheus_datasources WHERE auth_encrypted <> ''),
+  'credentialed_prometheus_datasources', (SELECT count(*)::bigint FROM prometheus_datasources WHERE auth_key_id <> ''),
   'prometheus_tls_verification_disabled', (SELECT count(*)::bigint FROM prometheus_datasources WHERE enabled AND tls_skip_verify)
 )`
 

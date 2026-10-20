@@ -69,7 +69,7 @@ type SupportBundleAsynqInspector interface {
 }
 
 // SupportBundleDBPooler exposes the minimum surface needed to run the
-// raw SELECT against schema_migrations. *pgxpool.Pool satisfies this.
+// raw SELECT against goose_db_version. *pgxpool.Pool satisfies this.
 type SupportBundleDBPooler interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }

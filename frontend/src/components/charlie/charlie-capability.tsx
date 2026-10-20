@@ -1,12 +1,17 @@
 import { LoadingPanel } from "@/components/charlie/loading-panel";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
 import type { CharlieContextOption } from "@/lib/api/charlie";
 import { DrawerShell } from "@/components/ui/drawer-shell";
 import { contextForRoute } from "./context-registry";
 import { CharlieContext as Context } from "./charlie-context";
-import { ActionButton } from "@/components/ui/action-button";
 
 const CharlieDrawer = lazy(() =>
   import("./charlie-drawer").then((module) => ({
@@ -14,7 +19,7 @@ const CharlieDrawer = lazy(() =>
   })),
 );
 
-export function CharlieCapability() {
+export function CharlieCapability({ children }: { children?: ReactNode }) {
   const pathname = useLocation({ select: (location) => location.pathname });
   const [open, setOpen] = useState(false);
   const [manual, setManual] = useState<CharlieContextOption[]>([]);
@@ -36,7 +41,8 @@ export function CharlieCapability() {
         target instanceof HTMLElement &&
         (target.isContentEditable ||
           ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
-      if (!editing && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === ".") {
+      // ⌘J / Ctrl+J toggles the assistant drawer (header icon does the same).
+      if (!editing && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault();
         setOpen((v) => !v);
       }
@@ -57,19 +63,7 @@ export function CharlieCapability() {
   };
   return (
     <Context.Provider value={value}>
-      <ActionButton
-        intent="bare"
-        size="none"
-        onClick={() => setOpen(true)}
-        aria-label="Open Charlie assistant"
-        aria-expanded={open}
-        aria-controls="charlie-assistant-drawer"
-        tooltip="Open Charlie (Ctrl/⌘ Shift .)"
-        className="fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
-      >
-        <Sparkles className="h-5 w-5" />
-        <span className="hidden sm:inline">Charlie</span>
-      </ActionButton>
+      {children}
       {open && (
         <Suspense
           fallback={

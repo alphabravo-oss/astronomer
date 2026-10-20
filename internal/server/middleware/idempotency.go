@@ -34,7 +34,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,8 +43,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // idempotencyTTL is the default lifetime of a cached response. Long enough
@@ -251,16 +252,16 @@ func idempotencyWith(ctx context.Context, ttl time.Duration, now func() time.Tim
 			requestDigest, err := idempotencyRequestDigest(r)
 			if err != nil {
 				if errors.Is(err, errIdempotencyBodyTooLarge) {
-					writeIdempotencyError(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request body exceeds the idempotency limit")
+					writeIdempotencyError(w, r, http.StatusRequestEntityTooLarge, apiutil.RequestTooLarge, "Request body exceeds the idempotency limit")
 					return
 				}
-				writeIdempotencyError(w, http.StatusBadRequest, "invalid_request", "Unable to read request body")
+				writeIdempotencyError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Unable to read request body")
 				return
 			}
 
 			entry, first, conflict := store.begin(key, requestDigest)
 			if conflict {
-				writeIdempotencyError(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used for a different request")
+				writeIdempotencyError(w, r, http.StatusConflict, apiutil.IdempotencyConflict, "Idempotency-Key was already used for a different request")
 				return
 			}
 			if !first {
@@ -306,12 +307,8 @@ func idempotencyWith(ctx context.Context, ttl time.Duration, now func() time.Tim
 	}
 }
 
-func writeIdempotencyError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]string{"code": code, "message": message},
-	})
+func writeIdempotencyError(w http.ResponseWriter, r *http.Request, status int, code apiutil.Code, message string) {
+	apiutil.WriteError(w, r, status, code, message)
 }
 
 func idempotencyRequestDigest(r *http.Request) (string, error) {

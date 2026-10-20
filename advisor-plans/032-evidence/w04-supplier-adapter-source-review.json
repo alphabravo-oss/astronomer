@@ -1,8 +1,0 @@
-{
-  "utc": "2026-10-10T02:46:45.716394+00:00",
-  "sourceCommit": "0fdc71cb4ae3dd2f08c403fbac80309af5d25191",
-  "sourceBindings": 8,
-  "staticLogBindings": 2,
-  "review": "Full 772-line source/test/doc change reviewed; operator-owned reviewed-origin schema tag resolved once; immutable bounded original manifest/config only; no supplier signature bypass or authenticated consumer feed; opaque constructor-bound supplier proof; shared complete two-pass compressed-byte hash and no-write archive parser; derives strict actual upstream metadata under finite timing; signed consumer still verifies first and compares claims. HTTP client value/network cloned; underlying guarded transport must remain operator-owned.",
-  "qualification": "Source only, not built or executed. Actual Cosign/full-package regressions, supplier whole layer transfer/cadence, publication/feed/durable state/report provenance/no-egress pending."
-}

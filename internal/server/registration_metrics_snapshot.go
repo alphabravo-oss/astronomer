@@ -3,12 +3,13 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/jackc/pgx/v5"
 )
 
 var errRegistrationMetricsBudget = errors.New("registration metrics observation exceeds owner budget")
@@ -62,7 +63,7 @@ func collectRegistrationMetricsSnapshot(ctx context.Context, begin connectionMet
 
 // One supervised serial loop; a slow bounded observation never launches an
 // overlapping collection. Failed/canceled reads leave the preceding snapshot.
-func runRegistrationMetricsCollector(ctx context.Context, begin connectionMetricsBegin, logger *slog.Logger) {
+func runRegistrationMetricsCollector(ctx context.Context, begin connectionMetricsBegin, logger zerolog.Logger) {
 	collect := func() {
 		started := time.Now().UTC()
 		watermark := observability.RegistrationMetricsWatermark()
@@ -76,9 +77,7 @@ func runRegistrationMetricsCollector(ctx context.Context, begin connectionMetric
 				result = "owner_budget"
 			}
 			observability.RecordRegistrationMetricFailure(result)
-			if logger != nil {
-				logger.Warn("registration metrics observation incomplete", "error_kind", "collection_failed")
-			}
+			logger.Warn().Str("error_kind", "collection_failed").Msg("registration metrics observation incomplete")
 			return
 		}
 		if ctx.Err() != nil {

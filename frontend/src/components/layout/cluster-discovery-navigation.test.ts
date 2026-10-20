@@ -38,11 +38,11 @@ it("hides only unserved Gateway kinds and preserves Astronomer API pages", () =>
   const empty = filterNavGroupsByDiscovery(groups, discovery());
   expect(allItems(empty).filter((item) => item.ifHaveGroup)).toHaveLength(0);
   expect(allItems(empty).map((item) => item.label)).toEqual(
-    expect.arrayContaining(["Image Scans", "Service Mesh"]),
+    expect.arrayContaining(["Image scans", "Service mesh"]),
   );
-  expect(groups.find((group) => group.label === "Cluster")?.items).toHaveLength(
-    7,
-  );
+  expect(
+    groups.find((group) => group.label === "Overview")?.items,
+  ).toHaveLength(7);
   expect(groups.some((group) => group.label === "Gateway API")).toBe(false);
   const gateway = filterNavGroupsByDiscovery(
     groups,
@@ -83,7 +83,7 @@ it("groups CRDs, avoids duplicate built-in Gateway links, and caps dynamic kinds
     data,
     "c-1",
   );
-  const more = groups.find((group) => group.label === "More Resources")!;
+  const more = groups.find((group) => group.label === "Manage")!;
   expect(
     more.subgroups?.find((group) => group.label === "Cert Manager")?.items,
   ).toHaveLength(2);
@@ -96,14 +96,14 @@ it("groups CRDs, avoids duplicate built-in Gateway links, and caps dynamic kinds
     ),
   ).toHaveLength(1);
   expect(
-    allItems(groups).some((item) => item.label === "All custom resources →"),
+    allItems(groups).some((item) => item.label === "All custom resources"),
   ).toBe(true);
 });
 
 it("finds nested active routes and filters subgroup permissions before starring", () => {
   const groups: NavGroup[] = [
     {
-      label: "More Resources",
+      label: "Manage",
       items: [],
       subgroups: [
         {
@@ -121,7 +121,7 @@ it("finds nested active routes and filters subgroup permissions before starring"
       ],
     },
   ];
-  expect(activeNavGroupLabel(groups, "/private/object")).toBe("More Resources");
+  expect(activeNavGroupLabel(groups, "/private/object")).toBe("Manage");
   const filtered = filterNavGroups(groups, null);
   expect(withStarredTypes(filtered, ["test.io/private"])).toEqual([]);
 });

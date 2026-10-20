@@ -132,3 +132,8 @@ describe("resolveSchemaRefs", () => {
     expect(out.properties!.child).toBeDefined(); // opaque, but no infinite loop
   });
 });
+
+it("returns a validation result for malformed and cyclic YAML instead of crashing the editor", () => {
+  expect(parseHelmValuesYAML("broken: [")).toBeNull();
+  expect(parseHelmValuesYAML("cycle: &cycle { again: *cycle }")).toBeNull();
+});

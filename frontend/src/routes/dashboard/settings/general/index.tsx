@@ -4,7 +4,9 @@ import { FileText, Key, LifeBuoy, Settings } from "lucide-react";
 import { useTabParam } from "@/lib/use-tab-param";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
-import { StatePanel } from "@/components/ui/empty-state";
+import { InfoCallout } from "@/components/ui/info-callout";
+import { useSSOProviders } from "@/lib/hooks/user-settings";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { AuditTab } from "./-audit-tab";
 import { GeneralEditModal } from "./-general-edit-modal";
 import { GeneralTab } from "./-general-tab";
@@ -17,8 +19,8 @@ const TAB_KEYS = ["general", "tokens", "audit", "support"] as const;
 
 const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
   { key: "general", label: "General", icon: Settings },
-  { key: "tokens", label: "API Tokens", icon: Key },
-  { key: "audit", label: "Audit Log", icon: FileText },
+  { key: "tokens", label: "API tokens", icon: Key },
+  { key: "audit", label: "Audit log", icon: FileText },
   { key: "support", label: "Support", icon: LifeBuoy },
 ];
 
@@ -26,12 +28,17 @@ function SettingsPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "general");
   const [showEditGeneral, setShowEditGeneral] = useState(false);
+  // The SSO signpost is a banner only while no provider is configured.
+  const { data: ssoProviders } = useSSOProviders();
+  const ssoUnconfigured =
+    ssoProviders !== undefined &&
+    !ssoProviders.some((provider) => provider.enabled);
 
   return (
     <PageShell>
       <PageHeader
         title="General"
-        description="Platform configuration and administration"
+        description="Platform identity, audit defaults, API tokens and support."
       />
 
       <div className="overflow-x-auto">
@@ -46,14 +53,21 @@ function SettingsPage() {
       <TabsContent>
         {activeTab === "general" && (
           <div className="space-y-4">
-            <StatePanel
-              tone="info"
-              title="Looking for SSO providers?"
-              description="Single sign-on providers are configured under Settings › Authentication."
-              actionLabel="Go to Authentication"
-              actionHref="/dashboard/settings/auth"
-              className="items-start py-4 text-left"
-            />
+            {ssoUnconfigured ? (
+              <InfoCallout
+                action={
+                  <RouterLink
+                    to="/dashboard/settings/auth"
+                    className="text-sm font-medium underline-offset-4 hover:underline"
+                  >
+                    Set up single sign-on
+                  </RouterLink>
+                }
+              >
+                No single sign-on provider is configured. Users sign in with
+                local passwords until one is added under Authentication.
+              </InfoCallout>
+            ) : null}
             <GeneralTab onEdit={() => setShowEditGeneral(true)} />
           </div>
         )}

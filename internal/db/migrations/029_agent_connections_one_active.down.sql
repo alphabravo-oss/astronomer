@@ -1,1 +1,0 @@
-DROP INDEX CONCURRENTLY IF EXISTS public.agent_connections_one_active_per_cluster;

@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -78,10 +80,10 @@ func PrepareTaskOutbox(ctx context.Context, task *asynq.Task, opts TaskOutboxOpt
 		TaskType:            task.Type(),
 		Payload:             payload,
 		QueueName:           opts.QueueName,
-		MaxRetry:            int32(opts.MaxRetry),
+		MaxRetry:            safeconv.Int32(opts.MaxRetry),
 		TimeoutSeconds:      int32(timeoutSeconds),
 		UniqueSeconds:       int32(uniqueSeconds),
-		MaxDeliveryAttempts: int32(opts.MaxDeliveryAttempts),
+		MaxDeliveryAttempts: safeconv.Int32(opts.MaxDeliveryAttempts),
 		NextAttemptAt:       pgtype.Timestamptz{Time: opts.NextAttemptAt.UTC(), Valid: true},
 	}, nil
 }

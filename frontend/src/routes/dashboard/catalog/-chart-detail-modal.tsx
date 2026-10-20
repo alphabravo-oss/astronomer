@@ -1,3 +1,6 @@
+import { CatalogOfferingSupport } from "@/components/catalog/catalog-offering-support";
+import { catalogIntegrity, offeringSupport } from "@/lib/catalogs/assurance";
+import { OfferingSupport } from "@/components/catalog/offering-support";
 import { useState } from "react";
 import { ActionButton } from "@/components/ui/action-button";
 import { CatalogIcon } from "@/components/catalog/catalog-icon";
@@ -96,12 +99,24 @@ export function ChartDetailModal({
 
       <p className="text-sm text-muted-foreground">{chart.description}</p>
 
+      {!chart.catalogPresentation && (
+        <CatalogOfferingSupport
+          chart={chart.name}
+          repository={chart.repositoryName}
+          repositoryId={chart.repositoryId}
+          version={selectedVersion?.version}
+          detail
+        />
+      )}
       {chart.catalogPresentation && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-status-success/25 bg-status-success/5 px-3 py-2">
-            <CheckCircle2 className="h-4 w-4 text-status-success" />
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2">
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
             <span className="text-xs font-medium text-foreground">
-              Immutable catalog verified
+              {catalogIntegrity(
+                chart.catalogPresentation.verificationStatus,
+                chart.catalogPresentation.revoked,
+              )}
             </span>
             <span className="font-mono text-2xs text-table-secondary">
               {chart.catalogPresentation.catalogDigest.slice(0, 19)}
@@ -117,14 +132,30 @@ export function ChartDetailModal({
               </a>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Catalog integrity verifies the source. Application assurance
+            requires separate qualification evidence.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-md border border-border bg-muted/20 p-3">
               <p className="flex items-center gap-1.5 text-xs text-table-secondary">
                 <ShieldCheck className="h-3.5 w-3.5" /> Support
               </p>
-              <p className="mt-1 text-sm font-medium text-foreground">
-                {chart.catalogPresentation.supportTier}
-              </p>
+              <OfferingSupport
+                detail
+                support={offeringSupport({
+                  tier:
+                    chart.catalogPresentation.supportTier === "Community"
+                      ? "upstream"
+                      : chart.catalogPresentation.supportTier === "Assured"
+                        ? "astronomer"
+                        : "experimental",
+                  artifact: chart.catalogPresentation.artifact,
+                  verification: chart.catalogPresentation.verificationStatus,
+                  revoked: chart.catalogPresentation.revoked,
+                  version: selectedVersion?.version,
+                })}
+              />
             </div>
             <div className="rounded-md border border-border bg-muted/20 p-3">
               <p className="flex items-center gap-1.5 text-xs text-table-secondary">
@@ -147,7 +178,7 @@ export function ChartDetailModal({
               <p className="mt-1 text-sm font-medium text-foreground">
                 {chart.catalogPresentation.privileged
                   ? "Cluster-scoped review"
-                  : "Namespace scoped"}
+                  : "Review chart permissions"}
               </p>
             </div>
           </div>

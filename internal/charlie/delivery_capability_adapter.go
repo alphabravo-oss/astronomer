@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -461,7 +463,7 @@ func (a *DeliveryCapabilityAdapter) rolloutApprove(ctx context.Context, capabili
 	if err != nil {
 		return nil, fmt.Errorf("approval binding digest is invalid")
 	}
-	result, err := a.rolloutControl.Approve(ctx, deliveryrollout.ApprovalRequest{ProjectID: projectID, RolloutID: id, ExpectedFence: int64Argument(args, "expected_fence", 0), Cohort: int32(int64Argument(args, "cohort", -2)), BindingDigest: digest, Decision: "approved", ExpiresAt: a.now().UTC().Add(time.Duration(int64Argument(args, "expires_in_seconds", 900)) * time.Second)})
+	result, err := a.rolloutControl.Approve(ctx, deliveryrollout.ApprovalRequest{ProjectID: projectID, RolloutID: id, ExpectedFence: int64Argument(args, "expected_fence", 0), Cohort: safeconv.Int32(int64Argument(args, "cohort", -2)), BindingDigest: digest, Decision: "approved", ExpiresAt: a.now().UTC().Add(time.Duration(int64Argument(args, "expires_in_seconds", 900)) * time.Second)})
 	if err != nil {
 		return nil, err
 	}

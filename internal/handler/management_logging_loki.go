@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -207,8 +209,8 @@ func (h *MonitoringHandler) ensureManagementLokiToken(ctx context.Context, clust
 		return "", errors.New("loki ingest token store not configured")
 	}
 	tok, err := store.GetLokiIngestTokenByCluster(ctx, clusterID)
-	if err == nil && strings.TrimSpace(tok.TokenEncrypted) != "" {
-		plain, decErr := h.encryptor.Decrypt(tok.TokenEncrypted)
+	if err == nil && tok.TokenKeyID != "" {
+		plain, decErr := h.encryptor.DecryptString(crypto.FromParts(tok.TokenKeyID, tok.TokenAlgorithm, tok.TokenCiphertext, tok.TokenNonce))
 		if decErr != nil {
 			return "", fmt.Errorf("decrypt management ingest token: %w", decErr)
 		}
@@ -221,15 +223,15 @@ func (h *MonitoringHandler) ensureManagementLokiToken(ctx context.Context, clust
 	if err != nil {
 		return "", err
 	}
-	sealed, err := h.encryptor.Encrypt(plain)
+	sealed, err := h.encryptor.EncryptString(plain)
 	if err != nil {
 		return "", fmt.Errorf("encrypt management ingest token: %w", err)
 	}
 	if _, err := store.UpsertLokiIngestToken(ctx, sqlc.UpsertLokiIngestTokenParams{
-		ClusterID:      clusterID,
-		TokenHash:      lokiauth.HashBearer(plain),
-		TokenEncrypted: sealed,
-		CreatedByID:    pgtype.UUID{},
+		ClusterID:  clusterID,
+		TokenHash:  lokiauth.HashBearer(plain),
+		TokenKeyID: sealed.KeyID, TokenAlgorithm: sealed.Algorithm, TokenCiphertext: sealed.Ciphertext, TokenNonce: sealed.Nonce,
+		CreatedByID: pgtype.UUID{},
 	}); err != nil {
 		return "", fmt.Errorf("store management ingest token: %w", err)
 	}

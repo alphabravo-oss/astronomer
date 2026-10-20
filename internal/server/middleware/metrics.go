@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -55,14 +54,6 @@ func registerMetrics() {
 			httpInflightRequests,
 		)
 	})
-}
-
-// MetricsHandler exposes the process and application Prometheus scrape
-// endpoint. Global collectors are registered once to keep repeated test/router
-// construction safe.
-func MetricsHandler() http.Handler {
-	registerMetrics()
-	return promhttp.Handler()
 }
 
 // Metrics instruments HTTP requests with bounded-cardinality labels derived

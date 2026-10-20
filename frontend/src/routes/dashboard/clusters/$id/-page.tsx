@@ -15,6 +15,7 @@ import { useClusterToolsStatus } from "@/lib/hooks/tools";
 import { liveFallback } from "@/lib/live/status-store";
 import { deriveEffectiveClusterStatus } from "./-cluster-status";
 import { ClusterUsageCards } from "./-cluster-usage-cards";
+import { ClusterInventory } from "./-cluster-inventory";
 import {
   AnomalyBaselinesPanel,
   ClusterConditionsBar,
@@ -36,7 +37,6 @@ import { QueryStates } from "@/components/ui/query-states";
 import { useQuery } from "@tanstack/react-query";
 import { getServiceMeshDetection } from "@/lib/api/cluster-service-mesh";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { registrationSearch } from "@/components/clusters/registration-flow";
@@ -195,29 +195,27 @@ export function ClusterDetailPage() {
           meta={clusterMeta}
           actions={
             <>
-              <ActionButton
-                tooltip="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
-                onClick={kubeconfig.downloadProxy}
-                loading={kubeconfig.proxyPending}
-                icon={<Download className="h-4 w-4" />}
-              >
-                Proxy kubeconfig
-              </ActionButton>
-              <ActionButton
-                tooltip="Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
-                onClick={kubeconfig.downloadDirect}
-                loading={kubeconfig.directPending}
-                disabled={!!kubeconfig.directDisabledReason}
-                disabledReason={kubeconfig.directDisabledReason}
-                icon={<Download className="h-4 w-4" />}
-              >
-                Direct kubeconfig
-              </ActionButton>
               <ActionMenu
                 items={[
                   {
-                    label: "Registration Command",
+                    label: "Download proxy kubeconfig",
+                    icon: <Download className="h-3.5 w-3.5" />,
+                    onClick: () => void kubeconfig.downloadProxy(),
+                    disabled: kubeconfig.proxyPending,
+                  },
+                  {
+                    label: "Download direct kubeconfig",
+                    icon: <Download className="h-3.5 w-3.5" />,
+                    onClick: () => void kubeconfig.downloadDirect(),
+                    disabled:
+                      kubeconfig.directPending ||
+                      !!kubeconfig.directDisabledReason,
+                    disabledReason: kubeconfig.directDisabledReason,
+                  },
+                  {
+                    label: "Registration command",
                     icon: <Terminal className="h-3.5 w-3.5" />,
+                    separator: true,
                     onClick: () =>
                       void navigate({
                         to: "/dashboard/clusters/register",
@@ -304,6 +302,9 @@ export function ClusterDetailPage() {
         toolsMetric={toolsMetric}
       />
 
+      {/* Inventory by group: the counts that used to sit in the sidebar. */}
+      <ClusterInventory clusterId={clusterId} />
+
       <ClusterRecentEvents query={eventsQuery} />
 
       {/* T7.2 — Anomaly baselines surface. The nightly
@@ -330,7 +331,7 @@ export function ClusterDetailPage() {
         open={showDelete}
         onClose={() => setShowDelete(false)}
         onConfirm={handleDelete}
-        title="Delete Cluster"
+        title="Delete cluster"
         description={`This will remove the cluster "${cluster.displayName}" from Astronomer. The underlying Kubernetes cluster will not be destroyed.`}
         confirmText="Delete"
         confirmValue={cluster.name}

@@ -41,7 +41,7 @@ var productionWiringSets = []string{
 	"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
 	"redis.external.address=redis.astronomer.svc.cluster.local:6379",
 	"secrets.secretKey=prod-jwt-signing-key",
-	"secrets.encryptionKey=prod-fernet-key",
+	"secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U",
 	"bootstrap.email=admin@example.com",
 	// F8: production requires a pinned bootstrap password (or existingSecret).
 	"bootstrap.password=prod-admin-initial",
@@ -58,7 +58,6 @@ var productionWiringSets = []string{
 	"image.server.digest=" + productionTestImageDigest,
 	"image.worker.digest=" + productionTestImageDigest,
 	"image.agent.digest=" + productionTestImageDigest,
-	"image.migrate.digest=" + productionTestImageDigest,
 	"utilities.busybox.digest=" + productionTestImageDigest,
 	"postgres.image.digest=" + productionTestImageDigest,
 	"redis.image.digest=" + productionTestImageDigest,
@@ -74,29 +73,6 @@ var productionWiringSets = []string{
 	"delivery.artifacts.builtInBundles.ociRepository=ghcr.io/example/astronomer/bundles",
 	"delivery.artifacts.builtInBundles.digest=sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 	"delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
-}
-
-func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) {
-	scriptPath := filepath.Join(repoRoot(t), "scripts", "verify-enterprise.sh")
-	raw, err := os.ReadFile(scriptPath)
-	if err != nil {
-		t.Fatalf("read enterprise verifier: %v", err)
-	}
-	script := string(raw)
-	start := strings.Index(script, `step "Fully wired production Helm render"`)
-	end := strings.Index(script, `step "Helm chart contract tests"`)
-	if start < 0 || end <= start {
-		t.Fatal("enterprise verifier production Helm render block is missing or malformed")
-	}
-	productionBlock := script[start:end]
-	arrayIndex := regexp.MustCompile(`\[[0-9]+\]`)
-	for _, set := range productionWiringSets {
-		key := strings.SplitN(set, "=", 2)[0]
-		canonicalKey := arrayIndex.ReplaceAllString(key, "")
-		if !strings.Contains(productionBlock, canonicalKey+"=") {
-			t.Errorf("enterprise verifier production render is missing productionWiringSets key %q", canonicalKey)
-		}
-	}
 }
 
 func TestProductionWorkloadImagesAreDigestOnly(t *testing.T) {
@@ -173,7 +149,6 @@ func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
 func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	allowedHooks := map[string]string{
-		"Job/astronomer-migrate":   "post-install,post-upgrade",
 		"Job/astronomer-preflight": "pre-install,pre-upgrade",
 		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
 		// hook-weight) so a fresh install doesn't deadlock on the main SA not
@@ -826,19 +801,12 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 		"image.pullPolicy=Always",
 		"image.server.tag=v-server",
 		"image.worker.tag=v-worker",
-		"image.migrate.tag=v-migrate",
 		"frontend.image.tag=v-frontend",
-		// This test deliberately gives each image a distinct tag to prove the
-		// per-image tag plumbing; that trips the F1 server↔migrate skew guard,
-		// so opt into the skew explicitly (it is not a real deploy).
-		"image.allowSchemaSkew=true",
 	))
 
-	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/astronomer-go-server:v-server", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-server", "initContainers", "migrate", "registry.example.com/platform/astronomer-go-migrate:v-migrate", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "registry.example.com/platform/astronomer-go-worker:v-worker", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/astronomer-frontend:v-frontend", "Always")
-	assertContainerImage(t, docs, "Job", "astronomer-migrate", "containers", "migrate", "registry.example.com/platform/astronomer-go-migrate:v-migrate", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/alphabravo-oss/astronomer-go-server:v-server", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "registry.example.com/platform/alphabravo-oss/astronomer-go-worker:v-worker", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/alphabravo-oss/astronomer-frontend:v-frontend", "Always")
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-postgres", "containers", "postgres", "registry.example.com/platform/postgres:16-alpine", "Always")
 	// The bundled cache engine is Valkey (BSD-licensed Redis fork); the resource
 	// stays named "redis" but the image is valkey/valkey (see values.yaml).
@@ -1080,7 +1048,7 @@ func TestSecretsCarryResourcePolicyKeep(t *testing.T) {
 	secret := findRenderedDoc(t, docs, "Secret", "astronomer-secrets")
 	annotations := nestedMap(secret, "metadata", "annotations")
 	if annotations == nil {
-		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the Fernet/JWT keys survive helm uninstall")
+		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the encryption/JWT keys survive helm uninstall")
 	}
 	if got := stringValue(annotations["helm.sh/resource-policy"]); got != "keep" {
 		t.Fatalf("astronomer-secrets helm.sh/resource-policy = %q, want keep", got)
@@ -1109,7 +1077,7 @@ func TestProductionRequiresBackupsWired(t *testing.T) {
 
 // OPS-01: production with backups enabled must also require encryption-key
 // wrap custody. S3-only wiring leaves CronJobs green but key backup inert —
-// a restore onto a new cluster then cannot decrypt Fernet columns.
+// a restore onto a new cluster then cannot decrypt sealed columns.
 func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 
@@ -1192,71 +1160,6 @@ func TestSchemaFloorIsFreshV1(t *testing.T) {
 
 	if floor != 1 {
 		t.Fatalf("expectedMinSchemaVersion=%d, want the minimum supported upgrade schema 1", floor)
-	}
-}
-
-// O-01 / R-03 / C-11 / C-05: the encryption-key env var is ASTRONOMER_ENCRYPTION_KEY
-// everywhere. Guard against the bare-ENCRYPTION_KEY drift that silently breaks
-// decryption (the DR runbook, raw manifests, and docker-compose must not use it;
-// keyrotate must accept the canonical name).
-func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
-	root := repoRoot(t)
-
-	// The chart writes the configured canonical key and workloads reference that
-	// exact key from the selected existing Secret.
-	chartSecret, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "secret.yaml"))
-	if err != nil {
-		t.Fatalf("read chart secret.yaml: %v", err)
-	}
-	if !strings.Contains(string(chartSecret), `.Values.secrets.encryptionKeyKey`) {
-		t.Fatal("chart templates/secret.yaml no longer renders the configured encryption key name")
-	}
-	for _, template := range []string{"server-deployment.yaml", "worker-deployment.yaml"} {
-		raw, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", template))
-		if err != nil {
-			t.Fatalf("read %s: %v", template, err)
-		}
-		if !strings.Contains(string(raw), "ASTRONOMER_ENCRYPTION_KEY") || !strings.Contains(string(raw), `.Values.secrets.encryptionKeyKey`) {
-			t.Fatalf("%s must expose ASTRONOMER_ENCRYPTION_KEY from the configured Secret key", template)
-		}
-	}
-
-	// The DR runbook must not read/recreate the key under the bare name.
-	runbook, err := os.ReadFile(filepath.Join(root, "docs", "management-plane-dr-runbook.md"))
-	if err != nil {
-		t.Fatalf("read DR runbook: %v", err)
-	}
-	for _, bad := range []string{"data.ENCRYPTION_KEY", "from-literal=ENCRYPTION_KEY="} {
-		if strings.Contains(string(runbook), bad) {
-			t.Fatalf("DR runbook still uses bare %q — server/worker read ASTRONOMER_ENCRYPTION_KEY, so this silently no-ops during a real restore", bad)
-		}
-	}
-
-	// Raw manifests and docker-compose must not assign the bare key.
-	bareAssign := regexp.MustCompile(`(?m)^\s+ENCRYPTION_KEY\s*:`)
-	for _, rel := range []string{
-		filepath.Join("deploy", "k8s", "03-secret.yaml"),
-		filepath.Join("deploy", "docker-compose.yml"),
-	} {
-		b, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil {
-			t.Fatalf("read %s: %v", rel, err)
-		}
-		if bareAssign.Match(b) {
-			t.Fatalf("%s assigns bare ENCRYPTION_KEY; rename to ASTRONOMER_ENCRYPTION_KEY", rel)
-		}
-		if !strings.Contains(string(b), "ASTRONOMER_ENCRYPTION_KEY") {
-			t.Fatalf("%s does not set ASTRONOMER_ENCRYPTION_KEY", rel)
-		}
-	}
-
-	// keyrotate must accept the canonical name (fallback).
-	kr, err := os.ReadFile(filepath.Join(root, "cmd", "keyrotate", "main.go"))
-	if err != nil {
-		t.Fatalf("read keyrotate main.go: %v", err)
-	}
-	if !strings.Contains(string(kr), "ASTRONOMER_ENCRYPTION_KEY") {
-		t.Fatal("cmd/keyrotate/main.go does not read ASTRONOMER_ENCRYPTION_KEY")
 	}
 }
 

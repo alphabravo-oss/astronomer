@@ -4,14 +4,16 @@ import (
 	"context"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // isSupportedChannelType is the create+update gate. Centralized here
@@ -103,12 +105,12 @@ type AlertingHandler struct {
 	// This handler is a WRITER of that column — persistSharedAlertingAssetHashes
 	// stamps the rendered-asset hashes into it — so it needs the key for the
 	// same reason MonitoringHandler does. Optional in development only.
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 }
 
-// SetEncryptor wires the Fernet encryptor for the monitoring-backend
+// SetEncryptor wires the age encryptor for the monitoring-backend
 // credential (migration 146).
-func (h *AlertingHandler) SetEncryptor(encryptor *auth.Encryptor) {
+func (h *AlertingHandler) SetEncryptor(encryptor *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

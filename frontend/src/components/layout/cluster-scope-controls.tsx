@@ -307,7 +307,7 @@ function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Namespace scope: ${label}`}
-        className="inline-flex h-8 max-w-28 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:max-w-48 sm:px-2.5 font-normal"
+        className="inline-flex h-8 max-w-28 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:max-w-40 sm:px-2.5 font-normal"
       >
         <Layers3 className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{label}</span>

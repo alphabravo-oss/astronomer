@@ -39,7 +39,7 @@ import (
 )
 
 func (h *DexHandler) connectorResponse(row sqlc.DexConnector) (map[string]any, error) {
-	cfg := decodeJSONMap(row.Config)
+	cfg := withStoredSecretMarkers(row.Type, decodeJSONMap(row.Config), row.SecretsKeyID != "")
 	if err := validateConnectorConfig(row.Type, cfg); err != nil {
 		return nil, err
 	}
@@ -151,11 +151,15 @@ func (h *DexHandler) renderDexConfig(settings sqlc.DexSetting, publicClients []m
 	out := make([]map[string]any, 0, len(connectors))
 	for _, c := range connectors {
 		raw := decodeJSONMap(c.Config)
+		secrets, err := h.openConnectorSecrets(c)
+		if err != nil {
+			return nil, fmt.Errorf("connector %q: %w", c.Name, err)
+		}
+		for key, value := range secrets {
+			raw[key] = value
+		}
 		if err := validateConnectorConfig(c.Type, raw); err != nil {
 			return nil, fmt.Errorf("stored connector %q is invalid", c.Name)
-		}
-		if err := h.decryptSecretFields(c.Type, raw); err != nil {
-			return nil, fmt.Errorf("connector %q: %w", c.Name, err)
 		}
 		canonical, canonicalErr := dexconfig.CanonicalConnectorType(c.Type)
 		if canonicalErr != nil {
@@ -604,7 +608,7 @@ func (h *DexHandler) verifyDexHealth(ctx context.Context, clusterID, namespace, 
 // When the request omits a secret field (or sends it empty), keep the existing
 // value so the UI can re-save form data without forcing the user to retype the
 // secret. Non-secret fields are taken verbatim from req.
-func mergeSecretFromExisting(connectorType string, existingRaw json.RawMessage, req map[string]any) map[string]any {
+func mergeSecretFromExisting(connectorType string, existing map[string]string, req map[string]any) map[string]any {
 	merged := make(map[string]any, len(req))
 	for k, v := range req {
 		merged[k] = v
@@ -614,7 +618,6 @@ func mergeSecretFromExisting(connectorType string, existingRaw json.RawMessage, 
 		return merged
 	}
 	spec := dexConnectorRegistry[canonical]
-	existing := decodeJSONMap(existingRaw)
 	for _, key := range spec.Secret {
 		v, ok := req[key]
 		s, isStr := v.(string)

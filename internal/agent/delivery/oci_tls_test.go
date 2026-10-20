@@ -2,8 +2,9 @@ package delivery
 
 import (
 	"bytes"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestOCITLSAndRegistryAuthenticationReferences(t *testing.T) {

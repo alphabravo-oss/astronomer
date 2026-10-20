@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -58,7 +60,7 @@ func privateInput(path string) (*os.File, error) {
 	}
 	file := os.NewFile(uintptr(fd), "private-input")
 	actual, err := file.Stat()
-	if err != nil || !actual.Mode().IsRegular() || actual.Mode().Perm() != 0o600 || !os.SameFile(before, actual) || actual.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !actual.Mode().IsRegular() || actual.Mode().Perm() != 0o600 || !os.SameFile(before, actual) || actual.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		_ = file.Close()
 		return nil, errors.New("private input owner or identity differs")
 	}
@@ -66,7 +68,7 @@ func privateInput(path string) (*os.File, error) {
 }
 func privateCaptures(spec Spec) (*os.Root, *os.File, *os.File, error) {
 	parent, err := os.Lstat(spec.CaptureDirectory)
-	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return nil, nil, nil, errors.New("owned private0700 capture directory required")
 	}
 	resolved, err := filepath.EvalSymlinks(spec.CaptureDirectory)
@@ -206,7 +208,7 @@ func waitLeader(ctx context.Context, fd int) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		events := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+		events := []unix.PollFd{{Fd: safeconv.Int32(fd), Events: unix.POLLIN}}
 		count, err := unix.Poll(events, 25)
 		if errors.Is(err, unix.EINTR) {
 			continue

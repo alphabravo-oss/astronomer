@@ -2,12 +2,14 @@ package kuberequests
 
 import (
 	"context"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	dto "github.com/prometheus/client_model/go"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	dto "github.com/prometheus/client_model/go"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"

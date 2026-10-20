@@ -21,7 +21,7 @@
 //     PUT    /api/v1/projects/{id}/default-vault-connection/
 //
 // Encryption:
-//   - auth_encrypted is a Fernet-encrypted JSON blob whose shape depends
+//   - auth_* sealed is a age-encrypted JSON blob whose shape depends
 //     on auth_method (see internal/vault/resolver.go DecodeAuthBlob).
 //   - GETs decrypt then redact: the response shows method-specific
 //     redaction (e.g. token: "<encrypted>") so the UI can render the
@@ -47,6 +47,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -54,10 +56,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
@@ -145,7 +146,7 @@ func (h *VaultHandler) persistHealthResult(r *http.Request, result vaultHealthPe
 type VaultHandler struct {
 	queries   VaultConnectionQuerier
 	auditor   any // auditWriterV1 surface; same pattern as cloud_credentials
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	probe     VaultProbe
 	resolver  *avault.Resolver // cached resolver for ClearCache calls on mutate/delete
 	runTx     vaultRunTxFunc
@@ -171,7 +172,7 @@ func (h *VaultHandler) SetRunTx(runTx vaultRunTxFunc) {
 
 func (h *VaultHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func (h *VaultHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *VaultHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h != nil {
 		h.encryptor = e
 	}
@@ -255,12 +256,12 @@ func (h *VaultHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connection ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connection ID")
 		return
 	}
 	row, err := h.queries.GetVaultConnectionByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vault connection not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Vault connection not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, h.toResponse(row, true))
@@ -273,30 +274,30 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryption key not configured; cannot store vault auth")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryption key not configured; cannot store vault auth")
 		return
 	}
 	var req VaultConnectionRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if err := validateConnectionName(req.Name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, err.Error())
 		return
 	}
 	if err := validateAddr(req.Addr, req.TLSSkipVerify); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidAddr, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidAddr, err.Error())
 		return
 	}
 	authBlob, err := avault.EncodeAuthBlob(req.AuthMethod, req.Auth)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.AuthenticationRequired, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.AuthenticationRequired, err.Error())
 		return
 	}
-	encrypted, err := h.encryptor.Encrypt(authBlob)
+	encrypted, err := h.encryptor.EncryptString(authBlob)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt auth blob")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt auth blob")
 		return
 	}
 	mount := req.DefaultMount
@@ -314,11 +315,11 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := sqlc.CreateVaultConnectionParams{
-		Name:          req.Name,
-		Description:   req.Description,
-		Addr:          req.Addr,
-		AuthMethod:    req.AuthMethod,
-		AuthEncrypted: encrypted,
+		Name:        req.Name,
+		Description: req.Description,
+		Addr:        req.Addr,
+		AuthMethod:  req.AuthMethod,
+		AuthKeyID:   encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
 		Namespace:     req.Namespace,
 		TlsSkipVerify: req.TLSSkipVerify,
 		CaCertPem:     req.CACertPEM,
@@ -338,10 +339,10 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A vault connection with that name already exists")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A vault connection with that name already exists")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create vault connection")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create vault connection")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/vault-connections/"+row.ID.String()+"/")
@@ -354,29 +355,29 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryption key not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryption key not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connection ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connection ID")
 		return
 	}
 	existing, err := h.queries.GetVaultConnectionByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vault connection not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Vault connection not found")
 		return
 	}
 	var req VaultConnectionRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.AuthMethod == "" {
 		req.AuthMethod = existing.AuthMethod
 	}
 	if err := validateAddr(req.Addr, req.TLSSkipVerify); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidAddr, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidAddr, err.Error())
 		return
 	}
 
@@ -384,17 +385,17 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// replaced with the stored value before we re-encode the blob.
 	mergedAuth, err := h.mergeAuth(existing, req.AuthMethod, req.Auth)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.AuthenticationRequired, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.AuthenticationRequired, err.Error())
 		return
 	}
 	authBlob, err := avault.EncodeAuthBlob(req.AuthMethod, mergedAuth)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.AuthenticationRequired, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.AuthenticationRequired, err.Error())
 		return
 	}
-	encrypted, err := h.encryptor.Encrypt(authBlob)
+	encrypted, err := h.encryptor.EncryptString(authBlob)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt auth blob")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt auth blob")
 		return
 	}
 	mount := req.DefaultMount
@@ -407,11 +408,11 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := sqlc.UpdateVaultConnectionParams{
-		ID:            id,
-		Description:   req.Description,
-		Addr:          req.Addr,
-		AuthMethod:    req.AuthMethod,
-		AuthEncrypted: encrypted,
+		ID:          id,
+		Description: req.Description,
+		Addr:        req.Addr,
+		AuthMethod:  req.AuthMethod,
+		AuthKeyID:   encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
 		Namespace:     req.Namespace,
 		TlsSkipVerify: req.TLSSkipVerify,
 		CaCertPem:     req.CACertPEM,
@@ -429,7 +430,7 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update vault connection")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update vault connection")
 		return
 	}
 	if h.resolver != nil {
@@ -445,12 +446,12 @@ func (h *VaultHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connection ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connection ID")
 		return
 	}
 	existing, err := h.queries.GetVaultConnectionByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vault connection not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Vault connection not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -464,7 +465,7 @@ func (h *VaultHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete vault connection")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete vault connection")
 		return
 	}
 	observability.RetireVaultMetricOwner(id)
@@ -487,17 +488,17 @@ func (h *VaultHandler) GetProjectDefault(w http.ResponseWriter, r *http.Request)
 		// the alternate path param too.
 		projectID, err = reqctx.ProjectID(r)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 			return
 		}
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	ptr, err := h.queries.GetProjectDefaultVaultConnection(r.Context(), projectID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to look up project default vault connection")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to look up project default vault connection")
 		return
 	}
 	if !ptr.Valid {
@@ -520,12 +521,12 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		projectID, err = reqctx.ProjectID(r)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 			return
 		}
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	// openapi:request-operation putProjectsByIdDefaultVaultConnection
@@ -533,18 +534,18 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 		ConnectionID *string `json:"connection_id"`
 	}
 	if err := decodeV1JSONBody(r, &body); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	var ptr pgtype.UUID
 	if body.ConnectionID != nil && *body.ConnectionID != "" {
 		id, err := uuid.Parse(*body.ConnectionID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connection_id")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connection_id")
 			return
 		}
 		if _, err := h.queries.GetVaultConnectionByID(r.Context(), id); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Vault connection not found")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Vault connection not found")
 			return
 		}
 		ptr = pgtype.UUID{Bytes: id, Valid: true}
@@ -568,7 +569,7 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project default vault connection")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project default vault connection")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"connection_id": stringOrNull(body.ConnectionID)})
@@ -667,13 +668,13 @@ func toVaultConnectionListResponse(row sqlc.ListVaultConnectionsPageRow) VaultCo
 
 // decryptAuth returns the cleartext JSON blob for a connection.
 func (h *VaultHandler) decryptAuth(conn sqlc.VaultConnection) (string, error) {
-	if h.encryptor == nil {
-		return conn.AuthEncrypted, nil
-	}
-	if conn.AuthEncrypted == "" {
+	if conn.AuthKeyID == "" {
 		return "{}", nil
 	}
-	return h.encryptor.Decrypt(conn.AuthEncrypted)
+	if h.encryptor == nil {
+		return "", errors.New("vault auth is encrypted but no encryption key is configured")
+	}
+	return h.encryptor.DecryptString(crypto.FromParts(conn.AuthKeyID, conn.AuthAlgorithm, conn.AuthCiphertext, conn.AuthNonce))
 }
 
 func (h *VaultHandler) decryptAuthMap(conn sqlc.VaultConnection) (map[string]string, error) {

@@ -79,7 +79,7 @@ export function LatestDrillCard() {
           <div className="rounded-xl border border-border bg-card p-6 space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <p className="text-xs font-medium text-muted-foreground">
                   Latest restore drill
                 </p>
                 <div className="flex items-center gap-3">

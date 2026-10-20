@@ -256,7 +256,6 @@ function NewDestinationPage() {
           Back to Astronomer backup
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · Backup · New"
           title="Add S3 destination"
           description="Credentials are stored encrypted. The dump CronJob starts as soon as you save."
         />

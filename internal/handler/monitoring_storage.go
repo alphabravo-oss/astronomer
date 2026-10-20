@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 type storageConfigAuthorizer func(sqlc.BackupStorageConfig) error
@@ -79,11 +82,11 @@ func respondStackPayloadError(w http.ResponseWriter, r *http.Request, err error)
 		// sentinel's text: the response must not say which of the authorizer's
 		// clauses the caller failed, or whether the id they guessed resolved to
 		// a row at all.
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 	case errors.Is(err, errStorageConfigAuthzFailed):
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 	default:
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 	}
 }
 
@@ -124,20 +127,16 @@ func (h *MonitoringHandler) objectStoreSecretSpec(ctx context.Context, storageCo
 // storageCredentials returns the S3 access/secret pair for a backup storage
 // config.
 //
-// It is not simply cfg.AccessKey/cfg.SecretKey: since the credential-at-rest
-// change those columns are deliberately BLANKED whenever the encrypted column
-// is populated (legacyBackupCredentialColumns in backups.go), so reading them
-// directly yields "" on every deployment that has an encryptor — and the stack
-// was then installed with an empty-credential objstore secret and no error
-// anywhere. Fail loudly instead when the row is sealed and we cannot open it.
+// The pair lives only in the sealed credentials family; a row without it has
+// no credentials, and a sealed row that cannot be opened fails loudly.
 func (h *MonitoringHandler) storageCredentials(cfg sqlc.BackupStorageConfig) (string, string, error) {
-	if cfg.EncryptedCredentials == "" {
-		return cfg.AccessKey, cfg.SecretKey, nil
+	if cfg.CredentialsKeyID == "" {
+		return "", "", nil
 	}
 	if h == nil || h.encryptor == nil {
 		return "", "", fmt.Errorf("object storage credentials are encrypted but no encryption key is configured")
 	}
-	plaintext, err := h.encryptor.Decrypt(cfg.EncryptedCredentials)
+	plaintext, err := h.encryptor.DecryptString(crypto.FromParts(cfg.CredentialsKeyID, cfg.CredentialsAlgorithm, cfg.CredentialsCiphertext, cfg.CredentialsNonce))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to decrypt object storage credentials")
 	}

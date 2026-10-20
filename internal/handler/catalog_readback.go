@@ -3,24 +3,25 @@ package handler
 import (
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // GetInstalledChart resolves a durable release identity independently of list pages.
 func (h *CatalogHandler) GetInstalledChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, 400, apierror.InvalidID, "Invalid release ID")
+		apiutil.WriteError(w, r, 400, apiutil.InvalidID, "Invalid release ID")
 		return
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, 404, apierror.NotFound, "Installed chart not found")
+		apiutil.WriteError(w, r, 404, apiutil.NotFound, "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -30,12 +31,12 @@ func (h *CatalogHandler) GetInstalledChart(w http.ResponseWriter, r *http.Reques
 	if installed.ChartVersionID.Valid {
 		version, err := h.queries.GetHelmChartVersionByID(r.Context(), uuid.UUID(installed.ChartVersionID.Bytes))
 		if err != nil {
-			RespondRequestError(w, r, 500, apierror.InternalError, "Failed to load release chart version")
+			apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to load release chart version")
 			return
 		}
 		chart, err := h.queries.GetHelmChartByID(r.Context(), version.ChartID)
 		if err != nil {
-			RespondRequestError(w, r, 500, apierror.InternalError, "Failed to load release chart")
+			apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to load release chart")
 			return
 		}
 		row.ChartID = pgtype.UUID{Bytes: chart.ID, Valid: true}

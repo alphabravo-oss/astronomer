@@ -27,7 +27,7 @@ import (
 // them with its own --set.
 const (
 	testRenderSecretKeySet     = "secrets.secretKey=chart-render-test-jwt-signing-key"
-	testRenderEncryptionKeySet = "secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo="
+	testRenderEncryptionKeySet = "secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U"
 )
 
 // helmTemplate runs `helm template astronomer <chart> -f values.yaml --set ...`

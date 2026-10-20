@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // Preview handles GET /api/v1/admin/gitops-sources/{id}/preview/.
@@ -18,16 +19,16 @@ func (h *GitOpsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid source ID")
 		return
 	}
 	if h.runner == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps sync runner not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "GitOps sync runner not configured")
 		return
 	}
 	res, err := h.runner.PreviewSource(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PreviewError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.PreviewError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, res)
@@ -44,7 +45,7 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid source ID")
 		return
 	}
 	limit, offset := queryLimitOffset(r, 20)
@@ -52,7 +53,7 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 		SourceID: id, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters")
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
@@ -77,7 +78,7 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	}
 	total, err := h.queries.CountGitOpsRegisteredClustersBySource(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to count clusters")
 		return
 	}
 	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))

@@ -15,8 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const CookieName = "__Host-astronomer_tool"
@@ -45,7 +47,7 @@ type Gateway struct {
 	main   *url.URL
 	domain string
 	jwt    *auth.JWTManager
-	cipher *auth.Encryptor
+	cipher *crypto.Encryptor
 	grants auth.StreamTicketBackend
 	proxy  func(http.ResponseWriter, *http.Request, Target)
 }
@@ -69,7 +71,7 @@ func Validate(mainURL, domain string) error {
 	return nil
 }
 
-func New(mainURL, domain string, jwt *auth.JWTManager, cipher *auth.Encryptor, grants auth.StreamTicketBackend, proxy func(http.ResponseWriter, *http.Request, Target)) (*Gateway, error) {
+func New(mainURL, domain string, jwt *auth.JWTManager, cipher *crypto.Encryptor, grants auth.StreamTicketBackend, proxy func(http.ResponseWriter, *http.Request, Target)) (*Gateway, error) {
 	if err := Validate(mainURL, domain); err != nil {
 		return nil, err
 	}
@@ -138,11 +140,11 @@ func (g *Gateway) decode(ctx context.Context, encoded, host string) (session, er
 	if len(encoded) > 3800 {
 		return s, errors.New("invalid tool session")
 	}
-	plain, err := g.cipher.Decrypt(encoded)
+	plain, err := g.openToken(encoded)
 	if err != nil {
 		return s, err
 	}
-	if err = json.Unmarshal([]byte(plain), &s); err != nil {
+	if err = json.Unmarshal(plain, &s); err != nil {
 		return s, err
 	}
 	if s.Purpose != sessionPurpose || s.Host != host || g.host(s.Target) != host || !s.Expires.After(time.Now()) {

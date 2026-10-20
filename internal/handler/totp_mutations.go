@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -9,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // TOTPMutationTx binds second-factor state, account safeguards, and mandatory
@@ -52,7 +53,7 @@ func (h *TOTPHandler) TransactionalAuditWired() bool { return h != nil && h.runT
 
 func (h *TOTPHandler) requireRunner(w http.ResponseWriter, r *http.Request) bool {
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "TOTP transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "TOTP transaction runner is not configured")
 		return false
 	}
 	return true
@@ -64,16 +65,16 @@ func (h *TOTPHandler) mutate(w http.ResponseWriter, r *http.Request, fn func(TOT
 	}
 	if err := h.runTx(r.Context(), fn); err != nil {
 		if errors.Is(err, errTOTPChallengeUsed) {
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidChallenge, "Challenge token has already been used")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidChallenge, "Challenge token has already been used")
 		} else if errors.Is(err, errTOTPEnrollmentChanged) {
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidChallenge, "TOTP enrollment changed; restart authentication")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidChallenge, "TOTP enrollment changed; restart authentication")
 		} else if errors.Is(err, errTOTPAccountDisabled) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.AccountDisabled, "Account is disabled")
 		} else if errors.Is(err, errTOTPAccountLocked) {
-			RespondRequestError(w, r, http.StatusLocked, apierror.AccountLocked, "Account is temporarily locked")
+			apiutil.WriteError(w, r, http.StatusLocked, apiutil.AccountLocked, "Account is temporarily locked")
 		} else {
 			h.log.Error("TOTP mutation failed", "error", err)
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "Authentication safeguards are temporarily unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "Authentication safeguards are temporarily unavailable")
 		}
 		return false
 	}
@@ -110,7 +111,7 @@ func lockTOTPEnrollment(ctx context.Context, q TOTPMutationTx, userID uuid.UUID,
 	if err != nil {
 		return sqlc.User{}, err
 	}
-	if current.SecretEncrypted != expected.SecretEncrypted {
+	if current.SecretKeyID != expected.SecretKeyID || !bytes.Equal(current.SecretCiphertext, expected.SecretCiphertext) {
 		return sqlc.User{}, errTOTPEnrollmentChanged
 	}
 	return user, nil

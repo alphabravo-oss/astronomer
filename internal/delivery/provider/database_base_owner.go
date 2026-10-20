@@ -7,12 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/Masterminds/semver/v3"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 )
 
 // DatabaseBaseOwner is optional internal composition, not an API approval or
@@ -197,7 +200,7 @@ func (owner *DatabaseBaseOwner) createBase(ctx context.Context, queries *sqlc.Qu
 		MirrorTrustOriginFingerprint: databaseProjectionOptional(s.MirrorTrustOriginFingerprint),
 		CatalogDigest:                binding.CatalogDigest, Profile: binding.Profile, CandidateSourceCommit: binding.CandidateSourceCommit,
 		ScannerDigest: binding.Scanner.ImageDigest, ScannerVersion: binding.Scanner.Version,
-		MainSchema: int32(binding.Scanner.MainSchema), JavaSchema: int32(binding.Scanner.JavaSchema),
+		MainSchema: safeconv.Int32(binding.Scanner.MainSchema), JavaSchema: safeconv.Int32(binding.Scanner.JavaSchema),
 		PolicyFingerprint: b.PolicyFingerprint, TrustMaterialFingerprint: s.TrustMaterialFingerprint,
 		VendorTrustFingerprint: s.VendorTrustFingerprint, VendorTrustOriginFingerprint: s.VendorTrustOriginFingerprint,
 		RegistryRootsFingerprint: databaseProjectionOptional(s.RegistryRootsFingerprint), RegistryPolicyFingerprint: databaseProjectionOptional(s.RegistryPolicyFingerprint), RegistryRootOriginFingerprint: databaseProjectionOptional(s.RegistryRootOriginFingerprint), ScanningEnabled: b.ScanningEnabled,

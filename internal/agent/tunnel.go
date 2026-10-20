@@ -11,11 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/coder/websocket"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -527,7 +528,7 @@ func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *ra
 	if rng != nil {
 		jitter = 0.75 + rng.Float64()*0.5
 	} else {
-		jitter = 0.75 + rand.Float64()*0.5
+		jitter = 0.75 + rand.Float64()*0.5 // #nosec G404 -- reconnect back-off jitter, not security material
 	}
 	return time.Duration(backoff*jitter) * time.Second
 }
@@ -543,7 +544,7 @@ func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *ra
 // (the ±25% jitter only); the spread now smears them across a full 1s
 // before the exponential takes over.
 func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404 -- reconnect back-off jitter, not security material
 	for attempt := 0; ; attempt++ {
 		var wait time.Duration
 		if attempt == 0 {
@@ -584,7 +585,7 @@ func InitialReconnectSpread(baseSeconds int, rng *rand.Rand) time.Duration {
 	if rng != nil {
 		f = rng.Float64()
 	} else {
-		f = rand.Float64()
+		f = rand.Float64() // #nosec G404 -- reconnect back-off jitter, not security material
 	}
 	d := time.Duration(f * float64(baseSeconds) * float64(time.Second))
 	if d < 100*time.Millisecond {

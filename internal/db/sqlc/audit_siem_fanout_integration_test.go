@@ -1,23 +1,24 @@
+//go:build integration
+
 package sqlc
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders(t *testing.T) {
-	dsn := os.Getenv("AUDIT_OUTBOX_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("AUDIT_OUTBOX_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {

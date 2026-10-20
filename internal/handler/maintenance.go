@@ -33,16 +33,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // MaintenanceQuerier is the slice of *sqlc.Queries the handler needs.
@@ -165,7 +168,7 @@ func (h *MaintenanceHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListMaintenanceWindows(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := make([]MaintenanceWindowResponse, 0, len(rows))
@@ -183,16 +186,16 @@ func (h *MaintenanceHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid window ID")
 		return
 	}
 	row, err := h.queries.GetMaintenanceWindow(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Window not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Window not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, windowToWire(row))
@@ -205,12 +208,12 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	var req MaintenanceWindowRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req = applyRequestDefaults(req)
 	if msg, ok := validateRequest(req); !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, msg)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, msg)
 		return
 	}
 	sel, _ := json.Marshal(req.ClusterSelector)
@@ -230,7 +233,7 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Description:     req.Description,
 		Mode:            req.Mode,
 		CronOpen:        req.CronOpen,
-		DurationMinutes: int32(req.DurationMinutes),
+		DurationMinutes: safeconv.Int32(req.DurationMinutes),
 		Timezone:        req.Timezone,
 		ClusterSelector: sel,
 		OperationTypes:  ops,
@@ -251,10 +254,10 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, errMaintenanceNameConflict) || isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A window with that name already exists")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A window with that name already exists")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create maintenance window")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create maintenance window")
 		return
 	}
 	h.invalidate()
@@ -269,17 +272,17 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid window ID")
 		return
 	}
 	var req MaintenanceWindowRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req = applyRequestDefaults(req)
 	if msg, ok := validateRequest(req); !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, msg)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, msg)
 		return
 	}
 	sel, _ := json.Marshal(req.ClusterSelector)
@@ -311,7 +314,7 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 			return q.UpdateMaintenanceWindow(r.Context(), sqlc.UpdateMaintenanceWindowParams{
 				ID: id, Name: req.Name, Description: req.Description, Mode: req.Mode, CronOpen: req.CronOpen,
-				DurationMinutes: int32(req.DurationMinutes), Timezone: req.Timezone, ClusterSelector: sel,
+				DurationMinutes: safeconv.Int32(req.DurationMinutes), Timezone: req.Timezone, ClusterSelector: sel,
 				OperationTypes: ops, OnBlock: req.OnBlock, Enabled: enabled,
 			})
 		},
@@ -319,14 +322,14 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Window not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Window not found")
 			return
 		}
 		if errors.Is(err, errMaintenanceNameConflict) || isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A different window already uses that name")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A different window already uses that name")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update maintenance window")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update maintenance window")
 		return
 	}
 	h.invalidate()
@@ -340,7 +343,7 @@ func (h *MaintenanceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid window ID")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -355,10 +358,10 @@ func (h *MaintenanceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Window not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Window not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete maintenance window")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete maintenance window")
 		return
 	}
 	h.invalidate()
@@ -374,7 +377,7 @@ func (h *MaintenanceHandler) ListActive(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := h.queries.ListMaintenanceWindows(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	now := time.Now().UTC()
@@ -417,12 +420,12 @@ func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	total, err := h.queries.CountDeferredOperations(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := make([]DeferredOperationResponse, 0, len(rows))
@@ -439,7 +442,7 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid deferred-operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid deferred-operation ID")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -464,15 +467,15 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Deferred operation not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Deferred operation not found")
 			return
 		}
 		if errors.Is(err, errDeferredNotCancellable) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.NotCancellable,
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.NotCancellable,
 				"Only pending operations can be cancelled")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CancelFailed, "Failed to cancel deferred operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CancelFailed, "Failed to cancel deferred operation")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

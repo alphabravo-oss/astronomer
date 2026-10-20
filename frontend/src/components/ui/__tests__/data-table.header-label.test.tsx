@@ -88,7 +88,7 @@ describe("column ariaLabel / headerTooltip", () => {
   it("exports the full name as the CSV header", () => {
     downloadCsv.mockClear();
     renderTable();
-    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export" }));
     const csv = (downloadCsv.mock.calls[0] as [string, string])[1];
     expect(csv.split("\r\n")[0]).toBe(
       "Name,CPU requests (cores),Plain full name",

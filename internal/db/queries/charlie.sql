@@ -195,7 +195,7 @@ INSERT INTO charlie_connections (
     central_ca_fingerprint, signing_key_id, signing_key_fingerprint,
     onboarding_schema_version, central_api_version, agent_protocol_version,
     chart_reference, chart_version, chart_digest, image_reference, image_digest, logical_agent_id, replica_count,
-    bridge_service_name, mcp_service_name, local_trust_material_encrypted,
+    bridge_service_name, mcp_service_name, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce,
     agent_secret_name, onboarding_package_id, onboarding_package_digest,
     onboarding_package_expires_at, enrollment_credentials_expires_at,
     artifact_credential_expires_at, certificate_expires_at,
@@ -210,7 +210,7 @@ INSERT INTO charlie_connections (
     sqlc.arg(chart_digest), sqlc.arg(image_reference), sqlc.arg(image_digest), sqlc.arg(logical_agent_id),
     sqlc.arg(replica_count),
     sqlc.arg(bridge_service_name), sqlc.arg(mcp_service_name),
-    sqlc.arg(local_trust_material_encrypted), sqlc.arg(agent_secret_name),
+    sqlc.arg(local_trust_material_key_id), sqlc.arg(local_trust_material_algorithm), sqlc.arg(local_trust_material_ciphertext), sqlc.arg(local_trust_material_nonce), sqlc.arg(agent_secret_name),
     sqlc.arg(onboarding_package_id), sqlc.arg(onboarding_package_digest),
     sqlc.arg(onboarding_package_expires_at), sqlc.arg(enrollment_credentials_expires_at),
     sqlc.arg(artifact_credential_expires_at), sqlc.arg(certificate_expires_at),
@@ -218,6 +218,16 @@ INSERT INTO charlie_connections (
     'disabled', 'disabled', sqlc.arg(disclosure_digest), sqlc.arg(health_state), false,
     sqlc.narg(created_by_id), sqlc.narg(reconciliation_due_at)
 ) RETURNING *;
+
+-- name: UpdateCharlieConnectionAppliedArtifacts :one
+UPDATE charlie_connections
+SET chart_reference = sqlc.arg(chart_reference),
+    chart_digest = sqlc.arg(chart_digest),
+    image_reference = sqlc.arg(image_reference),
+    image_digest = sqlc.arg(image_digest),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING *;
 
 -- name: GetCharlieConnectionByPackageID :one
 SELECT * FROM charlie_connections WHERE onboarding_package_id = $1;
@@ -483,12 +493,12 @@ RETURNING *;
 -- name: ClaimCharlieActionReceipt :one
 INSERT INTO charlie_action_receipts (
     connection_id, session_id, charlie_action_id, turn_id, capability, effect,
-    argument_digest, arguments_encrypted, authorization_hash, fencing_epoch, product_idempotency_key,
+    argument_digest, arguments_key_id, arguments_algorithm, arguments_ciphertext, arguments_nonce, authorization_hash, fencing_epoch, product_idempotency_key,
     state, lease_owner, lease_expires_at, audit_correlation_id, resource_digest
 ) VALUES (
     sqlc.arg(connection_id), sqlc.arg(session_id), sqlc.arg(charlie_action_id),
     sqlc.arg(turn_id), sqlc.arg(capability), sqlc.arg(effect),
-    sqlc.arg(argument_digest), sqlc.arg(arguments_encrypted), sqlc.arg(authorization_hash),
+    sqlc.arg(argument_digest), sqlc.arg(arguments_key_id), sqlc.arg(arguments_algorithm), sqlc.arg(arguments_ciphertext), sqlc.arg(arguments_nonce), sqlc.arg(authorization_hash),
     sqlc.arg(fencing_epoch), sqlc.arg(product_idempotency_key), 'claimed',
     sqlc.arg(lease_owner), sqlc.arg(lease_expires_at), sqlc.arg(audit_correlation_id),
     sqlc.arg(resource_digest)
@@ -519,7 +529,10 @@ UPDATE charlie_action_receipts
 SET state = sqlc.arg(next_state),
     result_digest = sqlc.arg(result_digest),
     result_status = sqlc.arg(result_status),
-    result_encrypted = sqlc.arg(result_encrypted),
+    result_key_id = sqlc.arg(result_key_id),
+    result_algorithm = sqlc.arg(result_algorithm),
+    result_ciphertext = sqlc.arg(result_ciphertext),
+    result_nonce = sqlc.arg(result_nonce),
     dispatched_at = CASE WHEN sqlc.arg(next_state)::varchar = 'dispatched' THEN now() ELSE dispatched_at END,
     verified_at = CASE WHEN sqlc.arg(next_state)::varchar IN ('succeeded', 'failed') THEN now() ELSE verified_at END,
     updated_at = now()

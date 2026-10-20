@@ -21,6 +21,7 @@ import {
   KeyRound,
   Layers,
   LayoutDashboard,
+  LayoutGrid,
   Link,
   Link2,
   LineChart,
@@ -43,6 +44,7 @@ import {
   Wrench,
   Compass,
   Settings2,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import type { NavGroup } from "@/components/layout/sidebar-navigation";
@@ -51,7 +53,14 @@ import {
   withClusterResourceTypes,
 } from "./cluster-resource-types";
 
-// Cluster-context navigation - Rancher-style resource browser
+/** The group that receives discovered CRD subgroups. */
+export const CLUSTER_MANAGE_GROUP = "Manage";
+
+/**
+ * Cluster panel: six groups (A1). Overview · Workloads · Networking ·
+ * Storage · Policy & access · Manage. No counts here — the cluster overview
+ * page shows the inventory counts in group headers.
+ */
 export function getClusterNavGroups(
   clusterId: string,
   opts: {
@@ -61,15 +70,13 @@ export function getClusterNavGroups(
   } = {},
 ): NavGroup[] {
   const base = `/dashboard/clusters/${clusterId}`;
-  // Tabs that need a real outbound tunnel to a remote cluster agent.
-  // Hidden for the management plane's own cluster (is_local=true) where
-  // the in-cluster local-agent doesn't reliably support these flows.
-  // UX-03: attach permission metadata so cluster nav filters like global nav.
+  // Items that need a real outbound tunnel to a remote cluster agent. Hidden
+  // for the management plane's own cluster (is_local=true).
   const agentRequiredItems = opts.isLocal
     ? []
     : [
         {
-          label: "Image Scans",
+          label: "Image scans",
           href: `${base}/image-scans`,
           icon: ShieldAlert,
           permission: { resource: "security", verb: "read" as const },
@@ -80,26 +87,18 @@ export function getClusterNavGroups(
           icon: TerminalSquare,
           permission: { resource: "shell", verb: "exec" as const },
         },
-        // Control-plane (etcd) DR snapshots. Tunnel + self-managed only; the
-        // page itself renders a "not available" state for managed control
-        // planes and degrades gracefully when the feature is off server-side.
         {
           label: "Control-plane DR",
           href: `${base}/control-plane-snapshots`,
           icon: Database,
           permission: { resource: "backups", verb: "read" as const },
         },
-        // Registries (image-pull secrets) and the apiserver Network & Access
-        // allow-list drive the member cluster through the outbound tunnel.
         {
           label: "Registries",
           href: `${base}/registries`,
           icon: Boxes,
           permission: { resource: "clusters", verb: "read" as const },
         },
-        // Velero workload snapshots: only listed when Velero is actually
-        // installed on this cluster. The snapshots route still renders an
-        // empty-state install CTA if someone hits the URL directly.
         ...(opts.veleroInstalled
           ? [
               {
@@ -111,16 +110,18 @@ export function getClusterNavGroups(
             ]
           : []),
         {
-          label: "Network & Access",
+          label: "Network & access",
           href: `${base}/network-access`,
           icon: Route,
           permission: { resource: "security", verb: "read" as const },
         },
       ];
+  const gateway = gatewayNavItems(base);
   return withClusterResourceTypes([
     {
-      label: "Cluster",
+      label: "Overview",
       icon: LayoutDashboard,
+      href: base,
       defaultOpen: true,
       items: [
         { label: "Overview", href: base, icon: LayoutDashboard, exact: true },
@@ -136,27 +137,7 @@ export function getClusterNavGroups(
           icon: Layers,
           countKey: "namespaces",
         },
-        // Event counts on a chatty cluster balloon into the
-        // thousands and the literal number isn't actionable — what
-        // operators want is "any Warning events recently?". Drop the
-        // numeric count for now; a status-dot replacement (green/amber
-        // driven by recent Warning count) is the better end state.
         { label: "Events", href: `${base}/events`, icon: History },
-        { label: "Tools", href: `${base}/tools`, icon: Wrench },
-        { label: "Apps", href: `${base}/apps`, icon: Package },
-        {
-          label: "Delivery",
-          href: `${base}/delivery`,
-          icon: Rocket,
-          permission: { resource: "delivery_inventory", verb: "read" as const },
-        },
-      ],
-    },
-    {
-      label: "Observability",
-      icon: Gauge,
-      defaultOpen: true,
-      items: [
         {
           label: "Metrics",
           href: `${base}/metrics`,
@@ -164,31 +145,6 @@ export function getClusterNavGroups(
           permission: { resource: "monitoring", verb: "read" as const },
           featureFlag: "feature.monitoring",
         },
-        // Lifecycle for this cluster's kube-prometheus-stack (install /
-        // upgrade / replace / uninstall). Gated on monitoring:read, which is
-        // what the status + preview routes require; the mutating controls on
-        // the page gate themselves on create/update/delete.
-        {
-          label: "Monitoring Stack",
-          href: `${base}/monitoring-stack`,
-          icon: BarChart3,
-          permission: { resource: "monitoring", verb: "read" as const },
-          featureFlag: "feature.monitoring",
-        },
-        ...(opts.grafanaAvailable
-          ? [
-              {
-                label: "Grafana",
-                href: `${base}/grafana`,
-                icon: LineChart,
-                permission: {
-                  resource: "monitoring",
-                  verb: "read" as const,
-                },
-                featureFlag: "feature.monitoring" as const,
-              },
-            ]
-          : []),
         {
           label: "Alerting",
           href: `${base}/alerting`,
@@ -206,11 +162,12 @@ export function getClusterNavGroups(
     {
       label: "Workloads",
       icon: Box,
+      href: `${base}/workloads`,
       items: [
         {
           label: "Overview",
           href: `${base}/workloads`,
-          icon: LayoutDashboard,
+          icon: LayoutGrid,
           exact: true,
         },
         {
@@ -222,7 +179,7 @@ export function getClusterNavGroups(
         {
           label: "DaemonSets",
           href: `${base}/daemonsets`,
-          icon: Server,
+          icon: Boxes,
           countKey: "daemonsets",
         },
         {
@@ -244,11 +201,18 @@ export function getClusterNavGroups(
           icon: Container,
           countKey: "pods",
         },
+        {
+          label: "Autoscalers",
+          href: `${base}/hpa`,
+          icon: Gauge,
+          countKey: "hpa",
+        },
       ],
     },
     {
-      label: "Service Discovery",
+      label: "Networking",
       icon: Network,
+      href: `${base}/services`,
       items: [
         {
           label: "Services",
@@ -262,28 +226,34 @@ export function getClusterNavGroups(
           icon: Compass,
           countKey: "ingresses",
         },
-        ...gatewayNavItems(base).slice(0, 2),
-        { label: "HPA", href: `${base}/hpa`, icon: Gauge, countKey: "hpa" },
+        ...gateway,
+        {
+          label: "Network policies",
+          href: `${base}/network-policies`,
+          icon: Shield,
+          countKey: "networkpolicies",
+        },
       ],
     },
     {
       label: "Storage",
       icon: HardDrive,
+      href: `${base}/persistentvolumes`,
       items: [
         {
-          label: "PersistentVolumes",
+          label: "Persistent volumes",
           href: `${base}/persistentvolumes`,
           icon: HardDrive,
           countKey: "pvs",
         },
         {
-          label: "PVCs",
+          label: "Volume claims",
           href: `${base}/persistentvolumeclaims`,
           icon: FolderOpen,
           countKey: "pvcs",
         },
         {
-          label: "StorageClasses",
+          label: "Storage classes",
           href: `${base}/storageclasses`,
           icon: Database,
           countKey: "storageclasses",
@@ -304,34 +274,28 @@ export function getClusterNavGroups(
       ],
     },
     {
-      label: "Policy",
-      icon: Shield,
+      label: "Policy & access",
+      icon: Scale,
+      href: `${base}/resourcequotas`,
       items: [
         {
-          label: "Network Policies",
-          href: `${base}/network-policies`,
-          icon: Shield,
-          countKey: "networkpolicies",
-        },
-        {
-          label: "Resource Quotas",
+          label: "Resource quotas",
           href: `${base}/resourcequotas`,
           icon: Scale,
           countKey: "resourcequotas",
         },
         {
-          label: "Limit Ranges",
+          label: "Limit ranges",
           href: `${base}/limitranges`,
-          icon: ShieldAlert,
+          icon: SlidersHorizontal,
           countKey: "limitranges",
         },
         {
-          label: "PDB",
+          label: "Disruption budgets",
           href: `${base}/poddisruptionbudgets`,
           icon: ShieldCheck,
           countKey: "poddisruptionbudgets",
         },
-        // P-04 — Gatekeeper/OPA constraint authoring (bundle + custom).
         {
           label: "Gatekeeper",
           ifHaveGroup: "constraints.gatekeeper.sh",
@@ -339,29 +303,11 @@ export function getClusterNavGroups(
           icon: Gavel,
           permission: { resource: "security", verb: "read" },
         },
-      ],
-    },
-    {
-      label: "RBAC",
-      icon: UserCircle,
-      items: [
         {
-          label: "ServiceAccounts",
+          label: "Service accounts",
           href: `${base}/serviceaccounts`,
           icon: UserCircle,
           countKey: "serviceaccounts",
-        },
-        {
-          label: "ClusterRoles",
-          href: `${base}/k8s-clusterroles`,
-          icon: KeyRound,
-          countKey: "k8sClusterroles",
-        },
-        {
-          label: "ClusterRoleBindings",
-          href: `${base}/k8s-clusterrolebindings`,
-          icon: Link2,
-          countKey: "k8sClusterrolebindings",
         },
         {
           label: "Roles",
@@ -370,17 +316,59 @@ export function getClusterNavGroups(
           countKey: "k8sRoles",
         },
         {
-          label: "RoleBindings",
+          label: "Role bindings",
           href: `${base}/k8s-rolebindings`,
           icon: Link,
           countKey: "k8sRolebindings",
         },
+        {
+          label: "Cluster roles",
+          href: `${base}/k8s-clusterroles`,
+          icon: KeyRound,
+          countKey: "k8sClusterroles",
+        },
+        {
+          label: "Cluster role bindings",
+          href: `${base}/k8s-clusterrolebindings`,
+          icon: Link2,
+          countKey: "k8sClusterrolebindings",
+        },
       ],
     },
     {
-      label: "Cluster Management",
+      label: CLUSTER_MANAGE_GROUP,
       icon: Settings2,
+      href: `${base}/tools`,
       items: [
+        { label: "Tools", href: `${base}/tools`, icon: Wrench },
+        { label: "Applications", href: `${base}/apps`, icon: Package },
+        {
+          label: "Delivery",
+          href: `${base}/delivery`,
+          icon: Rocket,
+          permission: { resource: "delivery_inventory", verb: "read" as const },
+        },
+        {
+          label: "Monitoring stack",
+          href: `${base}/monitoring-stack`,
+          icon: BarChart3,
+          permission: { resource: "monitoring", verb: "read" as const },
+          featureFlag: "feature.monitoring",
+        },
+        ...(opts.grafanaAvailable
+          ? [
+              {
+                label: "Grafana",
+                href: `${base}/grafana`,
+                icon: LineChart,
+                permission: {
+                  resource: "monitoring",
+                  verb: "read" as const,
+                },
+                featureFlag: "feature.monitoring" as const,
+              },
+            ]
+          : []),
         { label: "Adoption", href: `${base}/adoption`, icon: Activity },
         {
           label: "Onboarding template",
@@ -389,57 +377,41 @@ export function getClusterNavGroups(
           permission: { resource: "clusters", verb: "read" },
         },
         {
-          label: "Service Mesh",
+          label: "Service mesh",
           href: `${base}/service-mesh`,
           icon: Waypoints,
         },
         ...agentRequiredItems,
-      ],
-    },
-    {
-      label: "More Resources",
-      icon: Puzzle,
-      items: [],
-      subgroups: [
         {
-          label: "Built-in",
-          items: [
-            // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
-            {
-              label: "Custom Resources",
-              href: `${base}/custom-resources`,
-              icon: Puzzle,
-              permission: { resource: "custom_resources", verb: "read" },
-              exact: true,
-            },
-            {
-              label: "CRDs",
-              href: `${base}/crds`,
-              icon: Blocks,
-              countKey: "crds",
-            },
-            {
-              label: "Endpoints",
-              href: `${base}/endpoints`,
-              icon: Globe,
-              countKey: "endpoints",
-            },
-            {
-              label: "ReplicaSets",
-              href: `${base}/replicasets`,
-              icon: Copy,
-              countKey: "replicasets",
-            },
-            // Read-only CRD-mirror view (quotas, policies, and other resources the
-            // agent mirrors into the management plane).
-            {
-              label: "Mirrored Resources",
-              href: `${base}/resources`,
-              icon: Layers,
-            },
-          ],
+          label: "Custom resources",
+          href: `${base}/custom-resources`,
+          icon: Puzzle,
+          permission: { resource: "custom_resources", verb: "read" },
+          exact: true,
         },
-        { label: "Gateway API", items: gatewayNavItems(base).slice(2) },
+        {
+          label: "CRDs",
+          href: `${base}/crds`,
+          icon: Blocks,
+          countKey: "crds",
+        },
+        {
+          label: "Endpoints",
+          href: `${base}/endpoints`,
+          icon: Globe,
+          countKey: "endpoints",
+        },
+        {
+          label: "ReplicaSets",
+          href: `${base}/replicasets`,
+          icon: Copy,
+          countKey: "replicasets",
+        },
+        {
+          label: "Mirrored resources",
+          href: `${base}/resources`,
+          icon: Layers,
+        },
       ],
     },
   ]);

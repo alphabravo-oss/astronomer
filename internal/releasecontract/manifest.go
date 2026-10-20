@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -358,14 +359,19 @@ func validApplicationImages(version string, images []Artifact) bool {
 	if err != nil {
 		return false
 	}
-	expected := []string{"agent", "frontend", "migrate", "server", "shell", "worker"}
+	expected := []string{"agent", "frontend", "server", "shell", "worker"}
 	// Disaster recovery became a first-party release artifact in v1.2.0.
 	if release.Major() > 1 || (release.Major() == 1 && release.Minor() >= 2) {
 		expected = append(expected, "dr")
 	}
-	names := make([]string, len(images))
-	for index, artifact := range images {
-		names[index] = artifact.Name
+	names := make([]string, 0, len(images))
+	for _, artifact := range images {
+		// The standalone migrate image was retired in 2.1 (migrations are
+		// embedded in the server); releases that still ship it stay valid.
+		if artifact.Name == "migrate" {
+			continue
+		}
+		names = append(names, artifact.Name)
 	}
 	return sameStringSet(names, expected)
 }

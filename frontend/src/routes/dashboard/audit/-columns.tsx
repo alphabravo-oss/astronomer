@@ -51,20 +51,28 @@ export function auditColumns(
       kind: "name",
       minSize: 200,
       accessor: (row) => (
-        <div>
-          <div className="truncate font-mono text-xs text-foreground">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-sm text-foreground">
+              {humanizeAuditAction(row.action)}
+            </span>
+            {row.actionClass && row.actionClass !== "mutation" ? (
+              <span
+                className={cn(
+                  "inline-flex rounded-sm px-1.5 py-0.5 text-micro",
+                  actionClassStyle(row.actionClass),
+                )}
+              >
+                {row.actionClass}
+              </span>
+            ) : null}
+          </div>
+          <div className="truncate font-mono text-micro text-muted-foreground">
             {row.action}
           </div>
-          <span
-            className={cn(
-              "mt-1 inline-flex rounded-sm px-1.5 py-0.5 text-2xs",
-              actionClassStyle(row.actionClass),
-            )}
-          >
-            {row.actionClass || "mutation"}
-          </span>
         </div>
       ),
+      searchAccessor: (row) => `${humanizeAuditAction(row.action)} ${row.action}`,
       sortAccessor: (row) => row.action,
     },
     {
@@ -170,16 +178,32 @@ export function scopeLabels(row: AuditLogEntry): string[] {
   return Array.from(out);
 }
 
+/**
+ * "admin.backup_drill.viewed" → "Backup drill viewed". Dotted audit keys are
+ * `<area>.<object>.<verb>`; the area is dropped (it is the Scope column's
+ * job) and the rest reads as a sentence.
+ */
+export function humanizeAuditAction(action: string | undefined): string {
+  if (!action) return "—";
+  const parts = action.split(".").filter(Boolean);
+  const words = (parts.length > 2 ? parts.slice(1) : parts)
+    .join(" ")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (!words) return action;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function actionClassStyle(actionClass?: string): string {
   switch (actionClass) {
     case "read":
-      return "bg-info/10 text-info";
+      return "bg-status-info/10 text-status-info";
     case "auth":
       return "bg-status-warning/10 text-status-warning";
     case "system":
       return "bg-muted text-muted-foreground";
     default:
-      return "bg-primary/10 text-primary";
+      return "bg-muted text-foreground";
   }
 }
 

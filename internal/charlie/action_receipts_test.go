@@ -8,19 +8,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type receiptTestCipher struct{}
 
-func (receiptTestCipher) Encrypt(value string) (string, error) {
-	return "sealed:" + base64.RawURLEncoding.EncodeToString([]byte(value)), nil
+func (receiptTestCipher) Encrypt(value []byte) (crypto.Sealed, error) {
+	return crypto.Sealed{KeyID: "test-key", Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: []byte(base64.RawURLEncoding.EncodeToString(value))}, nil
 }
-func (receiptTestCipher) Decrypt(value string) (string, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, "sealed:"))
-	return string(decoded), err
+func (receiptTestCipher) Decrypt(value crypto.Sealed) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(string(value.Ciphertext))
+}
+
+func resultSealed(p sqlc.TransitionCharlieActionReceiptParams) crypto.Sealed {
+	return crypto.FromParts(p.ResultKeyID, p.ResultAlgorithm, p.ResultCiphertext, p.ResultNonce)
 }
 
 type fakeReceiptQueries struct {
@@ -48,8 +53,9 @@ func (f *fakeReceiptQueries) ClaimCharlieActionReceipt(_ context.Context, arg sq
 		ID: uuid.New(), ConnectionID: arg.ConnectionID, SessionID: arg.SessionID,
 		CharlieActionID: arg.CharlieActionID, TurnID: arg.TurnID,
 		Capability: arg.Capability, Effect: arg.Effect, ArgumentDigest: arg.ArgumentDigest,
-		ArgumentsEncrypted: arg.ArgumentsEncrypted,
-		AuthorizationHash:  arg.AuthorizationHash, FencingEpoch: arg.FencingEpoch,
+		ArgumentsKeyID: arg.ArgumentsKeyID, ArgumentsAlgorithm: arg.ArgumentsAlgorithm,
+		ArgumentsCiphertext: arg.ArgumentsCiphertext, ArgumentsNonce: arg.ArgumentsNonce,
+		AuthorizationHash: arg.AuthorizationHash, FencingEpoch: arg.FencingEpoch,
 		ProductIdempotencyKey: arg.ProductIdempotencyKey, State: "claimed",
 		LeaseOwner: arg.LeaseOwner, LeaseExpiresAt: arg.LeaseExpiresAt,
 		ResourceDigest: arg.ResourceDigest, AuditCorrelationID: arg.AuditCorrelationID,
@@ -67,7 +73,7 @@ func (f *fakeReceiptQueries) TransitionCharlieActionReceipt(_ context.Context, a
 	f.receipt.State = arg.NextState
 	f.receipt.ResultDigest = arg.ResultDigest
 	f.receipt.ResultStatus = arg.ResultStatus
-	f.receipt.ResultEncrypted = arg.ResultEncrypted
+	f.receipt.ResultKeyID, f.receipt.ResultAlgorithm, f.receipt.ResultCiphertext, f.receipt.ResultNonce = resultSealed(arg).Parts()
 	return f.receipt, nil
 }
 
@@ -133,7 +139,8 @@ func TestDBActionReceiptExactReplayNeverReexecutes(t *testing.T) {
 	}
 	replayResult := ActionResult{Allowed: true, State: "succeeded", Verified: true, Result: []byte(`{"status":"done"}`)}
 	replayBytes, _ := json.Marshal(replayResult)
-	queries.receipt.ResultEncrypted, _ = receiptTestCipher{}.Encrypt(string(replayBytes))
+	replaySealed, _ := receiptTestCipher{}.Encrypt(replayBytes)
+	queries.receipt.ResultKeyID, queries.receipt.ResultAlgorithm, queries.receipt.ResultCiphertext, queries.receipt.ResultNonce = replaySealed.Parts()
 	queries.receipt.ResultDigest = digestBytes(replayBytes)
 	queries.receipt.ResultStatus = "succeeded"
 	store, _ := NewDBActionReceiptStore(queries, receiptTestCipher{}, "server-b")
@@ -162,7 +169,8 @@ func TestDBActionReceiptExactReplayPreservesFencedDecisionState(t *testing.T) {
 	}
 	replayResult := ActionResult{Allowed: false, Code: DeniedEmergencyDisabled, State: "blocked"}
 	replayBytes, _ := json.Marshal(replayResult)
-	queries.receipt.ResultEncrypted, _ = receiptTestCipher{}.Encrypt(string(replayBytes))
+	replaySealed, _ := receiptTestCipher{}.Encrypt(replayBytes)
+	queries.receipt.ResultKeyID, queries.receipt.ResultAlgorithm, queries.receipt.ResultCiphertext, queries.receipt.ResultNonce = replaySealed.Parts()
 	queries.receipt.ResultDigest = digestBytes(replayBytes)
 	store, _ := NewDBActionReceiptStore(queries, receiptTestCipher{}, "server-b")
 	claim, err := store.Claim(context.Background(), action, capability)
@@ -213,7 +221,7 @@ func TestDBActionReceiptTransitionsAreCASAndContentFree(t *testing.T) {
 	if queries.transition.ExpectedState != "claimed" || queries.transition.NextState != "dispatched" || queries.transition.ResultDigest == "" || queries.transition.ResultStatus != "dispatched" {
 		t.Fatalf("transition is not exact/content-free: %+v", queries.transition)
 	}
-	if queries.transition.ResultEncrypted == "" || strings.Contains(queries.transition.ResultEncrypted, "must-not-persist") {
+	if queries.transition.ResultKeyID == "" || strings.Contains(string(queries.transition.ResultCiphertext), "must-not-persist") {
 		t.Fatalf("transition result was not encrypted: %+v", queries.transition)
 	}
 	if err := store.Transition(context.Background(), action, "blocked", result); err == nil {

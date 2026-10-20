@@ -10,9 +10,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // Migration 048 — webhook dispatcher + retention task types.
@@ -58,7 +58,7 @@ type WebhookQuerier interface {
 type WebhookDeps struct {
 	Queries   WebhookQuerier
 	Sender    WebhookSender
-	Encryptor *auth.Encryptor
+	Encryptor *crypto.Encryptor
 }
 
 // HandleWebhookDispatch is the periodic task that drains pending
@@ -91,7 +91,7 @@ func (runtime DispatchRuntime) HandleWebhookDispatch(ctx context.Context, _ *asy
 		}
 		// Per-tick subscription cache. Rows are usually clustered by
 		// subscription (filters tend to overlap) so this saves
-		// duplicate GETs and duplicate Fernet decrypts.
+		// duplicate GETs and duplicate decrypts.
 		cache := map[uuid.UUID]webhook.Subscription{}
 		for _, row := range rows {
 			if err := ctx.Err(); err != nil {
@@ -207,11 +207,11 @@ func (runtime DispatchRuntime) loadWebhookSubscription(ctx context.Context, id u
 		return webhook.Subscription{}, fmt.Errorf("get subscription: %w", err)
 	}
 	secret := ""
-	if row.SecretEncrypted != "" {
+	if row.SecretKeyID != "" {
 		if runtime.Webhook.Encryptor == nil {
 			return webhook.Subscription{}, fmt.Errorf("encryptor unavailable; cannot decrypt secret")
 		}
-		plain, err := runtime.Webhook.Encryptor.Decrypt(row.SecretEncrypted)
+		plain, err := runtime.Webhook.Encryptor.DecryptString(crypto.FromParts(row.SecretKeyID, row.SecretAlgorithm, row.SecretCiphertext, row.SecretNonce))
 		if err != nil {
 			return webhook.Subscription{}, fmt.Errorf("decrypt secret: %w", err)
 		}

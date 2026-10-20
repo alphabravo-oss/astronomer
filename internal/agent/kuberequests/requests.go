@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/client-go/rest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 type Consumer uint8

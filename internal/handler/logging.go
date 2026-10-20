@@ -11,16 +11,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // LoggingNamespace is the namespace on the managed cluster where rendered
@@ -136,7 +138,7 @@ type LoggingHandler struct {
 	// helmConcurrency caps the parallel dispatch fan-out for
 	// executeOperation; zero falls back to the package default.
 	helmConcurrency int
-	encryptor       *auth.Encryptor
+	encryptor       *crypto.Encryptor
 	lokiIngest      lokiIngestReconciler
 	lokiAttach      lokiAttachGate
 	// querySlots bounds expensive remote log queries across all providers.
@@ -160,14 +162,14 @@ var (
 	errLoggingPipelineOutputsInvalid       = errors.New("logging pipeline outputs are invalid")
 )
 
-func respondLoggingMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+func respondLoggingMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, errLoggingOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"Idempotency-Key already identifies a logging operation; retrieve the existing operation instead of restaging it")
 		return
 	}
 	if errors.Is(err, errLoggingPipelineOutputsInvalid) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody,
 			"Every logging pipeline must reference one or more outputs from the same cluster")
 		return
 	}
@@ -182,7 +184,7 @@ type lokiIngestReconciler interface {
 // MonitoringHandler implements it. Nil is fail-closed (Loki not ready).
 type lokiAttachGate interface {
 	LokiAttachState(ctx context.Context) lokiAttachState
-	CheckLokiAttachCapacity(ctx context.Context, clusterID uuid.UUID) (code, msg string, ok bool)
+	CheckLokiAttachCapacity(ctx context.Context, clusterID uuid.UUID) (code apiutil.Code, msg string, ok bool)
 }
 
 type lokiAttachState struct {
@@ -225,7 +227,7 @@ func (h *LoggingHandler) SetHelmRequester(r HelmRequester) {
 	h.helm = r
 }
 
-func (h *LoggingHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *LoggingHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -314,7 +316,7 @@ func (h *LoggingHandler) runReconciler(ctx context.Context) {
 func (h *LoggingHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load logging outputs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load logging outputs")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -486,7 +488,7 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	}
 	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceLogging, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	var ops []sqlc.LoggingOperation
@@ -501,7 +503,7 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		}
 	} else {
 		if !hasPager {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped logging-operation pagination is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Scoped logging-operation pagination is unavailable")
 			return
 		}
 		scoped := sqlc.ListLoggingOperationsForScopesParams{
@@ -516,7 +518,7 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list logging operations")
 		return
 	}
 	items := make([]map[string]any, 0, len(ops))
@@ -534,17 +536,17 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 func (h *LoggingHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetLoggingOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging operation not found")
 		return
 	}
 	clusterID, err := h.loggingOperationClusterID(r.Context(), op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve logging operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve logging operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbRead) {
@@ -561,12 +563,12 @@ func (h *LoggingHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetLoggingOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging operation not found")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -574,7 +576,7 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 	}
 	clusterID, err := h.loggingOperationClusterID(r.Context(), op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve logging operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve logging operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbUpdate) {
@@ -593,7 +595,7 @@ func (h *LoggingHandler) RetryOperation(w http.ResponseWriter, r *http.Request) 
 			}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry logging operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.RetryError, "Failed to retry logging operation")
 		return
 	}
 	h.afterLoggingOperationCommit(requeued)
@@ -694,18 +696,18 @@ func operationIDOrEmpty(op sqlc.LoggingOperation) string {
 func (h *LoggingHandler) listOutputsFleetWide(w http.ResponseWriter, r *http.Request, limit, offset int32) {
 	outputs, err := h.queries.ListLoggingOutputs(r.Context(), sqlc.ListLoggingOutputsParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging outputs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list logging outputs")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	if !restricted {
 		total, err := h.queries.CountLoggingOutputs(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging outputs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count logging outputs")
 			return
 		}
 		paging.Write(w, loggingOutputDTOs(outputs), paging.Exact(total, int(limit), int(offset), len(outputs)))
@@ -725,23 +727,23 @@ func (h *LoggingHandler) listOutputsFleetWide(w http.ResponseWriter, r *http.Req
 func (h *LoggingHandler) listPipelinesFleetWide(w http.ResponseWriter, r *http.Request, limit, offset int32) {
 	pipelines, err := h.queries.ListLoggingPipelines(r.Context(), sqlc.ListLoggingPipelinesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging pipelines")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list logging pipelines")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	if !restricted {
 		total, err := h.queries.CountLoggingPipelines(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging pipelines")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count logging pipelines")
 			return
 		}
 		pipelineDTOs, err := h.loggingPipelineDTOs(r.Context(), pipelines)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to load logging pipeline outputs")
 			return
 		}
 		paging.Write(w, pipelineDTOs, paging.Exact(total, int(limit), int(offset), len(pipelineDTOs)))
@@ -755,7 +757,7 @@ func (h *LoggingHandler) listPipelinesFleetWide(w http.ResponseWriter, r *http.R
 	}
 	pipelineDTOs, err := h.loggingPipelineDTOs(r.Context(), filtered)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load logging pipeline outputs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to load logging pipeline outputs")
 		return
 	}
 	paging.Write(w, pipelineDTOs, paging.Exact(int64(len(filtered)), int(limit), int(offset), len(pipelineDTOs)))

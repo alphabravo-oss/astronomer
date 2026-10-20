@@ -162,7 +162,7 @@ func targetManifestPins(raw []byte, manifest releasecontract.Manifest) error {
 		wanted[image.Name] = image.Reference
 	}
 	text := string(raw)
-	for _, role := range []string{"server", "worker", "migrate", "frontend", "shell"} {
+	for _, role := range []string{"server", "worker", "frontend", "shell"} {
 		if wanted[role] == "" || !strings.Contains(text, wanted[role]) {
 			return errors.New("target rendered manifest lacks exact first-party image pin")
 		}

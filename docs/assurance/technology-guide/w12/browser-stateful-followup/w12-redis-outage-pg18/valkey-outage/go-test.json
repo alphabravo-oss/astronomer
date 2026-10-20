@@ -1,9 +1,0 @@
-{"Time":"2026-10-09T22:43:35.304233623Z","Action":"start","Package":"github.com/alphabravocompany/astronomer-go/internal/worker"}
-{"Time":"2026-10-09T22:43:35.361428968Z","Action":"run","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Test":"TestRedisOutageRecoveryDurableNotification"}
-{"Time":"2026-10-09T22:43:35.361519269Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Test":"TestRedisOutageRecoveryDurableNotification","Output":"=== RUN   TestRedisOutageRecoveryDurableNotification\n","OutputType":"frame"}
-{"Time":"2026-10-09T22:43:35.377973595Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Test":"TestRedisOutageRecoveryDurableNotification","Output":"    redis_outage_recovery_integration_test.go:73: PostgreSQL version = \"18.6 (Debian 18.6-1.pgdg13+2)\", want 16.x\n","OutputType":"error"}
-{"Time":"2026-10-09T22:43:35.378267268Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Test":"TestRedisOutageRecoveryDurableNotification","Output":"--- FAIL: TestRedisOutageRecoveryDurableNotification (0.02s)\n","OutputType":"frame"}
-{"Time":"2026-10-09T22:43:35.378283439Z","Action":"fail","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Test":"TestRedisOutageRecoveryDurableNotification","Elapsed":0.02}
-{"Time":"2026-10-09T22:43:35.378364883Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Output":"FAIL\n","OutputType":"frame"}
-{"Time":"2026-10-09T22:43:35.382826973Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Output":"FAIL\tgithub.com/alphabravocompany/astronomer-go/internal/worker\t0.078s\n","OutputType":"frame"}
-{"Time":"2026-10-09T22:43:35.382862179Z","Action":"fail","Package":"github.com/alphabravocompany/astronomer-go/internal/worker","Elapsed":0.079}

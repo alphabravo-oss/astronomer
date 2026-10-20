@@ -77,11 +77,9 @@ func globalMonitoringBinding(verbs ...rbac.Verb) rbac.RoleBinding {
 // fleet-wide (unscoped) config every deployment has as its default.
 func storageConfigRow(id uuid.UUID, cluster uuid.UUID) sqlc.BackupStorageConfig {
 	row := sqlc.BackupStorageConfig{
-		ID:        id,
-		Bucket:    "metrics",
-		Region:    "us-east-1",
-		AccessKey: "AKIA-LIVE-KEY",
-		SecretKey: "live-secret-key",
+		ID:     id,
+		Bucket: "metrics",
+		Region: "us-east-1",
 	}
 	if cluster != uuid.Nil {
 		row.ClusterID = pgtype.UUID{Bytes: cluster, Valid: true}
@@ -276,18 +274,15 @@ func TestStorageConfigParityClauseTracksTheRouteVerb(t *testing.T) {
 // gitops-creds-never-decrypted defect.
 func TestObjstoreConfigUsesDecryptedCredentials(t *testing.T) {
 	encryptor := newTestEncryptor(t)
-	sealed, err := encryptor.Encrypt(`{"access_key":"AKIA-SEALED","secret_key":"sealed-secret"}`)
+	sealed, err := encryptor.EncryptString(`{"access_key":"AKIA-SEALED","secret_key":"sealed-secret"}`)
 	if err != nil {
 		t.Fatalf("seal credentials: %v", err)
 	}
 	cfg := sqlc.BackupStorageConfig{
-		ID:                   uuid.New(),
-		Bucket:               "metrics",
-		Region:               "us-east-1",
-		EncryptedCredentials: sealed,
-		// Blank, exactly as legacyBackupCredentialColumns writes them.
-		AccessKey: "",
-		SecretKey: "",
+		ID:               uuid.New(),
+		Bucket:           "metrics",
+		Region:           "us-east-1",
+		CredentialsKeyID: sealed.KeyID, CredentialsAlgorithm: sealed.Algorithm, CredentialsCiphertext: sealed.Ciphertext, CredentialsNonce: sealed.Nonce,
 	}
 
 	t.Run("decrypts when an encryptor is wired", func(t *testing.T) {
@@ -309,15 +304,4 @@ func TestObjstoreConfigUsesDecryptedCredentials(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy plaintext rows still work", func(t *testing.T) {
-		h := NewMonitoringHandler()
-		legacy := sqlc.BackupStorageConfig{Bucket: "metrics", AccessKey: "AKIA-LEGACY", SecretKey: "legacy-secret"}
-		content, err := h.buildObjstoreConfigYAML(legacy)
-		if err != nil {
-			t.Fatalf("build objstore config: %v", err)
-		}
-		if !strings.Contains(content, "AKIA-LEGACY") {
-			t.Fatalf("legacy plaintext credentials were dropped:\n%s", content)
-		}
-	})
 }

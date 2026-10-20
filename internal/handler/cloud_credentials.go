@@ -13,8 +13,7 @@
 //   GET    /api/v1/cloud-credentials/providers/   (public — UI form-builder fuel)
 //
 // Encryption:
-//   - The "data" blob (map[string]string) is JSON-encoded and Fernet-
-//     encrypted at rest using the shared auth.Encryptor.
+//   - The "data" blob (map[string]string) is JSON-encoded and sealed//     encrypted at rest using the shared pkg/crypto Encryptor.
 //   - GETs decrypt + redact each provider-flagged "SecretKey" with the
 //     SecretSentinel constant; the PUT path treats sentinel values as
 //     "preserve the stored value" so a natural GET → edit → PUT loop
@@ -36,11 +35,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -112,7 +112,7 @@ type CloudTestResult struct {
 type CloudCredentialHandler struct {
 	queries   CloudCredentialQuerier
 	auditor   any // auditWriterV1 surface — recordAudit type-asserts internally
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	tester    CloudTester
 	runTx     cloudCredentialRunTxFunc
 }
@@ -142,10 +142,10 @@ func (h *CloudCredentialHandler) SetRunTx(runTx cloudCredentialRunTxFunc) {
 
 func (h *CloudCredentialHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-// SetEncryptor wires the Fernet encryptor. The handler 503s on POST/PUT
+// SetEncryptor wires the age encryptor. The handler 503s on POST/PUT
 // when encryptor is nil so an operator can't accidentally store creds
 // in plaintext.
-func (h *CloudCredentialHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *CloudCredentialHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

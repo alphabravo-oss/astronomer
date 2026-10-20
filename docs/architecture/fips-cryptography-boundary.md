@@ -44,7 +44,7 @@ does not identify a module version; it does not establish validation of the
 installed `v1.26.0` in-process snapshot. Source snapshots and hashes are retained
 in the W16 assessment evidence.
 
-The assessment must distinguish native module operations from external Fernet,
+The assessment must distinguish native module operations from external age (X25519 + ChaCha20-Poly1305, not FIPS-approved; see ADR-0010),
 password, TOTP, JWT/OIDC, Python DR, PostgreSQL, Node/NGINX and signing-tool
 boundaries. A successful library round trip does not qualify those boundaries
 or the full application. Existing historical and versioned ciphertext readers

@@ -19,9 +19,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -29,6 +26,10 @@ import (
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 type registryFixture struct {

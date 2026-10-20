@@ -3,8 +3,9 @@ package builtin
 import (
 	"context"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // Both interfaces receive sqlc.New(tx) from the existing asset transaction.

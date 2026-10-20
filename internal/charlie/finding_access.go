@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 const MaxCharlieFindingItems = 100
@@ -220,7 +222,7 @@ func (s *FindingAccessService) transition(ctx context.Context, actorID, findingI
 	}
 	if err != nil {
 		s.audit(ctx, findingDecisionAuditAction(decision), row.ID, actorID, "central_committed_local_failed", len(resources))
-		LogOperationalFailure(ctx, nil, "charlie.finding_local_commit_failed", "")
+		LogOperationalFailure(ctx, *logging.Default(), "charlie.finding_local_commit_failed", "")
 		return FindingView{}, fmt.Errorf("Charlie finding transition could not be committed")
 	}
 	updated, err := s.queries.GetCharlieFinding(ctx, row.ID)

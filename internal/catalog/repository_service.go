@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // ErrRepositoryCredentialEncryptionUnavailable prevents new secret material
@@ -99,15 +100,18 @@ func (repositoryService) PrepareCreate(input RepositoryCreateInput, encryptor En
 		enabled = *input.Enabled
 	}
 	return sqlc.CreateHelmRepositoryParams{
-		Name:                input.Name,
-		Url:                 cleanURL,
-		RepoType:            repoType,
-		Description:         input.Description,
-		IsDefault:           input.IsDefault,
-		AuthType:            authType,
-		AuthConfig:          publicConfig,
-		AuthConfigEncrypted: sealed,
-		Enabled:             enabled,
+		Name:                 input.Name,
+		Url:                  cleanURL,
+		RepoType:             repoType,
+		Description:          input.Description,
+		IsDefault:            input.IsDefault,
+		AuthType:             authType,
+		AuthConfig:           publicConfig,
+		AuthConfigKeyID:      sealed.KeyID,
+		AuthConfigAlgorithm:  sealed.Algorithm,
+		AuthConfigCiphertext: sealed.Ciphertext,
+		AuthConfigNonce:      sealed.Nonce,
+		Enabled:              enabled,
 	}, nil
 }
 
@@ -133,16 +137,19 @@ func (repositoryService) PrepareUpdate(existing sqlc.HelmRepository, input Repos
 		return sqlc.UpdateHelmRepositoryParams{}, err
 	}
 	return sqlc.UpdateHelmRepositoryParams{
-		ID:                  existing.ID,
-		Name:                valueOr(input.Name, existing.Name),
-		Url:                 cleanURL,
-		RepoType:            valueOr(input.RepoType, existing.RepoType),
-		Description:         valueOr(input.Description, existing.Description),
-		IsDefault:           valueOr(input.IsDefault, existing.IsDefault),
-		AuthType:            authType,
-		AuthConfig:          publicConfig,
-		AuthConfigEncrypted: sealed,
-		Enabled:             valueOr(input.Enabled, existing.Enabled),
+		ID:                   existing.ID,
+		Name:                 valueOr(input.Name, existing.Name),
+		Url:                  cleanURL,
+		RepoType:             valueOr(input.RepoType, existing.RepoType),
+		Description:          valueOr(input.Description, existing.Description),
+		IsDefault:            valueOr(input.IsDefault, existing.IsDefault),
+		AuthType:             authType,
+		AuthConfig:           publicConfig,
+		AuthConfigKeyID:      sealed.KeyID,
+		AuthConfigAlgorithm:  sealed.Algorithm,
+		AuthConfigCiphertext: sealed.Ciphertext,
+		AuthConfigNonce:      sealed.Nonce,
+		Enabled:              valueOr(input.Enabled, existing.Enabled),
 	}, nil
 }
 
@@ -166,9 +173,9 @@ func ValidateRepositoryURL(raw string) (string, error) {
 	return clean, nil
 }
 
-func sealRepositoryAuthConfig(authConfig json.RawMessage, encryptor Encryptor) (string, json.RawMessage, error) {
+func sealRepositoryAuthConfig(authConfig json.RawMessage, encryptor Encryptor) (crypto.Sealed, json.RawMessage, error) {
 	if encryptor == nil && HasAuthConfigSecret(authConfig) {
-		return "", nil, ErrRepositoryCredentialEncryptionUnavailable
+		return crypto.Sealed{}, nil, ErrRepositoryCredentialEncryptionUnavailable
 	}
 	return SealAuthConfig(authConfig, encryptor)
 }

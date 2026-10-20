@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func TestSourceMetricsExposeSampleAndPreservedObservationTimes(t *testing.T) {

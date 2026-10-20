@@ -78,7 +78,7 @@ ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC;
 
 -- name: ListPrometheusDatasourcesPage :many
 -- Admin lists need only the configured state, never the encrypted credential.
-SELECT id, name, url, (auth_encrypted <> '') AS has_auth,
+SELECT id, name, url, (auth_key_id <> '') AS has_auth,
        tls_skip_verify, enabled, created_at, updated_at
 FROM prometheus_datasources
 ORDER BY name ASC, id ASC
@@ -88,36 +88,39 @@ LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 SELECT count(*) FROM prometheus_datasources;
 
 -- name: ListEnabledPrometheusDatasources :many
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT *
 FROM prometheus_datasources
 WHERE enabled = true
 ORDER BY name ASC;
 
 -- name: GetPrometheusDatasourceByID :one
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT *
 FROM prometheus_datasources
 WHERE id = $1;
 
 -- name: GetPrometheusDatasourceByName :one
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT *
 FROM prometheus_datasources
 WHERE name = $1;
 
 -- name: CreatePrometheusDatasource :one
-INSERT INTO prometheus_datasources (name, url, auth_encrypted, tls_skip_verify, enabled)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at;
+INSERT INTO prometheus_datasources (name, url, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce, tls_skip_verify, enabled)
+VALUES ($1, $2, $3, $6, $7, $8, $4, $5)
+RETURNING *;
 
 -- name: UpdatePrometheusDatasource :one
 UPDATE prometheus_datasources
 SET name            = $2,
     url             = $3,
-    auth_encrypted  = $4,
+    auth_key_id = $4,
+    auth_algorithm = $7,
+    auth_ciphertext = $8,
+    auth_nonce = $9,
     tls_skip_verify = $5,
     enabled         = $6,
     updated_at      = now()
 WHERE id = $1
-RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at;
+RETURNING *;
 
 -- name: DeletePrometheusDatasource :exec
 DELETE FROM prometheus_datasources WHERE id = $1;

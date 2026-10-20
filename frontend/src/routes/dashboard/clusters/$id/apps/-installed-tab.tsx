@@ -192,7 +192,7 @@ export function InstalledView({
             )}
             <div className="border border-border rounded-lg overflow-hidden">
               <Table className="w-full text-sm">
-                <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+                <TableHeader className="bg-muted/50 text-left text-xs">
                   <TableRow>
                     <TableHead className="px-3 py-2">Release</TableHead>
                     <TableHead className="px-3 py-2">Chart</TableHead>
@@ -278,7 +278,7 @@ function InstalledRow({
             </Tooltip>
           )}
           {isTool && (
-            <Tooltip content="This release is managed by the Tools tab. Open Tools to upgrade or uninstall.">
+            <Tooltip content="This release is managed through Platform Tools. Open Tools to upgrade or uninstall.">
               <RouterLink
                 to="/dashboard/clusters/$id/tools"
                 params={{ id: clusterId }}

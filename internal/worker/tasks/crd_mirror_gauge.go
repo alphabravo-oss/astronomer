@@ -1,7 +1,7 @@
 // T6.069 — periodic populator for the astronomer_crd_mirror_rows
 // gauge.
 //
-// The gauge is declared in internal/crd/ingest_v2.go but had no
+// The gauge is declared in internal/operator/mirror/ingest.go but had no
 // populator: ingest-time increments live in IngestsTotal (a counter),
 // and PruneStale runs on its own cadence without computing the
 // current row count. This task fans out a single UNION-ALL SQL query
@@ -16,8 +16,8 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/mirror"
 )
 
 // CrdMirrorGaugePopulateType is the periodic task identifier.
@@ -52,9 +52,9 @@ func HandleCrdMirrorGaugePopulate(ctx context.Context, _ *asynq.Task) error {
 		// Reset existing series so a cluster whose row count dropped to
 		// zero doesn't keep emitting a stale value. Prometheus gauges
 		// without an update keep their last value forever.
-		crd.Rows.Reset()
+		mirror.Rows.Reset()
 		for _, r := range rows {
-			crd.Rows.WithLabelValues(r.Kind, r.ClusterID.String()).Set(float64(r.Count))
+			mirror.Rows.WithLabelValues(r.Kind, r.ClusterID.String()).Set(float64(r.Count))
 		}
 		runtimeLogger(ctx).InfoContext(ctx, "crd mirror gauge populated", "series", len(rows))
 		return nil

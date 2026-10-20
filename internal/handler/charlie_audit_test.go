@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type charlieAuditWriterFake struct {
@@ -67,9 +69,9 @@ func TestRequiredCharlieAdminAuditPersistsIntentWithoutMutatingFields(t *testing
 
 func TestCharlieAdminAuditRejectsArbitraryResourceAndLogsOnlyFailureCode(t *testing.T) {
 	var output bytes.Buffer
-	prior := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
-	t.Cleanup(func() { slog.SetDefault(prior) })
+	prior := logging.Default()
+	logging.SetDefault(zerolog.New(&output))
+	t.Cleanup(func() { logging.SetDefault(*prior) })
 	writer := &charlieAuditWriterFake{}
 	request := authenticatedCharlieRequest(http.MethodPut, "/", "", uuid.New(), "jwt")
 	recordCharlieAdminAudit(request, writer, "admin.charlie.action_policy.update", "charlie_action_policy", "resource-SENTINEL", nil)

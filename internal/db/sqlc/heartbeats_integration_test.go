@@ -1,25 +1,26 @@
+//go:build integration
+
 package sqlc
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // TestRecordAgentHeartbeatAtomicWrite is an opt-in PostgreSQL test. It proves
 // the common heartbeat advances narrow liveness/connection rows, refreshes the
 // health sample timestamp, and leaves stable wide cluster inventory untouched.
 func TestRecordAgentHeartbeatAtomicWrite(t *testing.T) {
-	dsn := os.Getenv("HEARTBEAT_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("HEARTBEAT_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

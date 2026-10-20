@@ -1,10 +1,11 @@
+//go:build integration
+
 package rollout
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,16 +15,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // This opt-in test exercises the production transaction adapter and rollout
 // claim fencing against real PostgreSQL. CI and release rehearsals provide a
 // disposable database; the test owns and drops an isolated schema.
 func TestPostgresPlanningTransactionAndHAFencing(t *testing.T) {
-	dsn := os.Getenv("DELIVERY_ROLLOUT_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DELIVERY_ROLLOUT_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

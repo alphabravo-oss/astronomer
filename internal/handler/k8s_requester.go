@@ -434,7 +434,7 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 		return nil, true, err
 	}
 	target := "http://" + addr + "/internal/tunnel/k8s/" + clusterID
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payloadBytes)) // #nosec G704 -- target is the internal forward service of a registered cluster (server-side configuration), not caller input
 	if err != nil {
 		return nil, true, err
 	}
@@ -456,7 +456,7 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 		return nil, true, err
 	}
 
-	httpResp, err := internalK8sForwardClient.Do(req)
+	httpResp, err := internalK8sForwardClient.Do(req) // #nosec G704 -- see NewRequestWithContext above: internal forward service, PSK-authenticated
 	if err != nil {
 		return nil, true, err
 	}

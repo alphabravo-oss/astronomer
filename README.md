@@ -177,55 +177,46 @@ Astronomer is the enterprise operating plane after those clusters exist.
 
 ## Getting Started
 
-For local development:
+For local development (Go, Node 24, Docker with the compose plugin and
+[Air](https://github.com/air-verse/air) on `PATH`):
 
 ```bash
-make dev
-cd frontend
-npm ci
-npm run dev
+scripts/dev.sh up      # Postgres 17, Redis, Tempo/Loki/Alloy/Prometheus/Grafana,
+                       # Air-reloaded server + worker, Vite dashboard on :3000
+scripts/dev.sh status  # URLs and process state; logs under tmp/logs/
+scripts/dev.sh down
 ```
 
-The Vite development server binds to `127.0.0.1` by default. Set
-`VITE_DEV_HOST=0.0.0.0` explicitly only when running it inside an isolated
-development container that must publish the port.
+`.env.dev` holds the tracked defaults (API `:8000`, metrics `:9090`/`:9091`,
+Postgres `:15432`, Redis `:16379`, Grafana `:3001`); `.env.dev.local` is the
+gitignored per-developer override. The Vite dev server binds `0.0.0.0:3000` and
+proxies `/api` to the Go server, so the browser never sees CORS. Grafana at
+`:3001` shows traces (Tempo over OTLP gRPC), logs (Alloy → Loki) and metrics.
 
-`make dev` starts Postgres, Redis, migrations, the Go server on port 8001,
-and the worker. Vite serves the operator console on port 3000 and proxies API
-and WebSocket traffic to the Go server. Use `make dev-full` when the
-containerized frontend is preferable to the Vite development server. After a
-Go or SQL change, run `make dev-reload` to rebuild and replace the migrator,
-server, and worker through the same production Dockerfiles. The explicit
-rebuild is the supported backend reload path; the repository does not require a
-separate file-watcher runtime.
-Use the optional [local telemetry stack](docs/local-telemetry.md) to inspect
-correlated JSON logs, Prometheus exemplars and end-to-end traces without a
-hosted collector.
+### Quality gates
 
-### Verification scopes
+| Command | What it proves |
+|---|---|
+| `make check` | `lint vet fmt build test` — golangci-lint v2 STANDARD, `go vet`, gofmt, all binaries, unit tests with `-race` (no Docker) |
+| `make test-integration` | Integration tests behind `-tags integration` against real PostgreSQL/Redis |
+| `make frontend-check` | TypeScript, zero-warning ESLint, vitest |
+| `make security` | gosec (fails on HIGH), govulncheck, gitleaks over the full history |
+| `make e2e-live` | Playwright against the running dev stack with a real login |
+| `make helm-lint` | Chart lint and template render |
+| `make docker-build` | Every production image with `GO_VERSION` derived from `go.mod` |
 
-| Command | What it proves | Requirements / exclusions |
-|---|---|---|
-| `make verify-enterprise VERIFY_SCOPE=backend` | Go formatting, build, vet, unit/race tests, architecture and generated-document contracts. | Go and the tools checked by the script; not stateful failure qualification. |
-| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 26.11.1 Current, npm 12.2.0 and `npm ci`; no browser or live-cluster acceptance. |
-| `make verify-enterprise VERIFY_SCOPE=helm` | Chart lint/render, release artifacts and deployment contracts. | Helm and the script's deployment-tool prerequisites; no live installation. |
-| `make verify-enterprise VERIFY_SCOPE=api-contract` | OpenAPI quality, route/request coverage and generated-client freshness. | Go and Node; focused contract diagnostics. |
-| `make verify-enterprise VERIFY_SCOPE=all` | All static backend, frontend and Helm scopes. | Does **not** substitute for the stateful/browser lanes below. |
-| `make verify-all` | Static scopes plus PostgreSQL and worker integration, restart/outage recovery (including race variants), tunnel HA, database failover, Playwright and live-browser qualification. | Docker, browser binaries and the lane-specific cluster/credential prerequisites; destructive lanes require disposable targets. |
-
-The enterprise script records the source-tree fingerprint, tool versions and
-per-command results under `artifacts/`. A green static scope is not a measured
-scale result or proof of production restore, accessibility or live acceptance.
-See [workflow responsibilities](.github/workflows/README.md) for CI ownership.
+See [`CLAUDE.md`](CLAUDE.md) for the engineering principles and
+[`docs/decisions/`](docs/decisions/index.md) for architecture decisions.
 
 For a Kubernetes install, use an exact published chart version. The chart ships
-no key material in any profile, so generate the JWT signing key and the Fernet
-key once and keep them — losing the Fernet key makes every encrypted column
-undecryptable:
+no key material in any profile, so generate the JWT signing key and the age
+encryption key once and keep them — losing the encryption key makes every
+encrypted column undecryptable (rotate with `astro admin rotate-keys`, see
+`docs/secret-rotation-runbook.md`):
 
 ```bash
 openssl rand -base64 32 > ./jwt-key
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ./fernet-key
+astro admin generate-encryption-key > ./encryption-key   # or: age-keygen | grep AGE-SECRET-KEY > ./encryption-key
 
 # Astronomer uses Gateway API. Install the tested controller/CRD pair once per
 # cluster before installing the chart.
@@ -244,7 +235,7 @@ helm upgrade --install astronomer \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \
-  --set-file secrets.encryptionKey=./fernet-key
+  --set-file secrets.encryptionKey=./encryption-key
 ```
 
 For production, layer the production values file and provide the CloudNativePG
@@ -262,7 +253,7 @@ helm upgrade --install astronomer \
   --create-namespace \
   -f astronomer-release/deploy/chart/values-production.yaml \
   --set-file secrets.secretKey=./jwt-key \
-  --set-file secrets.encryptionKey=./fernet-key
+  --set-file secrets.encryptionKey=./encryption-key
 ```
 
 After installation, retrieve the bootstrap password when one was generated by the chart:

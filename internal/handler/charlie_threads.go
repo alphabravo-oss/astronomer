@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type CharlieThreadService interface {
@@ -81,7 +82,7 @@ func (h *CharlieThreadHandler) Active(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie active thread is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie active thread is unavailable")
 		return
 	}
 	RespondJSON(w, http.StatusOK, activeThreadResponse(view))
@@ -94,7 +95,7 @@ func (h *CharlieThreadHandler) NewChat(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := h.threads.NewChat(r.Context(), mustUserID(actor))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie new chat is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie new chat is unavailable")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, activeThreadResponse(view))
@@ -107,7 +108,7 @@ func (h *CharlieThreadHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.threads.List(r.Context(), mustUserID(actor), 50, 0)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie threads are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie threads are unavailable")
 		return
 	}
 	items := make([]charlieThreadMetadata, 0, len(rows))
@@ -147,12 +148,12 @@ func (h *CharlieThreadHandler) Message(w http.ResponseWriter, r *http.Request) {
 	}
 	messageID, err := uuid.Parse(request.ClientMessageID)
 	if err != nil || strings.TrimSpace(request.Message) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie thread message request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie thread message request")
 		return
 	}
 	command, err := charlie.ResolveProductCommand(request.Message, request.Command)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Unknown or invalid Charlie command")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Unknown or invalid Charlie command")
 		return
 	}
 	label := strings.TrimSpace(actor.Username)
@@ -171,14 +172,14 @@ func (h *CharlieThreadHandler) Message(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, charlie.ErrInvalidSessionRequest) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie thread message request")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie thread message request")
 			return
 		}
 		if strings.Contains(err.Error(), "no longer open") || strings.Contains(err.Error(), "does not accept") {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie session is no longer open for messages")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Charlie session is no longer open for messages")
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie thread message is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie thread message is unavailable")
 		return
 	}
 	payload := activeThreadResponse(view)
@@ -198,21 +199,21 @@ func (h *CharlieThreadHandler) History(w http.ResponseWriter, r *http.Request) {
 	}
 	threadID, err := uuid.Parse(chi.URLParam(r, "thread_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie thread ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie thread ID")
 		return
 	}
 	raw, err := h.threads.StitchedHistory(r.Context(), mustUserID(actor), threadID, 100)
 	if errors.Is(err, charlie.ErrThreadNotFound) || errors.Is(err, charlie.ErrThreadNotOwned) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Charlie thread was not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Charlie thread was not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie thread history is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie thread history is unavailable")
 		return
 	}
 	safe, err := safeCharlieBrowserJSON(raw)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie thread history is invalid")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie thread history is invalid")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"items": json.RawMessage(safe)})

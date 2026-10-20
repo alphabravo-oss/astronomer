@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -59,15 +61,15 @@ func (q *contractRepoQuerier) GetHelmRepositoryByID(_ context.Context, id uuid.U
 // Pre-fix, GET /api/v1/catalog/repositories/ marshalled sqlc.HelmRepository
 // directly. The row carried no chart count of any kind, so the Charts column
 // had nothing to render, and the response shape was whatever the schema
-// happened to be that week — including, after migration 145, the Fernet
-// ciphertext in auth_config_encrypted.
+// happened to be that week — including, after migration 145, the age
+// ciphertext in auth_config_* sealed.
 func TestListReposResponseFieldNames(t *testing.T) {
 	synced := time.Date(2026, 7, 28, 10, 30, 0, 0, time.UTC)
 	full := sqlc.HelmRepository{
 		ID: uuid.New(), Name: "bitnami", Url: "https://charts.bitnami.com/bitnami",
 		RepoType: "helm", AuthType: "none", Enabled: true, IsDefault: true,
-		AuthConfig:          json.RawMessage(`{}`),
-		AuthConfigEncrypted: "gAAAAA-pretend-ciphertext",
+		AuthConfig:      json.RawMessage(`{}`),
+		AuthConfigKeyID: "test-key", AuthConfigAlgorithm: crypto.AlgorithmAgeX25519, AuthConfigCiphertext: []byte("gAAAAA-pretend-ciphertext"),
 		LastSyncedAt:        pgtype.Timestamptz{Time: synced, Valid: true},
 		LastSyncAttemptedAt: pgtype.Timestamptz{Time: synced, Valid: true},
 		CreatedAt:           synced, UpdatedAt: synced,
@@ -115,9 +117,9 @@ func TestListReposResponseFieldNames(t *testing.T) {
 		}
 	}
 
-	// The DB row shape must not leak. auth_config_encrypted is the
-	// migration-145 Fernet envelope and has no business on the wire.
-	for _, key := range []string{"auth_config_encrypted"} {
+	// The DB row shape must not leak. auth_config_* sealed is the
+	// sealed auth_config_* family and has no business on the wire.
+	for _, key := range []string{"auth_config_key_id", "auth_config_algorithm", "auth_config_ciphertext", "auth_config_nonce"} {
 		if _, ok := env.Data[0][key]; ok {
 			t.Errorf("response leaks internal column %q", key)
 		}

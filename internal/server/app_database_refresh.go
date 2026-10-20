@@ -4,9 +4,10 @@ import (
 	"errors"
 	"path/filepath"
 
+	"oras.land/oras-go/v2/registry/remote"
+
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"oras.land/oras-go/v2/registry/remote"
 )
 
 // Validate typed locator DATA before the restart reduction phase. No DNS,

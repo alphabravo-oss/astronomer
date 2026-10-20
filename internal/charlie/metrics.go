@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Charlie metrics intentionally expose only fixed-vocabulary operational

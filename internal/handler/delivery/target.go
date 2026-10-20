@@ -6,6 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
@@ -16,14 +27,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"net/http"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type TargetQueries interface {
@@ -165,16 +168,16 @@ type targetResponse struct {
 func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery target persistence is unavailable")
 		return
 	}
 	if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
@@ -184,12 +187,12 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err != nil {
-			respondDatabaseError(w, err)
+			respondDatabaseError(w, r, err)
 			return
 		}
 		item, err := targetFromRow(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery target is invalid")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery target is invalid")
 			return
 		}
 		setEntityTag(w, row.ResourceVersion)
@@ -198,19 +201,19 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListDeliveryTargets(r.Context(), sqlc.ListDeliveryTargetsParams{ProjectID: projectID, QueryLimit: limit, QueryOffset: offset})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountDeliveryTargets(r.Context(), projectID)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	items := make([]targetResponse, 0, len(rows))
 	for _, row := range rows {
 		item, err := targetFromRow(row)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery target is invalid")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery target is invalid")
 			return
 		}
 		items = append(items, item)
@@ -220,33 +223,33 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request targetRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	if err := validateTargetRequest(request); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery target persistence is unavailable")
 		return
 	}
 	if err := h.requireReadyBundle(r.Context(), projectID, request.BundleVersionID); err != nil {
-		respondTargetBundleError(w, err)
+		respondTargetBundleError(w, r, err)
 		return
 	}
 	if err := h.validateConfigurationRefs(r.Context(), projectID, request.ConfigurationTemplateID, request.OverrideSetIDs); err != nil {
-		respondError(w, http.StatusConflict, "configuration_reference_unavailable", err.Error())
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.ConfigurationReferenceUnavailable, err.Error())
 		return
 	}
 	placementJSON, _ := json.Marshal(request.Placement)
@@ -254,17 +257,17 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	reconcileJSON, _ := json.Marshal(request.ReconciliationPolicy)
 	maintenanceJSON, err := canonicalJSONObject(request.MaintenanceWindowPolicy)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	overrides, err := request.Overrides.Canonical()
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	overridesJSON, _ := json.Marshal(overrides)
 	if err := h.requireTargetOverridesCompatible(r.Context(), projectID, request.BundleVersionID, overrides); err != nil {
-		respondTargetBundleError(w, err)
+		respondTargetBundleError(w, r, err)
 		return
 	}
 	actor := reqctx.UserUUID(r.Context())
@@ -291,12 +294,12 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response, err := targetFromRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery target is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery target is invalid")
 		return
 	}
 	setEntityTag(w, row.ResourceVersion)
@@ -310,17 +313,17 @@ func (h *TargetHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery target persistence is unavailable")
 		return
 	}
 	row, err := h.queries.GetDeliveryTarget(r.Context(), sqlc.GetDeliveryTargetParams{ID: targetID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response, err := targetFromRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery target is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery target is invalid")
 		return
 	}
 	setEntityTag(w, row.ResourceVersion)
@@ -330,52 +333,52 @@ func (h *TargetHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	expected, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", err.Error())
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, err.Error())
 		return
 	}
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request updateTargetRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	targetID, err := pathUUID(r, "id", "targetID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery target persistence is unavailable")
 		return
 	}
 	current, err := h.queries.GetDeliveryTarget(r.Context(), sqlc.GetDeliveryTargetParams{ID: targetID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if current.ResourceVersion != expected {
-		respondError(w, http.StatusPreconditionFailed, "stale_resource_version", "If-Match does not match the current target resource version")
+		apiutil.WriteError(w, r, http.StatusPreconditionFailed, apiutil.StaleResourceVersion, "If-Match does not match the current target resource version")
 		return
 	}
 	merged, err := mergeTargetUpdate(current, request)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if err := h.requireReadyBundle(r.Context(), projectID, merged.BundleVersionID); err != nil {
-		respondTargetBundleError(w, err)
+		respondTargetBundleError(w, r, err)
 		return
 	}
 	if err := h.validateConfigurationRefs(r.Context(), projectID, merged.ConfigurationTemplateID, merged.OverrideSetIDs); err != nil {
-		respondError(w, http.StatusConflict, "configuration_reference_unavailable", err.Error())
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.ConfigurationReferenceUnavailable, err.Error())
 		return
 	}
 	placementJSON, _ := json.Marshal(merged.Placement)
@@ -390,7 +393,7 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ID: targetID, ProjectID: projectID, ExpectedResourceVersion: expected,
 	}
 	if err := h.requireTargetOverridesCompatible(r.Context(), projectID, merged.BundleVersionID, merged.Overrides); err != nil {
-		respondTargetBundleError(w, err)
+		respondTargetBundleError(w, r, err)
 		return
 	}
 	row, err := executeMutation(r, h.runTx,
@@ -407,12 +410,12 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondCASError(w, err)
+		respondCASError(w, r, err)
 		return
 	}
 	response, err := targetFromRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery target is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery target is invalid")
 		return
 	}
 	setEntityTag(w, row.ResourceVersion)
@@ -423,12 +426,12 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	expected, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", err.Error())
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, err.Error())
 		return
 	}
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	projectID, targetID, ok := targetScope(w, r)
@@ -436,7 +439,7 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil || h.runTx == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery target persistence is unavailable")
 		return
 	}
 	params := sqlc.RequestDeliveryTargetDeletionCASParams{
@@ -445,7 +448,7 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := reqctx.UserUUID(r.Context())
 	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
-		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "authenticated actor is required")
 		return
 	}
 	digest, err := asyncop.Digest(struct {
@@ -454,7 +457,7 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		ResourceVersion int64     `json:"resource_version"`
 	}{projectID, targetID, expected})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	var row sqlc.RequestDeliveryTargetDeletionCASRow
@@ -496,10 +499,10 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, asyncop.ErrConflict) {
-			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.IdempotencyConflict, err.Error())
 			return
 		}
-		respondCASError(w, err)
+		respondCASError(w, r, err)
 		return
 	}
 	if !replayed {
@@ -512,7 +515,7 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 	expected, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", err.Error())
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, err.Error())
 		return
 	}
 	projectID, targetID, ok := targetScope(w, r)
@@ -520,7 +523,7 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery target persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery target persistence is unavailable")
 		return
 	}
 	params := sqlc.MarkDeliveryTargetOrphanedParams{
@@ -540,7 +543,7 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondCASError(w, err)
+		respondCASError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.ResourceVersion)
@@ -589,33 +592,33 @@ func (h *TargetHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.previewer == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery placement preview is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery placement preview is unavailable")
 		return
 	}
 	snapshot, result, err := h.previewer.Preview(r.Context(), targetID)
 	if err != nil {
-		respondRolloutError(w, err)
+		respondRolloutError(w, r, err)
 		return
 	}
 	if snapshot.ProjectID != projectID {
-		respondError(w, http.StatusNotFound, "not_found", "delivery resource not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "delivery resource not found")
 		return
 	}
 	pageSize, cursor, err := previewPageRequest(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	offset := 0
 	if cursor != nil {
 		if cursor.PreviewDigest != result.PreviewDigest {
-			respondError(w, http.StatusConflict, "preview_cursor_stale", "placement changed; request a fresh preview")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.PreviewCursorStale, "placement changed; request a fresh preview")
 			return
 		}
 		offset = cursor.Offset
 	}
 	if offset > len(result.Decisions) {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", "preview cursor offset is outside the decision set")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, "preview cursor offset is outside the decision set")
 		return
 	}
 	end := offset + pageSize
@@ -785,14 +788,14 @@ var (
 	errPlatformScopeForbidden = errors.New("platform-scoped bundle targets require a superuser")
 )
 
-func respondTargetBundleError(w http.ResponseWriter, err error) {
+func respondTargetBundleError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, errBundleNotReady):
-		respondError(w, http.StatusConflict, "bundle_not_ready", err.Error())
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.BundleNotReady, err.Error())
 	case errors.Is(err, errPlatformScopeForbidden):
-		respondError(w, http.StatusForbidden, "platform_scope_forbidden", err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PlatformScopeForbidden, err.Error())
 	default:
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 	}
 }
 
@@ -931,12 +934,12 @@ func nullableUUIDPointer(value pgtype.UUID) *uuid.UUID {
 func targetScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	targetID, err := pathUUID(r, "id", "targetID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, targetID, true
@@ -983,39 +986,60 @@ func previewRisks(result placement.Result) []string {
 	return items
 }
 
-func respondCASError(w http.ResponseWriter, err error) {
+func respondCASError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, context.Canceled) {
-		respondError(w, http.StatusRequestTimeout, "request_canceled", "delivery operation was canceled")
+		apiutil.WriteError(w, r, http.StatusRequestTimeout, apiutil.RequestCanceled, "delivery operation was canceled")
 		return
 	}
 	// A project-scoped CAS update returning no rows deliberately does not
 	// distinguish a missing resource from stale state.
 	if errors.Is(err, pgx.ErrNoRows) {
-		respondError(w, http.StatusPreconditionFailed, "stale_resource_version", "resource state changed; fetch it and retry with the current ETag")
+		apiutil.WriteError(w, r, http.StatusPreconditionFailed, apiutil.StaleResourceVersion, "resource state changed; fetch it and retry with the current ETag")
 		return
 	}
-	respondDatabaseError(w, err)
+	respondDatabaseError(w, r, err)
 }
 
-func respondRolloutError(w http.ResponseWriter, err error) {
+func respondRolloutError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, asyncop.ErrConflict):
-		respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IdempotencyConflict, err.Error())
 	case rollout.HasCode(err, rollout.CodeStaleFence):
-		respondError(w, http.StatusPreconditionFailed, string(rollout.CodeStaleFence), err.Error())
+		apiutil.WriteError(w, r, http.StatusPreconditionFailed, apiutil.RolloutStaleFence, err.Error())
 	case rollout.HasCode(err, rollout.CodePreviewStale), rollout.HasCode(err, rollout.CodeTargetChanged), rollout.HasCode(err, rollout.CodeIdempotencyConflict):
-		respondError(w, http.StatusConflict, string(extractRolloutCode(err)), err.Error())
+		apiutil.WriteError(w, r, http.StatusConflict, rolloutAPICode(err), err.Error())
 	case rollout.HasCode(err, rollout.CodeInvalidInput), rollout.HasCode(err, rollout.CodeNoClusters), rollout.HasCode(err, rollout.CodeInvalidCohorts):
-		respondError(w, http.StatusBadRequest, string(extractRolloutCode(err)), err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, rolloutAPICode(err), err.Error())
 	default:
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 	}
 }
 
-func extractRolloutCode(err error) rollout.ErrorCode {
+// rolloutAPICode translates the rollout engine's closed ErrorCode set into
+// the API catalog.
+func rolloutAPICode(err error) apiutil.Code {
 	var typed *rollout.Error
-	if errors.As(err, &typed) {
-		return typed.Code
+	if !errors.As(err, &typed) {
+		return apiutil.RolloutInvariant
 	}
-	return rollout.CodeInvariant
+	switch typed.Code {
+	case rollout.CodeInvalidInput:
+		return apiutil.RolloutInvalidInput
+	case rollout.CodeIdempotencyConflict:
+		return apiutil.IdempotencyConflict
+	case rollout.CodePreviewStale:
+		return apiutil.RolloutPreviewStale
+	case rollout.CodeTargetChanged:
+		return apiutil.RolloutTargetChanged
+	case rollout.CodeNoClusters:
+		return apiutil.RolloutNoClusters
+	case rollout.CodeInvalidCohorts:
+		return apiutil.RolloutInvalidCohorts
+	case rollout.CodeLeaseLost:
+		return apiutil.RolloutLeaseLost
+	case rollout.CodeStaleFence:
+		return apiutil.RolloutStaleFence
+	default:
+		return apiutil.RolloutInvariant
+	}
 }

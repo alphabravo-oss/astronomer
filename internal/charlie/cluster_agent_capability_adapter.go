@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type clusterAgentCapabilityQueries interface {
@@ -37,7 +40,7 @@ func (a *ClusterAgentCapabilityAdapter) Execute(ctx context.Context, capability 
 	switch capability.Name {
 	case "astronomer.cluster_agents.summary":
 		stale := int64Argument(arguments, "stale_after_seconds", 300)
-		row, err := a.queries.CharlieClusterAgentSummary(ctx, int32(stale))
+		row, err := a.queries.CharlieClusterAgentSummary(ctx, safeconv.Int32(stale))
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +122,7 @@ func (a *ClusterAgentCapabilityAdapter) Execute(ctx context.Context, capability 
 		if err != nil {
 			return nil, err
 		}
-		rows, err := a.queries.CharlieAgentConnectionHistory(ctx, sqlc.CharlieAgentConnectionHistoryParams{ClusterID: clusterID, Since: sinceArgument(arguments, 24*time.Hour), RowLimit: int32(int64Argument(arguments, "limit", 100))})
+		rows, err := a.queries.CharlieAgentConnectionHistory(ctx, sqlc.CharlieAgentConnectionHistoryParams{ClusterID: clusterID, Since: sinceArgument(arguments, 24*time.Hour), RowLimit: safeconv.Int32(int64Argument(arguments, "limit", 100))})
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +144,7 @@ func (a *ClusterAgentCapabilityAdapter) Execute(ctx context.Context, capability 
 		}
 		return marshalBounded(map[string]any{"replicas": rows}, capability.MaxResponseBytes)
 	case "astronomer.tunnel.recent_errors":
-		rows, err := a.queries.CharlieTunnelRecentErrors(ctx, sqlc.CharlieTunnelRecentErrorsParams{Since: sinceArgument(arguments, time.Hour), ConnectionID: optionalPGText(arguments, "connection_id"), RowLimit: int32(int64Argument(arguments, "limit", 100))})
+		rows, err := a.queries.CharlieTunnelRecentErrors(ctx, sqlc.CharlieTunnelRecentErrorsParams{Since: sinceArgument(arguments, time.Hour), ConnectionID: optionalPGText(arguments, "connection_id"), RowLimit: safeconv.Int32(int64Argument(arguments, "limit", 100))})
 		if err != nil {
 			return nil, err
 		}

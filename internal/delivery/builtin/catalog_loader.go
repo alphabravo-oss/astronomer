@@ -3,9 +3,10 @@ package builtin
 import (
 	"context"
 	"errors"
+	"log/slog"
+
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
-	"log/slog"
 )
 
 // CatalogLoader supplies either verified release assets or explicitly selected

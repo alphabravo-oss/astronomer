@@ -1,4 +1,0 @@
-ok  	github.com/alphabravocompany/astronomer-go/internal/handler	19.356s
-ok  	github.com/alphabravocompany/astronomer-go/internal/server	7.027s
-ok  	github.com/alphabravocompany/astronomer-go/internal/auth	1.274s
-ok  	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.268s

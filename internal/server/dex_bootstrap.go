@@ -17,12 +17,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -68,7 +68,7 @@ type dexBootstrapEnvLookup func(string) (string, bool)
 //   - (false, err): an unexpected DB error; the caller should log but boot
 //     should continue — the connector wizard stays usable and the operator
 //     can configure dex_settings via the UI as a fallback.
-func SeedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger *slog.Logger, cfg *config.Config) (bool, error) {
+func SeedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger zerolog.Logger, cfg *config.Config) (bool, error) {
 	values := map[string]string{}
 	if cfg != nil {
 		values[dexBootstrapEnv] = fmt.Sprintf("%t", cfg.DexBundledEnabled)
@@ -86,15 +86,12 @@ func SeedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	})
 }
 
-func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger *slog.Logger, env dexBootstrapEnvLookup) (bool, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger zerolog.Logger, env dexBootstrapEnvLookup) (bool, error) {
 	if queries == nil {
 		return false, nil
 	}
 	if !isDexBundledEnabled(env) {
-		logger.Debug("dex bootstrap: DEX_BUNDLED_ENABLED not set; skipping seed")
+		logger.Debug().Msg("dex bootstrap: DEX_BUNDLED_ENABLED not set; skipping seed")
 		return false, nil
 	}
 
@@ -104,9 +101,7 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		// configmap.yaml + _helpers.tpl astronomer.dex.issuerURL). When it
 		// doesn't, refuse to seed — a row with an empty issuer fails the
 		// /apply preflight inside DexHandler anyway.
-		logger.Warn("dex bootstrap: DEX_BUNDLED_ENABLED=true but DEX_BUNDLED_ISSUER_URL is empty; skipping seed",
-			"event", "dex_bootstrap_missing_issuer",
-		)
+		logger.Warn().Str("event", "dex_bootstrap_missing_issuer").Msg("dex bootstrap: DEX_BUNDLED_ENABLED=true but DEX_BUNDLED_ISSUER_URL is empty; skipping seed")
 		return false, nil
 	}
 
@@ -129,16 +124,15 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 				ID: existing.ID, IssuerUrl: existing.IssuerUrl, ClusterID: existing.ClusterID,
 				Namespace: desiredNamespace, ReleaseName: desiredDeployment,
 				ConfigmapName: desiredRuntimeName, RuntimeSecretName: desiredRuntimeName,
-				PublicClients: existing.PublicClients, PublicClientsEncrypted: existing.PublicClientsEncrypted,
+				PublicClientsKeyID: existing.PublicClientsKeyID, PublicClientsAlgorithm: existing.PublicClientsAlgorithm,
+				PublicClientsCiphertext: existing.PublicClientsCiphertext, PublicClientsNonce: existing.PublicClientsNonce,
 				Expiry: existing.Expiry, Extra: existing.Extra,
 				ChartReleaseName: desiredChartRelease, DeploymentName: desiredDeployment, ServiceName: desiredService,
 				RuntimePhase: desiredPhase,
 			})
 			return updateErr == nil, updateErr
 		}
-		logger.Debug("dex bootstrap: settings already exist; skipping seed",
-			"existing_issuer", existing.IssuerUrl,
-		)
+		logger.Debug().Str("existing_issuer", existing.IssuerUrl).Msg("dex bootstrap: settings already exist; skipping seed")
 		return false, nil
 	}
 	// Any error other than "no rows" is unexpected; surface it.
@@ -160,35 +154,24 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv, "astronomer-dex-runtime")
 
 	_, err = queries.StageDexSettingsAndDisableSSO(ctx, sqlc.StageDexSettingsAndDisableSSOParams{
-		ID:                     dexBootstrapSingletonID,
-		IssuerUrl:              issuer,
-		ClusterID:              pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
-		Namespace:              namespace,
-		ReleaseName:            deploymentName,
-		ConfigmapName:          runtimeSecretName,
-		RuntimeSecretName:      runtimeSecretName,
-		PublicClientsEncrypted: "",
-		PublicClients:          []byte("[]"),
-		Expiry:                 []byte("{}"),
-		Extra:                  []byte("{}"),
-		ChartReleaseName:       chartReleaseName,
-		DeploymentName:         deploymentName,
-		ServiceName:            serviceName,
-		RuntimePhase:           runtimePhase,
+		ID:                dexBootstrapSingletonID,
+		IssuerUrl:         issuer,
+		ClusterID:         pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
+		Namespace:         namespace,
+		ReleaseName:       deploymentName,
+		ConfigmapName:     runtimeSecretName,
+		RuntimeSecretName: runtimeSecretName,
+		Expiry:            []byte("{}"),
+		Extra:             []byte("{}"),
+		ChartReleaseName:  chartReleaseName,
+		DeploymentName:    deploymentName,
+		ServiceName:       serviceName,
+		RuntimePhase:      runtimePhase,
 	})
 	if err != nil {
 		return false, err
 	}
-	logger.Info("dex bootstrap: seeded dex_settings for bundled Dex",
-		"event", "dex_settings_seeded",
-		"issuer_url", issuer,
-		"namespace", namespace,
-		"chart_release_name", chartReleaseName,
-		"deployment_name", deploymentName,
-		"service_name", serviceName,
-		"runtime_phase", runtimePhase,
-		"runtime_secret_name", runtimeSecretName,
-	)
+	logger.Info().Str("event", "dex_settings_seeded").Str("issuer_url", issuer).Str("namespace", namespace).Str("chart_release_name", chartReleaseName).Str("deployment_name", deploymentName).Str("service_name", serviceName).Str("runtime_phase", runtimePhase).Str("runtime_secret_name", runtimeSecretName).Msg("dex bootstrap: seeded dex_settings for bundled Dex")
 	return true, nil
 }
 
@@ -230,23 +213,16 @@ type legacySSORowsQuerier interface {
 //
 // Boot-path semantics: best-effort. Errors are returned to the caller for
 // logging but boot continues — this is a posture warning, not a hard gate.
-func WarnIfLegacySSORowsActive(ctx context.Context, queries legacySSORowsQuerier, logger *slog.Logger) error {
+func WarnIfLegacySSORowsActive(ctx context.Context, queries legacySSORowsQuerier, logger zerolog.Logger) error {
 	if queries == nil {
 		return nil
-	}
-	if logger == nil {
-		logger = slog.Default()
 	}
 	n, err := queries.CountActiveUnmigratedSSORows(ctx)
 	if err != nil {
 		return err
 	}
 	if n > 0 {
-		logger.Warn(
-			"legacy sso_configurations rows are still active; migrate to dex_connectors via the auth settings UI before the next release removes the old path",
-			"event", "legacy_sso_rows_active",
-			"count", n,
-		)
+		logger.Warn().Str("event", "legacy_sso_rows_active").Int64("count", n).Msg("legacy sso_configurations rows are still active; migrate to dex_connectors via the auth settings UI before the next release removes the old path")
 	}
 	return nil
 }

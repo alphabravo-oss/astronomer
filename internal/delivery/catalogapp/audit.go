@@ -1,9 +1,10 @@
 package catalogapp
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 )
 
 // The catalog operation already records its accepted request. The rollout is

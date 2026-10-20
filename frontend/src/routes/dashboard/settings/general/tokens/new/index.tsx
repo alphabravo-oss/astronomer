@@ -140,7 +140,7 @@ function NewTokenPage() {
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to API tokens
       </RouterLink>
-      <PageHeader eyebrow="Settings · General · New" title="Create API token" />
+      <PageHeader title="Create API token" />
       <NewTokenForm />
     </PageShell>
   );

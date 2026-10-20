@@ -97,9 +97,17 @@ type Config struct {
 	// Requires HTTPS, wildcard DNS/TLS, and a suffix separate from ServerURL.
 	ToolUIDomain string `mapstructure:"tool_ui_domain"`
 
+	// EncryptionKey is the inline age keyring for column encryption
+	// (ASTRONOMER_ENCRYPTION_KEY): newline- or comma-separated
+	// "[label:]AGE-SECRET-KEY-1..." entries, current key first, previous keys
+	// after it until `astro admin rotate-keys` has rewritten every row.
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
+	// EncryptionKeyFile is the same keyring read from a file
+	// (ASTRONOMER_ENCRYPTION_KEY_FILE), e.g. a mounted Secret. Setting both is
+	// a startup error.
+	EncryptionKeyFile string `mapstructure:"astronomer_encryption_key_file"`
 	// InternalPSK authenticates body-bound, short-lived cross-pod tunnel RPC.
-	// It must be independent from both the JWT signing and Fernet keys.
+	// It must be independent from both the JWT signing and encryption keys.
 	InternalPSK string `mapstructure:"astronomer_internal_psk"`
 	// InternalPSKPrevious is accepted for verification only during an
 	// operator-controlled rotation window. New sibling requests are always signed
@@ -118,6 +126,15 @@ type Config struct {
 
 	AgentImageRepository string `mapstructure:"agent_image_repository"`
 	AgentImageTag        string `mapstructure:"agent_image_tag"`
+
+	// Air-gap layered registry policy (internal/registry). RegistryLocal is the
+	// cluster-local registry host every runtime image/artifact reference is
+	// re-hosted onto (layer 1); RegistryFallbacks the opt-in, comma-separated
+	// layer-2 list (empty = fail closed after layer 1); RegistryPlainHTTP the
+	// comma-separated registry hosts reached without TLS (in-cluster zot).
+	RegistryLocal     string `mapstructure:"registry_local"`
+	RegistryFallbacks string `mapstructure:"registry_fallbacks"`
+	RegistryPlainHTTP string `mapstructure:"registry_plain_http"`
 	// ReleaseManifestPath points at the signed, generated compatibility unit
 	// mounted by the packaged chart. When present it is authoritative for every
 	// artifact/version field below; mutable operator overrides cannot split the
@@ -184,7 +201,11 @@ type Config struct {
 	DeliverySourceMaxHelmChartBytes      int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
 	DeliverySourceTrustDirectory         string `mapstructure:"delivery_source_trust_directory"`
 
+	// LogLevel is a zerolog level name (LOG_LEVEL, default info).
 	LogLevel string `mapstructure:"log_level"`
+	// LogFormat is json (LOG_FORMAT default; required in production) or
+	// text for local development (zerolog.ConsoleWriter).
+	LogFormat string `mapstructure:"log_format"`
 
 	AuditLogRetentionMonths int `mapstructure:"audit_log_retention_months"`
 	// ClusterTombstoneRetentionDays is how long decommissioned cluster rows
@@ -195,7 +216,11 @@ type Config struct {
 	ServerMetricsAddr             string `mapstructure:"server_metrics_addr"`
 	WorkerMetricsAddr             string `mapstructure:"worker_metrics_addr"`
 
+	// ServerAddr is the API listener address (default ":8000").
+	ServerAddr string `mapstructure:"server_addr"`
+
 	OTELExporterEndpoint string  `mapstructure:"otel_exporter_otlp_endpoint"`
+	OTELExporterProtocol string  `mapstructure:"otel_exporter_otlp_protocol"`
 	OTELExporterInsecure bool    `mapstructure:"otel_exporter_otlp_insecure"`
 	OTELExporterHeaders  string  `mapstructure:"otel_exporter_otlp_headers"`
 	OTELServiceName      string  `mapstructure:"otel_service_name"`
@@ -485,6 +510,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "delivery_source_max_helm_chart_bytes", Value: int64(100 << 20)},
 		envconfig.Default{Key: "delivery_source_trust_directory", Value: "/etc/astronomer/delivery-trust"},
 		envconfig.Default{Key: "log_level", Value: "info"},
+		envconfig.Default{Key: "log_format", Value: "json"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
 		envconfig.Default{Key: "cluster_tombstone_retention_days", Value: 90},
 		envconfig.Default{Key: "login_failure_threshold", Value: 5},
@@ -501,9 +527,15 @@ func Load() (*Config, error) {
 		// to disable namespace-filtered reads + kubectl-shell caller scoping.
 		envconfig.Default{Key: "namespace_scoped_rbac_enabled", Value: true},
 		envconfig.Default{Key: "kubectl_shell_image", Value: "astronomer-shell:dev"},
+		// Bare local names, like kubectl_shell_image: public registries are never a
+		// Go default. The chart renders explicit, registry-qualified references.
+		envconfig.Default{Key: "agent_image_repository", Value: "astronomer-go-agent"},
+		envconfig.Default{Key: "management_backup_image", Value: "astronomer-dr:dev"},
 		envconfig.Default{Key: "kubectl_shell_idle_timeout_minutes", Value: 30},
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
+		envconfig.Default{Key: "server_addr", Value: ":8000"},
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
+		envconfig.Default{Key: "otel_exporter_otlp_protocol", Value: "grpc"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "otel_traces_sampler_arg", Value: 0.05},
 		envconfig.Default{Key: "agent_otel_traces_sampler_arg", Value: 0.05},
@@ -541,6 +573,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := applyReleaseManifest(cfg); err != nil {
+		return nil, err
+	}
+	if err := applyRegistryPolicy(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil

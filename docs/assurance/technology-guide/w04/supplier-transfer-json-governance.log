@@ -1,1 +1,0 @@
-json-governance: JSON site drift: unowned=[('internal/delivery/resolver/artifact_metadata.go', 'fetchArtifactMetadata', 'jsoncontract.Decode', ('configBytes', '&object'))]; stale=[('internal/delivery/resolver/artifact_metadata.go', 'FetchVerifiedOCIArtifactMetadata', 'jsoncontract.Decode', ('configBytes', '&object'))]

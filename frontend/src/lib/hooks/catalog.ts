@@ -39,6 +39,7 @@ export function useCatalogApplications() {
   return useQuery({
     queryKey: queryKeys.catalog.applications,
     queryFn: ({ signal }) => getCatalogApplicationPresentations(signal),
+    throwOnError: false,
   });
 }
 
@@ -155,7 +156,12 @@ export function useHelmChartVersions(
   scopeId: string,
   chartId: string,
   scope: "cluster" | "project" = "project",
-  params: { limit?: number; offset?: number } = {},
+  params: {
+    limit?: number;
+    offset?: number;
+    view?: "curated" | "all";
+    selectedVersionId?: string;
+  } = {},
 ) {
   return useQuery({
     queryKey: queryKeys.catalog.chartVersions(scopeId, chartId, scope, params),

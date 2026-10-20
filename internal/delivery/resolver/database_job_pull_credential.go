@@ -6,12 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )

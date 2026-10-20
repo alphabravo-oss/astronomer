@@ -13,8 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // serviceProxyMaxBodyBytes caps how large a request body the service proxy will
@@ -65,17 +65,17 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	pathSuffix := chi.URLParam(r, "*")
 
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "service proxy not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, "service proxy not configured")
 		return
 	}
 
 	target, err := parseServiceProxyTarget(namespace, servicePort)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidServiceProxyTarget, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidServiceProxyTarget, err.Error())
 		return
 	}
 	if err := h.authorizeTarget(r.Context(), clusterUUID, target); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.ServiceProxyDenied, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.ServiceProxyDenied, err.Error())
 		return
 	}
 	if isServiceProxyAuditMethod(r.Method) {
@@ -102,10 +102,10 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "request body exceeds maximum allowed size")
+			apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "request body exceeds maximum allowed size")
 			return
 		}
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Failed to read request body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Failed to read request body")
 		return
 	}
 	headers := requestHeaders(r.Header.Get("Content-Type"))
@@ -118,7 +118,7 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 

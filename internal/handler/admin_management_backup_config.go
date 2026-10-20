@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	batchv1 "k8s.io/api/batch/v1"
@@ -18,6 +18,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func (req *ManagementBackupDestinationWrite) normalize() {
@@ -54,33 +57,33 @@ func derefInt32(v *int32, fallback int32) int32 {
 
 func (h *AdminDrillHandler) respondDestinationWriteError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, errManagementBackupReconcileActive) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Destination reconciliation is active; retry after the current generation settles")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Destination reconciliation is active; retry after the current generation settles")
 		return
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A destination with that name already exists")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A destination with that name already exists")
 		return
 	}
-	RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to persist management backup destination")
+	apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to persist management backup destination")
 }
 
-func (h *AdminDrillHandler) encryptDestinationCredentials(access, secret string) (string, error) {
+func (h *AdminDrillHandler) encryptDestinationCredentials(access, secret string) (crypto.Sealed, error) {
 	if h == nil || h.encryptor == nil {
-		return "", errors.New("management backup credential encryption is not configured")
+		return crypto.Sealed{}, errors.New("management backup credential encryption is not configured")
 	}
 	payload, err := json.Marshal(map[string]string{"access_key": access, "secret_key": secret})
 	if err != nil {
-		return "", err
+		return crypto.Sealed{}, err
 	}
-	return h.encryptor.Encrypt(string(payload))
+	return h.encryptor.Encrypt(payload)
 }
 
 func (h *AdminDrillHandler) decryptDestinationCredentials(row sqlc.ManagementBackupDestination) (string, string, error) {
-	if h == nil || h.encryptor == nil || row.EncryptedCredentials == "" {
+	if h == nil || h.encryptor == nil || row.CredentialsKeyID == "" {
 		return "", "", errors.New("management backup credentials are unavailable")
 	}
-	plaintext, err := h.encryptor.Decrypt(row.EncryptedCredentials)
+	plaintext, err := h.encryptor.DecryptString(crypto.FromParts(row.CredentialsKeyID, row.CredentialsAlgorithm, row.CredentialsCiphertext, row.CredentialsNonce))
 	if err != nil {
 		return "", "", err
 	}
@@ -230,10 +233,9 @@ func (h *AdminDrillHandler) buildDestinationCronJob(ctx context.Context, row sql
 	if sa == "" {
 		sa = h.resourcePrefix()
 	}
+	// MANAGEMENT_BACKUP_IMAGE is explicit configuration (the chart renders the
+	// DR image re-hosted by the registry policy); there is no public default.
 	image := h.backupImage
-	if image == "" {
-		image = defaultManagementBackupImage
-	}
 	nonRoot := int64(65534)
 	falseVal := false
 	env := []corev1.EnvVar{

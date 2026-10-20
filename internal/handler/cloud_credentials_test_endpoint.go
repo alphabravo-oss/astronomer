@@ -69,12 +69,12 @@ func (t *DefaultCloudTester) TestDigitalOcean(ctx context.Context, blob map[stri
 	if endpoint == "" {
 		endpoint = "https://api.digitalocean.com/v2"
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/account", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/account", nil) // #nosec G704 -- endpoint comes from the fixed provider table for the credential type, never from the request body
 	if err != nil {
 		return CloudTestResult{OK: false, Message: err.Error()}, nil
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := t.httpClient().Do(req)
+	resp, err := t.httpClient().Do(req) // #nosec G704 -- see NewRequestWithContext above: fixed provider endpoint, bounded response body
 	if err != nil {
 		return CloudTestResult{OK: false, Message: err.Error()}, nil
 	}
@@ -156,7 +156,7 @@ func (t *DefaultCloudTester) TestAWS(ctx context.Context, blob map[string]string
 		} `xml:"GetCallerIdentityResult"`
 	}
 	var parsed stsResult
-	if err := xml.Unmarshal(body, &parsed); err == nil && parsed.Result.Arn != "" {
+	if err := xml.Unmarshal(body, &parsed); err == nil && parsed.Result.Arn != "" { // #nosec G709 -- provider STS response decoded into a typed struct with bounded body; no dynamic types
 		return CloudTestResult{OK: true, Message: fmt.Sprintf("authenticated as %s", parsed.Result.Arn)}, nil
 	}
 	// 200 but unrecognised body — still treat as success since the
@@ -373,7 +373,7 @@ func summariseAWSError(body []byte) string {
 			Message string `xml:"Message"`
 		} `xml:"Error"`
 	}
-	if err := xml.Unmarshal(body, &doc); err == nil && doc.Error.Code != "" {
+	if err := xml.Unmarshal(body, &doc); err == nil && doc.Error.Code != "" { // #nosec G709 -- provider error document decoded into a typed struct with bounded body; no dynamic types
 		return fmt.Sprintf("%s: %s", doc.Error.Code, doc.Error.Message)
 	}
 	if len(body) > 200 {

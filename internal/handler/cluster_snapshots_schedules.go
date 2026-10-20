@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func (h *ClusterSnapshotsHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
@@ -17,12 +18,12 @@ func (h *ClusterSnapshotsHandler) ListSchedules(w http.ResponseWriter, r *http.R
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterSnapshotSchedules(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list schedules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list schedules")
 		return
 	}
 	out := make([]ScheduleResponse, 0, len(rows))
@@ -39,7 +40,7 @@ func (h *ClusterSnapshotsHandler) GetSchedule(w http.ResponseWriter, r *http.Req
 	}
 	row, err := h.queries.GetClusterSnapshotScheduleByID(r.Context(), scheduleID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, scheduleToResponse(row))
@@ -52,25 +53,25 @@ func (h *ClusterSnapshotsHandler) CreateSchedule(w http.ResponseWriter, r *http.
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
 	var req ScheduleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "name is required")
 		return
 	}
 	if !validVeleroResourceName(strings.ToLower(req.Name)) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name must be a valid DNS subdomain")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "name must be a valid DNS subdomain")
 		return
 	}
 	if _, err := parseCronExpression(req.CronSchedule); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, fmt.Sprintf("invalid cron_schedule: %v", err))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, fmt.Sprintf("invalid cron_schedule: %v", err))
 		return
 	}
 	enabled := true
@@ -101,7 +102,7 @@ func (h *ClusterSnapshotsHandler) CreateSchedule(w http.ResponseWriter, r *http.
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create schedule (name conflict?)")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create schedule (name conflict?)")
 		return
 	}
 
@@ -116,22 +117,22 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	existing, err := h.queries.GetClusterSnapshotScheduleByID(r.Context(), scheduleID)
 	if err != nil || existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 		return
 	}
 
 	var req ScheduleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if _, err := snapshotScheduleUpdateParams(scheduleID, req, existing); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	row, err := executeMutation(r, h.runTx,
@@ -161,10 +162,10 @@ func (h *ClusterSnapshotsHandler) UpdateSchedule(w http.ResponseWriter, r *http.
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update schedule")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update schedule")
 		return
 	}
 	h.publishSnapshotChanged(clusterID, row.ID, "schedule")
@@ -178,7 +179,7 @@ func (h *ClusterSnapshotsHandler) DeleteSchedule(w http.ResponseWriter, r *http.
 	}
 	existing, err := h.queries.GetClusterSnapshotScheduleByID(r.Context(), scheduleID)
 	if err != nil || existing.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -204,10 +205,10 @@ func (h *ClusterSnapshotsHandler) DeleteSchedule(w http.ResponseWriter, r *http.
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Schedule not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Schedule not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete schedule")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete schedule")
 		return
 	}
 	h.publishSnapshotChanged(clusterID, scheduleID, "schedule")

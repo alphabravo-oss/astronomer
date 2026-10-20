@@ -4,24 +4,25 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 )
 
 func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 
@@ -49,7 +50,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	// The FK cascade (migration 021) drops this project's project_namespaces
@@ -77,12 +78,12 @@ func (h *ProjectHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	projectIDStr := chi.URLParam(r, "id")
 	projectID, err := uuid.Parse(projectIDStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	rows, err := h.queries.ListProjectNamespaces(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project namespaces")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list project namespaces")
 		return
 	}
 	// Aggregate distinct cluster_ids with namespace counts.

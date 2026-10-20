@@ -4,12 +4,13 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +26,7 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := make([]WidgetResponse, 0, len(rows))
@@ -34,7 +35,7 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 	}
 	total, err := h.queries.CountDashboardWidgets(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
@@ -47,16 +48,16 @@ func (h *DashboardHandler) AdminGet(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid widget ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid widget ID")
 		return
 	}
 	row, err := h.queries.GetDashboardWidgetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Widget not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Widget not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, widgetToResponse(row))
@@ -69,11 +70,11 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var req WidgetRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	if err := h.validateWidgetRequest(r.Context(), req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	enabled := true
@@ -111,7 +112,7 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/dashboard-widgets/"+row.ID.String()+"/")
@@ -125,16 +126,16 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid widget ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid widget ID")
 		return
 	}
 	var req WidgetRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	if err := h.validateWidgetRequest(r.Context(), req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	enabled := true
@@ -173,10 +174,10 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Widget not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Widget not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, widgetToResponse(row))
@@ -189,7 +190,7 @@ func (h *DashboardHandler) AdminDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid widget ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid widget ID")
 		return
 	}
 	deleteWidget := func(q DashboardQuerier) (sqlc.DashboardWidget, error) {
@@ -212,10 +213,10 @@ func (h *DashboardHandler) AdminDelete(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Widget not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Widget not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

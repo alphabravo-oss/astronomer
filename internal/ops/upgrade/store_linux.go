@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
@@ -100,7 +102,7 @@ func ownedMode(info os.FileInfo, mode os.FileMode, directory bool) bool {
 		return false
 	}
 	owner, ok := info.Sys().(*syscall.Stat_t)
-	return ok && owner.Uid == uint32(os.Getuid())
+	return ok && owner.Uid == safeconv.Uint32(os.Getuid())
 }
 func (s *FileStore) directoryFence() error {
 	actual, err := s.root.Stat(".")

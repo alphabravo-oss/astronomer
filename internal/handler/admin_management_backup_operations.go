@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 type ManagementBackupDestinationDeleteReceipt struct {
@@ -39,7 +40,7 @@ func (h *AdminDrillHandler) TestDestination(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid destination ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid destination ID")
 		return
 	}
 	h.createManagementBackupOperation(w, r, id, "management_backup_test")
@@ -52,7 +53,7 @@ func (h *AdminDrillHandler) RunDestination(w http.ResponseWriter, r *http.Reques
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid destination ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid destination ID")
 		return
 	}
 	h.createManagementBackupOperation(w, r, id, "management_backup_run")
@@ -64,21 +65,21 @@ func (h *AdminDrillHandler) GetManagementBackupOperation(w http.ResponseWriter, 
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	q, ok := h.queries.(managementBackupWorkerQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.DBError, "Management backup operation store is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.DBError, "Management backup operation store is unavailable")
 		return
 	}
 	op, err := q.GetWorkloadOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (op.TargetType != "management_backup_destination" || !strings.HasPrefix(op.OperationType, "management_backup_"))) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Management backup operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Management backup operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load management backup operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load management backup operation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"id": op.ID.String(), "destination_id": op.TargetKey, "operation_type": op.OperationType, "status": op.Status, "attempt_count": op.AttemptCount, "error_message": op.ErrorMessage, "created_at": op.CreatedAt, "updated_at": op.UpdatedAt})
@@ -99,12 +100,12 @@ func managementBackupAuditDetail(row sqlc.ManagementBackupDestination) map[strin
 
 func (h *AdminDrillHandler) createManagementBackupOperation(w http.ResponseWriter, r *http.Request, id uuid.UUID, operationType string) {
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "management backup transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "management backup transaction runner is not configured")
 		return
 	}
 	idem, ok := operationIdempotencyFromContext(withOperationIdempotency(r, "management_backup"))
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Idempotency-Key is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Idempotency-Key is required")
 		return
 	}
 	var operation sqlc.WorkloadOperation
@@ -130,20 +131,20 @@ func (h *AdminDrillHandler) createManagementBackupOperation(w http.ResponseWrite
 		return recordAuditOutbox(r, q, "admin."+operationType+".accepted", "workload_operation", operation.ID.String(), operationType, http.StatusAccepted, map[string]any{"operation_id": operation.ID.String(), "destination_id": id.String()})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Destination not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Destination not found")
 		return
 	}
 	if errors.Is(err, errWorkloadOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different management backup operation")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different management backup operation")
 		return
 	}
 	var activeRunErr *pgconn.PgError
 	if errors.As(err, &activeRunErr) && activeRunErr.Code == "23505" && activeRunErr.ConstraintName == "workload_operations_active_management_backup_run_idx" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Another backup run is already active for this destination")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Another backup run is already active for this destination")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist management backup operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to persist management backup operation")
 		return
 	}
 	operationURL := "/api/v1/admin/management-backup/operations/" + operation.ID.String() + "/"
