@@ -25,7 +25,7 @@ export interface ProductConfig {
   name: string;
   /** Vendor shown in the footer ("AlphaBravo"). */
   vendor: string;
-  /** Build/semantic version shown in the footer ("2.0.1"). */
+  /** Build/semantic version shown in the footer ("2.1.0"). */
   version: string;
   /** Square mark rendered at 28px in the sidebar brand row. */
   mark: ReactNode;

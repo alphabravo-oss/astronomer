@@ -11,7 +11,7 @@ import "strings"
 // Version is normalized once at package init, so whatever the ldflags stamp
 // ("2.0.1", "v2.0.1", "dev-<sha>") every reader sees the canonical form.
 var (
-	Version   = "v2.0.1"
+	Version   = "v2.1.0"
 	GitCommit = "unknown"
 	BuildDate = "unknown"
 )

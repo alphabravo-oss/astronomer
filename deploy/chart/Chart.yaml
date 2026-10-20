@@ -2,8 +2,8 @@ apiVersion: v2
 name: astronomer
 description: Astronomer multi-cluster management and delivery plane
 type: application
-version: 2.0.1
-appVersion: "2.0.1"
+version: 2.1.0
+appVersion: "2.1.0"
 kubeVersion: ">=1.33.0-0 <1.38.0-0"
 home: https://astronomer.io
 sources:

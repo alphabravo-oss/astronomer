@@ -1,6 +1,6 @@
 name: release
 
-# One vX.Y.Z tag -> seven exact image tags (amd64+arm64), each signed with
+# One vX.Y.Z (or vX.Y.Z-rc.N release-candidate) tag -> six exact image tags (amd64+arm64), each signed with
 # cosign keyless and carrying an SPDX SBOM attestation, plus the OCI Helm chart.
 # Images are built through the same Dockerfiles and GO_VERSION derivation as
 # `make docker-build`.
@@ -35,8 +35,11 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          # vX.Y.Z or a release candidate vX.Y.Z-rc.N. The chart in git always
+          # carries the base X.Y.Z; a candidate is packaged with the full tag.
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]
           version="${TAG#v}"
+          version="${version%%-rc.*}"
           test "$(awk '$0 ~ /^version:[[:space:]]/ { print $2; exit }' deploy/chart/Chart.yaml)" = "$version"
           test "$(awk '$0 ~ /^appVersion:[[:space:]]/ { gsub(/"/, "", $2); print $2; exit }' deploy/chart/Chart.yaml)" = "$version"
           git fetch --no-tags origin main
@@ -177,7 +180,12 @@ jobs:
           make helm-lint
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "$REGISTRY" --username "${{ github.actor }}" --password-stdin
           helm dependency build deploy/chart
-          helm package deploy/chart --destination dist
+          base="$(awk '$0 ~ /^version:[[:space:]]/ { print $2; exit }' deploy/chart/Chart.yaml)"
+          if [ "${VERSION#v}" != "$base" ]; then
+            # Release candidate: default image tags follow the candidate tag.
+            sed -i "s/tag: \"v${base}\"/tag: \"${VERSION}\"/" deploy/chart/values.yaml
+          fi
+          helm package deploy/chart --destination dist --version "${VERSION#v}" --app-version "${VERSION#v}"
           out="$(helm push "dist/astronomer-${VERSION#v}.tgz" "oci://${REGISTRY}/${IMAGE_OWNER}/charts" 2>&1)"; echo "$out"
           digest="$(echo "$out" | sed -n 's/^Digest: //p')"
           cosign sign "${REGISTRY}/${IMAGE_OWNER}/charts/astronomer@${digest}"

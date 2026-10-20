@@ -2,7 +2,85 @@
 
 ## Unreleased
 
-### Realignment with the AlphaBravo Technology Selection Guide (Phase 0)
+## 2.1.0 - 2026-10-20
+
+Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
+**This release has breaking deploy changes — read "Upgrading to 2.1.0" first.**
+
+### Upgrading to 2.1.0 (breaking)
+
+- **Migrations run inside the server at boot** (goose, embedded, advisory
+  lock). The migrate image, the `migrate` Helm hook Job, the server init
+  container and the `image.migrate.*`, `image.allowSchemaSkew`, `migrate.*`
+  values are gone. Bookkeeping moves from golang-migrate `schema_migrations`
+  to `goose_db_version`; an existing 2.0.x database (schema 81) needs a
+  one-time baseline before the first 2.1.0 boot —
+  `docs/runbooks/upgrade-2.1.md`. Preflight target schema is **84**.
+- **Encryption key format changed to age.** `secrets.encryptionKey` /
+  `ASTRONOMER_ENCRYPTION_KEY` must be an age keyring
+  (`[label:]AGE-SECRET-KEY-1…`, current first); Fernet keys are rejected.
+  Migration 00082 discards every stored ciphertext: re-enter Helm repository
+  credentials, registry/git/cloud credentials, SSO client secrets, SMTP/SIEM/
+  vault/webhook secrets and Dex connectors. SSO sessions and TOTP enrolments
+  are deleted. Rotate with `astro admin rotate-keys`.
+- API: one error envelope `{"error":{code,message,request_id,fields,details}}`
+  for every error (429, quota and maintenance extras under `error.details`,
+  lost DB → 503 `db_unavailable`); authorization is decided by one static
+  route→permission table before feature/scope gates and denials write
+  `auth.authorization_denied` audit rows.
+- Logs are zerolog JSON: key `message` (not `msg`), lowercase levels,
+  request summary fields `route`/`status`. New env `LOG_FORMAT`,
+  `REGISTRY_LOCAL`, `REGISTRY_FALLBACKS`, `REGISTRY_PLAIN_HTTP`.
+- The DR image ships PostgreSQL 17 client tools and the Go `dr-crypto`
+  (envelope `ASTRODR2`); Python-format DR backups do not decrypt.
+- `branding.primary_color` defaults to `""` (unconfigured); the untouched
+  `#0066CC` seed is reset by migration 00084.
+- Release candidates are tagged `vX.Y.Z-rc.N`; the policy-controller subject
+  regex in `deploy/policy-controller/cip-astronomer.yaml` admits them.
+
+### Phase 1 — backend
+
+- Testing: testcontainers + pgtestdb substrate; every DB test is a
+  `//go:build integration` test run by `make test-integration`.
+- goose embedded migrations (ADR 0009), age column encryption with a
+  `(key_id, algorithm, ciphertext, nonce)` row shape and `astro admin
+  rotate-keys` (ADR 0010), zerolog `pkg/logging` with a slog bridge (ADR 0011),
+  `pkg/telemetry` tracer + meter provider on one `/metrics` (ADR 0012).
+- `internal/api/apiutil` error contract (259 codes) and the static route
+  authorizer (905 routes, deny-by-default) (ADR 0016).
+- Operator split into `internal/operator/{wire,lifecycle,mirror}` with per-key
+  locking and stage metrics (ADR 0013).
+- Air-gap layered registry resolver with optional in-cluster zot and
+  `astro airgap plan|mirror` (ADR 0014); Python release/mirror scripts removed.
+- Delivery fixes: `max_unavailable 0` means serial rollout, observation no
+  longer promotes `pending` assignments, version `v`-prefix normalisation,
+  `astro delivery system-rollout start|approve|status`, decommission cascades
+  to `cluster_deployments`.
+- Chart: `kubeVersion >=1.33 <1.38`, CNPG/DR NetworkPolicies (kube-apiserver,
+  Barman plugin, object-store egress), chart-managed Barman `ObjectStore`,
+  `scheduledBackup.immediate`, chart-managed Sigstore delivery trust root,
+  policy-controller values + `ClusterImagePolicy` with per-vendor authorities
+  (ADR 0015), k3s monitoring overlay.
+- gosec G115 resolved with `pkg/safeconv`; the rule exception is gone.
+- Go builder image pinned by digest (`deploy/docker/go-image.lock`).
+
+### UI — A1 Operator Console and the shared kit
+
+- Shared AlphaBravo UI kit in `frontend/src/ui/` (tokens, shell, sidebar,
+  header, palette, tables, forms, states) — `docs/ui/KIT.md`, ADR 0017.
+- Global rail of seven pillars + cluster panel with six groups; counts moved
+  from the sidebar to the cluster overview Inventory.
+- Sentence case and one vocabulary (Tools, Catalog, Tool links, Fleet,
+  Releases, Access control, Audit log, Agents, Onboarding templates).
+- Branding is a theme-level accent only; Charlie is a header icon + drawer
+  (`⌘J`), no FAB; one command palette (`/`, `⌘K`).
+- Fleet-first overview from one clusters query (verdict, clusters by health,
+  capacity, agents, delivery); full entity names in tables; humanised audit
+  actions; settings two layers deep.
+- Playwright live tier covers the shell, palette, Charlie, settings layers,
+  overview count agreement and axe (serious+critical = 0) on ten pages.
+
+### Phase 0 — realignment with the AlphaBravo Technology Selection Guide
 
 - Removed committed CI evidence, plan trees, generated inventories,
   compatibility ledgers, qualification-only scripts, binaries, packages and 20
