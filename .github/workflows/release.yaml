@@ -183,6 +183,8 @@ jobs:
           set -euo pipefail
           make helm-lint
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "$REGISTRY" --username "${{ github.actor }}" --password-stdin
+          # cosign reads the Docker credential store, not Helm's registry config.
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login "$REGISTRY" --username "${{ github.actor }}" --password-stdin
           helm dependency build deploy/chart
           base="$(awk '$0 ~ /^version:[[:space:]]/ { print $2; exit }' deploy/chart/Chart.yaml)"
           if [ "${VERSION#v}" != "$base" ]; then
