@@ -14,5 +14,6 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0006](0006-tailwind-v4-css-first.md) | Tailwind v4 CSS-first configuration | accepted |
 | [0007](0007-rest-to-connect-rpc.md) | REST/OpenAPI to Connect-RPC migration strategy | proposed |
 | [0008](0008-charlie-integration-retained.md) | Charlie integration is retained | accepted |
+| [0013](0013-operator-wire-lifecycle.md) | Operator split into wire (composition) and lifecycle (reconcile engine) | accepted |
 
 The threat model lives next to these decisions: [`../threat-model.md`](../threat-model.md).

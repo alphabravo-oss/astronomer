@@ -20,7 +20,7 @@
 // updated_at and last_seen_at. created_at is preserved by the upsert
 // path (it's only set on insert, never refreshed).
 
-package crd
+package mirror
 
 import (
 	"context"
@@ -39,11 +39,11 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// MirrorQuerier is the narrow DB surface the ingest_v2 path needs.
+// Querier is the narrow DB surface the ingest_v2 path needs.
 // Defined locally so unit tests can stand up a tiny fake without
 // pulling in all of *sqlc.Queries — same pattern as the
 // ClusterSnapshotQuerier interface used by the snapshot handler.
-type MirrorQuerier interface {
+type Querier interface {
 	UpsertMirroredIngressClass(ctx context.Context, arg sqlc.UpsertMirroredIngressClassParams) (sqlc.MirroredIngressClass, error)
 	DeleteMirroredIngressClass(ctx context.Context, arg sqlc.DeleteMirroredIngressClassParams) error
 	PruneStaleMirroredIngressClasses(ctx context.Context, before time.Time) (int64, error)
@@ -77,14 +77,14 @@ const (
 	// Sprint 062 hooks into the same mirror channel: the agent forwards
 	// aquasecurity.github.io/v1alpha1 VulnerabilityReport CRs through
 	// MsgMirrorEvent with Kind=KindVulnerabilityReport; the server's
-	// MirrorRouter routes those into the typed scanner.Ingester.
+	// Router routes those into the typed scanner.Ingester.
 	KindVulnerabilityReport = "VulnerabilityReport"
 )
 
-// MirrorKinds is the fixed list of kinds the v2 path mirrors. Useful
+// Kinds is the fixed list of kinds the v2 path mirrors. Useful
 // callers: the prune scheduler (loops over the set), unit tests (table-
 // driven), and the metric init that registers per-kind label values.
-var MirrorKinds = []string{
+var Kinds = []string{
 	KindIngressClass,
 	KindGatewayClass,
 	KindNetworkPolicy,
@@ -226,7 +226,7 @@ func AcceptedConditionStatus(obj *unstructured.Unstructured) string {
 // spec.controller, spec.parameters (left as the raw nested object so
 // the UI gets everything Kubernetes stores), the standard label/
 // annotation maps, and the resolved is_default flag.
-func IngestIngressClass(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredIngressClass, error) {
+func IngestIngressClass(ctx context.Context, q Querier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredIngressClass, error) {
 	if obj == nil {
 		IngestsTotal.WithLabelValues(KindIngressClass, "error").Inc()
 		return sqlc.MirroredIngressClass{}, fmt.Errorf("ingest IngressClass: nil object")
@@ -291,7 +291,7 @@ func IngestIngressClass(ctx context.Context, q MirrorQuerier, clusterID uuid.UUI
 // condition status is resolved at ingest time so the dashboard's "is
 // this class usable" badge doesn't have to re-walk conditions on every
 // list call.
-func IngestGatewayClass(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredGatewayClass, error) {
+func IngestGatewayClass(ctx context.Context, q Querier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredGatewayClass, error) {
 	if obj == nil {
 		IngestsTotal.WithLabelValues(KindGatewayClass, "error").Inc()
 		return sqlc.MirroredGatewayClass{}, fmt.Errorf("ingest GatewayClass: nil object")
@@ -355,7 +355,7 @@ func IngestGatewayClass(ctx context.Context, q MirrorQuerier, clusterID uuid.UUI
 // ingress + egress rules are kept as the verbatim nested objects.
 // is_managed is computed from the standard managed-by label so the UI
 // can disambiguate astronomer-owned netpols from operator-created ones.
-func IngestNetworkPolicy(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredNetworkPolicy, error) {
+func IngestNetworkPolicy(ctx context.Context, q Querier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredNetworkPolicy, error) {
 	if obj == nil {
 		IngestsTotal.WithLabelValues(KindNetworkPolicy, "error").Inc()
 		return sqlc.MirroredNetworkPolicy{}, fmt.Errorf("ingest NetworkPolicy: nil object")
@@ -445,7 +445,7 @@ func IngestNetworkPolicy(ctx context.Context, q MirrorQuerier, clusterID uuid.UU
 // / spec.scopes are persisted verbatim so the UI can render whatever
 // quota keys upstream Kubernetes carries (cpu, memory, count/configmaps,
 // requests.nvidia.com/gpu, …) without a schema bump per key.
-func IngestResourceQuota(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredResourceQuota, error) {
+func IngestResourceQuota(ctx context.Context, q Querier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredResourceQuota, error) {
 	if obj == nil {
 		IngestsTotal.WithLabelValues(KindResourceQuota, "error").Inc()
 		return sqlc.MirroredResourceQuota{}, fmt.Errorf("ingest ResourceQuota: nil object")
@@ -523,7 +523,7 @@ func IngestResourceQuota(ctx context.Context, q MirrorQuerier, clusterID uuid.UU
 // ordered array of per-type default/max entries; we persist it
 // verbatim so the UI can render all five LimitType variants (Container,
 // Pod, PersistentVolumeClaim, …) without re-walking nested defaults.
-func IngestLimitRange(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredLimitRange, error) {
+func IngestLimitRange(ctx context.Context, q Querier, clusterID uuid.UUID, obj *unstructured.Unstructured) (sqlc.MirroredLimitRange, error) {
 	if obj == nil {
 		IngestsTotal.WithLabelValues(KindLimitRange, "error").Inc()
 		return sqlc.MirroredLimitRange{}, fmt.Errorf("ingest LimitRange: nil object")
@@ -633,7 +633,7 @@ func UnstructuredFromIngressClass(ic *networkingv1.IngressClass) (*unstructured.
 // ---------------------------------------------------------------------
 
 // DeleteEvent is the wire shape the agent uses for k8s-side delete
-// events. The kind label is one of the MirrorKinds constants; the
+// events. The kind label is one of the Kinds constants; the
 // natural key (cluster_id + name + namespace) is enough to route to
 // the right DB delete.
 type DeleteEvent struct {
@@ -645,7 +645,7 @@ type DeleteEvent struct {
 // HandleDelete routes a delete event to the right table-level delete.
 // Unknown kinds are returned as errors so the agent-side caller can
 // log + drop, rather than silently swallowing typos.
-func HandleDelete(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, ev DeleteEvent) error {
+func HandleDelete(ctx context.Context, q Querier, clusterID uuid.UUID, ev DeleteEvent) error {
 	switch ev.Kind {
 	case KindIngressClass:
 		if err := q.DeleteMirroredIngressClass(ctx, sqlc.DeleteMirroredIngressClassParams{
@@ -693,7 +693,7 @@ func HandleDelete(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, ev 
 		IngestsTotal.WithLabelValues(KindLimitRange, "delete").Inc()
 		return nil
 	default:
-		return fmt.Errorf("unknown mirror kind %q (allowed: %s)", ev.Kind, strings.Join(MirrorKinds, ", "))
+		return fmt.Errorf("unknown mirror kind %q (allowed: %s)", ev.Kind, strings.Join(Kinds, ", "))
 	}
 }
 
@@ -706,7 +706,7 @@ func HandleDelete(ctx context.Context, q MirrorQuerier, clusterID uuid.UUID, ev 
 // dropped. Returns the per-kind row count map and the first error
 // encountered (subsequent kinds still run, so a single failing kind
 // doesn't starve the others).
-func PruneStaleAll(ctx context.Context, q MirrorQuerier, before time.Time) (map[string]int64, error) {
+func PruneStaleAll(ctx context.Context, q Querier, before time.Time) (map[string]int64, error) {
 	out := map[string]int64{}
 	var firstErr error
 

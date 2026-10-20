@@ -1,4 +1,4 @@
-package crd
+package mirror
 
 import (
 	"context"
@@ -59,7 +59,7 @@ func TestRouteTrivyEvent_IgnoresOtherKinds(t *testing.T) {
 	ci := &captureIngester{}
 	ev := TrivyMirrorEvent{
 		ClusterID:  uuid.New(),
-		APIVersion: GroupVersion.String(), // management group, not trivy
+		APIVersion: "management.astronomer.io/v1alpha1", // management group, not trivy
 		Kind:       "Cluster",
 		Type:       "ADDED",
 		Object:     json.RawMessage(`{}`),
