@@ -109,7 +109,7 @@ export function useIsSuperuser(): { isSuperuser: boolean; ready: boolean } {
 import { settingsKeys } from "./query-keys";
 
 // ============================================================
-// Platform Settings
+// Platform settings
 // ============================================================
 
 export function usePlatformSettings() {

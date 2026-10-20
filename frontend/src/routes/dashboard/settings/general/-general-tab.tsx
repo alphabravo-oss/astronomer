@@ -17,7 +17,7 @@ export function GeneralTab({ onEdit }: { onEdit: () => void }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 className="text-base font-semibold text-foreground">
-                Platform Settings
+                Platform settings
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Name, heartbeat, session, audit + metrics.
