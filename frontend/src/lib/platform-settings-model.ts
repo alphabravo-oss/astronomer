@@ -5,7 +5,7 @@ export const PLATFORM_SETTINGS_DEFAULTS: PlatformSettingsGrouped = {
   branding: {
     logoUrl: "",
     productName: "Astronomer",
-    primaryColor: "#0066CC",
+    primaryColor: "",
     supportUrl: "",
     copyright: "",
   },

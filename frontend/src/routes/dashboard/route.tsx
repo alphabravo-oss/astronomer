@@ -208,14 +208,13 @@ function DashboardAuthorizedShell() {
 }
 
 /**
- * The platform-settings registry seeds `branding.primary_color` with a
- * placeholder (#0066CC). Only an operator-chosen value overrides the product
- * accent; the seed means "not configured".
+ * `branding.primary_color` from `GET /api/v1/settings/branding/` is empty
+ * until an operator chooses a color (backend default "", migration 00084).
+ * Empty or blank means "unconfigured": the product accent applies.
  */
-const SEEDED_PRIMARY_COLOR = "#0066cc";
 export function operatorBrandAccent(hex: string | undefined): string | null {
-  if (!hex) return null;
-  return hex.trim().toLowerCase() === SEEDED_PRIMARY_COLOR ? null : hex;
+  const value = hex?.trim();
+  return value ? value : null;
 }
 
 const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [

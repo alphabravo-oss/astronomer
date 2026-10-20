@@ -158,7 +158,8 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             )}
           </form.Field>
           <p className="text-xs text-muted-foreground">
-            Hex string (e.g. <span className="font-mono">#3b82f6</span>).
+            Hex string (e.g. <span className="font-mono">#3b82f6</span>). Leave
+            empty to use the product accent.
           </p>
         </div>
         <form.AppField name="branding.supportUrl">
