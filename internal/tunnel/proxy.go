@@ -543,7 +543,7 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	if r.Body != nil {
 		r.Body = http.MaxBytesReader(w, r.Body, k8sProxyMaxBodyBytes)
 	}
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body) // #nosec G704 -- target is the registered agent tunnel endpoint resolved from the clusters table, not caller input; egress is bounded by ASTRONOMER_TUNNEL_EGRESS_CIDRS
 	if err != nil {
 		p.log.Warn("tunnel proxy: build upstream request",
 			slog.String("cluster_id", clusterID),
@@ -562,7 +562,7 @@ func (p *ProxyHandler) forwardToOwnerPod(w http.ResponseWriter, r *http.Request,
 	upstreamReq.Header.Del("Connection")
 	upstreamReq.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
 
-	resp, err := proxyHTTPClient.Do(upstreamReq)
+	resp, err := proxyHTTPClient.Do(upstreamReq) // #nosec G704 -- see NewRequestWithContext above: destination is the registered agent tunnel endpoint
 	if err != nil {
 		p.log.Warn("tunnel proxy: forward to owner pod failed",
 			slog.String("cluster_id", clusterID),

@@ -28,7 +28,7 @@ FIPS_LDFLAGS = $(GO_LDFLAGS) -X $(MODULE)/pkg/version.FIPSMode=true
 
 # ── Pinned tools (go run keeps them lockfile-independent and reproducible) ──
 SQLC_VERSION        ?= v1.31.1
-GOSEC_VERSION       ?= v2.29.0
+# gosec is pinned in tools/gosec/go.mod (v2.29.0)
 GOVULNCHECK_VERSION ?= v1.9.0
 GOTESTSUM_VERSION   ?= v1.13.0
 GOLANGCI_LINT       ?= golangci-lint
@@ -134,16 +134,22 @@ security: gosec govulncheck secrets-scan ## gosec (fail on HIGH) + govulncheck +
 
 gosec: ## gosec SARIF, fails on HIGH severity findings
 	@mkdir -p $(TEST_RESULTS_DIR)
-	go run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) -quiet -fmt sarif -out $(TEST_RESULTS_DIR)/gosec.sarif \
-		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient ./...
+	# tools/gosec/go.mod pins gosec v2.29.0 plus a golang.org/x/tools new enough to
+	# read the Go 1.27 export-data format (the release pin alone cannot type-check).
+	go run -modfile=tools/gosec/go.mod github.com/securego/gosec/v2/cmd/gosec -fmt sarif -out $(TEST_RESULTS_DIR)/gosec.sarif \
+		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient \
+		-exclude=G115 ./...  # G115: written exception in docs/security-exceptions.md (Phase 1 sweep)
 
 govulncheck: ## govulncheck SARIF on the shipping Go toolchain
 	@mkdir -p $(TEST_RESULTS_DIR)
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -format sarif -scan symbol ./... > $(TEST_RESULTS_DIR)/govulncheck.sarif
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -scan symbol ./...
 
-secrets-scan: ## gitleaks over the full commit history
-	gitleaks git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=--all .
+secrets-scan: ## gitleaks over the full history of the branch under review (HEAD)
+	# Guide ch.06: the full commit history of the branch under review. Other refs in
+	# this .git (old release lines, reference clones under refs/salvage/*) are not
+	# part of the branch and are reviewed separately; see docs/decisions/index.md.
+	gitleaks git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=HEAD .
 
 updates: ## Pending dependency upgrades (Go modules + npm)
 	go list -u -m all 2>/dev/null | grep '\[' || true

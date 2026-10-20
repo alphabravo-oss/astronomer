@@ -243,7 +243,7 @@ func (r *MCPRuntime) reconcile(ctx context.Context) error {
 	r.connection = connectionKey
 	r.material = material
 	r.mu.Unlock()
-	go r.serve(listener)
+	go r.serve(listener) // #nosec G118 -- MCP listener lifecycle goroutine is owned by the runtime manager, not by a request
 	if hadListener {
 		observeMCPListener("restarted")
 	} else {
