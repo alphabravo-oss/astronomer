@@ -3,17 +3,18 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 // pathResourceMap maps URL path segments to human-readable resource type names,
@@ -125,7 +126,7 @@ func (sw *statusWriter) Unwrap() http.ResponseWriter { return sw.ResponseWriter 
 // regardless of outcome, so denied/failed mutations (4xx such as 401/403/409,
 // and 5xx) are recorded with their status for the compliance trail — not just
 // successful ones.
-func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
+func AuditLog(log zerolog.Logger) func(http.Handler) http.Handler {
 	return AuditLogWithWriter(log, nil)
 }
 
@@ -134,7 +135,7 @@ func AuditLog(log *slog.Logger) func(http.Handler) http.Handler {
 // attempts; authenticated requests continue through AuditLogWithWriter where
 // actor context is available. This avoids both the pre-auth blind spot and
 // duplicate success/authorization records.
-func CharlieAuthenticationDenialAuditWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Handler {
+func CharlieAuthenticationDenialAuditWithWriter(log zerolog.Logger, writer any) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r == nil || !mutatingMethods[r.Method] || !isCharlieAPIPath(r.URL.Path) {
@@ -156,7 +157,7 @@ func CharlieAuthenticationDenialAuditWithWriter(log *slog.Logger, writer any) fu
 
 // AuditLogWithWriter extends AuditLog with best-effort persistence to the
 // partitioned audit_log v1 table. When writer is nil, only structured logs are emitted.
-func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Handler {
+func AuditLogWithWriter(log zerolog.Logger, writer any) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Only log mutating methods.
@@ -182,9 +183,7 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			// closed: allowing the side effect would create an unaudited success.
 			resourceType, resourceID := parsePathResource(r.URL.Path)
 			if err := writeMandatoryAuditIntent(r, writer, resourceType, resourceID); err != nil {
-				log.ErrorContext(r.Context(), "mandatory audit intent persistence failed",
-					"method", r.Method, "resource_type", resourceType,
-					"request_id", reqctx.RequestID(r.Context()), "error", err)
+				logging.Ctx(r.Context(), log).Error().Str("method", r.Method).Str("resource_type", resourceType).Str("request_id", reqctx.RequestID(r.Context())).Err(err).Msg("mandatory audit intent persistence failed")
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(http.StatusServiceUnavailable)
@@ -215,16 +214,7 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			// Dropping 4xx (401/403/409) / 5xx here would leave DENIED/FAILED
 			// mutations invisible in the audit log — a compliance blind spot.
 			// The status is carried through so the outcome is auditable.
-			log.Info("audit",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"resource_type", resourceType,
-				"resource_id", resourceID,
-				"status", sw.status,
-				"duration_ms", time.Since(start).Milliseconds(),
-				"request_id", reqctx.RequestID(r.Context()),
-				"correlation_id", reqctx.CorrelationID(r.Context()),
-			)
+			log.Info().Str("method", r.Method).Str("path", r.URL.Path).Str("resource_type", resourceType).Str("resource_id", resourceID).Int("status", sw.status).Int64("duration_ms", time.Since(start).Milliseconds()).Str("request_id", reqctx.RequestID(r.Context())).Str("correlation_id", reqctx.CorrelationID(r.Context())).Msg("audit")
 			writeAuditLog(r, sw.status, writer, resourceType, resourceID, start)
 		})
 	}
@@ -282,7 +272,7 @@ func writeCharlieAuditLog(r *http.Request, status int, writer any, duration int6
 		"outcome_code": outcome, "method": r.Method, "status_code": status, "duration_ms": duration,
 	})
 	if err != nil {
-		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_encode_failed", reqctx.CorrelationID(r.Context()))
+		charlie.LogOperationalFailure(r.Context(), *logging.Default(), "charlie.http_audit_encode_failed", reqctx.CorrelationID(r.Context()))
 		return
 	}
 	if err := writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
@@ -290,7 +280,7 @@ func writeCharlieAuditLog(r *http.Request, status int, writer any, duration int6
 		ActorAuthMethod: authMethod(r.Context()), Action: "charlie.http.mutation", ResourceType: "charlie_http_request",
 		StatusCode: int32(status), DurationMs: duration, RequestID: reqctx.RequestID(r.Context()), Detail: detail, ActionClass: "mutation",
 	}); err != nil {
-		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_persist_failed", reqctx.CorrelationID(r.Context()))
+		charlie.LogOperationalFailure(r.Context(), *logging.Default(), "charlie.http_audit_persist_failed", reqctx.CorrelationID(r.Context()))
 	}
 }
 

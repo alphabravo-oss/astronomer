@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -51,7 +51,7 @@ func TestConfigureSessionTimeoutPolicyMissingRowIndependentOfEncryptedFeatures(t
 			manager := auth.MustNewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
 			authHandler := handler.NewAuthHandler(nil, manager)
 			settings := &fakeSessionTimeoutSettings{err: pgx.ErrNoRows}
-			configureSessionTimeoutPolicy(authHandler, manager, settings, slog.Default())
+			configureSessionTimeoutPolicy(authHandler, manager, settings, zerolog.Nop())
 
 			access, _, err := manager.GenerateTokenPairContext(context.Background(), uuid.New())
 			if err != nil {
@@ -68,7 +68,7 @@ func TestConfigureSessionTimeoutPolicyExplicitValueAppliesToEveryMintContract(t 
 	settings := &fakeSessionTimeoutSettings{
 		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("10")},
 	}
-	configureSessionTimeoutPolicy(authHandler, manager, settings, slog.Default())
+	configureSessionTimeoutPolicy(authHandler, manager, settings, zerolog.Nop())
 
 	// Password, refresh, SSO callback, and both TOTP completion handlers all
 	// delegate to GenerateTokenPairContext. Keeping the contract cases named
@@ -90,9 +90,9 @@ func TestAuthHandlerMintContextReadsSessionSettingOnce(t *testing.T) {
 	settings := &fakeSessionTimeoutSettings{
 		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("10")},
 	}
-	configureSessionTimeoutPolicy(authHandler, manager, settings, slog.Default())
+	configureSessionTimeoutPolicy(authHandler, manager, settings, zerolog.Nop())
 
-	resolve := newSessionTimeoutResolver(settings, slog.Default())
+	resolve := newSessionTimeoutResolver(settings, zerolog.Nop())
 	mintCtx := sessionpolicy.WithMinutes(context.Background(), resolve(context.Background()))
 	access, _, err := manager.GenerateTokenPairContext(mintCtx, uuid.New())
 	if err != nil {
@@ -119,13 +119,13 @@ func TestSessionTimeoutResolverInvalidDataUsesSafeDefaultAndLogs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var logs bytes.Buffer
-			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			logger := zerolog.New(&logs)
 			resolve := newSessionTimeoutResolver(&fakeSessionTimeoutSettings{row: tt.row, err: tt.err}, logger)
 			if got := resolve(context.Background()); got != sessionpolicy.DefaultMinutes {
 				t.Fatalf("resolver = %d, want safe default %d", got, sessionpolicy.DefaultMinutes)
 			}
 			logLine := logs.String()
-			for _, want := range []string{sessionpolicy.SettingKey, "default_minutes=15"} {
+			for _, want := range []string{sessionpolicy.SettingKey, `"default_minutes":15`} {
 				if !strings.Contains(logLine, want) {
 					t.Fatalf("log %q missing actionable field %q", logLine, want)
 				}

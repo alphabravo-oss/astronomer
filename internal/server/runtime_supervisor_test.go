@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 func TestRuntimeSupervisorCriticalExitFailsHealth(t *testing.T) {
-	s := newRuntimeSupervisor(nil)
+	s := newRuntimeSupervisor(zerolog.Nop())
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +36,7 @@ func TestRuntimeSupervisorCriticalExitFailsHealth(t *testing.T) {
 }
 
 func TestRuntimeSupervisorIntentionalStopJoinsLoop(t *testing.T) {
-	s := newRuntimeSupervisor(nil)
+	s := newRuntimeSupervisor(zerolog.Nop())
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func TestRuntimeSupervisorIntentionalStopJoinsLoop(t *testing.T) {
 }
 
 func TestRuntimeSupervisorStopReportsHungLoop(t *testing.T) {
-	s := newRuntimeSupervisor(nil)
+	s := newRuntimeSupervisor(zerolog.Nop())
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}

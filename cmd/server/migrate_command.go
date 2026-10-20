@@ -5,11 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -40,14 +41,18 @@ func handleMigrateCommand(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 
-	logger := slog.New(slog.NewJSONHandler(stderr, nil))
+	logger, err := logging.NewWithWriter(stderr, logging.ConfigFromEnv("migrate"))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "migrate: %v\n", err)
+		return 2
+	}
 	database, err := db.ConnectWithConfig(ctx, *databaseURL, db.PoolConfig{MaxConns: 2, MinConns: 1})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "migrate: connect: %v\n", err)
 		return 1
 	}
 	defer database.Close()
-	result, err := database.Migrate(ctx, logger)
+	result, err := database.Migrate(ctx, logging.Slog(logger))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "migrate: %v\n", err)
 		return 1

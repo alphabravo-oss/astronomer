@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -40,12 +40,12 @@ func TestStartCRDControllerFailsClosedInProduction(t *testing.T) {
 	t.Setenv("KUBECONFIG", t.TempDir()+"/missing-kubeconfig")
 	t.Setenv("HOME", t.TempDir())
 
-	err := startCRDController(context.Background(), slog.Default(), &config.Config{Env: "production", CRDEnabled: true}, nil, nil)
+	err := startCRDController(context.Background(), zerolog.Nop(), &config.Config{Env: "production", CRDEnabled: true}, nil, nil)
 	if err == nil {
 		t.Fatal("expected production CRD controller bootstrap to fail without Kubernetes config")
 	}
 
-	err = startCRDController(context.Background(), slog.Default(), &config.Config{Env: "development", CRDEnabled: true}, nil, nil)
+	err = startCRDController(context.Background(), zerolog.Nop(), &config.Config{Env: "development", CRDEnabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("development CRD controller bootstrap error = %v, want nil", err)
 	}
@@ -191,7 +191,7 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 // must be loud in development too.
 func TestReportInsecureDevKeysOutsideProduction(t *testing.T) {
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logger := zerolog.New(&buf)
 
 	reportInsecureDevKeys(&config.Config{
 		Env:           "development",
@@ -199,7 +199,7 @@ func TestReportInsecureDevKeysOutsideProduction(t *testing.T) {
 		EncryptionKey: devEncryptionKey,
 	}, logger)
 	logged := buf.String()
-	for _, want := range []string{"level=ERROR", "secret_key", "encryption_key"} {
+	for _, want := range []string{`"level":"error"`, "secret_key", "encryption_key"} {
 		if !strings.Contains(logged, want) {
 			t.Fatalf("dev-sentinel boot log missing %q:\n%s", want, logged)
 		}

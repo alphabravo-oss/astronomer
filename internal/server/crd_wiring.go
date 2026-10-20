@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	ctrlrt "sigs.k8s.io/controller-runtime"
-
+	"github.com/rs/zerolog"
 	"k8s.io/client-go/rest"
+	ctrlrt "sigs.k8s.io/controller-runtime"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -22,6 +21,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 // crdClusterAdapter implements crd.ClusterSync against the existing sqlc
@@ -102,7 +102,7 @@ func (s *crdClusterDecommissionService) Request(ctx context.Context, cluster sql
 type crdClusterAdapter struct {
 	queries      *sqlc.Queries
 	decommission *crdClusterDecommissionService
-	log          *slog.Logger
+	log          zerolog.Logger
 }
 
 // EnsureFromCRD upserts the clusters row to match the spec.
@@ -304,7 +304,7 @@ func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error
 // crdProjectAdapter implements crd.ProjectSync.
 type crdProjectAdapter struct {
 	queries *sqlc.Queries
-	log     *slog.Logger
+	log     zerolog.Logger
 }
 
 // EnsureFromCRD upserts the projects row to match the spec.
@@ -599,7 +599,7 @@ func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref crd.Objec
 // Initial bootstrap failures are fatal in production when CRD_ENABLED=true.
 // Dev/test keeps the previous warn-and-disable behavior so local binaries can
 // run without a kubeconfig.
-func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) error {
+func startCRDController(ctx context.Context, logger zerolog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) error {
 	run, err := buildCRDControllerRunner(logger, cfg, queries, decommissionRunTx)
 	if err != nil || run == nil {
 		return err
@@ -608,7 +608,7 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	return nil
 }
 
-func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) (func(context.Context) error, error) {
+func buildCRDControllerRunner(logger zerolog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) (func(context.Context) error, error) {
 	if cfg == nil || !cfg.CRDEnabled {
 		return nil, nil
 	}
@@ -623,7 +623,7 @@ func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *
 			if isProductionConfig(cfg) {
 				return nil, err
 			}
-			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "error", err)
+			logger.Warn().Str("reason", "no_kubeconfig").Err(err).Msg("crd_controller_disabled")
 			return nil, nil
 		}
 		restCfg = fallback
@@ -644,24 +644,24 @@ func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *
 		LeaderElectionNamespace: crdWatchNamespace(cfg.CRDWatchNamespace),
 		ClusterHandler:          cAdapter,
 		ProjectHandler:          pAdapter,
-		Log:                     logger,
+		Log:                     logging.Slog(logger),
 	})
 	if err != nil {
 		err := fmt.Errorf("build CRD controller manager: %w", err)
 		if isProductionConfig(cfg) {
 			return nil, err
 		}
-		logger.Warn("crd_controller_disabled", "reason", "build_manager_failed", "error", err)
+		logger.Warn().Str("reason", "build_manager_failed").Err(err).Msg("crd_controller_disabled")
 		return nil, nil
 	}
 
 	return func(ctx context.Context) error {
-		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace(cfg.CRDWatchNamespace))
+		logger.Info().Str("watch_namespace", crdWatchNamespace(cfg.CRDWatchNamespace)).Msg("crd_controller_starting")
 		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("crd_controller_stopped", "error", err)
+			logger.Error().Err(err).Msg("crd_controller_stopped")
 			return err
 		}
-		logger.Info("crd_controller_stopped")
+		logger.Info().Msg("crd_controller_stopped")
 		return nil
 	}, nil
 }

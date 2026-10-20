@@ -4,19 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	jwtManager := c.jwtManager
@@ -35,7 +36,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	authHandler.SetPasswordRehasher(queries)
 	authHandler.SetRoleBindings(queries)
 	authHandler.SetAuditWriter(queries)
-	authHandler.SetLogger(logger)
+	authHandler.SetLogger(logging.Slog(logger))
 	// Auth hardening (migration 039): account lockout + JWT session revocation.
 	authHandler.SetLockoutQuerier(queries)
 	authHandler.SetRevocationQuerier(queries)
@@ -67,7 +68,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 		totpHandler = handler.NewTOTPHandler(queries, queries, encryptor, jwtManager)
 		totpHandler.SetRunTx(sqlcMutationTxRunner[handler.TOTPMutationTx](database))
 		totpHandler.SetIssuer(cfg.TOTPIssuer)
-		totpHandler.SetLogger(logger)
+		totpHandler.SetLogger(logging.Slog(logger))
 		totpHandler.SetPasswordRehasher(queries)
 		totpHandler.SetRequireAll(cfg.TOTPRequire)
 		totpHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
@@ -84,7 +85,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 				return false // setting never written -> documented default
 			}
 			if err != nil {
-				logger.Error("totp.required policy read failed; failing closed (enforcing MFA)", "error", err)
+				logger.Error().Err(err).Msg("totp.required policy read failed; failing closed (enforcing MFA)")
 				return true // transient/unknown DB error -> enforce, do not bypass
 			}
 			var v bool
@@ -125,7 +126,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	dexHandler.SetRunTx(sqlcMutationTxRunner[handler.DexMutationTx](database))
 	dexHandler.SetEncryptor(encryptor)
 	dexHandler.SetK8sRequester(requester)
-	dexHandler.SetLogger(logger)
+	dexHandler.SetLogger(logging.Slog(logger))
 
 	clusterHandler := handler.NewClusterHandler(queries)
 	clusterHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterMutationTx](database))

@@ -2,8 +2,9 @@ package server
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
@@ -12,6 +13,7 @@ import (
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type runtimeTaskComposition struct {
@@ -19,9 +21,9 @@ type runtimeTaskComposition struct {
 	project tasks.ProjectRuntime
 }
 
-func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *slog.Logger, routed *routerComposition, foundation *runtimeFoundation) (*runtimeTaskComposition, error) {
+func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger zerolog.Logger, routed *routerComposition, foundation *runtimeFoundation) (*runtimeTaskComposition, error) {
 	core := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
-		Queries: c.queries, ManagementBackup: routed.deps.AdminPlatform.AdminDrill, Log: logger,
+		Queries: c.queries, ManagementBackup: routed.deps.AdminPlatform.AdminDrill, Log: logging.Slog(logger),
 		AgentImageRepo: cfg.AgentImageRepository, AgentImageTag: cfg.AgentImageTag,
 		PlatformName: "Astronomer", Leader: c.taskLeader, K8s: c.requester,
 		ChartRecommendationPolicy:     catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight),
@@ -67,11 +69,11 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			AuditExport:   tasks.AuditExportRuntime{Queries: c.queries, Generator: routed.deps.AdminPlatform.Audit},
 		}
 		tunnelWorker, err := worker.NewTunnelWorker(
-			cfg.RedisURL, cfg.TunnelWorkerConcurrency, logger, runtime,
-			worker.NewTerminalFailureErrorHandler(terminalPublisher, logger),
+			cfg.RedisURL, cfg.TunnelWorkerConcurrency, logging.Slog(logger), runtime,
+			worker.NewTerminalFailureErrorHandler(terminalPublisher, logging.Slog(logger)),
 		)
 		if err != nil {
-			logger.Error("failed to create tunnel-queue asynq server", "error", err)
+			logger.Error().Err(err).Msg("failed to create tunnel-queue asynq server")
 		} else {
 			tunnelWorker.RegisterTunnelHandlers()
 			foundation.server.tunnelWorker = tunnelWorker
@@ -99,7 +101,7 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			c.kubectlSessionReapRuntime, c.securityIngestRuntime, crdOwnership); err != nil {
 			return nil, fmt.Errorf("validate tunnel task composition: %w", err)
 		}
-		logger.Info("validated tunnel task runtime", "task_counts", worker.TaskRegistryCounts())
+		logger.Info().Interface("task_counts", worker.TaskRegistryCounts()).Msg("validated tunnel task runtime")
 	}
 	return &runtimeTaskComposition{core: core, project: project}, nil
 }

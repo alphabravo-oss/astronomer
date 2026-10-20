@@ -3,13 +3,14 @@ package server
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -41,7 +42,7 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- StartMetricsServer(ctx, addr, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		errCh <- StartMetricsServer(ctx, addr, zerolog.Nop())
 	}()
 
 	deadline := time.Now().Add(3 * time.Second)

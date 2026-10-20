@@ -19,6 +19,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -29,10 +30,14 @@ import (
 const upgradeReportInterval = time.Minute
 
 func main() {
-	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	slog.SetDefault(logger)
+	zl, err := logging.New(logging.ConfigFromEnv("agent"))
+	if err != nil {
+		logging.Default().Error().Err(err).Msg("invalid logging configuration")
+		os.Exit(1)
+	}
+	logging.SetDefault(zl)
+	// internal/agent still takes *slog.Logger; the bridge keeps one encoder.
+	logger := logging.Slog(zl)
 
 	rootCmd := &cobra.Command{
 		Use:     "astronomer-agent",

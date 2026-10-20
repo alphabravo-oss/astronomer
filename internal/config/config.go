@@ -184,7 +184,11 @@ type Config struct {
 	DeliverySourceMaxHelmChartBytes      int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
 	DeliverySourceTrustDirectory         string `mapstructure:"delivery_source_trust_directory"`
 
+	// LogLevel is a zerolog level name (LOG_LEVEL, default info).
 	LogLevel string `mapstructure:"log_level"`
+	// LogFormat is json (LOG_FORMAT default; required in production) or
+	// text for local development (zerolog.ConsoleWriter).
+	LogFormat string `mapstructure:"log_format"`
 
 	AuditLogRetentionMonths int `mapstructure:"audit_log_retention_months"`
 	// ClusterTombstoneRetentionDays is how long decommissioned cluster rows
@@ -489,6 +493,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "delivery_source_max_helm_chart_bytes", Value: int64(100 << 20)},
 		envconfig.Default{Key: "delivery_source_trust_directory", Value: "/etc/astronomer/delivery-trust"},
 		envconfig.Default{Key: "log_level", Value: "info"},
+		envconfig.Default{Key: "log_format", Value: "json"},
 		envconfig.Default{Key: "audit_log_retention_months", Value: 13},
 		envconfig.Default{Key: "cluster_tombstone_retention_days", Value: 90},
 		envconfig.Default{Key: "login_failure_threshold", Value: 5},

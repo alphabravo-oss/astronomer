@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -25,10 +26,10 @@ func (f *fakeProjectBindingLister) ListProjectRoleBindings(_ context.Context, ar
 	return f.rows, f.err
 }
 
-func captureWarnings(t *testing.T) (*slog.Logger, *bytes.Buffer) {
+func captureWarnings(t *testing.T) (zerolog.Logger, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
-	return slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})), &buf
+	return zerolog.New(&buf).Level(zerolog.WarnLevel), &buf
 }
 
 // TestWarnInertProjectBindings covers step 4 of project-bindings-inert-by-default:
@@ -87,8 +88,8 @@ func TestWarnInertProjectBindings(t *testing.T) {
 	}
 }
 
-// A nil querier or logger must not panic the server's startup path.
+// A nil querier or zero-value logger must not panic the server's startup path.
 func TestWarnInertProjectBindingsNilSafe(t *testing.T) {
-	warnInertProjectBindings(context.Background(), nil, false, slog.Default())
-	warnInertProjectBindings(context.Background(), &fakeProjectBindingLister{}, false, nil)
+	warnInertProjectBindings(context.Background(), nil, false, zerolog.Nop())
+	warnInertProjectBindings(context.Background(), &fakeProjectBindingLister{}, false, zerolog.Logger{})
 }

@@ -3,23 +3,22 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializePersistence(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializePersistence(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	if isProductionConfig(cfg) && !dsnEnforcesTLS(cfg.DatabaseURL) {
-		logger.Warn(
-			"DATABASE_URL does not enforce TLS but production mode is enabled "+
-				"— production must use sslmode=require/verify-ca/verify-full",
-			"event", "production_dsn_tls_warning",
-		)
+		logger.Warn().Str("event", "production_dsn_tls_warning").Msg("DATABASE_URL does not enforce TLS but production mode is enabled " +
+			"— production must use sslmode=require/verify-ca/verify-full")
 	}
 
 	database, err := db.ConnectWithConfig(ctx, cfg.DatabaseURL, db.PoolConfig{
@@ -35,13 +34,12 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	// Apply pending migrations under the session advisory lock before
 	// anything else touches the schema (guide ch.02). Concurrent replicas
 	// serialize on the lock; a failed migration is terminal for the process.
-	result, migrateErr := database.Migrate(ctx, logger)
+	result, migrateErr := database.Migrate(ctx, logging.Slog(logger))
 	if migrateErr != nil {
 		database.Close()
 		return fmt.Errorf("database migration failed: %w", migrateErr)
 	}
-	logger.Info("database schema ready", "event", "database_schema_ready",
-		"applied", result.Applied, "version", result.Version)
+	logger.Info().Str("event", "database_schema_ready").Int("applied", result.Applied).Int64("version", result.Version).Msg("database schema ready")
 	if shErr := database.SchemaHealth(ctx); shErr != nil {
 		database.Close()
 		return fmt.Errorf("schema health check failed: %w", shErr)
@@ -75,17 +73,17 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	if cfg.EncryptionKey != "" {
 		enc, encErr := auth.NewEncryptor(cfg.EncryptionKey)
 		if encErr != nil {
-			logger.Warn("failed to initialise encryptor", "error", encErr)
+			logger.Warn().Err(encErr).Msg("failed to initialise encryptor")
 		} else {
 			encryptor = enc
 			callbackBase := resolveCallbackBaseURL(ctx, cfg, queries)
 			ssoManager = auth.NewSSOManager(encryptor, jwtManager, callbackBase)
 			if loadErr := ssoManager.LoadFromDatabase(ctx, queries); loadErr != nil {
-				logger.Warn("failed to load sso providers", "error", loadErr)
+				logger.Warn().Err(loadErr).Msg("failed to load sso providers")
 			}
 		}
 	} else {
-		logger.Warn("ASTRONOMER_ENCRYPTION_KEY is not set; encrypted columns will be returned as ciphertext and SSO is disabled")
+		logger.Warn().Msg("ASTRONOMER_ENCRYPTION_KEY is not set; encrypted columns will be returned as ciphertext and SSO is disabled")
 	}
 	if err := validateProductionSecurityConfig(cfg, encryptor); err != nil {
 		database.Close()
@@ -102,12 +100,12 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	// without a manual settings step. No-op when dex.enabled=false (legacy
 	// operator-managed Dex flow stays in effect).
 	if _, err := SeedBundledDexSettings(ctx, queries, logger, cfg); err != nil {
-		logger.Warn("dex bootstrap: seed failed", "error", err)
+		logger.Warn().Err(err).Msg("dex bootstrap: seed failed")
 	}
 	// Surface drift between legacy sso_configurations and the new
 	// dex_connectors path. Best-effort: log + continue on error.
 	if err := WarnIfLegacySSORowsActive(ctx, queries, logger); err != nil {
-		logger.Debug("dex bootstrap: legacy SSO check failed", "error", err)
+		logger.Debug().Err(err).Msg("dex bootstrap: legacy SSO check failed")
 	}
 	c.database = database
 	c.queries = queries

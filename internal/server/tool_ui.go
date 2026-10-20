@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -100,7 +99,7 @@ func serveIsolatedTool(w http.ResponseWriter, r *http.Request, target toolui.Tar
 		return
 	}
 	if deps.CoreAuth.Queries != nil {
-		endpoint = appmiddleware.AuditLogWithWriter(slog.Default(), deps.CoreAuth.Queries)(endpoint)
+		endpoint = appmiddleware.AuditLogWithWriter(deps.CoreAuth.Logger, deps.CoreAuth.Queries)(endpoint)
 	}
 	requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)(endpoint).ServeHTTP(w, r)
 }

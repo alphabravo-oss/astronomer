@@ -16,7 +16,7 @@ func TestPodDeleteProductionWiresExactTransactionRunner(t *testing.T) {
 	if constructor < 0 {
 		t.Fatal("workload handler production constructor not found")
 	}
-	end := strings.Index(text[constructor:], "workloadHandler.SetLogger(logger)")
+	end := strings.Index(text[constructor:], "workloadHandler.SetLogger(logging.Slog(logger))")
 	if end < 0 {
 		t.Fatal("workload handler production constructor terminator not found")
 	}

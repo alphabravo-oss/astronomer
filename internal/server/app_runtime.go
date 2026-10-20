@@ -2,15 +2,16 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
 
 // startProductionRuntime preserves the runtime startup order while delegating
 // each cohesive composition phase to a typed helper.
-func (c *productionComposition) startProductionRuntime(_ context.Context, cfg *config.Config, logger *slog.Logger, routed *routerComposition) (*Server, error) {
+func (c *productionComposition) startProductionRuntime(_ context.Context, cfg *config.Config, logger zerolog.Logger, routed *routerComposition) (*Server, error) {
 	lifecycles, err := c.composeCharlieLifecycles(cfg, logger, routed.deps)
 	if err != nil {
 		return nil, err
@@ -31,10 +32,10 @@ func (c *productionComposition) startProductionRuntime(_ context.Context, cfg *c
 	return foundation.server, nil
 }
 
-func shutdownFailedRuntime(server *Server, logger *slog.Logger) {
+func shutdownFailedRuntime(server *Server, logger zerolog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		logger.Error("failed to clean up partially started runtime", "error", err)
+		logger.Error().Err(err).Msg("failed to clean up partially started runtime")
 	}
 }

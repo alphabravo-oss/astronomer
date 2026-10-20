@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -95,30 +96,18 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("failed to load config", "error", err)
+		logging.Default().Error().Err(err).Msg("failed to load config")
 		os.Exit(1)
 	}
 
-	// Set up structured logger.
-	var level slog.Level
-	switch cfg.LogLevel {
-	case "debug":
-		level = slog.LevelDebug
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
+	logger, err := logging.New(logging.Config{Level: cfg.LogLevel, Format: cfg.LogFormat, Component: "server"})
+	if err != nil {
+		logging.Default().Error().Err(err).Msg("invalid logging configuration")
+		os.Exit(1)
 	}
-	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	slog.SetDefault(logger)
+	logging.SetDefault(logger)
 
-	observability.WithEvent(logger, "server_starting").Info("starting astronomer server",
-		"version", version.Version,
-		"commit", version.GitCommit,
-		"env", cfg.Env,
-	)
+	logger.Info().Str("event", "server_starting").Str("version", version.Version).Str("commit", version.GitCommit).Str("env", cfg.Env).Msg("starting astronomer server")
 
 	// Distributed tracing foundation. No-op when
 	// OTEL_EXPORTER_OTLP_ENDPOINT is unset; otherwise wires an OTLP gRPC
@@ -136,15 +125,15 @@ func main() {
 	tracingCfg.Environment = cfg.Env
 	tracingCfg.ServiceNamespace = "astronomer"
 	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
-	otelShutdown, err := observability.InitTracing(context.Background(), logger, tracingCfg)
+	otelShutdown, err := observability.InitTracing(context.Background(), logging.Slog(logger), tracingCfg)
 	if err != nil {
-		logger.Error("failed to init otel tracing", "error", err)
+		logger.Error().Err(err).Msg("failed to init otel tracing")
 		os.Exit(1)
 	}
 
 	srv, err := server.NewApp(context.Background(), cfg, logger)
 	if err != nil {
-		logger.Error("failed to initialize server", "error", err)
+		logger.Error().Err(err).Msg("failed to initialize server")
 		os.Exit(1)
 	}
 	// auditWriter is started below once the DB pool is verified; the
@@ -154,11 +143,11 @@ func main() {
 	if srv.DB() != nil {
 		distributionDigest, digestErr := fluxdistribution.ControllerSetDigest()
 		if digestErr != nil {
-			logger.Error("failed to identify embedded Flux distribution", "error", digestErr)
+			logger.Error().Err(digestErr).Msg("failed to identify embedded Flux distribution")
 			os.Exit(1)
 		}
 		if configured := cfg.DeliveryFluxVersion; configured != "" && configured != fluxdistribution.Version() {
-			logger.Error("configured Flux version differs from embedded distribution", "configured", configured, "embedded", fluxdistribution.Version())
+			logger.Error().Str("configured", configured).Str("embedded", fluxdistribution.Version()).Msg("configured Flux version differs from embedded distribution")
 			os.Exit(1)
 		}
 		changed, releaseErr := systemrelease.Ensure(context.Background(), srv.DB().Pool(), systemrelease.Config{
@@ -174,19 +163,19 @@ func main() {
 			PublicKeys:          cfg.DeliveryFluxDistributionKeyring,
 		})
 		if releaseErr != nil {
-			logger.Error("failed to ensure signed delivery system release", "error", releaseErr)
+			logger.Error().Err(releaseErr).Msg("failed to ensure signed delivery system release")
 			os.Exit(1)
 		}
 		if changed {
-			logger.Info("signed delivery system release promoted", "version", version.Version, "distribution_digest", distributionDigest)
+			logger.Info().Str("version", version.Version).Str("distribution_digest", distributionDigest).Msg("signed delivery system release promoted")
 		}
 		queries := sqlc.New(srv.DB().Pool())
 		if _, err := observability.EnsureInstanceID(context.Background(), queries); err != nil {
-			logger.Error("failed to ensure observability instance id", "error", err)
+			logger.Error().Err(err).Msg("failed to ensure observability instance id")
 			os.Exit(1)
 		}
-		logger = observability.Logger(logger)
-		slog.SetDefault(logger)
+		logger = logger.With().Str("instance_id", observability.InstanceID()).Logger()
+		logging.SetDefault(logger)
 		// Async batched audit writer. The per-request synchronous
 		// INSERT INTO audit_log used to add one DB round-trip to every
 		// mutating handler's critical path; the writer drains a
@@ -195,17 +184,14 @@ func main() {
 		// (see writer.go for the trade-off discussion). When the
 		// writer is nil — e.g. a test main — audit.Record falls back
 		// to the sync insert through the supplied Querier.
-		auditWriter = audit.NewWriter(queries, logger)
+		auditWriter = audit.NewWriter(queries, logging.Slog(logger))
 		auditWriter.Start(context.Background())
 		audit.SetWriter(auditWriter)
 		srv.AddShutdownHook("audit writer", func(ctx context.Context) error {
 			defer audit.SetWriter(nil)
 			err := auditWriter.Shutdown(ctx)
 			if err != nil {
-				observability.WithEvent(logger, "server_audit_shutdown_error").Warn("audit writer shutdown error",
-					"dropped_total", auditWriter.DropCount(),
-					"error", err,
-				)
+				logger.Warn().Str("event", "server_audit_shutdown_error").Uint64("dropped_total", auditWriter.DropCount()).Err(err).Msg("audit writer shutdown error")
 			}
 			return err
 		})
@@ -218,14 +204,14 @@ func main() {
 			Username:            cfg.BootstrapAdminUsername,
 			Email:               cfg.BootstrapAdminEmail,
 			ForcePasswordChange: cfg.BootstrapAdminForcePasswordChange,
-		}, logger); err != nil {
-			logger.Error("failed to ensure bootstrap admin", "error", err)
+		}, logging.Slog(logger)); err != nil {
+			logger.Error().Err(err).Msg("failed to ensure bootstrap admin")
 			os.Exit(1)
 		}
 		// Seed platform_configuration.server_url from the Helm value so internal
 		// controllers can build stable public URLs without manual setup.
-		if err := auth.EnsurePlatformConfig(context.Background(), queries, cfg.ServerURL, "", logger); err != nil {
-			logger.Error("failed to ensure platform config", "error", err)
+		if err := auth.EnsurePlatformConfig(context.Background(), queries, cfg.ServerURL, "", logging.Slog(logger)); err != nil {
+			logger.Error().Err(err).Msg("failed to ensure platform config")
 			os.Exit(1)
 		}
 	}
@@ -236,17 +222,17 @@ func main() {
 	srv.AddShutdownHook("otel pipeline", func(ctx context.Context) error {
 		err := otelShutdown(ctx)
 		if err != nil {
-			observability.WithEvent(logger, "server_otel_shutdown_error").Warn("otel shutdown error", "error", err)
+			logger.Warn().Str("event", "server_otel_shutdown_error").Err(err).Msg("otel shutdown error")
 		}
 		return err
 	})
 
 	if srv.DB() != nil {
 		if err := srv.AddRuntimeLoop("database-metrics-reporter", true, func(ctx context.Context) error {
-			db.RunMetricsReporter(ctx, srv.DB().Pool(), logger)
+			db.RunMetricsReporter(ctx, srv.DB().Pool(), logging.Slog(logger))
 			return nil
 		}); err != nil {
-			logger.Error("failed to register database metrics reporter", "error", err)
+			logger.Error().Err(err).Msg("failed to register database metrics reporter")
 			os.Exit(1)
 		}
 	}
@@ -254,7 +240,7 @@ func main() {
 		if err := srv.AddRuntimeLoop("metrics-listener", true, func(ctx context.Context) error {
 			return server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger)
 		}); err != nil {
-			logger.Error("failed to register metrics listener", "error", err)
+			logger.Error().Err(err).Msg("failed to register metrics listener")
 			os.Exit(1)
 		}
 	}
@@ -272,33 +258,33 @@ func main() {
 			if result == nil {
 				result = fmt.Errorf("server exited unexpectedly")
 			}
-			observability.WithEvent(logger, "server_runtime_error").Error("runtime component exited", "error", result)
+			logger.Error().Str("event", "server_runtime_error").Err(result).Msg("runtime component exited")
 		}
 		stop()
 	}
-	observability.WithEvent(logger, "server_stopping").Info("shutting down server")
+	logger.Info().Str("event", "server_stopping").Msg("shutting down server")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
+		logger.Error().Str("event", "server_shutdown_error").Err(err).Msg("shutdown error")
 		runtimeFailed = true
 	}
 	if !runtimeJoined {
 		select {
 		case err := <-runtimeResults:
 			if err != nil {
-				observability.WithEvent(logger, "server_runtime_error").Error("server listener stopped with error", "error", err)
+				logger.Error().Str("event", "server_runtime_error").Err(err).Msg("server listener stopped with error")
 				runtimeFailed = true
 			}
 		case <-shutdownCtx.Done():
-			observability.WithEvent(logger, "server_shutdown_error").Error("server listener did not join", "error", shutdownCtx.Err())
+			logger.Error().Str("event", "server_shutdown_error").Err(shutdownCtx.Err()).Msg("server listener did not join")
 			runtimeFailed = true
 		}
 	}
 
-	observability.WithEvent(logger, "server_stopped").Info("server stopped")
+	logger.Info().Str("event", "server_stopped").Msg("server stopped")
 	if runtimeFailed {
 		os.Exit(1)
 	}

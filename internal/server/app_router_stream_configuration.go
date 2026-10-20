@@ -1,16 +1,18 @@
 package server
 
 import (
-	"log/slog"
 	"net/http"
 
+	"github.com/rs/zerolog"
+
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 // configureRouterStreamAdapters installs optional cross-domain adapters. Core
 // stream authentication, authorization, tickets, and audit are constructor
 // requirements and are deliberately absent from this phase.
-func (c *productionComposition) configureRouterStreamAdapters(logger *slog.Logger, deps *RouterDependencies) {
+func (c *productionComposition) configureRouterStreamAdapters(logger zerolog.Logger, deps *RouterDependencies) {
 	if cache := c.rbacQuerier.Cache(); cache != nil && deps.AdminPlatform.GroupMappings != nil {
 		deps.AdminPlatform.GroupMappings.SetRBACCacheInvalidator(cache)
 	}
@@ -24,6 +26,6 @@ func (c *productionComposition) configureRouterStreamAdapters(logger *slog.Logge
 		deps.StreamingInternal.KubectlShell.SetExecProxy(deps.StreamingInternal.Exec)
 	}
 	deps.StreamingInternal.KubectlShell.SetCrossPodWSForwarder(func(w http.ResponseWriter, r *http.Request, clusterID string) bool {
-		return tunnel.ForwardWSToOwnerPod(c.hub, logger, w, r, clusterID)
+		return tunnel.ForwardWSToOwnerPod(c.hub, logging.Slog(logger), w, r, clusterID)
 	})
 }
