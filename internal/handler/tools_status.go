@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -18,14 +18,14 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	tools, err := h.queries.ListEnabledTools(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list tools")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list tools")
 		return
 	}
 	bySlug := map[string][]sqlc.InstalledChart{}
 	for offset := int32(0); ; offset += 200 {
 		installed, err := h.queries.ListInstalledChartsByCluster(r.Context(), sqlc.ListInstalledChartsByClusterParams{ClusterID: clusterID, Limit: 200, Offset: offset})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list installed tool releases")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list installed tool releases")
 			return
 		}
 		for _, item := range installed {
@@ -101,7 +101,7 @@ func (h *ToolHandler) ClusterStatus(w http.ResponseWriter, r *http.Request) {
 func (h *ToolHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load tool operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load tool operations")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)

@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -86,12 +86,12 @@ func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Reques
 	}
 	items, err := h.queries.ListMonitoringOperations(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to list monitoring operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to list monitoring operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	resp := make([]map[string]any, 0, len(items))
@@ -112,21 +112,21 @@ func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Reques
 
 func (h *MonitoringHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetMonitoringOperation(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring operation not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Monitoring operation not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to load monitoring operation")
 		return
 	}
 	if !h.authorizeMonitoringOperationRead(w, r, op) {
@@ -141,21 +141,21 @@ func (h *MonitoringHandler) GetOperation(w http.ResponseWriter, r *http.Request)
 
 func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetMonitoringOperation(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring operation not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Monitoring operation not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to load monitoring operation")
 		return
 	}
 	if !h.authorizeMonitoringOperationUpdate(w, r, op) {
@@ -165,7 +165,7 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "monitoring transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "monitoring transaction runner is not configured")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "monitoring_operation_retry"))
@@ -174,7 +174,7 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 		OperationID string `json:"operation_id"`
 	}{Action: "retry", OperationID: id.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode monitoring retry request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode monitoring retry request")
 		return
 	}
 	var receipt map[string]any
@@ -209,14 +209,14 @@ func (h *MonitoringHandler) RetryOperation(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different monitoring operation retry")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different monitoring operation retry")
 			return
 		}
 		if errors.Is(err, errMonitoringOperationNotRetryable) {
 			requireRetryableOperation(w, r, op.Status)
 			return
 		}
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to requeue monitoring operation")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to requeue monitoring operation")
 		return
 	}
 	if !replayed {

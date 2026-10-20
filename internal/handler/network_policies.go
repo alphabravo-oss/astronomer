@@ -30,9 +30,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/netpol"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -251,12 +251,12 @@ func validateNamespace(ns string) error {
 func (h *NetworkPolicyHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid template ID")
 		return
 	}
 	t, err := h.queries.GetNetworkPolicyTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy template not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, networkPolicyTemplateToResponse(t))
@@ -269,7 +269,7 @@ func (h *NetworkPolicyHandler) GetTemplate(w http.ResponseWriter, r *http.Reques
 func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var req CreateNetworkPolicyTemplateRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Slug = strings.TrimSpace(req.Slug)
@@ -278,7 +278,7 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 	if req.CloneFrom != "" {
 		src, err := h.queries.GetNetworkPolicyTemplateBySlug(r.Context(), req.CloneFrom)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, fmt.Sprintf("clone_from slug %q not found", req.CloneFrom))
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, fmt.Sprintf("clone_from slug %q not found", req.CloneFrom))
 			return
 		}
 		if req.Slug == "" {
@@ -296,11 +296,11 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 	}
 
 	if req.Slug == "" || req.Name == "" || req.SpecTemplate == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "slug, name, and spec_template are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "slug, name, and spec_template are required")
 		return
 	}
 	if err := validateSlug(req.Slug); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	// Smoke-test the template: render with a placeholder context so a
@@ -308,7 +308,7 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 	if _, err := netpol.Render(req.SpecTemplate, netpol.Context{
 		Namespace: "preview", Project: "preview", PolicyName: netpol.PolicyName(req.Slug),
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, fmt.Sprintf("spec_template: %v", err))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, fmt.Sprintf("spec_template: %v", err))
 		return
 	}
 
@@ -338,10 +338,10 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 		})
 	if err != nil {
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A template with this slug already exists")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A template with this slug already exists")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create network policy template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create network policy template")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/network-policy-templates/"+tmpl.ID.String()+"/")
@@ -353,31 +353,31 @@ func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Req
 func (h *NetworkPolicyHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid template ID")
 		return
 	}
 	existing, err := h.queries.GetNetworkPolicyTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy template not found")
 		return
 	}
 	if existing.Kind == "builtin" {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinReadonly, "Builtin templates are read-only; clone via POST to create an editable copy.")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.BuiltinReadonly, "Builtin templates are read-only; clone via POST to create an editable copy.")
 		return
 	}
 	var req CreateNetworkPolicyTemplateRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.SpecTemplate) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name and spec_template are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "name and spec_template are required")
 		return
 	}
 	if _, err := netpol.Render(req.SpecTemplate, netpol.Context{
 		Namespace: "preview", Project: "preview", PolicyName: netpol.PolicyName(existing.Slug),
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, fmt.Sprintf("spec_template: %v", err))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, fmt.Sprintf("spec_template: %v", err))
 		return
 	}
 	enabled := existing.Enabled
@@ -402,7 +402,7 @@ func (h *NetworkPolicyHandler) UpdateTemplate(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update network policy template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update network policy template")
 		return
 	}
 	RespondJSON(w, http.StatusOK, networkPolicyTemplateToResponse(tmpl))
@@ -416,16 +416,16 @@ func (h *NetworkPolicyHandler) UpdateTemplate(w http.ResponseWriter, r *http.Req
 func (h *NetworkPolicyHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid template ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid template ID")
 		return
 	}
 	existing, err := h.queries.GetNetworkPolicyTemplateByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy template not found")
 		return
 	}
 	if existing.Kind == "builtin" {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.BuiltinReadonly, "Builtin templates are read-only and cannot be deleted.")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.BuiltinReadonly, "Builtin templates are read-only and cannot be deleted.")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -439,7 +439,7 @@ func (h *NetworkPolicyHandler) DeleteTemplate(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete network policy template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete network policy template")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -457,7 +457,7 @@ func (h *NetworkPolicyHandler) ListApplications(w http.ResponseWriter, r *http.R
 	}
 	apps, err := h.queries.ListApplicationsForCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list network policy applications")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list network policy applications")
 		return
 	}
 	// Hydrate template slugs in one pass for the common case where many
@@ -490,7 +490,7 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "network policy transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "network policy transaction runner is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -499,26 +499,26 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	var req ApplyNetworkPolicyRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	templateID, err := uuid.Parse(req.TemplateID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid template_id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid template_id")
 		return
 	}
 	tmpl, err := h.queries.GetNetworkPolicyTemplateByID(r.Context(), templateID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy template not found")
 		return
 	}
 	if !tmpl.Enabled {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.TemplateDisabled, "Network policy template is disabled")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.TemplateDisabled, "Network policy template is disabled")
 		return
 	}
 
@@ -527,12 +527,12 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 		namespaces = append(namespaces, req.Namespace)
 	}
 	if len(namespaces) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace or namespaces is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "namespace or namespaces is required")
 		return
 	}
 	for _, ns := range namespaces {
 		if err := validateNamespace(ns); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 			return
 		}
 	}
@@ -543,7 +543,7 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 		Namespaces []string `json:"namespaces"`
 	}{ClusterID: clusterID.String(), TemplateID: tmpl.ID.String(), Namespaces: namespaces})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode network policy request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode network policy request")
 		return
 	}
 	var receipt NetworkPolicyApplicationsReceipt
@@ -609,10 +609,10 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different network policy application request")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different network policy application request")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to apply network policy template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.ApplyError, "Failed to apply network policy template")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/network-policies/applications/", receipt)
@@ -635,21 +635,21 @@ func (h *NetworkPolicyHandler) DeleteApplication(w http.ResponseWriter, r *http.
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	appID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid application ID")
 		return
 	}
 	app, err := h.queries.GetNetworkPolicyApplicationByID(r.Context(), appID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy application not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy application not found")
 		return
 	}
 	if app.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy application not found for this cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy application not found for this cluster")
 		return
 	}
 	// Revoke the in-cluster NetworkPolicy first. On failure we KEEP the
@@ -675,10 +675,10 @@ func (h *NetworkPolicyHandler) DeleteApplication(w http.ResponseWriter, r *http.
 					}
 				})
 			if persistErr != nil {
-				respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.RevokeError, "Failed to persist network policy revocation failure")
+				respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apiutil.RevokeError, "Failed to persist network policy revocation failure")
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.RevokeError, fmt.Sprintf("Failed to revoke in-cluster NetworkPolicy: %v", err))
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.RevokeError, fmt.Sprintf("Failed to revoke in-cluster NetworkPolicy: %v", err))
 			return
 		}
 	}
@@ -696,7 +696,7 @@ func (h *NetworkPolicyHandler) DeleteApplication(w http.ResponseWriter, r *http.
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete network policy application")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete network policy application")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -709,7 +709,7 @@ func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "network policy transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "network policy transaction runner is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -718,16 +718,16 @@ func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 	}
 	appID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid application ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid application ID")
 		return
 	}
 	app, err := h.queries.GetNetworkPolicyApplicationByID(r.Context(), appID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy application not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy application not found")
 		return
 	}
 	if app.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Network policy application not found for this cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Network policy application not found for this cluster")
 		return
 	}
 	params := sqlc.MarkNetworkPolicyApplicationStatusParams{
@@ -742,7 +742,7 @@ func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 		ApplicationID string `json:"application_id"`
 	}{ClusterID: clusterID.String(), ApplicationID: app.ID.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode network policy reapply request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode network policy reapply request")
 		return
 	}
 	var receipt NetworkPolicyApplicationResponse
@@ -790,10 +790,10 @@ func (h *NetworkPolicyHandler) Reapply(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different network policy reapply request")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different network policy reapply request")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ReapplyError, "Failed to reset application status")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.ReapplyError, "Failed to reset application status")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/network-policies/applications/", receipt)

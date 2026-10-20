@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -110,7 +110,7 @@ type permissionSensitiveFlags struct {
 func (h *RBACHandler) MyEffectivePermissions(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	h.respondEffectivePermissions(w, r, user.ID, true)
@@ -119,11 +119,11 @@ func (h *RBACHandler) MyEffectivePermissions(w http.ResponseWriter, r *http.Requ
 func (h *RBACHandler) EffectivePermissionsForUser(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "user_id")
 	if userID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "User ID is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "User ID is required")
 		return
 	}
 	if _, err := uuid.Parse(userID); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	current, _ := reqctx.AuthenticatedUser(r.Context())
@@ -134,7 +134,7 @@ func (h *RBACHandler) EffectivePermissionsForUser(w http.ResponseWriter, r *http
 func (h *RBACHandler) PermissionPreview(w http.ResponseWriter, r *http.Request) {
 	var req permissionPreviewRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	scope := req.Scope
@@ -142,13 +142,13 @@ func (h *RBACHandler) PermissionPreview(w http.ResponseWriter, r *http.Request) 
 		scope = string(rbac.ScopeGlobal)
 	}
 	if !rbac.IsValidScope(rbac.Scope(scope)) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScope, "scope must be global, cluster, or project")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidScope, "scope must be global, cluster, or project")
 		return
 	}
 
 	rules, roleName, grants, err := h.previewRules(r.Context(), req, scope)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.PreviewError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.PreviewError, err.Error())
 		return
 	}
 	source := effectivePermissionSource{Scope: scope, RoleID: req.RoleID, RoleName: roleName}
@@ -174,17 +174,17 @@ func (h *RBACHandler) PermissionPreview(w http.ResponseWriter, r *http.Request) 
 
 func (h *RBACHandler) respondEffectivePermissions(w http.ResponseWriter, r *http.Request, userID string, self bool) {
 	if h == nil || h.bindings == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RBACUnavailable, "RBAC binding lookup is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RBACUnavailable, "RBAC binding lookup is not configured")
 		return
 	}
 	selectedContext, err := effectivePermissionContextFromRequest(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidContext, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidContext, err.Error())
 		return
 	}
 	bindings, err := h.bindings.GetUserBindings(r.Context(), userID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load user bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load user bindings")
 		return
 	}
 	response := effectivePermissionResponse{

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -227,11 +228,11 @@ func assertAPIError(t *testing.T, response *httptest.ResponseRecorder, status in
 	if response.Code != status {
 		t.Fatalf("status = %d, want %d; body = %s", response.Code, status, response.Body.String())
 	}
-	var envelope errorEnvelope
+	var envelope apiutil.Body
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode error response: %v; body = %s", err, response.Body.String())
 	}
-	if envelope.Error.Code != code {
+	if string(envelope.Error.Code) != code {
 		t.Fatalf("error code = %q, want %q; body = %s", envelope.Error.Code, code, response.Body.String())
 	}
 }

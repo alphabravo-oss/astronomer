@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -38,18 +38,18 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 		sortOrder = "namespace_asc"
 	}
 	if !validWorkloadSort(sortOrder) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid workload sort order")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid workload sort order")
 		return
 	}
 
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourceWorkloads, rbac.VerbList)
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	all, names, err = selectedNamespaces(r.URL.Query(), all, names)
 	if err != nil {
-		RespondRequestError(w, r, 400, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, 400, apiutil.ValidationError, err.Error())
 		return
 	}
 	var workloads []map[string]any
@@ -153,11 +153,11 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		Replicas int32 `json:"replicas"`
 	}
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if _, err := scalePath(kind, namespace, name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidKind, err.Error())
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -173,7 +173,7 @@ func (h *WorkloadHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		"clusterId": clusterID, "replicas": req.Replicas,
 	}})
 	if err != nil {
-		respondWorkloadMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue workload scale")
+		respondWorkloadMutationError(w, r, err, apiutil.EnqueueError, "Failed to enqueue workload scale")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/workloads/operations/"+op.ID.String()+"/", workloadOperationResponse(op))
@@ -187,7 +187,7 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	clusterID := clusterUUID.String()
 	kind, namespace, name := chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	if _, err := workloadPath(kind, namespace, name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidKind, err.Error())
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -200,7 +200,7 @@ func (h *WorkloadHandler) Restart(w http.ResponseWriter, r *http.Request) {
 		Name:      name,
 	}, currentUserUUID(r), mutationAuditEvent{action: "workload.restart", resourceType: "workload", resourceID: kind + "/" + namespace + "/" + name, resourceName: name, status: http.StatusAccepted, detail: map[string]any{"clusterId": clusterID}})
 	if err != nil {
-		respondWorkloadMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue workload restart")
+		respondWorkloadMutationError(w, r, err, apiutil.EnqueueError, "Failed to enqueue workload restart")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/workloads/operations/"+op.ID.String()+"/", workloadOperationResponse(op))
@@ -214,7 +214,7 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	clusterID := clusterUUID.String()
 	kind, namespace, name := chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	if _, err := workloadPath(kind, namespace, name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKind, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidKind, err.Error())
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -227,7 +227,7 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		Name:      name,
 	}, currentUserUUID(r), mutationAuditEvent{action: "workload.delete", resourceType: "workload", resourceID: kind + "/" + namespace + "/" + name, resourceName: name, status: http.StatusAccepted, detail: map[string]any{"clusterId": clusterID}})
 	if err != nil {
-		respondWorkloadMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue workload delete")
+		respondWorkloadMutationError(w, r, err, apiutil.EnqueueError, "Failed to enqueue workload delete")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/workloads/operations/"+op.ID.String()+"/", workloadOperationResponse(op))
@@ -239,7 +239,7 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 	}
 
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.WorkloadError, "workload store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.WorkloadError, "workload store not configured")
 		return
 	}
 	// Clamp limit to a sane bound (and floor at 1) via the shared helper so a
@@ -261,12 +261,12 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 	}
 	ops, err := h.queries.ListWorkloadOperations(r.Context(), arg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.WorkloadError, "Failed to list workload operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.WorkloadError, "Failed to list workload operations")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	resp := make([]map[string]any, 0, len(ops))
@@ -285,17 +285,17 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 func (h *WorkloadHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Workload operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Workload operation not found")
 		return
 	}
 	caller, authenticated := reqctx.AuthenticatedUser(r.Context())
 	if !authenticated || caller == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if !h.authorizeWorkloadOperationReceipt(w, r, caller.ID, op) {
@@ -312,22 +312,22 @@ const maxWorkloadOperationAuthorizationEnvelopeBytes = 64 << 10
 
 func (h *WorkloadHandler) authorizeWorkloadOperationReceipt(w http.ResponseWriter, r *http.Request, callerIDText string, op sqlc.WorkloadOperation) bool {
 	if len(op.Payload) == 0 || len(op.Payload) > maxWorkloadOperationAuthorizationEnvelopeBytes {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve workload operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve workload operation target")
 		return false
 	}
 	var target workloadOperationEnvelope
 	if err := json.Unmarshal(op.Payload, &target); err != nil || target.ClusterID == "" || len(target.Namespace) > 253 {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve workload operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve workload operation target")
 		return false
 	}
 	clusterID, err := uuid.Parse(target.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve workload operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve workload operation target")
 		return false
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
@@ -339,7 +339,7 @@ func (h *WorkloadHandler) authorizeWorkloadOperationReceipt(w http.ResponseWrite
 	}
 	callerID, err := uuid.Parse(callerIDText)
 	if err != nil || !op.CreatedByID.Valid || callerID != uuid.UUID(op.CreatedByID.Bytes) || !workloadOperationMutationScopeAllowed(r) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 		return false
 	}
 	allowed := false
@@ -357,7 +357,7 @@ func (h *WorkloadHandler) authorizeWorkloadOperationReceipt(w http.ResponseWrite
 			h.authz.engine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbRead, clusterID, uuid.Nil)
 	}
 	if !allowed {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 	}
 	return allowed
 }
@@ -378,12 +378,12 @@ func workloadOperationMutationScopeAllowed(r *http.Request) bool {
 func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetWorkloadOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Workload operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Workload operation not found")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -391,7 +391,7 @@ func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request)
 	}
 	clusterID, err := workloadOperationClusterID(op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve workload operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve workload operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceWorkloads, rbac.VerbUpdate) {
@@ -410,7 +410,7 @@ func (h *WorkloadHandler) RetryOperation(w http.ResponseWriter, r *http.Request)
 			}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry workload operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.RetryError, "Failed to retry workload operation")
 		return
 	}
 	h.TriggerReconcile()
@@ -424,7 +424,7 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	// Fast path: unrestricted callers get exact, uncapped counts straight from
@@ -434,7 +434,7 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 	if !restricted {
 		rows, err := h.queries.CountWorkloadOperationsByStatus(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load workload controller status")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load workload controller status")
 			return
 		}
 		counts := make(map[string]int, len(rows))
@@ -459,7 +459,7 @@ func (h *WorkloadHandler) ControllerStatus(w http.ResponseWriter, r *http.Reques
 	// on the operation payload; fall back to loading rows and filtering in Go.
 	ops, err := h.queries.ListWorkloadOperations(r.Context(), sqlc.ListWorkloadOperationsParams{Limit: 1000, Offset: 0})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load workload controller status")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load workload controller status")
 		return
 	}
 	opSummary := summarizeOperations(r.Context(), ops, operationStatusSummaryConfig[sqlc.WorkloadOperation]{

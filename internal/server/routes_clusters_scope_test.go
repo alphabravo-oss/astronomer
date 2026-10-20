@@ -2,14 +2,11 @@ package server
 
 import (
 	"net/http"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // registerClusterRoutes declares, once for its whole subtree, that the chi param
@@ -36,20 +33,23 @@ import (
 // built router and testing each route's real middleware chain for the
 // declaration itself.
 
-// clusterScopeDeclaredRoutes walks the fully-wired router and returns the
-// patterns whose middleware chain actually contains ClusterScopeFromIDParam.
-// Comparison is by function pointer — r.Use stores the function value itself,
-// so this matches the declaration and nothing else.
+// clusterScopeDeclaredRoutes returns the patterns of the routes registered on
+// router whose routePermissions row declares IDNamesCluster (the table form of
+// the former ClusterScopeFromIDParam subtree declaration).
 func clusterScopeDeclaredRoutes(t *testing.T, router chi.Routes) []string {
 	t.Helper()
-	want := reflect.ValueOf(appmiddleware.ClusterScopeFromIDParam).Pointer()
 	seen := map[string]struct{}{}
-	if err := chi.Walk(router, func(_ string, route string, _ http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-		for _, mw := range middlewares {
-			if reflect.ValueOf(mw).Pointer() == want {
-				seen[normalizeRoutePattern(route)] = struct{}{}
-				return nil
-			}
+	if err := chi.Walk(router, func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		perm, ok := routePermissions[routeKey(method, route)]
+		if !ok {
+			return nil
+		}
+		declared := perm.IDNamesCluster
+		for _, also := range perm.Also {
+			declared = declared || also.IDNamesCluster
+		}
+		if declared {
+			seen[normalizeRoutePattern(strings.SplitN(routeKey(method, route), " ", 2)[1])] = struct{}{}
 		}
 		return nil
 	}); err != nil {

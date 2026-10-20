@@ -15,10 +15,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
@@ -578,49 +578,49 @@ func userToResponse(user sqlc.User) UserResponse {
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(authUser.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 
 	var req ChangePasswordRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.CurrentPassword == "" || req.NewPassword == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "current_password and new_password are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "current_password and new_password are required")
 		return
 	}
 	if err := auth.ValidatePassword(req.NewPassword, h.passwordPolicy(r.Context())); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 
 	dbUser, err := h.queries.GetUserByID(r.Context(), userID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
 
 	verified, _, verifyErr := auth.VerifyPassword(dbUser.Password, req.CurrentPassword)
 	if verifyErr != nil || !verified {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Current password is incorrect")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Current password is incorrect")
 		return
 	}
 
 	newHash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HashError, "Failed to hash new password")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.HashError, "Failed to hash new password")
 		return
 	}
 
 	if h.rehasher == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Password updates are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Password updates are not configured")
 		return
 	}
 	passwordParams := sqlc.UpdateUserPasswordHashParams{ID: userID, Password: newHash}
@@ -660,10 +660,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if errors.Is(err, errCurrentPasswordIncorrect) {
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Current password is incorrect")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Current password is incorrect")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update password and invalidate sessions")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update password and invalidate sessions")
 		return
 	}
 	if h.revocation != nil && h.jwt != nil {
@@ -680,13 +680,13 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) CurrentUser(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 
@@ -707,7 +707,7 @@ func (h *AuthHandler) CurrentUser(w http.ResponseWriter, r *http.Request) {
 	} else {
 		dbUser, lookupErr := h.queries.GetUserByID(r.Context(), userID)
 		if lookupErr != nil {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 			return
 		}
 		resp = map[string]any{

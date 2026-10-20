@@ -18,10 +18,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	charliecontract "github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 const maxCharlieSessionRequestBytes = charlie.MaxCharlieMessageBytes + 8<<10
@@ -102,7 +102,7 @@ func (h *CharlieSessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	clientID, err := uuid.Parse(request.ClientSessionID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie session request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie session request")
 		return
 	}
 	label := strings.TrimSpace(actor.Username)
@@ -115,10 +115,10 @@ func (h *CharlieSessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, charlie.ErrInvalidSessionRequest) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie session request")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie session request")
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie session is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie session is unavailable")
 		return
 	}
 	status := http.StatusCreated
@@ -143,12 +143,12 @@ func (h *CharlieSessionHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.access.ListAccessible(r.Context(), mustUserID(actor), int32(offset), int32(limit))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie session access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie session access is denied")
 		return
 	}
 	mode, err := h.access.CurrentMode(r.Context(), mustUserID(actor))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie mode access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie mode access is denied")
 		return
 	}
 	result := make([]charlieSessionMetadata, 0, len(rows))
@@ -165,7 +165,7 @@ func (h *CharlieSessionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := h.access.Get(r.Context(), mustUserID(actor), sessionID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie session access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie session access is denied")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"session": safeSessionMetadata(view.Session), "remote": view.Remote})
@@ -182,17 +182,17 @@ func (h *CharlieSessionHandler) History(w http.ResponseWriter, r *http.Request) 
 	}
 	cursor := r.URL.Query().Get("cursor")
 	if len(cursor) > 128 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie history cursor")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie history cursor")
 		return
 	}
 	history, err := h.access.History(r.Context(), mustUserID(actor), sessionID, cursor, limit)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie history access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie history access is denied")
 		return
 	}
 	history, err = safeCharlieBrowserJSON(history)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie history response is invalid")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie history response is invalid")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -211,22 +211,22 @@ func (h *CharlieSessionHandler) Message(w http.ResponseWriter, r *http.Request) 
 	}
 	messageID, err := uuid.Parse(request.ClientMessageID)
 	if err != nil || strings.TrimSpace(request.Message) == "" || len([]byte(request.Message)) > charlie.MaxCharlieMessageBytes {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie message request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie message request")
 		return
 	}
 	receipt, err := h.access.Message(r.Context(), mustUserID(actor), sessionID, messageID, request.Message, nil)
 	if err != nil {
 		// Terminal sessions are a client state problem, not bridge outage.
 		if strings.Contains(err.Error(), "does not accept messages") {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie session is no longer open for messages")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Charlie session is no longer open for messages")
 			return
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie message is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie message is unavailable")
 		return
 	}
 	receipt, err = safeCharlieBrowserJSON(receipt)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie message response is invalid")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie message response is invalid")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -245,11 +245,11 @@ func (h *CharlieSessionHandler) Abort(w http.ResponseWriter, r *http.Request) {
 	}
 	requestID, err := uuid.Parse(request.RequestID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie abort request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie abort request")
 		return
 	}
 	if err := h.access.Abort(r.Context(), mustUserID(actor), sessionID, requestID); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie session abort is pending")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie session abort is pending")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -265,12 +265,12 @@ func (h *CharlieSessionHandler) Events(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.InternalError, "Charlie streaming is unavailable")
+		apiutil.WriteError(w, r, http.StatusNotImplemented, apiutil.InternalError, "Charlie streaming is unavailable")
 		return
 	}
 	lastEventID := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
 	if len(lastEventID) > 128 || strings.ContainsAny(lastEventID, "\r\n") {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie event cursor")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie event cursor")
 		return
 	}
 
@@ -438,7 +438,7 @@ func summarizeCharlieToolArguments(value any) any {
 func browserCharlieActor(w http.ResponseWriter, r *http.Request) (*reqctx.User, bool) {
 	actor, authenticated := reqctx.AuthenticatedUser(r.Context())
 	if !authenticated || actor == nil || actor.AuthMethod == "api_token" || mustUserID(actor) == uuid.Nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Browser authentication is required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Browser authentication is required")
 		return nil, false
 	}
 	return actor, true
@@ -451,7 +451,7 @@ func charlieSessionActorAndID(w http.ResponseWriter, r *http.Request) (*reqctx.U
 	}
 	sessionID, err := uuid.Parse(chi.URLParam(r, "session_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie session ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie session ID")
 		return nil, uuid.Nil, false
 	}
 	return actor, sessionID, true
@@ -468,16 +468,16 @@ func mustUserID(actor *reqctx.User) uuid.UUID {
 func decodeCharlieJSON(w http.ResponseWriter, r *http.Request, output any) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		RespondRequestError(w, r, http.StatusUnsupportedMediaType, apierror.InvalidRequest, "Content-Type must be application/json")
+		apiutil.WriteError(w, r, http.StatusUnsupportedMediaType, apiutil.InvalidRequest, "Content-Type must be application/json")
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxCharlieSessionRequestBytes)
 	if err := decodeStrictJSONBody(r, output); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Charlie request is too large")
+			apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "Charlie request is too large")
 		} else {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid Charlie request")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid Charlie request")
 		}
 		return false
 	}
@@ -491,7 +491,7 @@ func boundedQueryInt(w http.ResponseWriter, r *http.Request, name string, fallba
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value < minimum || value > maximum {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie pagination")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie pagination")
 		return 0, false
 	}
 	return value, true

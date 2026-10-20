@@ -12,9 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
@@ -38,7 +38,7 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)
@@ -47,16 +47,16 @@ func (h *ClusterHandler) GenerateKubeconfig(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		slog.Default().ErrorContext(r.Context(), "mint proxy kubeconfig credential", "cluster_id", cluster.ID.String(), "error", err)
 		if errors.Is(err, audit.ErrOutboxUnavailable) {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable; the proxy credential was not issued")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable; the proxy credential was not issued")
 		} else {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "A short-lived proxy credential could not be issued")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "A short-lived proxy credential could not be issued")
 		}
 		return
 	}
 	kubeconfig := buildProxyKubeconfig(cluster, userEmail, serverURL, token)
 	yamlBytes, err := yaml.Marshal(kubeconfig)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RenderError, "Failed to render kubeconfig")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.RenderError, "Failed to render kubeconfig")
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-yaml")
@@ -76,7 +76,7 @@ func (h *ClusterHandler) PreviewKubeconfig(w http.ResponseWriter, r *http.Reques
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	serverURL := agentServerURLFor(r.Context(), h.queries, r)

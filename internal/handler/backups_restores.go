@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -27,14 +27,14 @@ type CreateRestoreRequest struct {
 func (h *BackupHandler) CreateRestoreByBackup(w http.ResponseWriter, r *http.Request) {
 	backupID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid backup ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid backup ID")
 		return
 	}
 
 	// Verify the backup exists.
 	backup, err := h.queries.GetBackupByID(r.Context(), backupID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Backup not found")
 		return
 	}
 	// A restore overwrites live namespaces on the backup's cluster — the most
@@ -46,7 +46,7 @@ func (h *BackupHandler) CreateRestoreByBackup(w http.ResponseWriter, r *http.Req
 	var req CreateRestoreRequest
 	if r.Body != nil {
 		if err := decodeV1JSONBody(r, &req); err != nil && err != io.EOF {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
@@ -89,7 +89,7 @@ func (h *BackupHandler) CreateRestoreByBackup(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create restore operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create restore operation")
 		return
 	}
 
@@ -149,13 +149,13 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list restore operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list restore operations")
 		return
 	}
 
 	total, err := h.queries.CountRestoreOperations(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count restore operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count restore operations")
 		return
 	}
 
@@ -179,13 +179,13 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) GetRestore(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid restore ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid restore ID")
 		return
 	}
 
 	restore, err := h.queries.GetRestoreOperationByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Restore operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Restore operation not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, restore.ClusterID, rbac.VerbRead) {

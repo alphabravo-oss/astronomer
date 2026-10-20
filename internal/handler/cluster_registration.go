@@ -22,10 +22,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 )
 
@@ -150,10 +150,10 @@ func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Re
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load registration status")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load registration status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -171,11 +171,11 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 		InstallBaseline *bool `json:"install_baseline"`
 	}
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.InstallBaseline == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "install_baseline is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "install_baseline is required")
 		return
 	}
 	_, err := executeClusterRegistrationMutation(r, h,
@@ -196,15 +196,15 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to record options")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to record options")
 		return
 	}
 	status, err := h.service.LoadStatus(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load status")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load status")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -237,14 +237,14 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 	)
 	if advErr != nil {
 		if errors.Is(advErr, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 			return
 		}
 		if h.isIllegal(advErr) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, advErr.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, advErr.Error())
 			return
 		}
-		respondTransactionalMutationError(w, r, advErr, http.StatusInternalServerError, apierror.TransitionError, "Failed to confirm registration")
+		respondTransactionalMutationError(w, r, advErr, http.StatusInternalServerError, apiutil.TransitionError, "Failed to confirm registration")
 		return
 	}
 	status, _ := h.service.LoadStatus(r.Context(), id)
@@ -262,7 +262,7 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 	}
 	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStep, "Invalid step ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidStep, "Invalid step ID")
 		return
 	}
 	_, err = executeClusterRegistrationMutation(r, h,
@@ -298,15 +298,15 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Step not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Step not found")
 		case errors.Is(err, errRegistrationStepMismatch):
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.StepMismatch, "Step does not belong to cluster")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.StepMismatch, "Step does not belong to cluster")
 		case errors.Is(err, errRegistrationStepNotFailed):
-			RespondRequestError(w, r, http.StatusConflict, apierror.NotFailed, "Only failed steps can be retried")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.NotFailed, "Only failed steps can be retried")
 		case h.isIllegal(err):
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, err.Error())
 		default:
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.TransitionError, "Failed to retry registration")
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.TransitionError, "Failed to retry registration")
 		}
 		return
 	}
@@ -337,10 +337,10 @@ func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.R
 	)
 	if err != nil {
 		if h.isIllegal(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, err.Error())
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.TransitionError, "Failed to cancel registration")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.TransitionError, "Failed to cancel registration")
 		return
 	}
 	status, _ := h.service.LoadStatus(r.Context(), id)

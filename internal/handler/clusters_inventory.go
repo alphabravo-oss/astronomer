@@ -16,9 +16,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -158,13 +158,13 @@ type ClusterEstateSummaryResponse struct {
 func (h *ClusterHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceClusters, rbac.VerbList, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 
 	store, ok := h.queries.(clusterEstateSummaryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster summary store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cluster summary store is not available")
 		return
 	}
 
@@ -172,7 +172,7 @@ func (h *ClusterHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	if all {
 		row, queryErr := store.GetClusterEstateSummary(r.Context())
 		if queryErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to summarize clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to summarize clusters")
 			return
 		}
 		response.ClustersTotal = row.ClustersTotal
@@ -184,7 +184,7 @@ func (h *ClusterHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	} else {
 		row, queryErr := store.GetClusterEstateSummaryForScopes(r.Context(), clusterIDs)
 		if queryErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to summarize clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to summarize clusters")
 			return
 		}
 		response.ClustersTotal = row.ClustersTotal
@@ -219,7 +219,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		"environment": filterEnvironment, "search": filterSearch,
 	} {
 		if len(value) > 128 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, name+" must be at most 128 bytes")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, name+" must be at most 128 bytes")
 			return
 		}
 	}
@@ -232,14 +232,14 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	// below, byte-identical to before.
 	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceClusters, rbac.VerbList, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 
 	cursorValue, cursorProvided := r.URL.Query()["cursor"]
 	_, offsetProvided := r.URL.Query()["offset"]
 	if cursorProvided && offsetProvided {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor and offset cannot be combined")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cursor and offset cannot be combined")
 		return
 	}
 	cursorMode := !offsetProvided
@@ -250,19 +250,19 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	var cursor paging.Cursor
 	if cursorProvided {
 		if len(cursorValue) != 1 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor must be one opaque value")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cursor must be one opaque value")
 			return
 		}
 		cursor, err = paging.DecodeCursor(cursorValue[0], cursorBinding)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pagination cursor")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid pagination cursor")
 			return
 		}
 	}
 	cursorQueries, cursorCapable := h.queries.(clusterCursorQuerier)
 	if cursorMode && !cursorCapable {
 		if cursorProvided {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cursor cluster listing is not available")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cursor cluster listing is not available")
 			return
 		}
 		// Compatibility for injected stores that predate cursor support. The
@@ -277,7 +277,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	if all && hasFilters {
 		filtered, ok := h.queries.(clusterFilteredQuerier)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Filtered cluster listing is not available")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Filtered cluster listing is not available")
 			return
 		}
 		if cursorMode {
@@ -300,7 +300,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list filtered clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list filtered clusters")
 			return
 		}
 	} else if all {
@@ -312,18 +312,18 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: limit, Offset: offset})
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters")
 			return
 		}
 		total, err = h.queries.CountClusters(r.Context())
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count clusters")
 			return
 		}
 	} else if hasFilters {
 		filtered, ok := h.queries.(clusterFilteredQuerier)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Scoped filtered cluster listing is not available")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Scoped filtered cluster listing is not available")
 			return
 		}
 		if cursorMode {
@@ -346,7 +346,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list scoped filtered clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list scoped filtered clusters")
 			return
 		}
 	} else {
@@ -354,7 +354,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			// Authorization is wired but the query surface cannot filter. Fail
 			// closed rather than serve the whole fleet to a scoped caller.
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Scoped cluster listing is not available")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Scoped cluster listing is not available")
 			return
 		}
 		if cursorMode {
@@ -368,14 +368,14 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters")
 			return
 		}
 		// Count over the SAME predicate: an unfiltered total under a filtered
 		// page would both leak the fleet size and break the pager.
 		total, err = scoped.CountClustersForScopes(r.Context(), clusterIDs)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count clusters")
 			return
 		}
 	}
@@ -389,7 +389,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			last := clusters[len(clusters)-1]
 			nextCursor, err = paging.EncodeCursor(paging.NewCursor(last.CreatedAt, last.ID, cursorBinding, seen+len(clusters)))
 			if err != nil {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode pagination cursor")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to encode pagination cursor")
 				return
 			}
 		}
@@ -405,12 +405,12 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	decommissioning := h.inFlightDecommissionSet(r.Context(), pageIDs)
 	livenessStore, ok := h.queries.(clusterLivenessQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster liveness store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cluster liveness store is not available")
 		return
 	}
 	livenessRows, err := livenessStore.ListClusterLivenessForClusters(r.Context(), pageIDs)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster liveness")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cluster liveness")
 		return
 	}
 	livenessByCluster := make(map[uuid.UUID]pgtype.Timestamptz, len(livenessRows))
@@ -422,7 +422,7 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, c := range clusters {
 		resp, err := h.enrichClusterFromCache(r.Context(), c)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render cluster metadata")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render cluster metadata")
 			return
 		}
 		setClusterResponseHeartbeat(&resp, livenessByCluster[c.ID])
@@ -449,10 +449,10 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if h.enforcer != nil {
 		if err := h.enforcer.CheckGlobalClusterCreate(r.Context()); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate cluster quota")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate cluster quota")
 			return
 		}
 	}
@@ -463,12 +463,12 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	annotations := req.Annotations
 	if err := validateDirectAccessConfig(req.ApiServerUrl, req.CaCertificate); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	badgeText, badgeColor, err := normalizeClusterBadge(req.BadgeText, req.BadgeColor)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	// Downstream-impersonation mode: superuser-only, validated, default off.
@@ -476,14 +476,14 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// so there is nothing stored to preserve and no agent that could have
 	// advertised the capability, which makes `enforce` unreachable at create
 	// time by construction.
-	annotations, ok := guardDownstreamImpersonationAnnotation(w, r, h.queries, uuid.Nil, nil, annotations)
+	annotations, ok := guardDownstreamImpersonationAnnotation(w, r, &h.authz, h.queries, uuid.Nil, nil, annotations)
 	if !ok {
 		return
 	}
 	annotations = fullManagementAnnotations(annotations)
 	agentOverrides, err := marshalAgentOverrides(req.AgentOverrides)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	params := sqlc.CreateClusterParams{
@@ -517,10 +517,10 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, fmt.Sprintf("A cluster named %q already exists", req.Name))
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, fmt.Sprintf("A cluster named %q already exists", req.Name))
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create cluster")
 		return
 	}
 
@@ -554,7 +554,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", "/api/v1/clusters/"+cluster.ID.String()+"/")
 	response, err := clusterToResponse(cluster)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render cluster metadata")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render cluster metadata")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, response)
@@ -569,24 +569,24 @@ func (h *ClusterHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
 	out, err := h.enrichClusterFresh(r.Context(), cluster)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render cluster metadata")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render cluster metadata")
 		return
 	}
 	livenessStore, ok := h.queries.(clusterLivenessQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster liveness store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cluster liveness store is not available")
 		return
 	}
 	if liveness, livenessErr := livenessStore.GetClusterLiveness(r.Context(), id); livenessErr == nil {
 		setClusterResponseHeartbeat(&out, liveness.LastHeartbeat)
 	} else if !errors.Is(livenessErr, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load cluster liveness")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load cluster liveness")
 		return
 	}
 	if latest, derr := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id); derr == nil {
@@ -609,13 +609,13 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	if blocked, err := clusterUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check cluster ownership")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to check cluster ownership")
 		return
 	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, blocked)
 		return
 	}
 
@@ -631,7 +631,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 			if mergeErr != nil {
 				return sqlc.Cluster{}, mergeErr
 			}
-			annotations, ok := guardDownstreamImpersonationAnnotation(w, r, q, id, existing.Annotations, params.Annotations)
+			annotations, ok := guardDownstreamImpersonationAnnotation(w, r, &h.authz, q, id, existing.Annotations, params.Annotations)
 			if !ok {
 				return sqlc.Cluster{}, errClusterUpdateResponseWritten
 			}
@@ -654,15 +654,15 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		var validationErr *clusterUpdateValidationError
 		if errors.As(err, &validationErr) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, validationErr.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, validationErr.Error())
 			return
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		} else if errors.Is(err, audit.ErrOutboxUnavailable) {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to update cluster")
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to update cluster")
 		} else {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to update cluster")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to update cluster")
 		}
 		return
 	}
@@ -677,7 +677,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 	h.triggerGrafanaFolders()
 	response, err := clusterToResponse(cluster)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render cluster metadata")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render cluster metadata")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)

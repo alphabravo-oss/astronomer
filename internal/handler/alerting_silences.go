@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -29,7 +29,7 @@ func (h *AlertingHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert silences")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list alert silences")
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 
 	if req.EndsAt.IsZero() {
 		if req.Duration == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Silence end time is required")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Silence end time is required")
 			return
 		}
 	}
@@ -79,7 +79,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 	if endsAt.IsZero() {
 		duration, err := time.ParseDuration(req.Duration)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid silence duration")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid silence duration")
 			return
 		}
 		endsAt = startsAt.Add(duration)
@@ -108,7 +108,7 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert silence")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create alert silence")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -125,16 +125,16 @@ func (h *AlertingHandler) CreateSilence(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid silence ID")
 		return
 	}
 	match, err := h.queries.GetAlertSilenceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert silence not found")
 		return
 	}
 	if !match.EndsAt.After(time.Now()) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.AlreadyExpired, "This silence has already expired.")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.AlreadyExpired, "This silence has already expired.")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -148,7 +148,7 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to expire silence")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to expire silence")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -162,13 +162,13 @@ func (h *AlertingHandler) ExpireSilence(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid silence ID")
 		return
 	}
 
 	match, err := h.queries.GetAlertSilenceByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert silence not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -182,7 +182,7 @@ func (h *AlertingHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Alert silence not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Alert silence not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())

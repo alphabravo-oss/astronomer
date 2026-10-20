@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/grafanaproxy"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -14,7 +14,7 @@ import (
 func writeGrafanaResponse(w http.ResponseWriter, r *http.Request, resp *protocol.K8sResponsePayload, prefix string) {
 	body, err := decodeResponseBody(resp)
 	if err != nil {
-		RespondRequestError(w, r, 502, apierror.ProxyError, "Invalid Grafana response")
+		apiutil.WriteError(w, r, 502, apiutil.ProxyError, "Invalid Grafana response")
 		return
 	}
 	for key, value := range resp.Headers {

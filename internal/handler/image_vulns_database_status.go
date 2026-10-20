@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -30,12 +30,12 @@ func (h *ImageVulnHandler) ClusterReportDatabaseStatus(w http.ResponseWriter, r 
 	}
 	reportID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid report ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid report ID")
 		return
 	}
 	report, err := h.queries.GetImageVulnerabilityReportByID(r.Context(), reportID)
 	if err != nil || report.ClusterID != cluster {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vulnerability report not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Vulnerability report not found")
 		return
 	}
 	known := int64(report.CriticalCount) + int64(report.HighCount) + int64(report.MediumCount) + int64(report.LowCount) + int64(report.UnknownCount)

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -27,7 +27,7 @@ func (h *CatalogHandler) catalogChartFilter(w http.ResponseWriter, r *http.Reque
 		return filter, false
 	}
 	if filter.Tag != "" && (projectScoped || clusterScoped) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "tag filtering is available only on the global catalog")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "tag filtering is available only on the global catalog")
 		return filter, false
 	}
 	if projectScoped {
@@ -36,7 +36,7 @@ func (h *CatalogHandler) catalogChartFilter(w http.ResponseWriter, r *http.Reque
 		}
 		catalogs, err := h.queries.ListCatalogsForProject(r.Context(), projectID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve project catalogs")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to resolve project catalogs")
 			return filter, false
 		}
 		for _, catalog := range catalogs {
@@ -48,9 +48,9 @@ func (h *CatalogHandler) catalogChartFilter(w http.ResponseWriter, r *http.Reque
 		ids, err := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
 		if err != nil {
 			if errors.Is(err, errCatalogClusterAccessDenied) {
-				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have catalog access on this cluster")
 			} else {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve cluster catalogs")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to resolve cluster catalogs")
 			}
 			return filter, false
 		}
@@ -68,7 +68,7 @@ func catalogChartSearchFilter(w http.ResponseWriter, r *http.Request) (sqlc.Coun
 	filter := sqlc.CountFilteredHelmChartsParams{Tag: strings.TrimSpace(r.URL.Query().Get("tag"))}
 	search := r.URL.Query().Get("search")
 	if !utf8.ValidString(search) || utf8.RuneCountInString(search) > 256 || len(r.URL.Query()["search"]) > 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "search must be one string of at most 256 characters")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "search must be one string of at most 256 characters")
 		return filter, false
 	}
 	filter.SearchPattern = literalChartSearchPattern(strings.TrimSpace(search))

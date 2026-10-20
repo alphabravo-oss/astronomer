@@ -10,32 +10,32 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	email, emailErr := normalizeLoginEmail(req.Email)
 	if req.Email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Email is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Email is required")
 		return
 	}
 	if emailErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidEmail, "Enter a valid email address")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidEmail, "Enter a valid email address")
 		return
 	}
 
 	if req.Password == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.AuthenticationRequired, "Password is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.AuthenticationRequired, "Password is required")
 		return
 	}
 
@@ -49,11 +49,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		// brute-force scan for valid accounts is visible in the audit
 		// stream. user_id stays NULL because there's no row to attribute.
 		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{}, "auth.login_failed", "user", "", email, map[string]any{"reason": "user_not_found"}); auditErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 				"Mandatory audit storage is unavailable; authentication is temporarily unavailable")
 			return
 		}
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 
@@ -68,14 +68,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				"locked_until":  user.LockedUntil.Time.UTC().Format(time.RFC3339),
 				"locked_reason": user.LockedReason,
 			}); auditErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 				"Mandatory audit storage is unavailable; authentication is temporarily unavailable")
 			return
 		}
 		// 423 Locked is the RFC 4918 status that fits best; we keep
 		// the JSON error envelope shape unchanged so the frontend
 		// can surface "account_locked" without parsing the status.
-		RespondRequestError(w, r, http.StatusLocked, apierror.AccountLocked, "Account is temporarily locked. Try again later or contact an administrator.")
+		apiutil.WriteError(w, r, http.StatusLocked, apiutil.AccountLocked, "Account is temporarily locked. Try again later or contact an administrator.")
 		return
 	}
 
@@ -87,28 +87,28 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			h.log.Warn("password verification error", "user_id", user.ID.String(), "error", verifyErr)
 		}
 		if attemptErr := h.handleFailedAttempt(ctx, r, user, "verify_error"); attemptErr != nil {
-			respondTransactionalMutationError(w, r, attemptErr, http.StatusServiceUnavailable, apierror.StatusError, "Authentication safeguards are temporarily unavailable")
+			respondTransactionalMutationError(w, r, attemptErr, http.StatusServiceUnavailable, apiutil.StatusError, "Authentication safeguards are temporarily unavailable")
 			return
 		}
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 	if !ok {
 		if attemptErr := h.handleFailedAttempt(ctx, r, user, "bad_password"); attemptErr != nil {
-			respondTransactionalMutationError(w, r, attemptErr, http.StatusServiceUnavailable, apierror.StatusError, "Authentication safeguards are temporarily unavailable")
+			respondTransactionalMutationError(w, r, attemptErr, http.StatusServiceUnavailable, apiutil.StatusError, "Authentication safeguards are temporarily unavailable")
 			return
 		}
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 
 	if !user.IsActive {
 		if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.login_failed", "user", user.ID.String(), user.Username, map[string]any{"reason": "account_disabled"}); auditErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 				"Mandatory audit storage is unavailable; authentication is temporarily unavailable")
 			return
 		}
-		RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.AccountDisabled, "Account is disabled")
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	mintCtx := h.applySessionTimeoutFromSettings(r.Context())
 	pair, err := h.jwt.PrepareTokenPairContext(mintCtx)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to prepare session")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenError, "Failed to prepare session")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -158,13 +158,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				resourceName: committed.Username, status: http.StatusOK, detail: map[string]any{"identifier_type": "email"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 			"The browser session could not be persisted")
 		return
 	}
 	accessToken, refreshToken, err := h.jwt.SignPreparedTokenPair(user.ID, pair)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TokenError, "Failed to generate session")
 		return
 	}
 

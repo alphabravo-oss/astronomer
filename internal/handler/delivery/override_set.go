@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	deliveryconfig "github.com/alphabravocompany/astronomer-go/internal/delivery/configuration"
@@ -103,22 +104,22 @@ func overrideSetView(row sqlc.DeliveryOverrideSet) overrideSetResponse {
 func (h *OverrideSetHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, 400, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, 400, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	rows, err := h.queries.ListDeliveryOverrideSets(r.Context(), sqlc.ListDeliveryOverrideSetsParams{ProjectID: projectID, Limit: limit, Offset: offset})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountDeliveryOverrideSets(r.Context(), projectID)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	items := make([]overrideSetResponse, 0, len(rows))
@@ -135,7 +136,7 @@ func (h *OverrideSetHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.queries.GetDeliveryOverrideSet(r.Context(), sqlc.GetDeliveryOverrideSetParams{ProjectID: projectID, ID: id})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.Generation)
@@ -145,17 +146,17 @@ func (h *OverrideSetHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *OverrideSetHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input overrideSetWrite
 	if err := decodeRequest(w, r, &input); err != nil {
-		respondError(w, 400, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, input.ProjectID)
 	if err != nil {
-		respondError(w, 400, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	values, patches, err := h.validate(r.Context(), projectID, &input)
 	if err != nil {
-		respondError(w, 400, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	enabled := true
@@ -175,7 +176,7 @@ func (h *OverrideSetHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return deliveryAuditEvent{action: "delivery.override_set.created", resourceType: "delivery_override_set", resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated, detail: map[string]any{"scope": row.ScopeType}}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.Generation)
@@ -189,17 +190,17 @@ func (h *OverrideSetHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	var input overrideSetWrite
 	if err := decodeRequest(w, r, &input); err != nil {
-		respondError(w, 400, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	values, patches, err := h.validate(r.Context(), projectID, &input)
 	if err != nil {
-		respondError(w, 400, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	generation, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, 428, "precondition_required", "a numeric If-Match generation is required")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.PreconditionRequired, "a numeric If-Match generation is required")
 		return
 	}
 	enabled := true
@@ -219,11 +220,11 @@ func (h *OverrideSetHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return deliveryAuditEvent{action: "delivery.override_set.updated", resourceType: "delivery_override_set", resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK, detail: map[string]any{"generation": row.Generation}}
 		})
 	if errors.Is(err, pgx.ErrNoRows) {
-		respondError(w, 409, "stale_generation", "override set changed; reload before saving")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.StaleGeneration, "override set changed; reload before saving")
 		return
 	}
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.Generation)
@@ -237,7 +238,7 @@ func (h *OverrideSetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	generation, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, 428, "precondition_required", "a numeric If-Match generation is required")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.PreconditionRequired, "a numeric If-Match generation is required")
 		return
 	}
 	params := sqlc.DeleteDeliveryOverrideSetParams{ProjectID: projectID, ID: id, Generation: generation}
@@ -249,11 +250,11 @@ func (h *OverrideSetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return deliveryAuditEvent{action: "delivery.override_set.deleted", resourceType: "delivery_override_set", resourceID: deletedID.String(), status: http.StatusNoContent}
 		})
 	if errors.Is(err, pgx.ErrNoRows) {
-		respondError(w, 409, "stale_generation", "override set changed; reload before deleting")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.StaleGeneration, "override set changed; reload before deleting")
 		return
 	}
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	w.WriteHeader(204)
@@ -269,41 +270,41 @@ type effectiveConfigurationRequest struct {
 func (h *OverrideSetHandler) Effective(w http.ResponseWriter, r *http.Request) {
 	var input effectiveConfigurationRequest
 	if err := decodeRequest(w, r, &input); err != nil {
-		respondError(w, 400, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, input.ProjectID)
 	if err != nil {
-		respondError(w, 400, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	if len(input.OverrideIDs) > 64 {
-		respondError(w, 400, "validation_error", "at most 64 override sets may be resolved")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "at most 64 override sets may be resolved")
 		return
 	}
 	var baseObject map[string]any
 	if len(input.BaseValues) != 0 && json.Unmarshal(input.BaseValues, &baseObject) != nil {
-		respondError(w, 400, "validation_error", "base_values must be a JSON object")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "base_values must be a JSON object")
 		return
 	}
 	if containsInlineSecret(baseObject) {
-		respondError(w, 400, "secret_not_allowed", "base_values contain an inline secret field; use Kubernetes Secret references")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.SecretNotAllowed, "base_values contain an inline secret field; use Kubernetes Secret references")
 		return
 	}
 	rows, err := h.queries.ListDeliveryOverrideSetsByIDs(r.Context(), sqlc.ListDeliveryOverrideSetsByIDsParams{ProjectID: projectID, Column2: input.OverrideIDs})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if len(rows) != len(input.OverrideIDs) {
-		respondError(w, 409, "override_set_unavailable", "an override set is missing, disabled, or outside the project")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.OverrideSetUnavailable, "an override set is missing, disabled, or outside the project")
 		return
 	}
 	layers := make([]deliveryconfig.Layer, 0, len(rows))
 	for _, row := range rows {
 		var patches []string
 		if json.Unmarshal(row.Patches, &patches) != nil {
-			respondError(w, 500, "invalid_persisted_state", "stored override patches are invalid")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored override patches are invalid")
 			return
 		}
 		layers = append(layers, deliveryconfig.Layer{ID: row.ID, Name: row.Name, Scope: deliveryconfig.Scope(row.ScopeType), Precedence: int(row.Precedence), Values: row.ValuesDocument, Patches: patches})
@@ -312,10 +313,10 @@ func (h *OverrideSetHandler) Effective(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var conflict *deliveryconfig.ConflictError
 		if errors.As(err, &conflict) {
-			respondError(w, 409, "override_conflict", err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.OverrideConflict, err.Error())
 			return
 		}
-		respondError(w, 400, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	respondData(w, 200, result)
@@ -353,12 +354,12 @@ func (h *OverrideSetHandler) validate(ctx context.Context, projectID uuid.UUID, 
 func overrideSetIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, 400, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil || id == uuid.Nil {
-		respondError(w, 400, "invalid_id", "override set id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "override set id must be a UUID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, id, true

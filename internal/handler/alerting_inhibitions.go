@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
@@ -33,7 +33,7 @@ func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list inhibitions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list inhibitions")
 		return
 	}
 	items := make([]map[string]any, 0, len(inhibitions))
@@ -53,12 +53,12 @@ func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request
 func (h *AlertingHandler) GetInhibition(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid inhibition ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid inhibition ID")
 		return
 	}
 	inhibition, err := h.queries.GetAlertInhibitionByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Inhibition not found")
 		return
 	}
 	respondAlertInhibition(w, r, http.StatusOK, inhibition)
@@ -71,7 +71,7 @@ func (h *AlertingHandler) CreateInhibition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if msg := validateInhibition(req); msg != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, msg)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, msg)
 		return
 	}
 	enabled := true
@@ -98,7 +98,7 @@ func (h *AlertingHandler) CreateInhibition(w http.ResponseWriter, r *http.Reques
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create inhibition")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create inhibition")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/alerting/inhibitions/"+inhibition.ID.String()+"/")
@@ -109,11 +109,11 @@ func (h *AlertingHandler) CreateInhibition(w http.ResponseWriter, r *http.Reques
 func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid inhibition ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid inhibition ID")
 		return
 	}
 	if _, err := h.queries.GetAlertInhibitionByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Inhibition not found")
 		return
 	}
 	var req InhibitionRequest
@@ -121,7 +121,7 @@ func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if msg := validateInhibition(req); msg != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, msg)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, msg)
 		return
 	}
 	enabled := true
@@ -148,7 +148,7 @@ func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Reques
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update inhibition")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update inhibition")
 		return
 	}
 	respondAlertInhibition(w, r, http.StatusOK, inhibition)
@@ -158,12 +158,12 @@ func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Reques
 func (h *AlertingHandler) DeleteInhibition(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid inhibition ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid inhibition ID")
 		return
 	}
 	match, err := h.queries.GetAlertInhibitionByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Inhibition not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -177,7 +177,7 @@ func (h *AlertingHandler) DeleteInhibition(w http.ResponseWriter, r *http.Reques
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete inhibition")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete inhibition")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -230,7 +230,7 @@ func marshalEqualLabels(labels []string) json.RawMessage {
 }
 
 func respondInhibitionIntegrityError(w http.ResponseWriter, r *http.Request) {
-	RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Stored inhibition failed integrity validation")
+	apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Stored inhibition failed integrity validation")
 }
 
 func respondAlertInhibition(w http.ResponseWriter, r *http.Request, status int, inhibition sqlc.AlertInhibition) {

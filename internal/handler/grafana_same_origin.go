@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/grafanaproxy"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -33,23 +33,23 @@ func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request)
 	}
 	requester, ok := h.requester.(grafanaAuthenticatedRequester)
 	if !ok || h.queries == nil || h.grafanaTickets == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Grafana proxy is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Grafana proxy is not configured")
 		return
 	}
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil || user.ID == "" {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Shared Grafana is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Shared Grafana is not configured")
 		return
 	}
 	metadata := sharedStackMetadata(backend, "sharedGrafana")
 	if !grafanaStackPresent(stringFromMap(metadata, "status")) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Shared Grafana is not installed")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Shared Grafana is not installed")
 		return
 	}
 	clusterID := strings.TrimSpace(stringFromMap(metadata, "managementClusterId"))
@@ -57,7 +57,7 @@ func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request)
 	release := defaultString(stringFromMap(metadata, "releaseName"), sharedGrafanaDefaultRelease)
 	service := grafanaProxyServiceName(release)
 	if _, err := uuid.Parse(clusterID); err != nil || !isSafeK8sName(namespace) || !isSafeK8sName(service) {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Shared Grafana target is invalid")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Shared Grafana target is invalid")
 		return
 	}
 
@@ -67,29 +67,29 @@ func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request)
 	upstreamRequest.URL.RawPath = ""
 	email, role, explore, admin, clusterIDs := h.grafanaIdentity(r, user)
 	if email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Authenticated user has no email")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Authenticated user has no email")
 		return
 	}
 	upstreamRequest, status, err := grafanaproxy.PrepareRequest(upstreamRequest, grafanaproxy.Identity{
 		Email: email, Role: role, Explore: explore, Admin: admin, ClusterIDs: clusterIDs,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Grafana query")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Grafana query")
 		return
 	}
 	if status != 0 {
-		RespondRequestError(w, r, status, apierror.Forbidden, http.StatusText(status))
+		apiutil.WriteError(w, r, status, apiutil.Forbidden, http.StatusText(status))
 		return
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, upstreamRequest.Body, serviceProxyMaxBodyBytes))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Grafana request exceeds maximum allowed size")
+		apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "Grafana request exceeds maximum allowed size")
 		return
 	}
 	auth, err := h.grafanaProxyAuth(r, user, email, role, explore, admin, clusterIDs)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TicketError, "Failed to authorize Grafana request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TicketError, "Failed to authorize Grafana request")
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request)
 	headers := grafanaRequestHeaders(upstreamRequest.Header)
 	resp, err := requester.DoWithGrafanaAuth(r.Context(), clusterID, r.Method, proxyPath, body, headers, auth)
 	if err != nil || resp == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "Shared Grafana is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, "Shared Grafana is unavailable")
 		return
 	}
 

@@ -14,6 +14,7 @@ import (
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/compatibility"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -46,32 +47,32 @@ func NewInventoryHandler(queries InventoryQueries) *InventoryHandler {
 func (h *InventoryHandler) Cluster(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	clusterID, err := pathUUID(r, "clusterId", "clusterID", "cluster_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery inventory persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery inventory persistence is unavailable")
 		return
 	}
 	inventory, err := h.queries.GetDeliveryControllerInventory(r.Context(), sqlc.GetDeliveryControllerInventoryParams{ClusterID: clusterID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	cluster := pgtype.UUID{Bytes: clusterID, Valid: true}
 	deployments, err := h.queries.ListClusterDeployments(r.Context(), sqlc.ListClusterDeploymentsParams{ProjectID: projectID, ClusterID: cluster, QueryLimit: maxPageLimit, QueryOffset: 0})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountClusterDeployments(r.Context(), sqlc.CountClusterDeploymentsParams{ProjectID: projectID, ClusterID: cluster})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	respondData(w, http.StatusOK, map[string]any{"controller_inventory": inventory, "deployments": deployments, "deployment_count": total})
@@ -79,17 +80,17 @@ func (h *InventoryHandler) Cluster(w http.ResponseWriter, r *http.Request) {
 
 func (h *InventoryHandler) SystemCompatibility(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery inventory persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery inventory persistence is unavailable")
 		return
 	}
 	counts, err := h.queries.CountDeliveryControllerCompatibility(r.Context())
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	releases, err := h.queries.ListDeliverySystemReleases(r.Context(), sqlc.ListDeliverySystemReleasesParams{QueryLimit: 20})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	var currentRelease any
@@ -112,7 +113,7 @@ func (h *InventoryHandler) SystemCompatibility(w http.ResponseWriter, r *http.Re
 			"last_error_code": rollout.LastErrorCode, "created_at": rollout.CreatedAt, "updated_at": rollout.UpdatedAt,
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	respondData(w, http.StatusOK, map[string]any{
@@ -194,21 +195,21 @@ type DeliveryFleetDistributions struct {
 
 func (h *InventoryHandler) Fleet(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery inventory persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery inventory persistence is unavailable")
 		return
 	}
 	rows, err := h.queries.ListDeliveryEstateClusters(r.Context(), maxDeliveryEstateClusters+1)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if len(rows) > int(maxDeliveryEstateClusters) {
-		respondError(w, http.StatusUnprocessableEntity, "estate_limit_exceeded", "delivery estate exceeds the supported 10000-cluster dashboard limit")
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.EstateLimitExceeded, "delivery estate exceeds the supported 10000-cluster dashboard limit")
 		return
 	}
 	activeRollouts, err := h.queries.CountActiveDeliveryRollouts(r.Context())
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	now := time.Now()

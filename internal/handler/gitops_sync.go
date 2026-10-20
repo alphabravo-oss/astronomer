@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 // Sync handles POST /api/v1/admin/gitops-sources/{id}/sync/.
@@ -21,11 +21,11 @@ func (h *GitOpsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid source ID")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "GitOps transaction runner not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "GitOps transaction runner not configured")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "admin_gitops_source_sync"))
@@ -34,7 +34,7 @@ func (h *GitOpsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		SourceID string `json:"source_id"`
 	}{Action: "sync", SourceID: id.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode GitOps sync request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode GitOps sync request")
 		return
 	}
 	var receipt GitOpsSyncReceipt
@@ -65,14 +65,14 @@ func (h *GitOpsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different GitOps source sync")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different GitOps source sync")
 			return
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "GitOps source not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "GitOps source not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to queue GitOps source sync")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SyncError, "Failed to queue GitOps source sync")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/admin/gitops-sources/"+receipt.SourceID+"/", receipt)

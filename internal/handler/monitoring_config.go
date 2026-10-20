@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -29,7 +29,7 @@ func (h *MonitoringHandler) GetBackendConfig(w http.ResponseWriter, r *http.Requ
 			RespondJSON(w, http.StatusOK, map[string]any{})
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring backend")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to load monitoring backend")
 		return
 	}
 	RespondJSON(w, http.StatusOK, monitoringBackendResponse(backend, h.readAuthConfig(backend)))
@@ -58,16 +58,16 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring store not configured")
 		return
 	}
 	var req UpdateMonitoringBackendRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if _, err := monitoringRetryPolicy(req.AuthConfig); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	// RMW site (migration 146). This used to be a pure writer: whatever the
@@ -89,7 +89,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		// First save. There is nothing to preserve.
 		existing = sqlc.MonitoringBackend{}
 	default:
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring backend")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to load monitoring backend")
 		return
 	}
 	storedCfg, err := resolveMonitoringBackendAuthConfig(existing, h.monitoringDecryptor())
@@ -98,7 +98,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		// read: an operator editing a timeout would otherwise have their
 		// credential deleted as a side effect.
 		h.log.Error("decrypt monitoring backend credential for update", "error", err)
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError,
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError,
 			"Failed to read the existing monitoring credential; check the platform encryption key")
 		return
 	}
@@ -122,7 +122,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		policies["maxRetryAttempts"] = int32(1)
 	}
 	if _, err := monitoringRetryAttempts(policies["maxRetryAttempts"]); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	authConfigMap["operationPolicies"] = policies
@@ -130,7 +130,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		req.BackendType = "thanos"
 	}
 	if req.QueryURL == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "queryUrl is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "queryUrl is required")
 		return
 	}
 	params := sqlc.UpsertDefaultMonitoringBackendParams{
@@ -144,12 +144,12 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		CreatedByID:        currentUserUUID(r),
 	}
 	if h.monitoringSealer() == nil && imonitoring.HasAuthConfigSecret(authConfigMap) {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Monitoring credential encryption is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CryptoError, "Monitoring credential encryption is unavailable")
 		return
 	}
 	if err := imonitoring.SealInto(&params, authConfigMap, h.monitoringSealer()); err != nil {
 		h.log.Error("encrypt monitoring backend credential", "error", err)
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to secure the monitoring credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to secure the monitoring credential")
 		return
 	}
 	backend, err := executeMutation(r, h.runTx,
@@ -162,7 +162,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 			}}
 		})
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to save monitoring backend")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to save monitoring backend")
 		return
 	}
 	// UpdateBackendConfig is the upsert behind both CreateEndpoint and

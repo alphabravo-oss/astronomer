@@ -14,9 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -81,35 +81,35 @@ func generateAPIToken() (plaintext, hash, prefix string, err error) {
 func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 
 	if h.tokens == nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.NotConfigured, "Token management is not configured")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.NotConfigured, "Token management is not configured")
 		return
 	}
 
 	var req CreateTokenRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Token name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Token name is required")
 		return
 	}
 
 	plaintext, tokenHash, prefix, err := generateAPIToken()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenGenerationError, "Failed to generate token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenGenerationError, "Failed to generate token")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 
@@ -118,10 +118,10 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	if h.enforcer != nil {
 		if err := h.enforcer.CheckUserTokenCreate(r.Context(), userID); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate token quota")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate token quota")
 			return
 		}
 	}
@@ -148,7 +148,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	allowedCIDRs := strings.TrimSpace(req.AllowedCIDRs)
 	if allowedCIDRs != "" {
 		if _, perr := auth.ParseAllowedCIDRs(allowedCIDRs); perr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 				"allowed_cidrs must be a comma-separated list of valid CIDR ranges or IP addresses")
 
 			return
@@ -181,7 +181,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create token")
 		return
 	}
 
@@ -236,18 +236,18 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 
 	if h.tokens == nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.NotConfigured, "Token management is not configured")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.NotConfigured, "Token management is not configured")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 
@@ -260,13 +260,13 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list tokens")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list tokens")
 		return
 	}
 
 	total, err := h.tokens.CountTokensByUser(r.Context(), userID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count tokens")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count tokens")
 		return
 	}
 
@@ -304,37 +304,37 @@ func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 
 	if h.tokens == nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.NotConfigured, "Token management is not configured")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.NotConfigured, "Token management is not configured")
 		return
 	}
 
 	tokenIDStr := chi.URLParam(r, "id")
 	tokenID, err := uuid.Parse(tokenIDStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid token ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid token ID")
 		return
 	}
 
 	// Verify the token belongs to the authenticated user.
 	token, err := h.tokens.GetAPITokenByID(r.Context(), tokenID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Token not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Token not found")
 		return
 	}
 
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 
 	if token.UserID != userID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Token not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Token not found")
 		return
 	}
 
@@ -349,7 +349,7 @@ func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RevokeError, "Failed to revoke token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.RevokeError, "Failed to revoke token")
 		return
 	}
 	if h.jwt != nil {

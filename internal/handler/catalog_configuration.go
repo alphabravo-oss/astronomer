@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog/configuration"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -134,7 +134,7 @@ func (h *CatalogHandler) listCuratedChartVersions(w http.ResponseWriter, r *http
 	if selected := r.URL.Query().Get("selected_version_id"); selected != "" {
 		id, parseErr := uuid.Parse(selected)
 		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid selected version ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid selected version ID")
 			return true
 		}
 		found := false
@@ -146,7 +146,7 @@ func (h *CatalogHandler) listCuratedChartVersions(w http.ResponseWriter, r *http
 		if !found {
 			current, lookupErr := h.queries.GetHelmChartVersionByID(r.Context(), id)
 			if lookupErr != nil || current.ChartID != chart.ID {
-				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Selected version is not part of this chart")
+				apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Selected version is not part of this chart")
 				return true
 			}
 			rows = append(rows, configuredChartVersion{HelmChartVersion: current, CatalogVersion: artifact.Find(current.Version)})
@@ -159,7 +159,7 @@ func (h *CatalogHandler) listCuratedChartVersions(w http.ResponseWriter, r *http
 	return true
 }
 func catalogConfigurationUnavailable(w http.ResponseWriter, r *http.Request) {
-	RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog version configuration is unavailable or its immutable identity could not be verified")
+	apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Catalog version configuration is unavailable or its immutable identity could not be verified")
 }
 
 func validateCatalogConfigurationValues(upstream json.RawMessage, profile *configuration.Version, values map[string]any) error {
@@ -175,12 +175,12 @@ func validateCatalogConfigurationValues(upstream json.RawMessage, profile *confi
 func (h *CatalogHandler) authorizeCatalogPreviewChart(w http.ResponseWriter, r *http.Request, version sqlc.HelmChartVersion, projectID uuid.UUID) bool {
 	chart, err := h.queries.GetHelmChartByID(r.Context(), version.ChartID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart not found")
 		return false
 	}
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
 	if err != nil || (repo.OwnerProjectID.Valid && (projectID == uuid.Nil || !catalogVisibleToProject(r.Context(), h.queries, projectID, repo.ID))) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart not found")
 		return false
 	}
 	return true

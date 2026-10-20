@@ -18,9 +18,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // SSOQuerier abstracts the database queries the SSO handler needs in order
@@ -121,28 +121,28 @@ func (h *SSOHandler) SetEncryptor(e *auth.Encryptor) {
 // a CSRF state value in a short-lived cookie + the in-memory state map.
 func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if h.manager == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSONotConfigured, "Single sign-on is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SSONotConfigured, "Single sign-on is not configured")
 		return
 	}
 	provider := strings.ToLower(chi.URLParam(r, "provider"))
 	if provider == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidProvider, "Provider is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProvider, "Provider is required")
 		return
 	}
 	if !h.manager.HasProvider(provider) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, fmt.Sprintf("SSO provider %q is not enabled", provider))
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, fmt.Sprintf("SSO provider %q is not enabled", provider))
 		return
 	}
 
 	authURL, state, err := h.manager.GetAuthorizationURL(provider)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to start SSO flow")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SSOError, "Failed to start SSO flow")
 		return
 	}
 	h.rememberState(state, provider)
 	cookieValue, err := h.signStateCookie(provider, state)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to persist SSO state")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SSOError, "Failed to persist SSO state")
 		return
 	}
 	http.SetCookie(w, ssoStateCookie(provider, cookieValue, 10*time.Minute, h.now()))
@@ -154,26 +154,26 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 // browser back to the frontend with secure session cookies.
 func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if h.manager == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSONotConfigured, "Single sign-on is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SSONotConfigured, "Single sign-on is not configured")
 		return
 	}
 	provider := strings.ToLower(chi.URLParam(r, "provider"))
 	if provider == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidProvider, "Provider is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProvider, "Provider is required")
 		return
 	}
 	if !h.manager.HasProvider(provider) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, fmt.Sprintf("SSO provider %q is not enabled", provider))
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, fmt.Sprintf("SSO provider %q is not enabled", provider))
 		return
 	}
 	if errParam := r.URL.Query().Get("error"); errParam != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOProviderError, errParam)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.SSOProviderError, errParam)
 		return
 	}
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
 	if code == "" || state == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOInvalidRequest, "Missing code or state")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.SSOInvalidRequest, "Missing code or state")
 		return
 	}
 	// CSRF protection is enforced by the HMAC-signed, host-bound SSO state
@@ -188,37 +188,37 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	h.consumeState(state, provider)
 	cookie, err := r.Cookie(ssoStateCookieName(provider))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie missing")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.SSOInvalidState, "OAuth state cookie missing")
 		return
 	}
 	if !h.verifyStateCookie(cookie.Value, provider, state) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie mismatch")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.SSOInvalidState, "OAuth state cookie mismatch")
 		return
 	}
 	defer http.SetCookie(w, ssoStateCookie(provider, "", -1, h.now()))
 
 	info, err := h.manager.HandleCallback(r.Context(), provider, code, state)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.SSOCallbackError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.SSOCallbackError, err.Error())
 		return
 	}
 	if info == nil || info.Email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOMissingEmail, "SSO provider did not return an email address")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.SSOMissingEmail, "SSO provider did not return an email address")
 		return
 	}
 
 	user, pair, err := h.commitSSOCallback(r, provider, info)
 	if err != nil {
 		if errors.Is(err, errSSOAccountDisabled) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.AccountDisabled, "Account is disabled")
 		} else {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSOUserError, "Single sign-on persistence is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SSOUserError, "Single sign-on persistence is unavailable")
 		}
 		return
 	}
 	access, refresh, err := h.jwt.SignPreparedTokenPair(user.ID, pair)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate token")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TokenError, "Failed to generate token")
 		return
 	}
 

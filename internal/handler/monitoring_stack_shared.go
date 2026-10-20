@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -112,7 +112,7 @@ type sharedStackLifecycle[Req any] struct {
 	// skips the floor. Loki install/replace/mode-widen 412 on sizer fail;
 	// in-place upgrade and sizer_ratchet skip the mode gate. Preview does
 	// not call it.
-	precheck func(ctx context.Context, req Req, op string) (status int, code, msg string, ok bool)
+	precheck func(ctx context.Context, req Req, op string) (status int, code apiutil.Code, msg string, ok bool)
 	// afterCommit is for non-transactional wakeups and external reconciliation.
 	// It is never called until metadata, operation, and audit intent commit.
 	afterCommit func(context.Context, string)
@@ -135,7 +135,7 @@ func (l sharedStackLifecycle[Req]) preview(w http.ResponseWriter, r *http.Reques
 	}
 	req, values, _, backend, err := l.payload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	replaceRequired, reasons := l.replaceRequired(sharedStackMetadata(backend, l.metadataKey), req)
@@ -162,7 +162,7 @@ func (l sharedStackLifecycle[Req]) install(w http.ResponseWriter, r *http.Reques
 	}
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if !l.runPrecheck(w, r, req, "install") {
@@ -186,7 +186,7 @@ func (l sharedStackLifecycle[Req]) upgrade(w http.ResponseWriter, r *http.Reques
 	}
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if !l.runPrecheck(w, r, req, "upgrade") {
@@ -219,7 +219,7 @@ func (l sharedStackLifecycle[Req]) replace(w http.ResponseWriter, r *http.Reques
 	}
 	req, values, secretSpec, backend, err := l.payload(r.Context(), r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if !l.runPrecheck(w, r, req, "replace") {
@@ -231,7 +231,7 @@ func (l sharedStackLifecycle[Req]) replace(w http.ResponseWriter, r *http.Reques
 	namespace := defaultString(reqNamespace, defaultString(stringFromMap(metadata, "namespace"), "monitoring"))
 	releaseName := defaultString(reqRelease, defaultString(stringFromMap(metadata, "releaseName"), l.defaultRelease))
 	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "managementClusterId is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "managementClusterId is required")
 		return
 	}
 	// Persist and enqueue the same metadata-defaulted target. A replace with an
@@ -254,12 +254,12 @@ func (l sharedStackLifecycle[Req]) uninstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if l.h.helm == nil || l.h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "monitoring deployment is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.HelmError, "monitoring deployment is not configured")
 		return
 	}
 	backend, err := l.h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MonitoringError, "Default monitoring backend is not configured")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MonitoringError, "Default monitoring backend is not configured")
 		return
 	}
 	metadata := sharedStackMetadata(backend, l.metadataKey)
@@ -268,7 +268,7 @@ func (l sharedStackLifecycle[Req]) uninstall(w http.ResponseWriter, r *http.Requ
 		clusterID = stringFromMap(metadata, "managementClusterId")
 	}
 	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "clusterId is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "clusterId is required")
 		return
 	}
 	namespace := defaultString(stringFromMap(metadata, "namespace"), "monitoring")
@@ -375,7 +375,7 @@ func (l sharedStackLifecycle[Req]) respondStageMutationError(w http.ResponseWrit
 	if errors.Is(err, errSharedStackMetadataPersistence) {
 		message = l.persistFailure()
 	}
-	respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, message)
+	respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, message)
 }
 
 func (l sharedStackLifecycle[Req]) runPrecheck(w http.ResponseWriter, r *http.Request, req Req, op string) bool {
@@ -390,9 +390,9 @@ func (l sharedStackLifecycle[Req]) runPrecheck(w http.ResponseWriter, r *http.Re
 		status = http.StatusPreconditionFailed
 	}
 	if code == "" {
-		code = apierror.SizerFailed
+		code = apiutil.SizerFailed
 	}
-	RespondRequestError(w, r, status, code, msg)
+	apiutil.WriteError(w, r, status, code, msg)
 	return false
 }
 

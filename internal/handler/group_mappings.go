@@ -30,10 +30,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -158,12 +158,12 @@ func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to list group mappings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to list group mappings")
 		return
 	}
 	total, err := h.queries.CountGroupMappings(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to count group mappings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to count group mappings")
 		return
 	}
 	out := make([]GroupMappingResponse, 0, len(rows))
@@ -180,16 +180,16 @@ func (h *GroupMappingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid mapping ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid mapping ID")
 		return
 	}
 	row, err := h.queries.GetGroupMappingByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Group mapping not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Group mapping not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get group mapping")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to get group mapping")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toGroupMappingResponse(row))
@@ -204,22 +204,22 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	var req GroupMappingRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid request body")
 		return
 	}
 	req.GroupName = strings.TrimSpace(req.GroupName)
 	if req.GroupName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidGroupName, "group_name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidGroupName, "group_name is required")
 		return
 	}
 	scope := strings.ToLower(strings.TrimSpace(req.Scope))
 	if scope != "global" && scope != "cluster" && scope != "project" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScope, "scope must be one of global|cluster|project")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidScope, "scope must be one of global|cluster|project")
 		return
 	}
 	roleID, err := uuid.Parse(req.RoleID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "role_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "role_id must be a UUID")
 		return
 	}
 
@@ -231,7 +231,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.ConnectorID != "" {
 		cid, err := uuid.Parse(req.ConnectorID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "connector_id must be a UUID or empty")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "connector_id must be a UUID or empty")
 			return
 		}
 		params.ConnectorID = pgtype.UUID{Bytes: cid, Valid: true}
@@ -239,37 +239,37 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	switch scope {
 	case "cluster":
 		if req.ClusterID == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "cluster_id is required for scope=cluster")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "cluster_id is required for scope=cluster")
 			return
 		}
 		cl, err := uuid.Parse(req.ClusterID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "cluster_id must be a UUID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "cluster_id must be a UUID")
 			return
 		}
 		params.ClusterID = pgtype.UUID{Bytes: cl, Valid: true}
 		if req.ProjectID != "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScopeParams, "project_id must be empty for scope=cluster")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidScopeParams, "project_id must be empty for scope=cluster")
 			return
 		}
 	case "project":
 		if req.ProjectID == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "project_id is required for scope=project")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "project_id is required for scope=project")
 			return
 		}
 		pj, err := uuid.Parse(req.ProjectID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "project_id must be a UUID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "project_id must be a UUID")
 			return
 		}
 		params.ProjectID = pgtype.UUID{Bytes: pj, Valid: true}
 		if req.ClusterID != "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScopeParams, "cluster_id must be empty for scope=project")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidScopeParams, "cluster_id must be empty for scope=project")
 			return
 		}
 	case "global":
 		if req.ClusterID != "" || req.ProjectID != "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidScopeParams, "cluster_id and project_id must be empty for scope=global")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidScopeParams, "cluster_id and project_id must be empty for scope=global")
 			return
 		}
 	}
@@ -281,7 +281,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return result.events
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create group mapping")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create group mapping")
 		return
 	}
 	row := result.value
@@ -296,7 +296,7 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid mapping ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid mapping ID")
 		return
 	}
 	_, err = executeMutation(r, h.runTx, func(q GroupMappingsMutationTx) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
@@ -311,10 +311,10 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Group mapping not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Group mapping not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete group mapping")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete group mapping")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -342,7 +342,7 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 	}
 	uid, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	result, err := executeMutation(r, h.runTx, func(q GroupMappingsMutationTx) (groupMappingsMutationResult[groupResyncResult], error) {
@@ -375,17 +375,17 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		case errors.Is(err, errGroupSnapshotMissing):
-			RespondRequestError(w, r, http.StatusConflict, apierror.NoSnapshot, "User has no IdP-groups snapshot yet; ask them to log in via SSO once")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.NoSnapshot, "User has no IdP-groups snapshot yet; ask them to log in via SSO once")
 		case errors.Is(err, errGroupSnapshotParse):
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SnapshotParse, "Failed to parse IdP-groups snapshot")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SnapshotParse, "Failed to parse IdP-groups snapshot")
 		case errors.Is(err, errGroupSnapshotLoad):
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load user IdP-groups snapshot")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load user IdP-groups snapshot")
 		case errors.Is(err, errGroupSync):
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SyncError, "Failed to sync user groups")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SyncError, "Failed to sync user groups")
 		default:
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SyncError, "Failed to sync user groups")
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.SyncError, "Failed to sync user groups")
 		}
 		return
 	}
@@ -442,11 +442,11 @@ func groupResyncAuditEvents(user sqlc.User, result auth.SyncResult) []mutationAu
 // unauthenticated or non-superuser callers.
 func (h *GroupMappingsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Group-mapping store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Group-mapping store not configured")
 		return false
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return false
 	}
 	return true

@@ -13,11 +13,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/dexconfig"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/principal"
 )
 
@@ -73,16 +73,16 @@ type principalSearchResponse struct {
 func (h *PrincipalHandler) Search(w http.ResponseWriter, r *http.Request) {
 	queryValues := r.URL.Query()["q"]
 	if len(queryValues) != 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exactly one search query is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Exactly one search query is required")
 		return
 	}
 	query := strings.TrimSpace(queryValues[0])
 	if len(query) < principal.MinQueryLength || len(query) > principal.MaxQueryLength {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Search query must contain 3 to 128 characters")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Search query must contain 3 to 128 characters")
 		return
 	}
 	if h == nil || h.queries == nil || h.directory == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Principal discovery is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Principal discovery is not configured")
 		return
 	}
 
@@ -90,12 +90,12 @@ func (h *PrincipalHandler) Search(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	locals, err := h.queries.SearchPrincipalUsers(ctx, sqlc.SearchPrincipalUsersParams{Search: query, ResultLimit: principal.MaxResults})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to search the local identity directory")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to search the local identity directory")
 		return
 	}
 	connectorRows, err := h.queries.ListEnabledDexConnectors(ctx)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load identity connectors")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load identity connectors")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *PrincipalHandler) Search(w http.ResponseWriter, r *http.Request) {
 		items = append(items, principalSearchItem{Kind: "external", ConnectorID: found.ConnectorID.String(), ConnectorName: found.ConnectorName, ConnectorType: found.ConnectorType, Subject: found.Subject, Email: found.Email, Username: found.Username, DisplayName: found.DisplayName})
 	}
 	if err := recordMandatoryAudit(r, h.queries, "principal.search", "identity_directory", "", "", map[string]any{"query_length": len(query), "result_count": len(items), "connector_count": len(statuses)}); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable; principal results were not returned")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable; principal results were not returned")
 		return
 	}
 	RespondJSON(w, http.StatusOK, principalSearchResponse{Principals: items, Connectors: statuses})
@@ -150,43 +150,43 @@ type materializePrincipalRequest struct {
 
 func (h *PrincipalHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil || h.directory == nil || h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Principal materialization is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Principal materialization is not configured")
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var request materializePrincipalRequest
 	if err := decodeStrictJSONBody(r, &request); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid principal materialization request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid principal materialization request")
 		return
 	}
 	connectorID, err := uuid.Parse(request.ConnectorID)
 	if err != nil || strings.TrimSpace(request.Subject) == "" || len(request.Subject) > 512 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Connector ID and principal subject are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Connector ID and principal subject are required")
 		return
 	}
 	row, err := h.queries.GetDexConnectorByID(r.Context(), connectorID)
 	if errors.Is(err, pgx.ErrNoRows) || !row.Enabled {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Identity connector not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Identity connector not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load identity connector")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load identity connector")
 		return
 	}
 	connector, err := h.directoryConnector(row)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Identity connector configuration is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Identity connector configuration is unavailable")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), principalSearchTimeout)
 	defer cancel()
 	resolved, err := h.directory.Resolve(ctx, connector, request.Subject)
 	if errors.Is(err, principal.ErrUnsupported) {
-		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.ValidationError, "This identity connector does not support principal discovery")
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.ValidationError, "This identity connector does not support principal discovery")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.LoadError, "External principal could not be verified")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.LoadError, "External principal could not be verified")
 		return
 	}
 	firstName, lastName := splitPrincipalName(resolved.DisplayName)
@@ -202,7 +202,7 @@ func (h *PrincipalHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 		return recordAuditOutbox(r, q, "principal.materialized", "external_principal", materialized.ID.String(), materialized.DisplayName, http.StatusCreated, map[string]any{"connector_id": connectorID.String(), "connector_type": connector.Type, "user_id": materialized.UserID.String()})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to materialize external principal")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to materialize external principal")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, map[string]any{"id": materialized.ID, "user_id": materialized.UserID, "kind": "pending", "connector_id": materialized.ConnectorID, "email": materialized.Email, "username": materialized.Username, "display_name": materialized.DisplayName})

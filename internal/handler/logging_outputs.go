@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -46,13 +46,13 @@ func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging outputs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list logging outputs")
 		return
 	}
 
 	total, err := h.queries.CountOutputsByCluster(r.Context(), pgtype.UUID{Bytes: clusterID, Valid: true})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count logging outputs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count logging outputs")
 		return
 	}
 
@@ -73,12 +73,12 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 		var err error
 		clusterID, err = uuid.Parse(req.ClusterID)
 		if err != nil || clusterID == uuid.Nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 			return
 		}
 	}
 	if clusterID == uuid.Nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
@@ -115,7 +115,7 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 			}}
 		})
 	if err != nil {
-		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging output")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create logging output")
 		return
 	}
 	h.afterLoggingOperationCommit(result.op)
@@ -129,18 +129,18 @@ func (h *LoggingHandler) CreateOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid output ID")
 		return
 	}
 	var req CreateLoggingOutputRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Authorize against the output's owning cluster before mutating it.
 	existing, err := h.queries.GetLoggingOutputByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging output not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, uuid.UUID(existing.ClusterID.Bytes), rbac.ResourceLogging, rbac.VerbUpdate) {
@@ -175,7 +175,7 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 			}}
 		})
 	if err != nil {
-		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging output")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update logging output")
 		return
 	}
 	h.afterLoggingOperationCommit(result.op)
@@ -193,12 +193,12 @@ func (h *LoggingHandler) UpdateOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid output ID")
 		return
 	}
 	output, err := h.queries.GetLoggingOutputByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging output not found")
 		return
 	}
 	// A "test" pushes the output's config to the managed cluster through the
@@ -221,7 +221,7 @@ func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 			}}
 		})
 	if err != nil {
-		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.EnqueueError, "Failed to enqueue apply test")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apiutil.EnqueueError, "Failed to enqueue apply test")
 		return
 	}
 	h.afterLoggingOperationCommit(result.op)
@@ -236,7 +236,7 @@ func (h *LoggingHandler) TestOutput(w http.ResponseWriter, r *http.Request) {
 func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid output ID")
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if lookupErr != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging output not found")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -279,10 +279,10 @@ func (h *LoggingHandler) DeleteOutput(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if isFKRestrictViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Logging output is still selected by a pipeline; edit or delete the pipeline first")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Logging output is still selected by a pipeline; edit or delete the pipeline first")
 			return
 		}
-		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete logging output")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete logging output")
 		return
 	}
 	h.afterLoggingOperationCommit(result.op)

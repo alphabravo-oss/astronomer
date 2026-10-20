@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 func TestPodDeleteProductionWiresExactTransactionRunner(t *testing.T) {
@@ -36,8 +38,7 @@ func TestPodDeleteRouteRetainsWriteScopeAndPodDeleteAuthorization(t *testing.T) 
 	if !strings.Contains(text, "r.Use(mutationWriteScope)") || !strings.Contains(text, "r.Use(idem)") {
 		t.Fatal("workload mutation group must retain write-scope and idempotency middleware")
 	}
-	want := `r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.ClusterResources.Workloads.DeletePod)`
-	if !strings.Contains(text, want) {
-		t.Fatal("pod delete route must retain pods:delete authorization")
+	if got := routePermissions["DELETE /api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/"]; got.Resource != rbac.ResourcePods || got.Verb != rbac.VerbDelete || got.Scope != ScopeRoute {
+		t.Fatalf("pod delete route must retain pods:delete authorization, table has %s", got)
 	}
 }

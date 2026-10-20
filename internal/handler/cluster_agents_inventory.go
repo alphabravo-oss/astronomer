@@ -12,8 +12,8 @@ import (
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -30,18 +30,18 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	if len(r.URL.Query()["search"]) > 1 || utf8.RuneCountInString(search) > 200 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "search must be one value of at most 200 characters")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "search must be one value of at most 200 characters")
 		return
 	}
 	searchQueries, searchCapable := h.queries.(clusterAgentSearchQuerier)
 	if search != "" && !searchCapable {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster-agent search is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cluster-agent search is not available")
 		return
 	}
 	limit := queryLimitMax32(r, 100, 500)
@@ -55,7 +55,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	cursorValues, cursorProvided := r.URL.Query()["cursor"]
 	_, offsetProvided := r.URL.Query()["offset"]
 	if cursorProvided && offsetProvided {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor and offset cannot be combined")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cursor and offset cannot be combined")
 		return
 	}
 	cursorMode := !offsetProvided
@@ -67,19 +67,19 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if cursorProvided {
 		if len(cursorValues) != 1 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor must be one opaque value")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "cursor must be one opaque value")
 			return
 		}
 		cursor, err = paging.DecodeCursor(cursorValues[0], cursorBinding)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pagination cursor")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid pagination cursor")
 			return
 		}
 	}
 	cursorQueries, cursorCapable := h.queries.(clusterAgentCursorQuerier)
 	if cursorMode && !cursorCapable {
 		if cursorProvided {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cursor cluster-agent listing is not available")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Cursor cluster-agent listing is not available")
 			return
 		}
 		cursorMode = false
@@ -92,7 +92,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		total, err = h.queries.CountClusters(r.Context())
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count clusters")
 		return
 	}
 	var clusters []sqlc.Cluster
@@ -110,7 +110,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: limit, Offset: offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters")
 		return
 	}
 	nextCursor := ""
@@ -122,7 +122,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 			last := clusters[len(clusters)-1]
 			nextCursor, err = paging.EncodeCursor(paging.NewCursor(last.CreatedAt, last.ID, cursorBinding, seen+len(clusters)))
 			if err != nil {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode pagination cursor")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to encode pagination cursor")
 				return
 			}
 		}
@@ -139,7 +139,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		latest, lerr := h.queries.ListLatestConnectionsByClusters(r.Context(), clusterIDs)
 		if lerr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.AgentConnectionError, "Failed to list agent connections")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AgentConnectionError, "Failed to list agent connections")
 			return
 		}
 		for _, conn := range latest {
@@ -194,7 +194,7 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *ClusterAgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -203,14 +203,14 @@ func (h *ClusterAgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	connections, err := h.queries.ListConnectionsByCluster(r.Context(), sqlc.ListConnectionsByClusterParams{
 		ClusterID: clusterID, Limit: 1, Offset: 0,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AgentConnectionError, "Failed to list agent connections")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AgentConnectionError, "Failed to list agent connections")
 		return
 	}
 	now := h.now().UTC()
@@ -225,7 +225,7 @@ func (h *ClusterAgentHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *ClusterAgentHandler) Diagnostics(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -242,7 +242,7 @@ func (h *ClusterAgentHandler) Diagnostics(w http.ResponseWriter, r *http.Request
 
 func (h *ClusterAgentHandler) DiagnosticsBundle(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -275,7 +275,7 @@ func (h *ClusterAgentHandler) DiagnosticsBundle(w http.ResponseWriter, r *http.R
 
 func (h *ClusterAgentHandler) SelfTest(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)

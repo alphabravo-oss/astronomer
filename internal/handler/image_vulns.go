@@ -15,9 +15,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -102,7 +102,7 @@ func (h *ImageVulnHandler) ClusterSummary(w http.ResponseWriter, r *http.Request
 	}
 	agg, err := h.queries.AggregateClusterVulnerabilities(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AggregateError, "Failed to aggregate cluster vulnerabilities")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AggregateError, "Failed to aggregate cluster vulnerabilities")
 		return
 	}
 	RespondJSON(w, http.StatusOK, renderClusterAggregate(agg))
@@ -142,13 +142,13 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 		})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list vulnerable images")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list vulnerable images")
 		return
 	}
 
 	total, err := h.queries.CountVulnerableImagesForCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count vulnerable images")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count vulnerable images")
 		return
 	}
 
@@ -172,19 +172,19 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 	}
 	reportID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid report ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid report ID")
 		return
 	}
 	report, err := h.queries.GetImageVulnerabilityReportByID(r.Context(), reportID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vulnerability report not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Vulnerability report not found")
 		return
 	}
 	// Cross-tenant guard. The URL carries cluster_id; the row's
 	// cluster_id MUST match to avoid leaking a report from cluster A
 	// to a session scoped on cluster B.
 	if report.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vulnerability report not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Vulnerability report not found")
 		return
 	}
 	severity := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("severity")))
@@ -201,14 +201,14 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 		ReportID: reportID, SeverityFilter: severity, PageLimit: limit, PageOffset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListCVEError, "Failed to list vulnerabilities")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListCVEError, "Failed to list vulnerabilities")
 		return
 	}
 	total, err := h.queries.CountVulnerabilitiesForReport(r.Context(), sqlc.CountVulnerabilitiesForReportParams{
 		ReportID: reportID, SeverityFilter: severity,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountCVEError, "Failed to count vulnerabilities")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountCVEError, "Failed to count vulnerabilities")
 		return
 	}
 
@@ -230,12 +230,12 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if values := r.Header.Values("Idempotency-Key"); len(values) > 1 || (len(values) == 1 && !validOperationIdempotencyKey(values[0])) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest,
 			"Idempotency-Key must occur at most once and contain 1 through 128 printable UTF-8 bytes")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable,
 			"Durable vulnerability rescan storage is unavailable")
 		return
 	}
@@ -289,16 +289,16 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 			http.StatusAccepted, map[string]any{"cluster_id": clusterID.String(), "operation_id": operation.ID.String()})
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	if errors.Is(err, errWorkloadOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"Idempotency-Key already identifies a different vulnerability rescan")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError,
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError,
 			"Failed to create vulnerability rescan operation")
 		return
 	}
@@ -319,7 +319,7 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 func (h *ImageVulnHandler) FleetSummary(w http.ResponseWriter, r *http.Request) {
 	agg, err := h.queries.AggregateFleetVulnerabilities(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AggregateError, "Failed to aggregate fleet vulnerabilities")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AggregateError, "Failed to aggregate fleet vulnerabilities")
 		return
 	}
 	RespondJSON(w, http.StatusOK, renderFleetAggregate(agg))
@@ -334,7 +334,7 @@ func (h *ImageVulnHandler) FleetTopClusters(w http.ResponseWriter, r *http.Reque
 	}
 	rows, err := h.queries.TopClustersByVulnerability(r.Context(), limit)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list top clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list top clusters")
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))

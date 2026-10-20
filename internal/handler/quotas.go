@@ -43,9 +43,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -189,7 +189,7 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list quota plans")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list quota plans")
 		return
 	}
 	out := make([]quotaPlanResponse, 0, len(rows))
@@ -198,7 +198,7 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	}
 	total, err := h.queries.CountQuotaPlans(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count quota plans")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to count quota plans")
 		return
 	}
 	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
@@ -211,16 +211,16 @@ func (h *QuotaHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Plan name required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Plan name required")
 		return
 	}
 	p, err := h.queries.GetQuotaPlan(r.Context(), name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Quota plan not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to fetch quota plan")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to fetch quota plan")
 		return
 	}
 	RespondJSON(w, http.StatusOK, planToResponse(p))
@@ -233,18 +233,18 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	var req quotaPlanRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Plan name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Plan name is required")
 		return
 	}
 	if req.Enforcement == "" {
 		req.Enforcement = "hard"
 	}
 	if !validEnforcement(req.Enforcement) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
 	p, err := executeMutation(r, h.runTx,
@@ -254,7 +254,7 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		quotaPlanAuditEvent("quota.plan_create", http.StatusCreated),
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create quota plan")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create quota plan")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/quota-plans/"+p.Name+"/")
@@ -268,12 +268,12 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Plan name required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Plan name required")
 		return
 	}
 	var req quotaPlanRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Body's `name` is ignored — URL is authoritative.
@@ -282,7 +282,7 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		req.Enforcement = "hard"
 	}
 	if !validEnforcement(req.Enforcement) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
 	p, err := executeMutation(r, h.runTx,
@@ -298,10 +298,10 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Quota plan not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update quota plan")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update quota plan")
 		return
 	}
 	RespondJSON(w, http.StatusOK, planToResponse(p))
@@ -315,7 +315,7 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Plan name required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Plan name required")
 		return
 	}
 	// Block deleting any seeded singleton plan — 'free' is the default
@@ -325,7 +325,7 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 	// to 0 (unlimited) rather than dropping the row entirely.
 	switch name {
 	case "free", "global":
-		RespondRequestError(w, r, http.StatusConflict, apierror.PlanIsReserved, "The 'free' and 'global' quota plans are reserved and cannot be deleted")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.PlanIsReserved, "The 'free' and 'global' quota plans are reserved and cannot be deleted")
 		return
 	}
 	_, err := executeMutation(r, h.runTx,
@@ -350,20 +350,20 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 		quotaPlanAuditEvent("quota.plan_delete", http.StatusNoContent),
 	)
 	if errors.Is(err, errQuotaPlanInUse) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.PlanInUse,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.PlanInUse,
 			"Quota plan is still referenced by at least one project or user; reassign them first")
 		return
 	}
 	if errors.Is(err, errQuotaReferenceCount) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count plan references")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count plan references")
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Quota plan not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Quota plan not found")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete quota plan")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete quota plan")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -445,20 +445,20 @@ func (h *QuotaHandler) FleetUsage(w http.ResponseWriter, r *http.Request) {
 
 	plan, err := h.queries.GetQuotaPlan(r.Context(), "global")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load global quota plan")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to load global quota plan")
 		return
 	}
 	resp.Global.MaxTotalClusters = plan.MaxTotalClusters
 	resp.Global.MaxTotalUsers = plan.MaxTotalUsers
 	clusters, err := h.queries.CountTotalClusters(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count clusters")
 		return
 	}
 	resp.Global.TotalClusters = clusters
 	users, err := h.queries.CountTotalActiveUsers(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count active users")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count active users")
 		return
 	}
 	resp.Global.TotalUsers = users
@@ -470,13 +470,13 @@ func (h *QuotaHandler) FleetUsage(w http.ResponseWriter, r *http.Request) {
 	// at enterprise scale.
 	projRows, err := h.listAllProjectQuotaSnapshots(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project quota usage")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list project quota usage")
 		return
 	}
 	resp.ProjectOffenders = collectProjectOffenders(projRows)
 	userRows, err := h.listAllUserQuotaSnapshots(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list user quota usage")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list user quota usage")
 		return
 	}
 	resp.UserOffenders = collectUserOffenders(userRows)
@@ -579,37 +579,37 @@ func collectUserOffenders(rows []sqlc.UserQuotaSnapshotRow) []userOffenderRow {
 // don't re-check here.
 func (h *QuotaHandler) ProjectQuota(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Quota store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Quota store not configured")
 		return
 	}
 	idStr := chi.URLParam(r, "id")
 	projectID, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	plan, err := h.queries.GetEffectiveQuotaForProject(r.Context(), projectID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load project quota")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to load project quota")
 		return
 	}
 	clusters, err := h.queries.CountClustersInProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count project clusters")
 		return
 	}
 	namespaces, err := h.queries.CountNamespacesInProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project namespaces")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count project namespaces")
 		return
 	}
 	members, err := h.queries.CountMembersInProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project members")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count project members")
 		return
 	}
 
@@ -639,35 +639,35 @@ func (h *QuotaHandler) ProjectQuota(w http.ResponseWriter, r *http.Request) {
 func (h *QuotaHandler) MyQuota(w http.ResponseWriter, r *http.Request) {
 	caller, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || caller == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Quota store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Quota store not configured")
 		return
 	}
 	userID, err := uuid.Parse(caller.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid caller ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid caller ID")
 		return
 	}
 	plan, err := h.queries.GetEffectiveQuotaForUser(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to load user quota")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to load user quota")
 		return
 	}
 	projects, err := h.queries.CountProjectsForUser(r.Context(), userID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count user projects")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count user projects")
 		return
 	}
 	tokens, err := h.queries.CountActiveTokensForUser(r.Context(), userID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count active API tokens")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count active API tokens")
 		return
 	}
 	limits := map[string]int32{
@@ -724,18 +724,12 @@ func decodeOverrides(raw json.RawMessage) map[string]any {
 // quota.QuotaExceededError type. Hooked from the gated handlers
 // (clusters.Create, auth.CreateToken, ...) so the wire response is
 // consistent across every quota site.
-func WriteQuotaExceeded(w http.ResponseWriter, e *quota.QuotaExceededError) {
-	body := map[string]any{
-		"error": map[string]any{
-			"code":    "quota_exceeded",
-			"message": "Quota exceeded for this tenant.",
+func WriteQuotaExceeded(w http.ResponseWriter, r *http.Request, e *quota.QuotaExceededError) {
+	apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.QuotaExceeded, "Quota exceeded for this tenant.",
+		apiutil.WithDetails(map[string]any{
 			"limit":   e.Limit,
 			"current": e.Current,
 			"maximum": e.Maximum,
 			"subject": e.Subject,
-		},
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusTooManyRequests)
-	_ = json.NewEncoder(w).Encode(body)
+		}))
 }

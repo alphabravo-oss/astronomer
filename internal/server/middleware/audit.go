@@ -10,6 +10,8 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -184,10 +186,8 @@ func AuditLogWithWriter(log zerolog.Logger, writer any) func(http.Handler) http.
 			resourceType, resourceID := parsePathResource(r.URL.Path)
 			if err := writeMandatoryAuditIntent(r, writer, resourceType, resourceID); err != nil {
 				logging.Ctx(r.Context(), log).Error().Str("method", r.Method).Str("resource_type", resourceType).Str("request_id", reqctx.RequestID(r.Context())).Err(err).Msg("mandatory audit intent persistence failed")
-				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "1")
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = w.Write([]byte(`{"error":{"code":"audit_unavailable","message":"Mandatory audit storage is unavailable"}}`))
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 				return
 			}
 

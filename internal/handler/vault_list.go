@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -22,7 +22,7 @@ func (h *VaultHandler) List(w http.ResponseWriter, r *http.Request) {
 		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list vault connections")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list vault connections")
 		return
 	}
 	out := make([]VaultConnectionResponse, 0, len(rows))
@@ -31,7 +31,7 @@ func (h *VaultHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	total, err := h.queries.CountVaultConnections(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count vault connections")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to count vault connections")
 		return
 	}
 	RespondJSON(w, http.StatusOK, struct {

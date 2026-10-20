@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type clusterOwnershipQuerier interface {
@@ -93,7 +93,7 @@ func (h *ClusterHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Reques
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	type takeoverResult struct {
@@ -124,11 +124,11 @@ func (h *ClusterHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		case errors.Is(err, errClusterOwnershipTransferUnsupported):
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Only CRD-owned clusters can be transferred through this endpoint")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Only CRD-owned clusters can be transferred through this endpoint")
 		default:
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to transfer cluster ownership")
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to transfer cluster ownership")
 		}
 		return
 	}

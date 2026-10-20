@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *SupportBundleHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -27,18 +27,18 @@ func (h *SupportBundleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.runTx == nil || h.operations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Support bundle operation store is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Support bundle operation store is not configured")
 		return
 	}
 	caller := currentUserUUID(r)
 	if !caller.Valid || caller.Bytes == uuid.Nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Invalid caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Invalid caller")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "support_bundle"))
 	idem, ok := operationIdempotencyFromContext(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "A valid Idempotency-Key header is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "A valid Idempotency-Key header is required")
 		return
 	}
 	digestBytes := sha256.Sum256([]byte("support-bundle:v1"))
@@ -62,10 +62,10 @@ func (h *SupportBundleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different support bundle request")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different support bundle request")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist support bundle operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to persist support bundle operation")
 		return
 	}
 	RespondAcceptedOperation(w, supportBundleStatusURL(row.ID), supportBundleResponseFromCreate(row))
@@ -77,20 +77,20 @@ func (h *SupportBundleHandler) GetOperation(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid support bundle operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid support bundle operation ID")
 		return
 	}
 	if h.operations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Support bundle operation store is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Support bundle operation store is not configured")
 		return
 	}
 	row, err := h.operations.GetSupportBundleOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Support bundle operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Support bundle operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load support bundle operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load support bundle operation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, supportBundleResponseFromRow(row))
@@ -102,24 +102,24 @@ func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) 
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid support bundle operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid support bundle operation ID")
 		return
 	}
 	if h.operations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Support bundle operation store is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Support bundle operation store is not configured")
 		return
 	}
 	artifact, err := h.operations.GetSupportBundleArtifact(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Support bundle is not ready for download")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Support bundle is not ready for download")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load support bundle artifact")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load support bundle artifact")
 		return
 	}
 	if !artifact.ExpiresAt.After(time.Now().UTC()) {
-		RespondRequestError(w, r, http.StatusGone, apierror.NotFound, "Support bundle artifact has expired")
+		apiutil.WriteError(w, r, http.StatusGone, apiutil.NotFound, "Support bundle artifact has expired")
 		return
 	}
 	recordAudit(r, h.queries, "admin.support_bundle.downloaded", "support_bundle_operation", id.String(), artifact.Filename, map[string]any{"sha256": artifact.ArtifactSha256.String, "size": artifact.ArtifactSize})

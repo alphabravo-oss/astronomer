@@ -10,10 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *CloudCredentialHandler) requireTestAudit(r *http.Request, row sqlc.CloudCredential, outcome string) error {
@@ -37,17 +37,17 @@ func (h *CloudCredentialHandler) loadCredentialForRequest(w http.ResponseWriter,
 	}
 	credentialID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid credential ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid credential ID")
 		return sqlc.CloudCredential{}, false
 	}
 	row, err := h.queries.GetCloudCredentialByID(r.Context(), credentialID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Credential not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Credential not found")
 		return sqlc.CloudCredential{}, false
 	}
 	if row.ProjectID != projectID {
 		// Don't leak that the credential exists under a different project.
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Credential not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Credential not found")
 		return sqlc.CloudCredential{}, false
 	}
 	return row, true

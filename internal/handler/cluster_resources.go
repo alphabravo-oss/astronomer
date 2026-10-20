@@ -40,9 +40,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -186,7 +186,7 @@ func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *h
 		ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	out := make([]ClusterMirroredIngressClassDTO, 0, len(rows))
@@ -205,7 +205,7 @@ func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *h
 	}
 	total, err := h.queries.CountMirroredIngressClasses(r.Context(), cid)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, err.Error())
 		return
 	}
 	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
@@ -226,7 +226,7 @@ func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *h
 		ClusterID: cid, QueryLimit: limit, QueryOffset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	out := make([]ClusterMirroredGatewayClassDTO, 0, len(rows))
@@ -246,7 +246,7 @@ func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *h
 	}
 	total, err := h.queries.CountMirroredGatewayClasses(r.Context(), cid)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, err.Error())
 		return
 	}
 	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
@@ -286,7 +286,7 @@ func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	out := make([]ClusterMirroredNetworkPolicyDTO, 0, len(rows))
@@ -343,7 +343,7 @@ func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *h
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	out := make([]ClusterMirroredResourceQuotaDTO, 0, len(rows))
@@ -398,7 +398,7 @@ func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	out := make([]ClusterMirroredLimitRangeDTO, 0, len(rows))
@@ -428,7 +428,7 @@ func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http
 // wiring hasn't completed yet (test fakes, pre-migration boots).
 func (h *ClusterResourcesHandler) resolveCluster(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotWired, "cluster resources handler not wired")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotWired, "cluster resources handler not wired")
 		return uuid.Nil, false
 	}
 	cid, ok := parseClusterID(w, r)
@@ -437,10 +437,10 @@ func (h *ClusterResourcesHandler) resolveCluster(w http.ResponseWriter, r *http.
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), cid); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "cluster does not exist")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "cluster does not exist")
 			return uuid.Nil, false
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ClusterLookupFailed, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ClusterLookupFailed, err.Error())
 		return uuid.Nil, false
 	}
 	return cid, true

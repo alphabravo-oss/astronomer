@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -34,7 +34,7 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 	}
 	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceCatalog, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	var ops []sqlc.ToolOperation
@@ -49,7 +49,7 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if !hasPager {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped tool-operation pagination is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Scoped tool-operation pagination is unavailable")
 			return
 		}
 		ops, err = pager.ListToolOperationsForScopes(r.Context(), sqlc.ListToolOperationsForScopesParams{
@@ -63,7 +63,7 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list tool operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list tool operations")
 		return
 	}
 	items := make([]map[string]any, 0, len(ops))
@@ -80,17 +80,17 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 func (h *ToolHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetToolOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Tool operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Tool operation not found")
 		return
 	}
 	clusterID, err := toolOperationClusterID(op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve tool operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve tool operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -106,12 +106,12 @@ func (h *ToolHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid operation ID")
 		return
 	}
 	op, err := h.queries.GetToolOperation(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Tool operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Tool operation not found")
 		return
 	}
 	if !requireRetryableOperation(w, r, op.Status) {
@@ -119,7 +119,7 @@ func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	clusterID, err := toolOperationClusterID(op)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ResolveError, "Failed to resolve tool operation target")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ResolveError, "Failed to resolve tool operation target")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbUpdate) {
@@ -136,7 +136,7 @@ func (h *ToolHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 			}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RetryError, "Failed to retry tool operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.RetryError, "Failed to retry tool operation")
 		return
 	}
 	h.afterToolOperationCommit(requeued)

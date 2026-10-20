@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -66,7 +67,7 @@ func TestAdminQueueCanceledReadDoesNotInspectOrPublishPartialPayload(t *testing.
 			r := httptest.NewRequest(http.MethodGet, test.path, nil).WithContext(reqctx.WithUser(ctx, &reqctx.User{ID: actor.String(), AuthMethod: "jwt"}))
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, r)
-			if w.Code != statusClientClosedRequest || w.Body.Len() != 0 || i.infoCalls != test.infos || len(i.pages) != test.pages || i.runs != 0 || i.deletes != 0 {
+			if w.Code != apiutil.StatusClientClosedRequest || w.Body.Len() != 0 || i.infoCalls != test.infos || len(i.pages) != test.pages || i.runs != 0 || i.deletes != 0 {
 				t.Fatalf("canceled inspection returned partial payload or additional effects: status=%d bytes=%d infos=%d pages=%d", w.Code, w.Body.Len(), i.infoCalls, len(i.pages))
 			}
 		})

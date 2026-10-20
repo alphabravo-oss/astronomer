@@ -3,7 +3,7 @@ package handler
 import (
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 func fatSingleBinaryAttachInput(clusters int) sizerEvalInput {
@@ -33,8 +33,8 @@ func TestEvaluateLokiAttachCapacity(t *testing.T) {
 		if ok {
 			t.Fatal("want ingest_cap_exceeded for 6th cluster on singleBinary")
 		}
-		if code != apierror.IngestCapExceeded {
-			t.Fatalf("code = %s, want %s", code, apierror.IngestCapExceeded)
+		if code != apiutil.IngestCapExceeded {
+			t.Fatalf("code = %s, want %s", code, apiutil.IngestCapExceeded)
 		}
 	})
 
@@ -53,8 +53,8 @@ func TestEvaluateLokiAttachCapacity(t *testing.T) {
 		if ok {
 			t.Fatal("want ingest_cap_exceeded at 80% global budget")
 		}
-		if code != apierror.IngestCapExceeded {
-			t.Fatalf("code = %s, want %s", code, apierror.IngestCapExceeded)
+		if code != apiutil.IngestCapExceeded {
+			t.Fatalf("code = %s, want %s", code, apiutil.IngestCapExceeded)
 		}
 	})
 }

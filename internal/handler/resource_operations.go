@@ -17,9 +17,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -131,42 +131,42 @@ func resourceOperationResponse(row sqlc.ResourceOperation) ResourceOperationResp
 func (h *ResourceHandler) enqueueResourceOperation(w http.ResponseWriter, r *http.Request, intent resourceMutationIntent) {
 	clusterID, err := uuid.Parse(intent.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if key == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Idempotency-Key header is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Idempotency-Key header is required")
 		return
 	}
 	if len(key) > maxResourceIdempotencyKeyLength {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Idempotency-Key header is too long")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Idempotency-Key header is too long")
 		return
 	}
 	caller := currentUserUUID(r)
 	if !caller.Valid || caller.Bytes == uuid.Nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Invalid caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Invalid caller")
 		return
 	}
 	if h.resourceMutationRunTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable resource mutation storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Durable resource mutation storage is unavailable")
 		return
 	}
 	manifestEncrypted := ""
 	if intent.Action == "apply" {
 		if h.encryptor == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Resource manifest encryption is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Resource manifest encryption is unavailable")
 			return
 		}
 		manifestEncrypted, err = h.encryptor.Encrypt(string(intent.Manifest))
 		if err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Resource manifest encryption failed")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Resource manifest encryption failed")
 			return
 		}
 	}
 	requiredVerb := strings.ToLower(strings.TrimSpace(intent.AuditVerb))
 	if requiredVerb != string(rbac.VerbCreate) && requiredVerb != string(rbac.VerbUpdate) && requiredVerb != string(rbac.VerbDelete) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Resource mutation authorization intent is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Resource mutation authorization intent is invalid")
 		return
 	}
 	digestInput := strings.Join([]string{intent.Action, requiredVerb, clusterID.String(), intent.ResourceType, intent.Namespace, intent.Name, intent.APIPath, strings.ToLower(boolString(intent.Force))}, "\x00")
@@ -215,15 +215,15 @@ func (h *ResourceHandler) enqueueResourceOperation(w http.ResponseWriter, r *htt
 			})
 	})
 	if errors.Is(err, errResourceOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different resource mutation")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different resource mutation")
 		return
 	}
 	if errors.Is(err, errResourceOperationTargetBusy) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Another resource mutation is already active for this target")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Another resource mutation is already active for this target")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist resource mutation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to persist resource mutation")
 		return
 	}
 	location := "/api/v1/clusters/" + operation.ClusterID.String() + "/resources/operations/" + operation.ID.String() + "/"
@@ -248,21 +248,21 @@ func int64String(value int64) string {
 // creator may poll; superusers may inspect operations for support workflows.
 func (h *ResourceHandler) GetResourceOperation(w http.ResponseWriter, r *http.Request) {
 	if h.resourceOperations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Resource operation storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Resource operation storage is unavailable")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid resource operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid resource operation ID")
 		return
 	}
 	operation, err := h.resourceOperations.GetResourceOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Resource operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Resource operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load resource operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load resource operation")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -271,16 +271,16 @@ func (h *ResourceHandler) GetResourceOperation(w http.ResponseWriter, r *http.Re
 	}
 	if operation.ClusterID != clusterID {
 		// Do not reveal that an operation exists in another cluster.
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Resource operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Resource operation not found")
 		return
 	}
 	if _, ok := reqctx.AuthenticatedUser(r.Context()); !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	bindings, restricted, authErr := h.authz.bindingsForContext(r.Context())
 	if authErr != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	resource, resourceOK := knownNativeK8sResource(operation.ResourceType)
@@ -294,7 +294,7 @@ func (h *ResourceHandler) GetResourceOperation(w http.ResponseWriter, r *http.Re
 	if !allowed {
 		// Receipt IDs are opaque but still sensitive operational metadata. Hide
 		// existence from callers whose originating permission was revoked.
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Resource operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Resource operation not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, resourceOperationResponse(operation))

@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
@@ -31,7 +31,7 @@ func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Reque
 	}
 	clusterID := clusterUUID.String()
 	if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 		return
 	} else if ok {
 		RespondJSON(w, http.StatusOK, summary)
@@ -39,7 +39,7 @@ func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Reque
 	}
 	summary, err := h.clusterSummary(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)
@@ -56,7 +56,7 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 	kind := chi.URLParam(r, "kind")
 	if strings.EqualFold(kind, "pod") || strings.EqualFold(kind, "pods") {
 		if data, ok, err := h.realPodMetrics(r.Context(), clusterID, namespace, name, r.URL.Query().Get("range")); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 			return
 		} else if ok {
 			RespondJSON(w, http.StatusOK, data)
@@ -66,7 +66,7 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 		return
 	}
 	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, kind, namespace, name, r.URL.Query().Get("range")); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 		return
 	} else if ok {
 		RespondJSON(w, http.StatusOK, data)
@@ -74,7 +74,7 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 	}
 	summary, err := h.workloadSummary(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, h.metricsSeries(summary, r.URL.Query().Get("range"), namespace+"/"+name))
@@ -123,7 +123,7 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 	clusterID := clusterUUID.String()
 	if r.URL.Path == "/api/v1/clusters/"+clusterID+"/metrics/summary/" {
 		if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 			return
 		} else if ok {
 			RespondJSON(w, http.StatusOK, summary)
@@ -131,7 +131,7 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 		}
 	} else {
 		if data, ok, err := h.realClusterMetrics(r.Context(), clusterID, r.URL.Query().Get("range")); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 			return
 		} else if ok {
 			RespondJSON(w, http.StatusOK, data)
@@ -140,7 +140,7 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 	}
 	summary, err := h.clusterSummary(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MetricsError, err.Error())
 		return
 	}
 

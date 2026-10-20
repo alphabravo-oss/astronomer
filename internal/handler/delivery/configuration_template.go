@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -95,22 +96,22 @@ func configurationTemplateView(row sqlc.DeliveryConfigurationTemplate) configura
 func (h *ConfigurationTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	rows, err := h.queries.ListDeliveryConfigurationTemplates(r.Context(), sqlc.ListDeliveryConfigurationTemplatesParams{ProjectID: projectID, Limit: limit, Offset: offset})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	count, err := h.queries.CountDeliveryConfigurationTemplates(r.Context(), projectID)
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	items := make([]configurationTemplateResponse, 0, len(rows))
@@ -127,7 +128,7 @@ func (h *ConfigurationTemplateHandler) Get(w http.ResponseWriter, r *http.Reques
 	}
 	row, err := h.queries.GetDeliveryConfigurationTemplate(r.Context(), sqlc.GetDeliveryConfigurationTemplateParams{ProjectID: projectID, ID: id})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.Generation)
@@ -137,16 +138,16 @@ func (h *ConfigurationTemplateHandler) Get(w http.ResponseWriter, r *http.Reques
 func (h *ConfigurationTemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var input configurationTemplateWrite
 	if err := decodeRequest(w, r, &input); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, input.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	if err := validateConfigurationTemplate(&input); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	params := sqlc.CreateDeliveryConfigurationTemplateParams{
@@ -162,7 +163,7 @@ func (h *ConfigurationTemplateHandler) Create(w http.ResponseWriter, r *http.Req
 			return deliveryAuditEvent{action: "delivery.configuration_template.created", resourceType: "delivery_configuration_template", resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated, detail: map[string]any{"renderer": row.Renderer}}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.Generation)
@@ -176,20 +177,20 @@ func (h *ConfigurationTemplateHandler) Update(w http.ResponseWriter, r *http.Req
 	}
 	var input configurationTemplateWrite
 	if err := decodeRequest(w, r, &input); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if input.ProjectID != uuid.Nil && input.ProjectID != projectID {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", "project scopes do not match")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, "project scopes do not match")
 		return
 	}
 	if err := validateConfigurationTemplate(&input); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	generation, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, http.StatusPreconditionRequired, "precondition_required", "a numeric If-Match generation is required")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.PreconditionRequired, "a numeric If-Match generation is required")
 		return
 	}
 	params := sqlc.UpdateDeliveryConfigurationTemplateParams{
@@ -205,11 +206,11 @@ func (h *ConfigurationTemplateHandler) Update(w http.ResponseWriter, r *http.Req
 			return deliveryAuditEvent{action: "delivery.configuration_template.updated", resourceType: "delivery_configuration_template", resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK, detail: map[string]any{"generation": row.Generation}}
 		})
 	if errors.Is(err, pgx.ErrNoRows) {
-		respondError(w, http.StatusConflict, "stale_generation", "template changed; reload before saving")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.StaleGeneration, "template changed; reload before saving")
 		return
 	}
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	setEntityTag(w, row.Generation)
@@ -223,7 +224,7 @@ func (h *ConfigurationTemplateHandler) Delete(w http.ResponseWriter, r *http.Req
 	}
 	generation, err := requireIfMatch(r)
 	if err != nil {
-		respondError(w, http.StatusPreconditionRequired, "precondition_required", "a numeric If-Match generation is required")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.PreconditionRequired, "a numeric If-Match generation is required")
 		return
 	}
 	params := sqlc.DeleteDeliveryConfigurationTemplateParams{ProjectID: projectID, ID: id, Generation: generation}
@@ -235,11 +236,11 @@ func (h *ConfigurationTemplateHandler) Delete(w http.ResponseWriter, r *http.Req
 			return deliveryAuditEvent{action: "delivery.configuration_template.deleted", resourceType: "delivery_configuration_template", resourceID: deletedID.String(), status: http.StatusNoContent}
 		})
 	if errors.Is(err, pgx.ErrNoRows) {
-		respondError(w, http.StatusConflict, "stale_generation", "template changed; reload before deleting")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.StaleGeneration, "template changed; reload before deleting")
 		return
 	}
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -248,12 +249,12 @@ func (h *ConfigurationTemplateHandler) Delete(w http.ResponseWriter, r *http.Req
 func templateIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil || id == uuid.Nil {
-		respondError(w, http.StatusBadRequest, "invalid_id", "template id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "template id must be a UUID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, id, true

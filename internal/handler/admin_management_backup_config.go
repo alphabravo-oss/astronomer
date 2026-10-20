@@ -17,8 +17,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (req *ManagementBackupDestinationWrite) normalize() {
@@ -55,15 +55,15 @@ func derefInt32(v *int32, fallback int32) int32 {
 
 func (h *AdminDrillHandler) respondDestinationWriteError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, errManagementBackupReconcileActive) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Destination reconciliation is active; retry after the current generation settles")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Destination reconciliation is active; retry after the current generation settles")
 		return
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A destination with that name already exists")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A destination with that name already exists")
 		return
 	}
-	RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to persist management backup destination")
+	apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to persist management backup destination")
 }
 
 func (h *AdminDrillHandler) encryptDestinationCredentials(access, secret string) (string, error) {

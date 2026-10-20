@@ -28,9 +28,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/dexconfig"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *DexHandler) ListConnectorTypes(w http.ResponseWriter, r *http.Request) {
@@ -61,14 +61,14 @@ func nestedRequirementsToJSON(in []nestedRequirement) []map[string]any {
 func (h *DexHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.ListDexConnectors(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list Dex connectors")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list Dex connectors")
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		item, err := h.connectorResponse(row)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SettingsError, "Stored Dex connector is invalid and must be repaired")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SettingsError, "Stored Dex connector is invalid and must be repaired")
 			return
 		}
 		items = append(items, item)
@@ -80,17 +80,17 @@ func (h *DexHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connector ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connector ID")
 		return
 	}
 	row, err := h.queries.GetDexConnectorByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Connector not found")
 		return
 	}
 	response, err := h.connectorResponse(row)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SettingsError, "Stored Dex connector is invalid and must be repaired")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SettingsError, "Stored Dex connector is invalid and must be repaired")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)
@@ -100,38 +100,38 @@ func (h *DexHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	var req connectorRequest
 	if err := decodeDexRequest(r.Body, &req, false); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	canonicalType, err := dexconfig.CanonicalConnectorType(req.Type)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidType, err.Error())
 		return
 	}
 	req.Type = canonicalType
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Connector name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Connector name is required")
 		return
 	}
 	if _, ok := dexConnectorRegistry[req.Type]; !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, fmt.Sprintf("Unknown connector type %q", req.Type))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidType, fmt.Sprintf("Unknown connector type %q", req.Type))
 		return
 	}
 	if req.Config == nil {
 		req.Config = map[string]any{}
 	}
 	if err := validateConnectorConfig(req.Type, req.Config); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if err := h.encryptSecretFields(req.Type, req.Config); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret fields")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt secret fields")
 		return
 	}
 	cfgBytes, err := json.Marshal(req.Config)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode connector config")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MarshalError, "Failed to encode connector config")
 		return
 	}
 	enabled := true
@@ -157,17 +157,17 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A connector with that name already exists")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A connector with that name already exists")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create connector")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create connector")
 		return
 	}
 	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
 	w.Header().Set("Location", "/api/v1/auth/dex/connectors/"+row.ID.String()+"/")
 	response, err := h.connectorResponse(row)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Saved Dex connector failed validation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SettingsError, "Saved Dex connector failed validation")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, response)
@@ -181,28 +181,28 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connector ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connector ID")
 		return
 	}
 	existing, err := h.queries.GetDexConnectorByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Connector not found")
 		return
 	}
 	var req connectorRequest
 	if err := decodeDexRequest(r.Body, &req, false); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	connectorType := existing.Type
 	if req.Type != "" {
 		t, canonicalErr := dexconfig.CanonicalConnectorType(req.Type)
 		if canonicalErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, canonicalErr.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidType, canonicalErr.Error())
 			return
 		}
 		if t != existing.Type {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "connector type is immutable")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "connector type is immutable")
 			return
 		}
 	}
@@ -220,16 +220,16 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// the existing row (so the UI can PATCH without resending the secret).
 		merged := mergeSecretFromExisting(connectorType, existing.Config, req.Config)
 		if err := validateConnectorConfig(connectorType, merged); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 			return
 		}
 		if err := h.encryptSecretFields(connectorType, merged); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret fields")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt secret fields")
 			return
 		}
 		raw, err := json.Marshal(merged)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode connector config")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MarshalError, "Failed to encode connector config")
 			return
 		}
 		cfgBytes = raw
@@ -252,13 +252,13 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update connector")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update connector")
 		return
 	}
 	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
 	response, err := h.connectorResponse(row)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Saved Dex connector failed validation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SettingsError, "Saved Dex connector failed validation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)
@@ -268,12 +268,12 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connector ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid connector ID")
 		return
 	}
 	existing, err := h.queries.GetDexConnectorByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Connector not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Connector not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -285,7 +285,7 @@ func (h *DexHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete connector")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete connector")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"deleted": id.String()})

@@ -1,25 +1,11 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"github.com/google/uuid"
-
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
-
-// statusClientClosedRequest is nginx's conventional code for a request whose
-// caller disconnected before a response could be produced. It is deliberately
-// non-standard and never reaches a still-listening browser; recording it keeps
-// canceled route-transition reads out of the platform's 5xx error signal.
-const statusClientClosedRequest = 499
 
 // RespondJSON writes a JSON response wrapped in {"data": payload}.
 func RespondJSON(w http.ResponseWriter, status int, payload any) {
@@ -32,63 +18,6 @@ func RespondJSON(w http.ResponseWriter, status int, payload any) {
 // token payloads and identity discovery.
 func RespondJSONUnwrapped(w http.ResponseWriter, status int, payload any) {
 	writeJSON(w, status, payload)
-}
-
-// RespondError writes the standard JSON error envelope.
-func RespondError(w http.ResponseWriter, status int, code, message string) {
-	requestID := ""
-	if status >= http.StatusInternalServerError {
-		requestID = uuid.NewString()
-		slog.Error("request failed", "request_id", requestID, "status", status, "code", code, "internal_detail", message)
-		message = publicServerErrorMessage(status)
-	}
-	errObj := map[string]string{"code": code, "message": message}
-	if requestID != "" {
-		errObj["request_id"] = requestID
-	}
-	observability.RecordRequestError("", status)
-	resp := map[string]any{"error": errObj}
-	writeJSON(w, status, resp)
-}
-
-// RespondRequestError writes a JSON error response that includes the request
-// correlation identifier when RequestID middleware has populated one.
-func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
-	if r != nil && errors.Is(r.Context().Err(), context.Canceled) {
-		w.WriteHeader(statusClientClosedRequest)
-		return
-	}
-	requestID := ""
-	if r != nil {
-		requestID = reqctx.RequestID(r.Context())
-	}
-	if status >= http.StatusInternalServerError {
-		if requestID == "" {
-			requestID = uuid.NewString()
-		}
-		slog.Error("request failed", "request_id", requestID, "status", status, "code", code, "internal_detail", message)
-		message = publicServerErrorMessage(status)
-	}
-	errObj := map[string]string{
-		"code":    code,
-		"message": message,
-	}
-	if requestID != "" {
-		errObj["request_id"] = requestID
-	}
-	observability.RecordRequestError(observability.RoutePattern(r), status)
-	writeJSON(w, status, map[string]any{"error": errObj})
-}
-
-func publicServerErrorMessage(status int) string {
-	switch status {
-	case http.StatusBadGateway:
-		return "An upstream service could not complete the request"
-	case http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return "The service is temporarily unavailable"
-	default:
-		return "The request could not be completed"
-	}
 }
 
 // RespondAcceptedOperation writes a durable-operation receipt and the standard

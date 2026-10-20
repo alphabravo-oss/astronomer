@@ -4,7 +4,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // Code organization: this file holds a domain-specific slice of the
@@ -30,7 +29,6 @@ func registerDexRoutes(r chi.Router, deps RouterDependencies) {
 			// malicious IdP or DoS auth. requireScope only bites API tokens (JWT
 			// sessions fall through to the RBAC permission check, the real gate).
 			r.Use(requireScope(iauth.ScopeAdmin))
-			r.Use(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceSSO, rbac.VerbUpdate))
 			r.Get("/connector-types/", deps.AdminPlatform.DexConfig.ListConnectorTypes)
 			r.Get("/connectors/", deps.AdminPlatform.DexConfig.ListConnectors)
 			r.Post("/connectors/", deps.AdminPlatform.DexConfig.CreateConnector)

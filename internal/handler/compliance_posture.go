@@ -54,8 +54,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // PostureScores is the API response shape.
@@ -140,7 +140,7 @@ func (h *CompliancePostureHandler) Get(w http.ResponseWriter, r *http.Request) {
 	for offset := int32(0); ; offset += pageSize {
 		page, err := h.q.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: pageSize, Offset: offset})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list clusters")
 			return
 		}
 		clusters = append(clusters, page...)

@@ -35,7 +35,10 @@ type RouterDependencies struct {
 type CoreAuthDependencies struct {
 	// Logger receives the per-request summary and audit lines. The zero
 	// value discards them (focused route tests).
-	Logger             zerolog.Logger
+	Logger zerolog.Logger
+	// authz is the route authorizer NewRouter builds; authenticators compose it.
+	authz *routeAuthorizer
+
 	ToolUI             *toolui.Gateway
 	JWT                *auth.JWTManager
 	Encryptor          *auth.Encryptor

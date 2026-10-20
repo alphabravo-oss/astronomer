@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -19,7 +19,7 @@ import (
 // Open handles POST /clusters/{cluster_id}/shell/sessions/.
 func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil || h.Deps.Requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -28,15 +28,15 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, ok := shellCallerUUID(r)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	if _, err := h.Queries.GetClusterByID(r.Context(), clusterID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 	var scopeNamespaces []string
 	scope, ok := h.deriveScopeForCaller(r.Context(), userID, clusterID, verbs)
 	if !ok {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Kubectl shell scope could not be determined for the caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Kubectl shell scope could not be determined for the caller")
 		return
 	}
 	verbs = scope.Verbs
@@ -84,7 +84,7 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 		UserAgent:  r.UserAgent(),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ShellOpenFailed, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.ShellOpenFailed, err.Error())
 		return
 	}
 	auditDetail := map[string]any{
@@ -105,7 +105,7 @@ func (h *KubectlShellHandler) Open(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /clusters/{cluster_id}/shell/sessions/{id}/.
 func (h *KubectlShellHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell is not configured")
 		return
 	}
 	row, ok := h.loadSessionForCluster(w, r)
@@ -119,7 +119,7 @@ func (h *KubectlShellHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Close handles POST /clusters/{cluster_id}/shell/sessions/{id}/close/.
 func (h *KubectlShellHandler) Close(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell is not configured")
 		return
 	}
 	row, ok := h.loadSessionForCluster(w, r)
@@ -127,7 +127,7 @@ func (h *KubectlShellHandler) Close(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := kubectl.Close(r.Context(), h.Deps, row.ID); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ShellCloseFailed, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.ShellCloseFailed, err.Error())
 		return
 	}
 	recordAudit(r, h.Queries, "kubectl.session.closed", "cluster", row.ClusterID.String(), "", map[string]any{
@@ -149,29 +149,29 @@ func (h *KubectlShellHandler) loadSessionForCluster(w http.ResponseWriter, r *ht
 	idStr := chi.URLParam(r, "id")
 	sessionID, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid session id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid session id")
 		return sqlc.KubectlSession{}, false
 	}
 	row, err := h.Queries.GetKubectlSessionByID(r.Context(), sessionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Session not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Session not found")
 			return sqlc.KubectlSession{}, false
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return sqlc.KubectlSession{}, false
 	}
 	if row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Session not found in this cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Session not found in this cluster")
 		return sqlc.KubectlSession{}, false
 	}
 	callerID, ok := shellCallerUUID(r)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return sqlc.KubectlSession{}, false
 	}
 	if row.UserID != callerID && !h.callerIsSuperuser(r, callerID) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.SessionNotOwned, "Session belongs to another operator")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.SessionNotOwned, "Session belongs to another operator")
 		return sqlc.KubectlSession{}, false
 	}
 	return row, true

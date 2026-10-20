@@ -11,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type CharlieFindingAccess interface {
@@ -48,7 +48,7 @@ func (h *CharlieFindingHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	views, err := h.access.List(r.Context(), mustUserID(actor), strings.TrimSpace(r.URL.Query().Get("status")), int32(offset), int32(limit))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie finding access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie finding access is denied")
 		return
 	}
 	items := make([]charlieFindingResponse, 0, len(views))
@@ -65,7 +65,7 @@ func (h *CharlieFindingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := h.access.Get(r.Context(), mustUserID(actor), findingID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Charlie finding access is denied")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie finding access is denied")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"finding": safeCharlieFinding(view, true)})
@@ -98,7 +98,7 @@ func (h *CharlieFindingHandler) transitionAdvisory(w http.ResponseWriter, r *htt
 	}
 	view, err := h.access.TransitionAdvisory(r.Context(), mustUserID(actor), findingID, requestID, next)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie finding transition could not be completed")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Charlie finding transition could not be completed")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"finding": safeCharlieFinding(view, true)})
@@ -111,7 +111,7 @@ func (h *CharlieFindingHandler) transitionWorkflow(w http.ResponseWriter, r *htt
 	}
 	view, err := h.access.TransitionWorkflow(r.Context(), mustUserID(actor), findingID, requestID, next)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie finding transition could not be completed")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Charlie finding transition could not be completed")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"finding": safeCharlieFinding(view, true)})
@@ -128,7 +128,7 @@ func charlieFindingTransition(w http.ResponseWriter, r *http.Request) (*reqctx.U
 	}
 	requestID, err := uuid.Parse(request.RequestID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie finding transition")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie finding transition")
 		return nil, uuid.Nil, uuid.Nil, false
 	}
 	return actor, findingID, requestID, true
@@ -141,7 +141,7 @@ func charlieFindingActorAndID(w http.ResponseWriter, r *http.Request) (*reqctx.U
 	}
 	findingID, err := uuid.Parse(chi.URLParam(r, "finding_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie finding ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie finding ID")
 		return nil, uuid.Nil, false
 	}
 	return actor, findingID, true

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
@@ -160,7 +160,7 @@ func (h *MonitoringHandler) lokiS3FromStorageConfig(ctx context.Context, storage
 	}, prefix, nil
 }
 
-func (h *MonitoringHandler) sharedLokiPrecheck(ctx context.Context, req SharedLokiRequest, op string) (int, string, string, bool) {
+func (h *MonitoringHandler) sharedLokiPrecheck(ctx context.Context, req SharedLokiRequest, op string) (int, apiutil.Code, string, bool) {
 	if op != "install" && op != "replace" {
 		return 0, "", "", true
 	}
@@ -176,7 +176,7 @@ func (h *MonitoringHandler) sharedLokiPrecheck(ctx context.Context, req SharedLo
 	if requested != "" && selected != "" && requested != selected {
 		if requested != sizerModeSingleBinary || selected != sizerModeSimpleScalable {
 			msg := "requested mode " + requested + " is not offered (sizer selected " + selected + ")"
-			return http.StatusPreconditionFailed, apierror.SizerFailed, msg, false
+			return http.StatusPreconditionFailed, apiutil.SizerFailed, msg, false
 		}
 		selected = requested
 	}
@@ -188,7 +188,7 @@ func (h *MonitoringHandler) sharedLokiPrecheck(ctx context.Context, req SharedLo
 		if msg == "" {
 			msg = "loki sizer verdict failed"
 		}
-		return http.StatusPreconditionFailed, apierror.SizerFailed, msg, false
+		return http.StatusPreconditionFailed, apiutil.SizerFailed, msg, false
 	}
 	if selected == "" {
 		selected = sizerModeSingleBinary
@@ -207,7 +207,7 @@ func (h *MonitoringHandler) sharedLokiPrecheck(ctx context.Context, req SharedLo
 	return 0, "", "", true
 }
 
-func (h *MonitoringHandler) probeAndCacheLokiWAL(ctx context.Context, req SharedLokiRequest, mode string, skipDiskCheck bool) (int, string, string, bool) {
+func (h *MonitoringHandler) probeAndCacheLokiWAL(ctx context.Context, req SharedLokiRequest, mode string, skipDiskCheck bool) (int, apiutil.Code, string, bool) {
 	need := int64(sizerWALSingleBinaryBytes)
 	size := "10Gi"
 	if mode == sizerModeSimpleScalable {
@@ -218,7 +218,7 @@ func (h *MonitoringHandler) probeAndCacheLokiWAL(ctx context.Context, req Shared
 	if known {
 		_ = h.cacheSharedLokiWAL(ctx, true, bytes, time.Now().UTC())
 		if bytes < need {
-			return http.StatusPreconditionFailed, apierror.SizerFailed, "wal_too_small", false
+			return http.StatusPreconditionFailed, apiutil.SizerFailed, "wal_too_small", false
 		}
 		return 0, "", "", true
 	}
@@ -229,7 +229,7 @@ func (h *MonitoringHandler) probeAndCacheLokiWAL(ctx context.Context, req Shared
 	if reason == "" {
 		reason = "wal_capacity_unknown"
 	}
-	return http.StatusPreconditionFailed, apierror.SizerFailed, reason, false
+	return http.StatusPreconditionFailed, apiutil.SizerFailed, reason, false
 }
 
 func (h *MonitoringHandler) probeLokiWALCapacity(ctx context.Context, clusterID, namespace, storageClass, size string) (known bool, bytes int64, failReason string) {

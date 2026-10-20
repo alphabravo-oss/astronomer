@@ -42,11 +42,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -237,19 +237,19 @@ func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	rows, err := h.queries.ListCatalogsForProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalogs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list catalogs")
 		return
 	}
 	// Build a subscription-set so we can flip visibility = "subscribed_public"
 	// for public catalogs the project has explicitly opted into.
 	subs, err := h.queries.ListProjectSubscriptions(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list subscriptions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list subscriptions")
 		return
 	}
 	subSet := map[uuid.UUID]struct{}{}
@@ -279,25 +279,25 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	var req CreateProjectCatalogRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Catalog name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Catalog name is required")
 		return
 	}
 	if strings.TrimSpace(req.URL) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Catalog URL is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Catalog URL is required")
 		return
 	}
 	cleanURL, urlErr := catalog.ValidateRepositoryURL(req.URL)
 	if urlErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, urlErr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, urlErr.Error())
 		return
 	}
 	req.URL = cleanURL
@@ -322,12 +322,12 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		enabled = *req.Enabled
 	}
 	if h.sealer() == nil && catalog.HasAuthConfigSecret(req.AuthConfig) {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CryptoError, "Catalog credential encryption is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CryptoError, "Catalog credential encryption is unavailable")
 		return
 	}
 	sealed, publicCfg, err := catalog.SealAuthConfig(req.AuthConfig, h.sealer())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to secure catalog credentials")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to secure catalog credentials")
 		return
 	}
 	params := sqlc.CreateProjectOwnedCatalogParams{
@@ -347,7 +347,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "project catalog transaction runner is not configured")
 		return
 	}
 	var cat sqlc.HelmRepository
@@ -367,7 +367,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create and subscribe project catalog")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create and subscribe project catalog")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+cat.ID.String()+"/")
@@ -386,16 +386,16 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid catalog ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid catalog ID")
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	cat, err := h.queries.GetHelmRepositoryWithOwner(r.Context(), catalogID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Catalog not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Catalog not found")
 		return
 	}
 	// Foreign-private gate: a non-superuser can't subscribe to another
@@ -404,7 +404,7 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 	// the UNIQUE constraint catch that case via the idempotent path.
 	if cat.OwnerProjectID.Valid && uuid.UUID(cat.OwnerProjectID.Bytes) != projectID {
 		if !h.callerIsSuperuser(r) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot subscribe to another project's private catalog")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Cannot subscribe to another project's private catalog")
 			return
 		}
 	}
@@ -413,7 +413,7 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 		auditKey = "project.catalog.subscribed_foreign"
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "project catalog transaction runner is not configured")
 		return
 	}
 	var row sqlc.ProjectCatalogSubscription
@@ -440,7 +440,7 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 			RespondJSON(w, http.StatusOK, existing)
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SubscribeError, "Failed to subscribe to catalog")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.SubscribeError, "Failed to subscribe to catalog")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+catalogID.String()+"/")
@@ -465,18 +465,18 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid catalog ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid catalog ID")
 		return
 	}
 	cat, err := h.queries.GetHelmRepositoryWithOwner(r.Context(), catalogID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Catalog not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Catalog not found")
 		return
 	}
 	if cat.OwnerProjectID.Valid && uuid.UUID(cat.OwnerProjectID.Bytes) == projectID {
 		// Owned by caller → drop the row entirely.
 		if h.runTx == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "project catalog transaction runner is not configured")
 			return
 		}
 		err := h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
@@ -488,7 +488,7 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			})
 		})
 		if err != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete catalog")
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete catalog")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -498,7 +498,7 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// subscription have nothing to unsubscribe from; we return 204
 	// regardless so the UI can rely on idempotency.
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "project catalog transaction runner is not configured")
 		return
 	}
 	err = h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
@@ -512,7 +512,7 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to unsubscribe from catalog")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to unsubscribe from catalog")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -533,20 +533,20 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid catalog ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid catalog ID")
 		return
 	}
 	vis, err := h.queries.GetCatalogVisibilityForProject(r.Context(), projectID, catalogID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Catalog not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Catalog not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to resolve catalog visibility")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to resolve catalog visibility")
 		return
 	}
 	if vis == sqlc.CatalogVisibilityForeignPrivate && !h.callerIsSuperuser(r) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Catalog not accessible to this project")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Catalog not accessible to this project")
 		return
 	}
 	charts, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
@@ -555,7 +555,7 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 		Offset:       queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list charts")
 		return
 	}
 	// ListChartsByRepository is limit/offset paged but no COUNT query is

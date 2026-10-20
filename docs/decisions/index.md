@@ -18,5 +18,6 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0011](0011-zerolog-logging-with-slog-bridge.md) | zerolog via pkg/logging, with a log/slog bridge | accepted |
 | [0012](0012-otel-meter-provider-prometheus-exporter.md) | pkg/telemetry: one Init for tracer and meter providers, one /metrics | accepted |
 | [0015](0015-image-signature-admission.md) | Image signature admission with per-vendor authorities | accepted |
+| [0016](0016-api-error-contract-and-route-authorization.md) | One API error contract (apiutil) and one route authorizer | accepted |
 
 The threat model lives next to these decisions: [`../threat-model.md`](../threat-model.md).
