@@ -26,6 +26,13 @@ id = "generic-api-key"
   regexes = ['''^(?:SECRET_KEY|ASTRONOMER_ENCRYPTION_KEY|ASTRONOMER_INTERNAL_PSK|ASTRONOMER_BOOTSTRAP_PASSWORD)=''']
 
   [[rules.allowlists]]
+  description = "Operator envtest renders the chart CRDs with the same public throwaway Fernet key the deploy/ chart-render tests use; it never encrypts anything"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^internal/operator/wire/wire_integration_test\.go$''']
+  regexes = ['''^\s*"--set", "secrets\.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=",\s*$''']
+
+  [[rules.allowlists]]
   description = "Offering report fixture uses a literal idempotency marker, not an authentication credential"
   condition = "AND"
   regexTarget = "line"
