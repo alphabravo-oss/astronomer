@@ -16,6 +16,12 @@ env:
   REGISTRY: ghcr.io
   IMAGE_OWNER: alphabravo-oss
   COSIGN_VERSION: v3.1.3
+  # sigstore policy-controller (0.13.1, the admission controller in
+  # deploy/policy-controller/) only verifies the legacy `.sig`/`.att` tag
+  # layout; cosign 3 defaults to Sigstore bundles attached as OCI referrers,
+  # which it reports as "no signatures found". Keep the legacy layout until
+  # policy-controller verifies bundles (v2.1.0-rc.2 was rejected this way).
+  LEGACY_SIG_FLAGS: --new-bundle-format=false --use-signing-config=false
 
 jobs:
   preflight:
@@ -123,7 +129,7 @@ jobs:
       - name: Sign by digest
         env:
           COSIGN_YES: "true"
-        run: cosign sign "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}"
+        run: cosign sign $LEGACY_SIG_FLAGS "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}"
       - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
       - name: Attest SBOM
         env:
@@ -131,7 +137,7 @@ jobs:
           IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}
         run: |
           syft "$IMAGE_REF" -o spdx-json > "sbom-${{ matrix.component.name }}.spdx.json"
-          cosign attest --predicate "sbom-${{ matrix.component.name }}.spdx.json" --type spdxjson "$IMAGE_REF"
+          cosign attest $LEGACY_SIG_FLAGS --predicate "sbom-${{ matrix.component.name }}.spdx.json" --type spdxjson "$IMAGE_REF"
           printf '%s\n' "$IMAGE_REF" > "${{ matrix.component.name }}.digest"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -194,4 +200,4 @@ jobs:
           helm package deploy/chart --destination dist --version "${VERSION#v}" --app-version "${VERSION#v}"
           out="$(helm push "dist/astronomer-${VERSION#v}.tgz" "oci://${REGISTRY}/${IMAGE_OWNER}/charts" 2>&1)"; echo "$out"
           digest="$(echo "$out" | sed -n 's/^Digest: //p')"
-          cosign sign "${REGISTRY}/${IMAGE_OWNER}/charts/astronomer@${digest}"
+          cosign sign $LEGACY_SIG_FLAGS "${REGISTRY}/${IMAGE_OWNER}/charts/astronomer@${digest}"
