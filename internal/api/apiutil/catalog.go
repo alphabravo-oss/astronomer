@@ -273,7 +273,7 @@ var catalog = map[Code]spec{
 	RolloutStaleFence:                   {connect.CodeAborted, http.StatusPreconditionFailed},
 	MaintenanceWindowActive:             {connect.CodeFailedPrecondition, http.StatusConflict},
 	QuotaExceeded:                       {connect.CodeResourceExhausted, http.StatusTooManyRequests},
-	RolloutInvariant:                    {connect.CodeInternal, http.StatusConflict},
+	RolloutInvariant:                    {connect.CodeFailedPrecondition, http.StatusConflict},
 	RateLimited:                         {connect.CodeResourceExhausted, http.StatusTooManyRequests},
 	CharlieRateLimited:                  {connect.CodeResourceExhausted, http.StatusTooManyRequests},
 	RequestCanceled:                     {connect.CodeCanceled, http.StatusRequestTimeout},

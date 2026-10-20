@@ -44,7 +44,7 @@ func TestCatalogStatusesAgreeWithConnectCodes(t *testing.T) {
 	narrowed := map[Code]bool{
 		AlreadyExists: true, Conflict: true, ConcurrentModification: true, IdempotencyConflict: true,
 		StaleGeneration: true, StaleResourceVersion: true, PreviewCursorStale: true, RolloutPreviewStale: true,
-		RolloutTargetChanged: true, RolloutLeaseLost: true, RolloutStaleFence: true, RolloutInvariant: true,
+		RolloutTargetChanged: true, RolloutLeaseLost: true, RolloutStaleFence: true,
 		AgentOverloaded: true, RequestCanceled: true,
 	}
 	for code, row := range catalog {
