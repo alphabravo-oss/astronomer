@@ -1,3 +1,5 @@
+//go:build integration
+
 package worker
 
 import (
@@ -64,6 +66,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 const (
@@ -89,11 +93,8 @@ type workerIntegrationCase struct {
 // supported one-command entrypoint.
 func TestWorkerPostgresRedisIntegration(t *testing.T) {
 	t.Parallel()
-	databaseURL := os.Getenv(workerIntegrationDatabaseEnv)
-	redisURL := os.Getenv(workerIntegrationRedisEnv)
-	if databaseURL == "" || redisURL == "" {
-		t.Skip("real PostgreSQL and Redis integration endpoints are not configured")
-	}
+	databaseURL := testdb.DSN(t)
+	redisURL := testdb.Redis(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
