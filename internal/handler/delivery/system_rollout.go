@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
@@ -44,16 +45,16 @@ type systemRolloutActionRequest struct {
 func (h *SystemRolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request systemRolloutStartRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if h == nil || h.service == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery system rollout service is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery system rollout service is unavailable")
 		return
 	}
 	auditIntent := newAuditIntent(r, deliveryAuditEvent{
@@ -65,7 +66,7 @@ func (h *SystemRolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 		ActorID: authenticatedActorUUID(r), Audit: auditIntent,
 	})
 	if err != nil {
-		respondSystemRolloutError(w, err)
+		respondSystemRolloutError(w, r, err)
 		return
 	}
 	setEntityTag(w, result.FencingGeneration)
@@ -77,16 +78,16 @@ func (h *SystemRolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 func (h *SystemRolloutHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id", "rolloutID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.service == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery system rollout service is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery system rollout service is unavailable")
 		return
 	}
 	result, err := h.service.Get(r.Context(), id)
 	if err != nil {
-		respondSystemRolloutError(w, err)
+		respondSystemRolloutError(w, r, err)
 		return
 	}
 	setEntityTag(w, result.FencingGeneration)
@@ -96,16 +97,16 @@ func (h *SystemRolloutHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *SystemRolloutHandler) Assignments(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "id", "rolloutID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.service == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery system rollout service is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery system rollout service is unavailable")
 		return
 	}
 	items, err := h.service.Assignments(r.Context(), id)
 	if err != nil {
-		respondSystemRolloutError(w, err)
+		respondSystemRolloutError(w, r, err)
 		return
 	}
 	respondData(w, http.StatusOK, items)
@@ -138,25 +139,25 @@ func (h *SystemRolloutHandler) Rollback(w http.ResponseWriter, r *http.Request) 
 func (h *SystemRolloutHandler) action(w http.ResponseWriter, r *http.Request, action systemrollout.Action) {
 	expected, err := requireIfMatch(r)
 	if err != nil || expected < 1 {
-		respondError(w, http.StatusPreconditionRequired, "if_match_required", "If-Match must contain the current positive system rollout fencing generation")
+		apiutil.WriteError(w, r, http.StatusPreconditionRequired, apiutil.IfMatchRequired, "If-Match must contain the current positive system rollout fencing generation")
 		return
 	}
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request systemRolloutActionRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	id, err := pathUUID(r, "id", "rolloutID")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.service == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery system rollout service is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery system rollout service is unavailable")
 		return
 	}
 	reason := strings.TrimSpace(request.ReasonCode)
@@ -166,7 +167,7 @@ func (h *SystemRolloutHandler) action(w http.ResponseWriter, r *http.Request, ac
 	}, "")
 	result, err := h.service.Act(r.Context(), id, expected, action, authenticatedActorUUID(r), reason, auditIntent)
 	if err != nil {
-		respondSystemRolloutError(w, err)
+		respondSystemRolloutError(w, r, err)
 		return
 	}
 	setEntityTag(w, result.FencingGeneration)
@@ -186,20 +187,20 @@ func authenticatedActorUUID(r *http.Request) uuid.UUID {
 	return uuid.UUID(actor.Bytes)
 }
 
-func respondSystemRolloutError(w http.ResponseWriter, err error) {
+func respondSystemRolloutError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, audit.ErrOutboxUnavailable):
-		respondError(w, http.StatusServiceUnavailable, "audit_unavailable", "mandatory audit storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "mandatory audit storage is unavailable")
 	case errors.Is(err, systemrollout.ErrNotFound):
-		respondError(w, http.StatusNotFound, "not_found", "delivery system rollout or release not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "delivery system rollout or release not found")
 	case errors.Is(err, systemrollout.ErrConflict):
-		respondError(w, http.StatusConflict, "conflict", "delivery system rollout changed or another rollout is active")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "delivery system rollout changed or another rollout is active")
 	case errors.Is(err, systemrollout.ErrPrecondition):
-		respondError(w, http.StatusPreconditionFailed, "precondition_failed", safeSystemError(err))
+		apiutil.WriteError(w, r, http.StatusPreconditionFailed, apiutil.PreconditionFailed, safeSystemError(err))
 	case errors.Is(err, systemrollout.ErrInvalidTransition):
-		respondError(w, http.StatusConflict, "invalid_transition", safeSystemError(err))
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.InvalidTransition, safeSystemError(err))
 	default:
-		respondError(w, http.StatusInternalServerError, "internal_error", "delivery system rollout operation failed")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "delivery system rollout operation failed")
 	}
 }
 

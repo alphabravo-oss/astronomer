@@ -18,11 +18,35 @@ type Body struct {
 	Error BodyError `json:"error"`
 }
 
-// BodyError is the inner object of Body.
+// BodyError is the inner object of Body. Fields and Details are optional
+// and only ever set through WithFields / WithDetails.
 type BodyError struct {
-	Code      Code   `json:"code"`
-	Message   string `json:"message"`
-	RequestID string `json:"request_id,omitempty"`
+	Code      Code             `json:"code"`
+	Message   string           `json:"message"`
+	RequestID string           `json:"request_id,omitempty"`
+	Fields    []FieldViolation `json:"fields,omitempty"`
+	Details   map[string]any   `json:"details,omitempty"`
+}
+
+// FieldViolation is one failed field rule of a validation error.
+type FieldViolation struct {
+	Field   string `json:"field"`
+	Rule    string `json:"rule"`
+	Message string `json:"message"`
+}
+
+// Option adds optional structured detail to an error body.
+type Option func(*BodyError)
+
+// WithFields attaches per-field validation violations.
+func WithFields(fields []FieldViolation) Option {
+	return func(b *BodyError) { b.Fields = fields }
+}
+
+// WithDetails attaches machine-readable context (limits, window ids). Never
+// put internal error text here; 5xx bodies drop details entirely.
+func WithDetails(details map[string]any) Option {
+	return func(b *BodyError) { b.Details = details }
 }
 
 // WriteError writes the error envelope for an explicit status and catalog
@@ -31,8 +55,8 @@ type BodyError struct {
 // For status >= 500 the message is replaced with a fixed public message and
 // the original is logged with the request id that is returned to the client.
 // A request whose context was canceled by the client gets a bare 499.
-func WriteError(w http.ResponseWriter, r *http.Request, status int, code Code, message string) {
-	write(w, r, status, code, message, nil)
+func WriteError(w http.ResponseWriter, r *http.Request, status int, code Code, message string, opts ...Option) {
+	write(w, r, status, code, message, nil, opts...)
 }
 
 // Respond classifies err with FromError and writes it at the classified
@@ -45,7 +69,7 @@ func Respond(w http.ResponseWriter, r *http.Request, err error) {
 	write(w, r, apiErr.statusOf(), apiErr.Code, apiErr.Message, apiErr.Cause)
 }
 
-func write(w http.ResponseWriter, r *http.Request, status int, code Code, message string, cause error) {
+func write(w http.ResponseWriter, r *http.Request, status int, code Code, message string, cause error, opts ...Option) {
 	if r != nil && errors.Is(r.Context().Err(), context.Canceled) {
 		w.WriteHeader(StatusClientClosedRequest)
 		return
@@ -69,7 +93,14 @@ func write(w http.ResponseWriter, r *http.Request, status int, code Code, messag
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(Body{Error: BodyError{Code: code, Message: message, RequestID: requestID}})
+	body := BodyError{Code: code, Message: message, RequestID: requestID}
+	for _, opt := range opts {
+		opt(&body)
+	}
+	if status >= http.StatusInternalServerError {
+		body.Fields, body.Details = nil, nil
+	}
+	_ = json.NewEncoder(w).Encode(Body{Error: body})
 }
 
 // publicMessage scrubs server-side failure detail from 5xx responses.

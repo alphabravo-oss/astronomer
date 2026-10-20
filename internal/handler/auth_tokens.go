@@ -118,7 +118,7 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	if h.enforcer != nil {
 		if err := h.enforcer.CheckUserTokenCreate(r.Context(), userID); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate token quota")

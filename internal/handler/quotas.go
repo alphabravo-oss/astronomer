@@ -724,18 +724,12 @@ func decodeOverrides(raw json.RawMessage) map[string]any {
 // quota.QuotaExceededError type. Hooked from the gated handlers
 // (clusters.Create, auth.CreateToken, ...) so the wire response is
 // consistent across every quota site.
-func WriteQuotaExceeded(w http.ResponseWriter, e *quota.QuotaExceededError) {
-	body := map[string]any{
-		"error": map[string]any{
-			"code":    "quota_exceeded",
-			"message": "Quota exceeded for this tenant.",
+func WriteQuotaExceeded(w http.ResponseWriter, r *http.Request, e *quota.QuotaExceededError) {
+	apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.QuotaExceeded, "Quota exceeded for this tenant.",
+		apiutil.WithDetails(map[string]any{
 			"limit":   e.Limit,
 			"current": e.Current,
 			"maximum": e.Maximum,
 			"subject": e.Subject,
-		},
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusTooManyRequests)
-	_ = json.NewEncoder(w).Encode(body)
+		}))
 }

@@ -34,6 +34,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
@@ -139,7 +140,7 @@ func EnforceMaintenanceWindow(
 	maintenance.RecordBlocked(opType, win.Mode)
 
 	if win.OnBlock == maintenance.OnBlockRefuse {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
 			"op_type": opType,
 			"mode":    win.Mode,
@@ -151,7 +152,7 @@ func EnforceMaintenanceWindow(
 	// Falling back to refuse is safer than accepting an intent we cannot replay
 	// or persisting credentials/values YAML in cleartext JSONB.
 	if gate.Queries == nil || gate.Cipher == nil {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
 			"op_type":  opType,
 			"mode":     win.Mode,
@@ -164,7 +165,7 @@ func EnforceMaintenanceWindow(
 	expiresAt := deferredUntil.Add(24 * time.Hour)
 	spec, specErr := buildDeferredSpec(r)
 	if specErr != nil {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
 			"op_type": opType, "mode": win.Mode, "degraded": "defer_request_capture_failed",
 		})
@@ -172,13 +173,13 @@ func EnforceMaintenanceWindow(
 	}
 	plainSpec, err := json.Marshal(spec)
 	if err != nil {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		return true
 	}
 	ciphertext, err := gate.Cipher.Encrypt(string(plainSpec))
 	clear(plainSpec)
 	if err != nil {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
 			"op_type": opType, "mode": win.Mode, "degraded": "defer_encrypt_failed",
 		})
@@ -186,7 +187,7 @@ func EnforceMaintenanceWindow(
 	}
 	specBytes, err := json.Marshal(EncryptedDeferredOpSpec{SchemaVersion: 1, Ciphertext: ciphertext})
 	if err != nil {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		return true
 	}
 	params := sqlc.CreateDeferredOperationParams{
@@ -202,7 +203,7 @@ func EnforceMaintenanceWindow(
 	mutationContext := withOperationIdempotency(r, "deferred")
 	var row sqlc.DeferredOperation
 	if gate.runTx == nil {
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
 			"op_type": opType, "mode": win.Mode, "degraded": "transaction_runner_unavailable",
 		})
@@ -222,7 +223,7 @@ func EnforceMaintenanceWindow(
 	if err != nil {
 		// If we can't queue, refuse rather than silently letting the
 		// op through.
-		respondMaintenanceRefuse(w, *win, now)
+		respondMaintenanceRefuse(w, r, *win, now)
 		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
 			"op_type":  opType,
 			"mode":     win.Mode,
@@ -270,32 +271,26 @@ func createDeferredOperation(ctx context.Context, q GatedOpQuerier, params sqlc.
 // respondMaintenanceRefuse writes the 409 body with the window
 // identifier + next-open hint so the operator/client can decide
 // whether to retry later.
-func respondMaintenanceRefuse(w http.ResponseWriter, win maintenance.Window, now time.Time) {
+func respondMaintenanceRefuse(w http.ResponseWriter, r *http.Request, win maintenance.Window, now time.Time) {
 	next := maintenance.NextOpen(win, now)
-	body := map[string]any{
-		"error": map[string]any{
-			"code":        "maintenance_window_active",
-			"message":     "Operation blocked by maintenance window: " + win.Name,
-			"window_id":   win.ID.String(),
-			"window_name": win.Name,
-			"mode":        win.Mode,
-		},
+	details := map[string]any{
+		"window_id":   win.ID.String(),
+		"window_name": win.Name,
+		"mode":        win.Mode,
 	}
 	if win.Mode == maintenance.ModeBlackout {
 		// For blackout windows, the operator can retry after the
 		// current window closes; that close time is more useful than
 		// the next open.
-		close := maintenance.NextClose(win, now)
-		if !close.IsZero() {
-			body["error"].(map[string]any)["opens_at"] = close.Format(time.RFC3339)
+		if closeAt := maintenance.NextClose(win, now); !closeAt.IsZero() {
+			details["opens_at"] = closeAt.Format(time.RFC3339)
 		}
 	}
 	if !next.IsZero() {
-		body["error"].(map[string]any)["next_open"] = next.Format(time.RFC3339)
+		details["next_open"] = next.Format(time.RFC3339)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusConflict)
-	_ = json.NewEncoder(w).Encode(body)
+	apiutil.WriteError(w, r, http.StatusConflict, apiutil.MaintenanceWindowActive,
+		"Operation blocked by maintenance window: "+win.Name, apiutil.WithDetails(details))
 }
 
 // buildDeferredSpec captures the original request's identifying pieces

@@ -276,7 +276,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 	if h.enforcer != nil {
 		if err := h.enforcer.CheckProjectMemberAdd(r.Context(), projectID); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate project member quota")
@@ -285,7 +285,7 @@ func (h *RBACHandler) CreateProjectRoleBinding(w http.ResponseWriter, r *http.Re
 		if userID.Valid {
 			if err := h.enforcer.CheckUserProjectAdd(r.Context(), uuid.UUID(userID.Bytes)); err != nil {
 				if qe, ok := quota.IsQuotaExceeded(err); ok {
-					WriteQuotaExceeded(w, qe)
+					WriteQuotaExceeded(w, r, qe)
 					return
 				}
 				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate user project quota")

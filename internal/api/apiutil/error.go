@@ -126,10 +126,10 @@ func fromPgError(pgErr *pgconn.PgError) *Error {
 	case "23505": // unique_violation
 		return New(AlreadyExists, "A resource with that identity already exists")
 	case "23503": // foreign_key_violation
-		if strings.HasPrefix(pgErr.Message, "update or delete on table") {
-			return New(ResourceInUse, "The resource is still referenced by other resources")
+		if strings.HasPrefix(pgErr.Message, "insert or update on table") {
+			return New(InvalidReference, "The request references a resource that does not exist")
 		}
-		return New(InvalidReference, "The request references a resource that does not exist")
+		return New(ResourceInUse, "The resource is still referenced by other resources")
 	case "23001": // restrict_violation
 		return New(ResourceInUse, "The resource is still referenced by other resources")
 	case "23514", "23502", "22001", "22003", "22007", "22008", "22P02": // check, not-null, data exceptions

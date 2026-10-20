@@ -449,7 +449,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if h.enforcer != nil {
 		if err := h.enforcer.CheckGlobalClusterCreate(r.Context()); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate cluster quota")

@@ -12,7 +12,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // rfc1123Subdomain is the RFC-1123 label/name shape Kubernetes (and Rancher)
@@ -128,17 +127,11 @@ func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func writeJSONFieldErrors(w http.ResponseWriter, r *http.Request, fields []fieldError) {
-	errObj := map[string]any{
-		"code":    apiutil.ValidationError,
-		"message": "Request failed validation",
-		"fields":  fields,
+	violations := make([]apiutil.FieldViolation, 0, len(fields))
+	for _, f := range fields {
+		violations = append(violations, apiutil.FieldViolation(f))
 	}
-	if r != nil {
-		if requestID := reqctx.RequestID(r.Context()); requestID != "" {
-			errObj["request_id"] = requestID
-		}
-	}
-	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": errObj})
+	apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.ValidationError, "Request failed validation", apiutil.WithFields(violations))
 }
 
 // validationMessage renders a human-readable message for a single field error.

@@ -903,6 +903,11 @@ const (
 
 	// RolloutInvariant indicates a rollout invariant was violated.
 	RolloutInvariant Code = "invariant_violation"
+
+	// MaintenanceWindowActive indicates a mutation refused by an active
+	// maintenance window; details carry the window id, name, mode and the
+	// next time the operation may proceed.
+	MaintenanceWindowActive Code = "maintenance_window_active"
 )
 
 // --- Rate limiting, cancellation, deadlines ---
@@ -913,6 +918,10 @@ const (
 
 	// CharlieRateLimited indicates Charlie request capacity is exhausted.
 	CharlieRateLimited Code = "charlie_rate_limited"
+
+	// QuotaExceeded indicates a tenant quota refused the request; details
+	// carry limit, current, maximum and subject.
+	QuotaExceeded Code = "quota_exceeded"
 
 	// RequestCanceled indicates the operation was canceled before completion.
 	RequestCanceled Code = "request_canceled"
@@ -941,4 +950,7 @@ const (
 	// ResolutionEnqueueFailed indicates a source resolution job could not be
 	// enqueued.
 	ResolutionEnqueueFailed Code = "resolution_enqueue_failed"
+
+	// AuthenticationDependencyUnavailable indicates token or session state could not be checked; authentication fails closed.
+	AuthenticationDependencyUnavailable Code = "authentication_dependency_unavailable"
 )

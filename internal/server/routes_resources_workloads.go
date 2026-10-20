@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -50,12 +51,12 @@ func requireNamespacePickerListPermission(engine *rbac.Engine, querier rbac.Bind
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
 				return
 			}
 			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 				return
 			}
 			clusterID, projectID := permissionScopeIDs(r)
@@ -65,7 +66,7 @@ func requireNamespacePickerListPermission(engine *rbac.Engine, querier rbac.Bind
 					engine.HasAnyNamespaceAccess(bindings, rbac.ResourcePods, rbac.VerbList, clusterID)
 			}
 			if !allowed {
-				writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -185,10 +186,8 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 				log.ErrorContext(r.Context(), "mandatory audit intent persistence failed",
 					"method", r.Method, "resource_type", resourceType,
 					"request_id", reqctx.RequestID(r.Context()), "error", err)
-				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "1")
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = w.Write([]byte(`{"error":{"code":"audit_unavailable","message":"Mandatory audit storage is unavailable"}}`))
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 				return
 			}
 

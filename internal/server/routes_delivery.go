@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -187,18 +188,18 @@ func deliveryProjectScope(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bodyProjectID, err := deliveryBodyProjectID(w, r)
 		if err != nil {
-			writeRouteAuthError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 			return
 		}
 		projectID, err := resolveDeliveryProjectID(r, bodyProjectID)
 		if err != nil {
-			writeRouteAuthError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 			return
 		}
 
 		routeContext := chi.RouteContext(r.Context())
 		if routeContext == nil {
-			writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "delivery route context is unavailable")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "delivery route context is unavailable")
 			return
 		}
 		cloned := *routeContext

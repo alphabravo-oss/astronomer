@@ -2,12 +2,12 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
@@ -207,13 +207,8 @@ func AuthFailureRateLimit(limit int, window time.Duration) func(http.Handler) ht
 			decision := limiter.allow(key)
 			setLoginRateLimitHeaders(w, decision)
 			if !decision.allowed {
-				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", formatRetryAfter(decision.retryAfter))
-				w.WriteHeader(http.StatusTooManyRequests)
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"code":    "rate_limited",
-					"message": "Too many failed authentication attempts",
-				})
+				apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.RateLimited, "Too many failed authentication attempts")
 				return
 			}
 
@@ -247,13 +242,8 @@ func newLoginRateLimitMiddleware(ctx context.Context, limit int, window time.Dur
 				return
 			}
 
-			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", formatRetryAfter(d.retryAfter))
-			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"code":    "rate_limited",
-				"message": "Too many login attempts",
-			})
+			apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.RateLimited, "Too many login attempts")
 		})
 	}
 }

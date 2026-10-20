@@ -21,9 +21,9 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/platformsettings"
 )
@@ -65,14 +65,7 @@ func FeatureGateDefault(key string, reader FeatureFlagReader, fallback bool) fun
 				return
 			}
 
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": map[string]string{
-					"code":    "feature_disabled",
-					"message": "This feature is not enabled on this Astronomer installation.",
-				},
-			})
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.FeatureDisabled, "This feature is not enabled on this Astronomer installation.")
 		})
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -208,8 +209,8 @@ func requireAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier) func(htt
 
 func unavailableSecurityDependency(name string) func(http.Handler) http.Handler {
 	return func(http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeRouteAuthError(w, http.StatusServiceUnavailable, "security_dependency_unavailable", name+" is unavailable")
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SecurityDependencyUnavailable, name+" is unavailable")
 		})
 	}
 }
@@ -284,12 +285,12 @@ func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requ
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
 				return
 			}
 			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 				return
 			}
 			clusterID, projectID := permissionScopeIDs(r)
@@ -299,7 +300,7 @@ func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requ
 					return
 				}
 			}
-			writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 		})
 	}
 }
@@ -312,18 +313,18 @@ func requireAllPermissions(engine *rbac.Engine, querier rbac.BindingQuerier, req
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
 				return
 			}
 			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 				return
 			}
 			clusterID, projectID := permissionScopeIDs(r)
 			for _, requirement := range requirements {
 				if !engine.CheckPermission(bindings, requirement.resource, requirement.verb, clusterID, projectID) {
-					writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+					apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 					return
 				}
 			}
@@ -370,12 +371,12 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier,
 			resource, verb := k8sProxyPermission(r)
 			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
 				return
 			}
 			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 				return
 			}
 			clusterID, projectID := permissionScopeIDs(r)
@@ -390,7 +391,7 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier,
 			// against namespace-scoped bindings — matching the forwarded request.
 			k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidK8sPath, "Kubernetes proxy path is not canonical")
 				return
 			}
 			ref := parseK8sProxyObjectRef(k8sPath)
@@ -409,7 +410,7 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier,
 			// exec at all.
 			if resource == rbac.ResourceNodes && verb == rbac.VerbProxy && isMutatingK8sProxyMethod(r.Method) &&
 				!engine.CheckPermission(bindings, rbac.ResourcePods, rbac.VerbExec, clusterID, projectID, namespace) {
-				writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 				return
 			}
 			if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) {
@@ -489,7 +490,7 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier,
 							return
 						}
 					}
-					writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+					apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 					return
 				}
 			}
@@ -522,7 +523,7 @@ func auditK8sProxySecretReads(auditWriter any) func(http.Handler) http.Handler {
 				clusterID := chi.URLParam(r, "cluster_id")
 				k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
 				if err != nil {
-					writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+					apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidK8sPath, "Kubernetes proxy path is not canonical")
 					return
 				}
 				detail := map[string]any{
@@ -553,7 +554,7 @@ func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetai
 			clusterID := chi.URLParam(r, "cluster_id")
 			k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
 			if err != nil {
-				writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidK8sPath, "Kubernetes proxy path is not canonical")
 				return
 			}
 			detail := k8sProxyAuditDetail(r.Method, k8sPath, extraDetail)
@@ -573,7 +574,7 @@ func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetai
 					"method", r.Method,
 					"error", err,
 				)
-				writeRouteAuthError(w, http.StatusServiceUnavailable, "audit_unavailable", "Mandatory audit storage is unavailable; the Kubernetes mutation was not forwarded")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable; the Kubernetes mutation was not forwarded")
 				return
 			}
 
@@ -1006,7 +1007,7 @@ func requireNamedResourceCreatePermission(engine *rbac.Engine, querier rbac.Bind
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(io.LimitReader(r.Body, createBodyMaxBytes+1))
 			if err != nil || len(body) > createBodyMaxBytes {
-				writeRouteAuthError(w, http.StatusRequestEntityTooLarge, "invalid_body", "Request body is too large")
+				apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "Request body is too large")
 				return
 			}
 			// Hand the handler back an identical, re-readable body.
@@ -1015,7 +1016,7 @@ func requireNamedResourceCreatePermission(engine *rbac.Engine, querier rbac.Bind
 
 			namespace := k8sManifestNamespace(body)
 			if namespace == "" {
-				writeRouteAuthError(w, http.StatusBadRequest, "invalid_body", "metadata.namespace is required")
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "metadata.namespace is required")
 				return
 			}
 			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbCreate)
@@ -1095,13 +1096,13 @@ func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQue
 				var err error
 				clusterID, err = uuid.Parse(chi.URLParam(r, clusterParam))
 				if err != nil {
-					writeRouteAuthError(w, http.StatusBadRequest, "invalid_id", "Invalid cluster ID")
+					apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 					return
 				}
 			}
 			userID, ok := iauth.AuthorizeStreamRequestWithTickets(r, queries, jwt, tickets, kind, clusterID)
 			if !ok {
-				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 				return
 			}
 			if userID != uuid.Nil {
@@ -1113,17 +1114,6 @@ func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQue
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func writeRouteAuthError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
-	})
 }
 
 func isMutatingK8sProxyMethod(method string) bool {

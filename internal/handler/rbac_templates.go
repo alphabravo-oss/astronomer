@@ -158,7 +158,7 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 	if h.enforcer != nil && !alreadyApplied {
 		if err := h.enforcer.CheckProjectMemberAdd(r.Context(), projectID); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate project member quota")
@@ -166,7 +166,7 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 		}
 		if err := h.enforcer.CheckUserProjectAdd(r.Context(), userID); err != nil {
 			if qe, ok := quota.IsQuotaExceeded(err); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate user project quota")

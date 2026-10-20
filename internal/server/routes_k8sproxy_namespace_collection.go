@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
@@ -17,12 +18,12 @@ func handleSelectedNamespaceAuthorization(w http.ResponseWriter, r *http.Request
 		return false
 	}
 	if err != nil {
-		writeRouteAuthError(w, http.StatusBadRequest, "invalid_namespace_selection", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidNamespaceSelection, err.Error())
 		return true
 	}
 	for _, namespace := range names {
 		if !engine.CheckPermission(bindings, resource, verb, clusterID, projectID, namespace) && (native == nil || !native.Allow(r.Context(), userID, clusterID.String(), namespace, ref["api_group"], ref["resource"], string(verb))) {
-			writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to access every selected namespace")
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to access every selected namespace")
 			return true
 		}
 	}
@@ -34,7 +35,7 @@ func canonicalK8sProxyPath(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		canonical, err := tunnel.CanonicalK8sProxyPath(r)
 		if err != nil {
-			writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidK8sPath, "Kubernetes proxy path is not canonical")
 			return
 		}
 		next.ServeHTTP(w, tunnel.WithCanonicalK8sProxyPath(r, canonical))

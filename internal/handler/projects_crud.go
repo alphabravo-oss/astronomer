@@ -168,7 +168,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 				h.logger().Warn("failed to roll back over-quota project", "project_id", project.ID.String(), "error", derr)
 			}
 			if qe, ok := quota.IsQuotaExceeded(qerr); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate project cluster quota")
