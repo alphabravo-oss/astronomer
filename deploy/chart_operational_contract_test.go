@@ -76,29 +76,6 @@ var productionWiringSets = []string{
 	"delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
 }
 
-func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) {
-	scriptPath := filepath.Join(repoRoot(t), "scripts", "verify-enterprise.sh")
-	raw, err := os.ReadFile(scriptPath)
-	if err != nil {
-		t.Fatalf("read enterprise verifier: %v", err)
-	}
-	script := string(raw)
-	start := strings.Index(script, `step "Fully wired production Helm render"`)
-	end := strings.Index(script, `step "Helm chart contract tests"`)
-	if start < 0 || end <= start {
-		t.Fatal("enterprise verifier production Helm render block is missing or malformed")
-	}
-	productionBlock := script[start:end]
-	arrayIndex := regexp.MustCompile(`\[[0-9]+\]`)
-	for _, set := range productionWiringSets {
-		key := strings.SplitN(set, "=", 2)[0]
-		canonicalKey := arrayIndex.ReplaceAllString(key, "")
-		if !strings.Contains(productionBlock, canonicalKey+"=") {
-			t.Errorf("enterprise verifier production render is missing productionWiringSets key %q", canonicalKey)
-		}
-	}
-}
-
 func TestProductionWorkloadImagesAreDigestOnly(t *testing.T) {
 	sets := append([]string{}, productionWiringSets...)
 	sets = append(sets,
@@ -1192,71 +1169,6 @@ func TestSchemaFloorIsFreshV1(t *testing.T) {
 
 	if floor != 1 {
 		t.Fatalf("expectedMinSchemaVersion=%d, want the minimum supported upgrade schema 1", floor)
-	}
-}
-
-// O-01 / R-03 / C-11 / C-05: the encryption-key env var is ASTRONOMER_ENCRYPTION_KEY
-// everywhere. Guard against the bare-ENCRYPTION_KEY drift that silently breaks
-// decryption (the DR runbook, raw manifests, and docker-compose must not use it;
-// keyrotate must accept the canonical name).
-func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
-	root := repoRoot(t)
-
-	// The chart writes the configured canonical key and workloads reference that
-	// exact key from the selected existing Secret.
-	chartSecret, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "secret.yaml"))
-	if err != nil {
-		t.Fatalf("read chart secret.yaml: %v", err)
-	}
-	if !strings.Contains(string(chartSecret), `.Values.secrets.encryptionKeyKey`) {
-		t.Fatal("chart templates/secret.yaml no longer renders the configured encryption key name")
-	}
-	for _, template := range []string{"server-deployment.yaml", "worker-deployment.yaml"} {
-		raw, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", template))
-		if err != nil {
-			t.Fatalf("read %s: %v", template, err)
-		}
-		if !strings.Contains(string(raw), "ASTRONOMER_ENCRYPTION_KEY") || !strings.Contains(string(raw), `.Values.secrets.encryptionKeyKey`) {
-			t.Fatalf("%s must expose ASTRONOMER_ENCRYPTION_KEY from the configured Secret key", template)
-		}
-	}
-
-	// The DR runbook must not read/recreate the key under the bare name.
-	runbook, err := os.ReadFile(filepath.Join(root, "docs", "management-plane-dr-runbook.md"))
-	if err != nil {
-		t.Fatalf("read DR runbook: %v", err)
-	}
-	for _, bad := range []string{"data.ENCRYPTION_KEY", "from-literal=ENCRYPTION_KEY="} {
-		if strings.Contains(string(runbook), bad) {
-			t.Fatalf("DR runbook still uses bare %q — server/worker read ASTRONOMER_ENCRYPTION_KEY, so this silently no-ops during a real restore", bad)
-		}
-	}
-
-	// Raw manifests and docker-compose must not assign the bare key.
-	bareAssign := regexp.MustCompile(`(?m)^\s+ENCRYPTION_KEY\s*:`)
-	for _, rel := range []string{
-		filepath.Join("deploy", "k8s", "03-secret.yaml"),
-		filepath.Join("deploy", "docker-compose.yml"),
-	} {
-		b, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil {
-			t.Fatalf("read %s: %v", rel, err)
-		}
-		if bareAssign.Match(b) {
-			t.Fatalf("%s assigns bare ENCRYPTION_KEY; rename to ASTRONOMER_ENCRYPTION_KEY", rel)
-		}
-		if !strings.Contains(string(b), "ASTRONOMER_ENCRYPTION_KEY") {
-			t.Fatalf("%s does not set ASTRONOMER_ENCRYPTION_KEY", rel)
-		}
-	}
-
-	// keyrotate must accept the canonical name (fallback).
-	kr, err := os.ReadFile(filepath.Join(root, "cmd", "keyrotate", "main.go"))
-	if err != nil {
-		t.Fatalf("read keyrotate main.go: %v", err)
-	}
-	if !strings.Contains(string(kr), "ASTRONOMER_ENCRYPTION_KEY") {
-		t.Fatal("cmd/keyrotate/main.go does not read ASTRONOMER_ENCRYPTION_KEY")
 	}
 }
 

@@ -10,8 +10,8 @@
   git. Previous history is intact.
 - Toolchain: Go 1.27.3, Node 24.22.0 LTS, Helm 4.3.1, golangci-lint 2.15,
   gotestsum 1.13, Air 1.67. Dependencies refreshed (`go get -u`, npm bumps:
-  React 19.3.1, TypeScript 7.0.2, Vite 8.3.4, TanStack Query 5.104.5, vitest
-  5.0.5, Playwright 1.64.1, eslint 10, lucide-react 1.59).
+  React 19.3.1, TypeScript 6.0.3 (7.0.2 is blocked by typescript-eslint 8.72, whose peer range is <6.1.0 and which needs the JS compiler API the native TS 7 package does not ship), Vite 8.3.4, TanStack Query 5.104.5, vitest
+  5.0.5, Playwright 1.64.1, lucide-react 1.59, @tanstack/react-table 9.3.1, radix-ui 1.8.1; eslint stays on 9.39 because eslint-plugin-jsx-a11y 6.10 declares no eslint 10 peer support; jsdom is held at 30.1.2 and @tanstack/react-virtual at 3.14.14 because 30.1.3 / 3.14.21 break the DataTable behaviour tests — tracked for Phase 1).
 - Canonical `Makefile` (`dev build test test-integration lint vet fmt generate
   migrate check security fips-build updates docker-build helm-lint e2e`);
   `GO_VERSION` derived from `go.mod` for every image build.

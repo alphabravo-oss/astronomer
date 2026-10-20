@@ -159,9 +159,14 @@ docker-build-frontend: ## Build the frontend image
 docker-build-%: ## Build one image: docker-build-server|worker|agent|migrate|shell|dr
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/astronomer-go-$*:$(IMG_TAG) .
 
+# The base values profile requires release-stamped digests and real key material;
+# lint with the dev profile, the qualified kube minor and throwaway lint-only keys.
+HELM_LINT_ARGS = -f deploy/chart/values-dev.yaml --kube-version 1.35.0 \
+	--set-string secrets.secretKey=helm-lint-only-jwt-signing-key-0000 \
+	--set-string secrets.encryptionKey=aGVsbS1saW50LW9ubHktZmVybmV0LWtleS0wMDAwMDA=
 helm-lint: ## helm lint + template dry-run of deploy/chart
-	helm lint deploy/chart
-	helm template astronomer deploy/chart > /dev/null
+	helm lint deploy/chart $(HELM_LINT_ARGS)
+	helm template astronomer deploy/chart $(HELM_LINT_ARGS) > /dev/null
 
 clean: ## Remove build and test output
 	rm -rf bin tmp $(TEST_RESULTS_DIR) frontend/dist frontend/e2e-results

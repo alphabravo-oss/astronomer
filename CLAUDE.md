@@ -75,7 +75,7 @@ Prometheus `:9092`, Tempo OTLP gRPC `:4317`.
 - `internal/observability`: slog JSON handler with redaction, OTLP gRPC traces,
   Prometheus metrics (`service_build_info`, RED counters incl.
   `astronomer_request_errors_total{route,reason}`).
-- `frontend/`: React 19, Vite 8, TypeScript 7, Tailwind v4 (CSS-first,
+- `frontend/`: React 19, Vite 8, TypeScript 6 (7 once typescript-eslint supports it), Tailwind v4 (CSS-first,
   ADR-0006), Radix/shadcn primitives, TanStack Query + TanStack Router
   (ADR-0001).
 - `deploy/chart`: the Helm chart (CNPG-managed PostgreSQL, Flux delivery,

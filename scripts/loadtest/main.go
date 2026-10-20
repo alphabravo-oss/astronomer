@@ -405,7 +405,7 @@ func (sa *syntheticAgent) Run(ctx context.Context) {
 	for _, c := range []byte(sa.clusterID) {
 		seed = seed*31 + int64(c)
 	}
-	rng := rand.New(rand.NewSource(time.Now().UnixNano() ^ seed))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano() ^ seed)) //nolint:gosec // #nosec G404 -- synthetic load-test seed, not security material
 	attempt := 0
 	for {
 		if err := sa.connectAndServe(ctx); err != nil {

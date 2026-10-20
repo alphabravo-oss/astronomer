@@ -528,7 +528,7 @@ func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *ra
 	if rng != nil {
 		jitter = 0.75 + rng.Float64()*0.5
 	} else {
-		jitter = 0.75 + rand.Float64()*0.5
+		jitter = 0.75 + rand.Float64()*0.5 //nolint:gosec // #nosec G404 -- reconnect back-off jitter, not security material
 	}
 	return time.Duration(backoff*jitter) * time.Second
 }
@@ -544,7 +544,7 @@ func BackoffDurationWithJitter(attempt int, baseSeconds, maxSeconds int, rng *ra
 // (the ±25% jitter only); the spread now smears them across a full 1s
 // before the exponential takes over.
 func (tc *TunnelClient) reconnectLoop(ctx context.Context) error {
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // #nosec G404 -- reconnect back-off jitter, not security material
 	for attempt := 0; ; attempt++ {
 		var wait time.Duration
 		if attempt == 0 {
@@ -585,7 +585,7 @@ func InitialReconnectSpread(baseSeconds int, rng *rand.Rand) time.Duration {
 	if rng != nil {
 		f = rng.Float64()
 	} else {
-		f = rand.Float64()
+		f = rand.Float64() //nolint:gosec // #nosec G404 -- reconnect back-off jitter, not security material
 	}
 	d := time.Duration(f * float64(baseSeconds) * float64(time.Second))
 	if d < 100*time.Millisecond {

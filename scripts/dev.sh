@@ -99,7 +99,7 @@ cmd_up() {
   [ "${DEV_START_AGENT:-0}" = "1" ] && start_bg agent air -c .air.agent.toml
   (cd frontend && [ -d node_modules ] || npm ci --no-audit --no-fund)
   start_bg web bash -c "cd frontend && BACKEND_URL=http://127.0.0.1${SERVER_ADDR} exec npx vite --host 0.0.0.0 --port ${DEV_WEB_PORT} --strictPort"
-  wait_for server "http://127.0.0.1${SERVER_ADDR}/healthz"
+  wait_for server "http://127.0.0.1${SERVER_ADDR}/health/"
   wait_for web "http://127.0.0.1:${DEV_WEB_PORT}/"
   cmd_status
 }

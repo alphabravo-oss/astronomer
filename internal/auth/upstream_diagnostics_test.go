@@ -32,7 +32,7 @@ func TestAuthUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {
 	defer func() { otel.SetTracerProvider(priorProvider); otel.SetTextMapPropagator(priorPropagator) }()
 	var output bytes.Buffer
 	logger := slog.New(observability.NewJSONHandler(&output, nil))
-	shutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{Endpoint: collector.URL, SamplerRatio: 1, ServiceName: "upstream-error-fixture"})
+	shutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{Protocol: observability.ProtocolHTTPProtobuf, Endpoint: collector.URL, SamplerRatio: 1, ServiceName: "upstream-error-fixture"})
 	if err != nil {
 		t.Fatal(err)
 	}

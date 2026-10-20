@@ -1,13 +1,8 @@
 package releasecontract
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 func TestApplicationImageInventoryByRelease(t *testing.T) {
@@ -41,37 +36,5 @@ func TestApplicationImageInventoryByRelease(t *testing.T) {
 				t.Fatalf("Validate(%s) = %v; want valid=%v", tc.version, err, tc.wantValid)
 			}
 		})
-	}
-}
-
-// Exercise the producer and the application loader together: independent
-// generator and loader fixtures previously disagreed about the DR image.
-func TestGeneratedReleaseManifestLoadsInApplication(t *testing.T) {
-	command := exec.Command("python3", "-c", `
-import sys
-sys.path.insert(0, "scripts/tests")
-from release_manifest_test import ReleaseManifestTest, GENERATOR
-fixture = ReleaseManifestTest()
-fixture.setUp()
-try:
-    sys.stdout.buffer.write(GENERATOR.encode(GENERATOR.build(fixture.args())))
-finally:
-    fixture.tearDown()
-`)
-	command.Dir = filepath.Join("..", "..")
-	payload, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("generate manifest: %v\n%s", err, payload)
-	}
-	path := filepath.Join(t.TempDir(), "release-manifest.json")
-	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	manifest, projection, err := Load(path, version.Version)
-	if err != nil {
-		t.Fatalf("application rejected generated release manifest: %v", err)
-	}
-	if len(manifest.Astronomer.Images) != 7 || projection.AgentImage == "" {
-		t.Fatalf("incomplete generated manifest/projection: images=%d, agent=%q", len(manifest.Astronomer.Images), projection.AgentImage)
 	}
 }

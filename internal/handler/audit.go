@@ -684,7 +684,10 @@ func auditFilterFromRequest(r *http.Request, limit, offset int32) (sqlc.AuditLog
 		if err != nil || statusCode < 0 || statusCode > 599 {
 			return filter, fmt.Errorf("invalid status_code")
 		}
-		filter.StatusCode = int32(statusCode)
+		if statusCode < 100 || statusCode > 599 {
+			return filter, fmt.Errorf("invalid status_code")
+		}
+		filter.StatusCode = int32(statusCode) // bounded above: fits int32
 		filter.HasStatusCode = true
 	}
 	from, hasFrom, err := auditTimeParam(q.Get("from"))

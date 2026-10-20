@@ -56,7 +56,7 @@ services:
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./telemetry/loki.yaml:/etc/loki/loki.yaml:ro
-      - loki_data:/var/loki
+      - loki_data:/loki
     ports: ["3100:3100"]
 
   alloy:
