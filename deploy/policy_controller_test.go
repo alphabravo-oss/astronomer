@@ -227,10 +227,10 @@ func TestSignaturePoliciesUseVendorAuthorities(t *testing.T) {
 	}
 	signed := map[string]string{
 		"ghcr.io/alphabravo-oss/astronomer-go-server":        "keyless",
-		"ghcr.io/cloudnative-pg/cloudnative-pg":              "keyless",
-		"ghcr.io/cloudnative-pg/postgresql":                  "keyless",
-		"ghcr.io/dexidp/dex":                                 "keyless",
-		"index.docker.io/fluent/fluent-bit":                  "keyless",
+		"ghcr.io/cloudnative-pg/cloudnative-pg":              "static",
+		"ghcr.io/cloudnative-pg/postgresql":                  "static",
+		"ghcr.io/dexidp/dex":                                 "static",
+		"index.docker.io/fluent/fluent-bit":                  "static",
 		"quay.io/jetstack/cert-manager-acmesolver":           "key",
 		"index.docker.io/library/busybox":                    "static",
 		"ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar": "static",
