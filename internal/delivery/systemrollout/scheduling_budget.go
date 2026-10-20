@@ -20,13 +20,7 @@ func systemReleaseSlots(strategy model.RolloutStrategy, total int32, current cou
 	fleet := int64(total)
 	reserved := int64(current.inFlight) + int64(current.immatureReady)
 	concurrency := min(int64(strategy.MaxConcurrent), fleet) - reserved
-	availabilityLimit := fleet
-	switch strategy.MaxUnavailable.Type {
-	case model.AmountCount:
-		availabilityLimit = min(int64(strategy.MaxUnavailable.Value), fleet)
-	case model.AmountPercent:
-		availabilityLimit = fleet * int64(strategy.MaxUnavailable.Value) / 100
-	}
+	availabilityLimit := systemUnavailableBudget(strategy.MaxUnavailable, fleet)
 	slots := min(concurrency, availabilityLimit-reserved-int64(current.failed))
 	if slots <= 0 {
 		return 0
@@ -37,4 +31,23 @@ func systemReleaseSlots(strategy model.RolloutStrategy, total int32, current cou
 		return total
 	}
 	return int32(slots)
+}
+
+// systemUnavailableBudget resolves max_unavailable for a system rollout. Every
+// released assignment reserves availability until it reports Ready (there is
+// no "already unavailable, release as repair" path as in application
+// rollouts), so a budget that resolves to zero — count 0, or a percentage that
+// floors to zero on a small fleet — would never release anything and the
+// mandatory platform upgrade would stall forever. Zero therefore means the
+// strictest serial rollout: one member at a time, and because failed members
+// keep consuming the budget, the first failure halts forward progress.
+func systemUnavailableBudget(amount model.Amount, fleet int64) int64 {
+	limit := fleet
+	switch amount.Type {
+	case model.AmountCount:
+		limit = min(int64(amount.Value), fleet)
+	case model.AmountPercent:
+		limit = fleet * int64(amount.Value) / 100
+	}
+	return max(limit, 1)
 }
