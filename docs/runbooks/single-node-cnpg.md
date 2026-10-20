@@ -56,6 +56,31 @@ the duplicate exporters, creates ServiceMonitors for the existing services and
 bounds Prometheus resources. Verify the new targets are UP and node/container
 queries return data. Keep retention a deliberate site setting.
 
+On k3s also layer `deploy/monitoring/values-k3s.yaml` (after the generated values
+and `values-single-node.yaml`, e.g. `helm upgrade astronomer-monitoring ...
+--reuse-values -f deploy/monitoring/values-k3s.yaml`). It:
+
+- disables the kube-controller-manager, kube-scheduler and kube-proxy scrapes and
+  their default rules (k3s runs them in-process with no endpoints, so their
+  `*Down` alerts would fire forever; disabling beats silencing);
+- sets `retention: 15d` and `retentionSize: 15GB` under the 20Gi PVC;
+- ships the Alertmanager routing: default receiver `alert-log` (an echo webhook
+  that writes each notification as one JSON line to its logs:
+  `kubectl -n astronomer-monitoring logs deploy/alert-log -c echo | grep '"path":"/alert"'`),
+  `Watchdog` to `null`, `critical` to `slack` and `alert-log`;
+- reads the Slack webhook from Secret `alertmanager-slack` key `url` via
+  `api_url_file` (mounted through `alertmanagerSpec.secrets`, never inline). The
+  release seeds the Secret with a placeholder that points at alert-log's
+  `slack-ok` container and keeps any value already present, so going live with
+  Slack is `kubectl -n astronomer-monitoring create secret generic alertmanager-slack
+  --from-literal=url=https://hooks.slack.com/services/... --dry-run=client -o yaml | kubectl apply -f -`
+  and, to skip the ~1 min Secret refresh, a restart of the Alertmanager StatefulSet.
+
+The alert-log Deployment, Service and ConfigMap and the Secret seed render through
+the release's `extraManifests`. When adopting objects created by hand, add
+`app.kubernetes.io/managed-by=Helm` and the `meta.helm.sh/release-name` /
+`meta.helm.sh/release-namespace` annotations first.
+
 The agent applies a narrow Flux replica patch on single-node clusters:
 one source, kustomize and helm controller. It does not alter signed artifact bytes,
 images, verification settings or trust policy. Registered node count determines
