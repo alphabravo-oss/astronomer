@@ -23,8 +23,12 @@ export const LIVE_ADMIN_AUTH_STATE = fileURLToPath(
   new URL("../../playwright/.auth/live-admin.json", import.meta.url),
 );
 
-export const SESSION_COOKIE = "astronomer_session";
-export const CSRF_COOKIE = "astronomer_csrf";
+// Over HTTPS (a deployed install) the server issues __Host- prefixed cookies;
+// the dev loop serves plain HTTP and uses the bare names.
+const COOKIE_PREFIX = (process.env.PLAYWRIGHT_BASE_URL ?? "").startsWith("https://") ? "__Host-" : "";
+export const SESSION_COOKIE = `${COOKIE_PREFIX}astronomer_session`;
+export const CSRF_COOKIE = `${COOKIE_PREFIX}astronomer_csrf`;
+export const REFRESH_COOKIE = `${COOKIE_PREFIX}astronomer_refresh`;
 export const CSRF_HEADER = "X-CSRF-Token";
 
 /**
