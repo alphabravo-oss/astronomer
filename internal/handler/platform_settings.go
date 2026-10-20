@@ -137,7 +137,7 @@ var settingsRegistry = map[string]settingSpec{
 	platformsettings.ReadAuditTierKey:         {Type: typeEnum, Default: "standard", Description: "Read-audit coverage: standard uses configured policies; diagnostic adds a 10% sample of all authenticated reads; incident records all authenticated reads. No request or response bodies are recorded. Takes effect within 30 seconds", Enum: []string{"standard", "diagnostic", "incident"}},
 	"branding.product_name":                   {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
 	"branding.logo_url":                       {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
-	"branding.primary_color":                  {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
+	"branding.primary_color":                  {Type: typeString, Default: "", Description: "Primary brand color (hex); empty means not configured (the UI uses its theme default); applied as a CSS variable across the SPA"},
 	"branding.support_url":                    {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
 	"branding.copyright":                      {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
 	"banner.login_text":                       {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},

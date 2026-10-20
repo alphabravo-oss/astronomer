@@ -12,6 +12,10 @@ func TestClassifyActionClass(t *testing.T) {
 		{"read.audit", "http", "read", ClassRead},
 		{"read.audit", "http", "", ClassRead},
 		{"charlie.http.read", "http", "", ClassRead},
+		// Read-style handler audits (`*.viewed`) are reads even when the
+		// writer passed the mutation default.
+		{"admin.queues.viewed", "http", "", ClassRead},
+		{"compliance.baseline.viewed", "http", "mutation", ClassRead},
 		{"agent.connected", "tunnel", "", ClassSystem},
 		{"agent.token.rotated", "tunnel", "mutation", ClassSystem},
 		{"catalog.repo.sync_failed", "worker", "", ClassSystem},
