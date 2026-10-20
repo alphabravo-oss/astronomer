@@ -5,8 +5,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -54,11 +53,11 @@ func newProductionRouterHarness(t *testing.T) *productionRouterHarness {
 	cfg.NativeRBACEnabled = true
 	cfg.ManagementBackupEnabled = true
 	cfg.DexBundledEnabled = true
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := zerolog.Nop()
 	ctx := context.Background()
 	c := &productionComposition{runtime: newRuntimeSupervisor(logger)}
 	t.Cleanup(c.closeUntransferredDatabaseAuthority)
-	for _, phase := range []func(context.Context, *config.Config, *slog.Logger) error{
+	for _, phase := range []func(context.Context, *config.Config, zerolog.Logger) error{
 		c.initializePersistence, c.initializeCoreHandlers, c.initializeTenantHandlers, c.initializeClusterHandlers,
 		c.initializeIdentityAndClusterHandlers, c.initializeIntegrations, c.initializeCharlie, c.initializeDelivery,
 	} {
