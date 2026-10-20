@@ -1,19 +1,20 @@
+//go:build integration
+
 package builtin
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func TestPostgresBuiltinRegistrationRetryPresenceAndOrdering(t *testing.T) {
-	dsn := os.Getenv("BUILTIN_PROVISIONER_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("BUILTIN_PROVISIONER_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	pool := openBuiltinProvisionerTestPool(t, ctx, dsn)

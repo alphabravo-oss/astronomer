@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -25,6 +27,7 @@ func (q *rejectProjectRepositoryMaterialization) ListCatalogsForProject(context.
 }
 
 func TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	prefix := "project-cursor-" + uuid.NewString()
 	cluster, project, foreign := uuid.New(), uuid.New(), uuid.New()

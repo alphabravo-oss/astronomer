@@ -1,26 +1,27 @@
+//go:build integration
+
 package sqlc
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // This opt-in PostgreSQL test pins the revision semantics that cannot be
 // faithfully exercised by a query mock. Release/CI rehearsals can provide a
 // disposable database through CHARLIE_ALERT_POLICY_TEST_DATABASE_URL.
 func TestUpsertCharlieAlertPolicyRevisionSemantics(t *testing.T) {
-	dsn := os.Getenv("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	conn, err := pgx.Connect(ctx, dsn)
@@ -81,10 +82,8 @@ CREATE TABLE charlie_alert_policies (
 }
 
 func TestCharlieAlertReconcileCandidatesRequireFindingScope(t *testing.T) {
-	dsn := os.Getenv("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	conn, err := pgx.Connect(ctx, dsn)

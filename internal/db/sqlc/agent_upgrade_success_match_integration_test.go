@@ -1,16 +1,19 @@
+//go:build integration
+
 package sqlc
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // Content guard for MarkRunningAgentUpgradeSucceededByVersion.
@@ -27,6 +30,7 @@ import (
 // the stuck-operation sweeper — which for a batched rollout reads as a
 // fleet-wide failure.
 func TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch(t *testing.T) {
+	t.Parallel()
 	sql := markRunningAgentUpgradeSucceededByVersion
 	if strings.Contains(sql, "AND target_version = $2") {
 		t.Fatalf("the success match is exact string equality again:\n%s", sql)
@@ -48,10 +52,8 @@ func TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch(t *testing
 // AGENT_UPGRADE_MATCH_TEST_DATABASE_URL to a disposable database; the test owns
 // and drops an isolated schema.
 func TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings(t *testing.T) {
-	dsn := os.Getenv("AGENT_UPGRADE_MATCH_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("AGENT_UPGRADE_MATCH_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

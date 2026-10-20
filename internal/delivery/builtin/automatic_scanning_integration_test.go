@@ -1,8 +1,9 @@
+//go:build integration
+
 package builtin
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 type scanningRollouts struct {
@@ -44,11 +47,10 @@ func (s *scanningRegistration) OnDeliveryApplyFailure(context.Context, uuid.UUID
 	return nil
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestAutomaticScanningPostgres(t *testing.T) {
-	dsn := os.Getenv("BUILTIN_PROVISIONER_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("BUILTIN_PROVISIONER_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	pool := openBuiltinProvisionerTestPool(t, ctx, dsn)

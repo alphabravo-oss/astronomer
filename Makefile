@@ -82,9 +82,9 @@ test: ## Unit tests (no Docker) with race detector, JUnit XML in test-results/
 	@mkdir -p $(TEST_RESULTS_DIR)
 	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/unit.xml -- -race -count=1 ./...
 
-test-integration: ## Integration tests behind the `integration` build tag (real Postgres/Redis)
+test-integration: ## Unit + integration tests (`integration` build tag): testcontainers Postgres 17 + Redis, pgtestdb clone per test
 	@mkdir -p $(TEST_RESULTS_DIR)
-	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration ./...
+	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration -p 8 ./...
 
 e2e: e2e-live ## Alias for e2e-live
 

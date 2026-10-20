@@ -1,9 +1,10 @@
+//go:build integration
+
 package systemrollout
 
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,14 +16,13 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func systemRolloutFixture(t *testing.T) (*Service, StartRequest) {
 	t.Helper()
-	dsn := os.Getenv("ASTRONOMER_SYSTEM_ROLLOUT_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("ASTRONOMER_SYSTEM_ROLLOUT_TEST_DATABASE_URL is not set")
-	}
+	dsn := testdb.DSN(t)
 	admin, err := pgx.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatal("cannot connect to owned system rollout database")
@@ -105,6 +105,7 @@ func countRows(t *testing.T, s *Service, table string, want int) {
 }
 
 func TestPostgresSystemRolloutStartIdempotencyAndEligibility(t *testing.T) {
+	t.Parallel()
 	s, request := systemRolloutFixture(t)
 	for _, row := range []struct {
 		local          bool
@@ -155,7 +156,9 @@ func TestPostgresSystemRolloutStartIdempotencyAndEligibility(t *testing.T) {
 		}
 	}
 }
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction(t *testing.T) {
+	t.Parallel()
 	for _, action := range []bool{false, true} {
 		t.Run(map[bool]string{false: "start", true: "action"}[action], func(t *testing.T) {
 			s, request := systemRolloutFixture(t)
@@ -194,6 +197,7 @@ func TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction(t *testing.T) 
 	}
 }
 func TestPostgresSystemRolloutConcurrentFenceHasOneWinner(t *testing.T) {
+	t.Parallel()
 	s, request := systemRolloutFixture(t)
 	first, err := s.Start(t.Context(), request)
 	if err != nil {
@@ -235,7 +239,9 @@ func TestPostgresSystemRolloutConcurrentFenceHasOneWinner(t *testing.T) {
 	countRows(t, s, "delivery_system_events", 2)
 	countRows(t, s, "audit_outbox", 2)
 }
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresSystemRolloutCohortPromotionAndRollback(t *testing.T) {
+	t.Parallel()
 	for _, rollback := range []bool{false, true} {
 		t.Run(map[bool]string{false: "promotion", true: "partial rollback"}[rollback], func(t *testing.T) {
 			s, request := systemRolloutFixture(t)
@@ -305,6 +311,7 @@ func TestPostgresSystemRolloutCohortPromotionAndRollback(t *testing.T) {
 }
 
 func TestPostgresSystemRolloutPromotionConflictRollsBackRetirement(t *testing.T) {
+	t.Parallel()
 	s, request := systemRolloutFixture(t)
 	request.Strategy.MaxConcurrent = 3
 	request.Strategy.MaxUnavailable.Value = 3

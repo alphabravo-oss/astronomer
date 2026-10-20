@@ -23,7 +23,7 @@ const cnpgPVTemplate = `{{.metadata.uid}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{if 
 const cnpgServiceTemplate = `{{.metadata.uid}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{.metadata.namespace}}{{"\t"}}{{range .metadata.ownerReferences}}{{if .controller}}{{.uid}}{{end}}{{end}}{{"\t"}}{{if .metadata.deletionTimestamp}}deleted{{else}}live{{end}}{{"\t"}}{{index .spec.selector "cnpg.io/cluster"}}{{"\t"}}{{index .spec.selector "cnpg.io/instanceRole"}}`
 const cnpgEndpointsTemplate = `{{range .subsets}}{{range .addresses}}{{.targetRef.uid}}{{"\t"}}{{.targetRef.name}}{{"\t"}}{{.targetRef.namespace}}{{"\t"}}{{.targetRef.kind}}{{"\n"}}{{end}}{{range .notReadyAddresses}}notready{{"\n"}}{{end}}{{end}}`
 const cnpgSecretTemplate = `{{.metadata.uid}}{{"\t"}}{{.metadata.name}}{{"\t"}}{{.metadata.namespace}}{{"\t"}}{{range .metadata.ownerReferences}}{{if .controller}}{{.uid}}{{end}}{{end}}{{"\t"}}{{if .metadata.deletionTimestamp}}deleted{{else}}live{{end}}{{"\t"}}{{.metadata.resourceVersion}}`
-const cnpgStateScript = `psql -X -v ON_ERROR_STOP=1 --username=postgres --dbname="$1" -AtF "|" -c "SELECT current_database(), current_setting('server_version_num')::bigint / 10000, count(*), COALESCE(max(version),0), COALESCE(bool_or(dirty),false) FROM schema_migrations"`
+const cnpgStateScript = `psql -X -v ON_ERROR_STOP=1 --username=postgres --dbname="$1" -AtF "|" -c "SELECT current_database(), current_setting('server_version_num')::bigint / 10000, 1, COALESCE(max(version_id) FILTER (WHERE is_applied),0), COALESCE(bool_or(NOT is_applied),false) FROM goose_db_version"`
 const cnpgDumpScript = `pg_dump --format=custom --username=postgres --dbname="$1"`
 
 type CloudNativePGOptions struct {

@@ -7,7 +7,7 @@ import (
 
 // ModeAnnotation is the per-cluster tri-state flag from
 // docs/design/downstream-impersonation.md §5, stored in `clusters.annotations`
-// (JSONB, 001_initial.up.sql:80-81). VERIFIED: no migration is needed — the
+// (JSONB, 00001_initial.sql:80-81). VERIFIED: no migration is needed — the
 // column already exists, is already `jsonb NOT NULL DEFAULT '{}'`, and is
 // already round-tripped by CreateCluster/UpdateCluster and surfaced on the
 // cluster response, so this is a new key in an existing free-form map.

@@ -1,9 +1,10 @@
+//go:build integration
+
 package jsoncontract_test
 
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -14,14 +15,13 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func postgresJSONFixture(t *testing.T) *pgx.Conn {
 	t.Helper()
-	dsn := os.Getenv("ASTRONOMER_JSON_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("ASTRONOMER_JSON_TEST_DATABASE_URL is not set")
-	}
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	t.Cleanup(cancel)
 	conn, err := pgx.Connect(ctx, dsn)
@@ -41,7 +41,9 @@ func rollbackJSONFixture(t *testing.T, tx pgx.Tx) {
 	}
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresDurableJSONNestedNewWritesAndLegacyArrays(t *testing.T) {
+	t.Parallel()
 	conn := postgresJSONFixture(t)
 	for _, item := range []struct {
 		name, source, target, equal string
@@ -77,6 +79,7 @@ func TestPostgresDurableJSONNestedNewWritesAndLegacyArrays(t *testing.T) {
 }
 
 func TestPostgresTaskPayloadSchemaMatchesV1Adapter(t *testing.T) {
+	t.Parallel()
 	conn := postgresJSONFixture(t)
 	for _, raw := range [][]byte{nil, []byte(`{}`), []byte(`{"future":1e999999999}`), []byte(`{"_correlation_id":null,"_correlation_id":"valid"}`), []byte(`null`), []byte(`[]`), []byte(`{} {}`), []byte(`{"_traceparent":42}`), []byte(` `)} {
 		_, goErr := jsoncontract.ReadTaskPayloadV1(raw)
@@ -110,6 +113,7 @@ func TestPostgresTaskPayloadSchemaMatchesV1Adapter(t *testing.T) {
 }
 
 func TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows(t *testing.T) {
+	t.Parallel()
 	conn := postgresJSONFixture(t)
 	tx, err := conn.Begin(t.Context())
 	if err != nil {
@@ -144,6 +148,7 @@ func TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows(t *testing.T) {
 }
 
 func TestPostgresPlacementAndRolloutNestedWireShapes(t *testing.T) {
+	t.Parallel()
 	conn := postgresJSONFixture(t)
 	for _, item := range []struct {
 		kind, raw string
@@ -171,6 +176,7 @@ func TestPostgresPlacementAndRolloutNestedWireShapes(t *testing.T) {
 }
 
 func TestPostgresIntegrityAuditDedupeUsesExistingOutbox(t *testing.T) {
+	t.Parallel()
 	conn := postgresJSONFixture(t)
 	tx, err := conn.Begin(t.Context())
 	if err != nil {

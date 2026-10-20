@@ -1,14 +1,17 @@
+//go:build integration
+
 package charlie
 
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 type adminVisibilityRow struct {
@@ -39,6 +42,7 @@ func (f adminVisibilityDatabaseFake) QueryRow(context.Context, string, ...any) p
 }
 
 func TestAdminVisibilityCatalogExecutesOnlyBoundedJSONProjections(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewAdminVisibilityCapabilityAdapter(adminVisibilityDatabaseFake{value: []byte(`{"configured":true,"items":[]}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +60,7 @@ func TestAdminVisibilityCatalogExecutesOnlyBoundedJSONProjections(t *testing.T) 
 }
 
 func TestConfigurationOverviewQueryRedactsContentBearingValues(t *testing.T) {
+	t.Parallel()
 	query := strings.ToLower(configurationOverviewQuery)
 	for _, required := range []string{"secret", "password", "token", "credential", "certificate", "bundle", "redacted"} {
 		if !strings.Contains(query, required) {
@@ -70,10 +75,8 @@ func TestConfigurationOverviewQueryRedactsContentBearingValues(t *testing.T) {
 // Release qualification points this test at an already-migrated disposable
 // PostgreSQL database. The normal unit suite skips it without infrastructure.
 func TestAdminVisibilityQueriesAgainstMigratedPostgres(t *testing.T) {
-	dsn := os.Getenv("CHARLIE_VISIBILITY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("CHARLIE_VISIBILITY_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
 		t.Fatal(err)

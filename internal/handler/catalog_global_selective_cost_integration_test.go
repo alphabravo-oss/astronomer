@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -129,17 +131,18 @@ func catalogPreparedCursorPage(t *testing.T, ctx context.Context, h *CatalogHand
 	return page
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestCatalogGlobalCursorPostgresPreparedSelectiveCharacterization(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	if tx.Conn().Config().DefaultQueryExecMode != pgx.QueryExecModeCacheStatement {
 		t.Fatal("production statement cache required")
 	}
-	var existing int64
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM helm_charts`).Scan(&existing); err != nil {
+	// The per-test database is a fresh clone owned by this test; built-in
+	// catalog seed rows are cleared inside the fixture transaction (rolled
+	// back at cleanup) so the cost characterization sees only its rows.
+	if _, err := tx.Exec(ctx, `DELETE FROM helm_charts`); err != nil {
 		t.Fatal(err)
-	}
-	if existing != 0 {
-		t.Fatal("controlled fixture requires an empty exclusively owned cursor database; existing rows are never removed")
 	}
 	prefix := "catalogcost-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
 	commonTag, rareTag, needle, absent := "common-"+prefix, "rare-"+prefix, "needle-"+prefix, "absent-"+prefix

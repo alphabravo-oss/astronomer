@@ -94,11 +94,12 @@ func Up(ctx context.Context, db *sql.DB, logger *slog.Logger) (Result, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	// Provider.Close would close the caller's *sql.DB; the provider holds no
+	// resources of its own, so it is simply dropped.
 	provider, err := newProvider(db, logger)
 	if err != nil {
 		return Result{}, err
 	}
-	defer provider.Close()
 
 	results, err := provider.Up(ctx)
 	if err != nil {
@@ -126,7 +127,6 @@ func Version(ctx context.Context, db *sql.DB) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer provider.Close()
 	v, err := provider.GetDBVersion(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("migrations: read version: %w", err)

@@ -1,20 +1,21 @@
+//go:build integration
+
 package builtin
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func TestPostgresBuiltinCanceledTransactionReleasesSessionLock(t *testing.T) {
-	dsn := os.Getenv("BUILTIN_PROVISIONER_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("BUILTIN_PROVISIONER_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, stop := context.WithTimeout(t.Context(), 15*time.Second)
 	defer stop()
 	pool := openBuiltinProvisionerTestPool(t, ctx, dsn)

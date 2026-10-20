@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -5,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // Opt-in real PostgreSQL contract for saved table views. The unit tests use an
@@ -25,10 +28,7 @@ import (
 
 func tableViewsPostgresHandler(t *testing.T) (*TableViewsHandler, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("TABLE_VIEWS_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TABLE_VIEWS_TEST_DATABASE_URL is not set")
-	}
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -104,6 +104,7 @@ func tally(statuses []int) map[int]int {
 }
 
 func TestTableViewsPostgresConcurrentCreatesRespectTheCap(t *testing.T) {
+	t.Parallel()
 	h, pool := tableViewsPostgresHandler(t)
 	user := tableViewsTestUser(t, pool)
 	statuses := runParallel(40, func(i int) *httptest.ResponseRecorder {
@@ -135,6 +136,7 @@ func TestTableViewsPostgresConcurrentCreatesRespectTheCap(t *testing.T) {
 }
 
 func TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner(t *testing.T) {
+	t.Parallel()
 	h, pool := tableViewsPostgresHandler(t)
 	user := tableViewsTestUser(t, pool)
 	statuses := runParallel(10, func(int) *httptest.ResponseRecorder {
@@ -150,6 +152,7 @@ func TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner(t *testing.T) 
 }
 
 func TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault(t *testing.T) {
+	t.Parallel()
 	h, pool := tableViewsPostgresHandler(t)
 	user := tableViewsTestUser(t, pool)
 	ids := make([]uuid.UUID, 4)

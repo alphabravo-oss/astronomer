@@ -22,7 +22,7 @@ func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zi
 	defer cancel()
 	var version int64
 	var dirty bool
-	err := h.db.QueryRow(lctx, "SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
+	err := h.db.QueryRow(lctx, "SELECT COALESCE(max(version_id) FILTER (WHERE is_applied), 0), COALESCE(bool_or(NOT is_applied), false) FROM goose_db_version").Scan(&version, &dirty)
 	if err != nil {
 		log.section("schema-migrations.json", err)
 		return

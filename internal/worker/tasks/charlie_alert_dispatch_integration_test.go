@@ -1,10 +1,11 @@
+//go:build integration
+
 package tasks
 
 import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,8 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 type charlieAlertDispatchFake struct {
@@ -43,6 +46,7 @@ func (reconcile charlieAlertReconcilerFunc) Reconcile(ctx context.Context) error
 }
 
 func TestCharlieAlertRuntimeValidatesAndBindsBothHandlers(t *testing.T) {
+	t.Parallel()
 	emptyErr := (CharlieAlertRuntime{}).Validate()
 	if emptyErr == nil {
 		t.Fatal("empty Charlie alert runtime validated successfully")
@@ -100,7 +104,9 @@ func (f *charlieAlertDispatchFake) GetNotificationChannelByID(context.Context, u
 	return f.channel, f.channelErr
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestCharlieAlertDispatchRetriesProductDatabaseReadOutages(t *testing.T) {
+	t.Parallel()
 	connectionID, findingID, channelID, deliveryID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	base := &charlieAlertDispatchFake{
 		delivery: sqlc.CharlieAlertDelivery{ID: deliveryID, ConnectionID: connectionID, FindingID: findingID, NotificationChannelID: pgtype.UUID{Bytes: channelID, Valid: true}, DeliveryKind: "initial", Severity: "high", AttemptCount: 1, MaximumAttempts: 8, Subject: "Charlie finding", Body: "bounded", CreatedAt: time.Now()},
@@ -149,6 +155,7 @@ func (f charlieAlertRoundTripFunc) RoundTrip(request *http.Request) (*http.Respo
 }
 
 func TestCharlieAlertDispatchNeverReturnsProviderOrDatabaseErrorText(t *testing.T) {
+	t.Parallel()
 	sentinel := "credential-provider-SENTINEL"
 	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		return nil, errors.New(sentinel)
@@ -178,6 +185,7 @@ func TestCharlieAlertDispatchNeverReturnsProviderOrDatabaseErrorText(t *testing.
 }
 
 func TestCharlieAlertDispatchNoopsClaimReplay(t *testing.T) {
+	t.Parallel()
 	fake := &charlieAlertDispatchFake{claimErr: pgx.ErrNoRows, currentErr: pgx.ErrNoRows}
 	runtime := configureCharlieAlertDispatchTest(t, fake, nil)
 	err := runtime.HandleCharlieAlertDispatch(context.Background(), asynq.NewTask(CharlieAlertDispatchTaskType, []byte(`{"delivery_id":"`+uuid.NewString()+`"}`)))
@@ -186,7 +194,9 @@ func TestCharlieAlertDispatchNoopsClaimReplay(t *testing.T) {
 	}
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestCharlieAlertDispatchSuppressesCurrentPolicyChangesBeforeHTTP(t *testing.T) {
+	t.Parallel()
 	httpCalls := 0
 	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		httpCalls++
@@ -213,6 +223,7 @@ func TestCharlieAlertDispatchSuppressesCurrentPolicyChangesBeforeHTTP(t *testing
 }
 
 func TestCharlieAlertDispatchRecoversExpiredLeaseWithoutConcurrentSend(t *testing.T) {
+	t.Parallel()
 	httpCalls := 0
 	runtimeCtx := testRuntimeContext(RuntimeDependencies{HTTPClient: &http.Client{Transport: charlieAlertRoundTripFunc(func(*http.Request) (*http.Response, error) {
 		httpCalls++
@@ -246,6 +257,7 @@ func TestCharlieAlertDispatchRecoversExpiredLeaseWithoutConcurrentSend(t *testin
 }
 
 func TestCharlieAlertDispatchDisableDrainsProviderAndRejectsQueuedDelivery(t *testing.T) {
+	t.Parallel()
 	providerEntered := make(chan struct{})
 	releaseProvider := make(chan struct{})
 	httpCalls := 0
@@ -306,10 +318,8 @@ func TestCharlieAlertDispatchDisableDrainsProviderAndRejectsQueuedDelivery(t *te
 // release-gate environment is optional because this test only needs a real
 // PostgreSQL advisory-lock implementation, not Astronomer schema objects.
 func TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses(t *testing.T) {
-	dsn := os.Getenv("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	apiPool, err := pgxpool.New(ctx, dsn)
@@ -358,10 +368,8 @@ func TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses(t *tes
 }
 
 func TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease(t *testing.T) {
-	dsn := os.Getenv("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("CHARLIE_ALERT_POLICY_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	transitionPool, err := pgxpool.New(ctx, dsn)

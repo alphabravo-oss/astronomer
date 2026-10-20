@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -12,7 +14,9 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestCatalogGlobalCandidatePostgresEmptyProgressTraversal(t *testing.T) {
+	t.Parallel()
 	for _, filter := range []string{"absent-tag", "late-tag"} {
 		t.Run(filter, func(t *testing.T) {
 			ctx, tx := paginationPostgresTx(t)

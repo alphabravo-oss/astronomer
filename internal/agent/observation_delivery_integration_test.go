@@ -24,6 +24,7 @@ import (
 )
 
 func TestSharedDeliveryRealInformerReadsAndControllerChanges(t *testing.T) {
+	t.Parallel()
 	images, err := fluxdistribution.ControllerImages()
 	if err != nil {
 		t.Fatal(err)

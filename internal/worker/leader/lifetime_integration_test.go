@@ -1,23 +1,24 @@
+//go:build integration
+
 package leader
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // This test only terminates the dedicated session it creates. It does not
 // modify application tables or terminate unrelated database connections.
 func TestPostgresLeadershipSessionLoss(t *testing.T) {
-	dsn := os.Getenv("LEADER_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("LEADER_TEST_DATABASE_URL not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	admin, err := pgxpool.New(ctx, dsn)

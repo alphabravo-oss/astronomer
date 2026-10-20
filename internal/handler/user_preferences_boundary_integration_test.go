@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -110,6 +112,7 @@ func preferencePostgresPut(t *testing.T, h *AuthHandler, actor uuid.UUID, body a
 }
 
 func TestPreferencePostgresMissingReadIsActorScopedAndHasNoWrites(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	actor := preferencePostgresUser(t, ctx, tx)
 	other := preferencePostgresUser(t, ctx, tx)
@@ -135,7 +138,9 @@ func TestPreferencePostgresMissingReadIsActorScopedAndHasNoWrites(t *testing.T) 
 	}
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPreferencePostgresRequiredFavoritesRejectBeforeMutation(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"missing", "null", "empty"} {
 		t.Run(name, func(t *testing.T) {
 			ctx, tx := paginationPostgresTx(t)
@@ -173,6 +178,7 @@ func TestPreferencePostgresRequiredFavoritesRejectBeforeMutation(t *testing.T) {
 }
 
 func TestPreferencePostgresAuditFailureRollsBackActualReplacementAndRetry(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	actor := preferencePostgresUser(t, ctx, tx)
 	state := &preferencePostgresBoundary{}
@@ -208,6 +214,7 @@ func TestPreferencePostgresAuditFailureRollsBackActualReplacementAndRetry(t *tes
 }
 
 func TestPreferencePostgresChangedBodySameKeyCannotRetainStaleAudit(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	actor := preferencePostgresUser(t, ctx, tx)
 	state := &preferencePostgresBoundary{}

@@ -1,10 +1,11 @@
+//go:build integration
+
 package builtin
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -17,16 +18,17 @@ import (
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // This opt-in test owns an isolated PostgreSQL schema and exercises the actual
 // serializable transaction, deterministic rows, conflict rollback, and
 // concurrent retry behavior used by the built-in provisioner.
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestProvisionerPostgresMultiSourceAssets(t *testing.T) {
-	dsn := os.Getenv("BUILTIN_PROVISIONER_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("BUILTIN_PROVISIONER_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	pool := openBuiltinProvisionerTestPool(t, ctx, dsn)

@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -11,7 +13,9 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
 )
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPreferencePostgresChangedBodySameRequestIDCannotRetainStaleAudit(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"absent-header", "invalid-header", "repeated-header"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, tx := paginationPostgresTx(t)

@@ -88,6 +88,7 @@ type workerIntegrationCase struct {
 // script provisions disposable PostgreSQL and Redis containers and is the
 // supported one-command entrypoint.
 func TestWorkerPostgresRedisIntegration(t *testing.T) {
+	t.Parallel()
 	databaseURL := os.Getenv(workerIntegrationDatabaseEnv)
 	redisURL := os.Getenv(workerIntegrationRedisEnv)
 	if databaseURL == "" || redisURL == "" {
@@ -180,6 +181,7 @@ func TestWorkerPostgresRedisIntegration(t *testing.T) {
 // TestWorkerIntegrationProcessHelper runs an actual Asynq consumer in a child
 // process so the parent can terminate it at the committed execution checkpoint.
 func TestWorkerIntegrationProcessHelper(t *testing.T) {
+	t.Parallel()
 	if os.Getenv(workerIntegrationHelperEnv) != "1" {
 		t.Skip("subprocess helper")
 	}

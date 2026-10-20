@@ -1,9 +1,10 @@
+//go:build integration
+
 package systemrelease
 
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,14 +13,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func releasePostgresPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dsn := os.Getenv("ASTRONOMER_SYSTEM_RELEASE_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("ASTRONOMER_SYSTEM_RELEASE_TEST_DATABASE_URL is not set")
-	}
+	dsn := testdb.DSN(t)
 	admin, err := pgx.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatal("cannot connect to owned release test database")
@@ -51,6 +51,7 @@ func releasePostgresPool(t *testing.T) *pgxpool.Pool {
 }
 
 func TestPostgresSystemReleaseBootstrapIdempotencyAndDraft(t *testing.T) {
+	t.Parallel()
 	pool := releasePostgresPool(t)
 	config := validConfig()
 	created, err := Ensure(t.Context(), pool, config)
@@ -73,6 +74,7 @@ func TestPostgresSystemReleaseBootstrapIdempotencyAndDraft(t *testing.T) {
 }
 
 func TestPostgresSystemReleaseBootstrapImmutableAndRevoked(t *testing.T) {
+	t.Parallel()
 	pool := releasePostgresPool(t)
 	config := validConfig()
 	if _, err := Ensure(t.Context(), pool, config); err != nil {
@@ -98,6 +100,7 @@ func TestPostgresSystemReleaseBootstrapImmutableAndRevoked(t *testing.T) {
 }
 
 func TestPostgresSystemReleaseBootstrapRollbackAfterInsert(t *testing.T) {
+	t.Parallel()
 	pool := releasePostgresPool(t)
 	if _, err := pool.Exec(t.Context(), `CREATE FUNCTION fail_promotion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic promotion failure' USING ERRCODE='P0001'; END; $$; CREATE TRIGGER fail_promotion BEFORE UPDATE ON delivery_system_releases FOR EACH ROW EXECUTE FUNCTION fail_promotion()`); err != nil {
 		t.Fatal(err)
@@ -114,6 +117,7 @@ func TestPostgresSystemReleaseBootstrapRollbackAfterInsert(t *testing.T) {
 }
 
 func TestPostgresSystemReleaseBootstrapSameTransactionLock(t *testing.T) {
+	t.Parallel()
 	pool := releasePostgresPool(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -165,6 +169,7 @@ func waitForReleaseLock(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 }
 
 func TestPostgresSystemReleaseBootstrapConcurrentFirstCreate(t *testing.T) {
+	t.Parallel()
 	pool := releasePostgresPool(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

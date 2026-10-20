@@ -8,6 +8,9 @@ run:
   tests: true
   # A lint run must never mutate go.mod / go.sum.
   modules-download-mode: readonly
+  # Integration tests (guide ch.07) are linted with the rest of the tree.
+  build-tags:
+    - integration
 
 formatters:
   enable:
@@ -45,6 +48,10 @@ linters:
       statements: 50
     nestif:
       min-complexity: 5
+    paralleltest:
+      # Subtests that share a fixture are sequenced by design; top-level
+      # tests always run in parallel.
+      ignore-missing-subtests: true
     staticcheck:
       # golangci-lint's default staticcheck set with ST1005 added. `checks`
       # REPLACES the default, so the default entries are repeated verbatim.
@@ -81,9 +88,10 @@ linters:
           - gocognit
           - funlen
           - nestif
-      # Existing test files predate the t.Parallel() rule; they are retagged and
-      # parallelised as each domain is rewritten (Phase 1 testing substrate).
-      - path: _test\.go$
+      # Legacy unit-test files predate the t.Parallel() rule and are
+      # parallelised as each domain is rewritten (Phase 2). Every
+      # *_integration_test.go (the Phase 1 testdb substrate) is enforced.
+      - path-except: _integration_test\.go$
         linters:
           - paralleltest
           - tparallel

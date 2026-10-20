@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 // Larger-cardinality characterization of the production prepared-query cache.
@@ -124,7 +126,9 @@ func assertRepresentativeControlPlaneCost(t *testing.T, raw json.RawMessage) {
 	}
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestControlPlaneCursorPostgresRepresentativeSelectiveCost(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	if tx.Conn().Config().DefaultQueryExecMode != pgx.QueryExecModeCacheStatement {
 		t.Fatal("fixture must retain production-default pgx statement-cache mode")

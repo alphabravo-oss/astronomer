@@ -1,3 +1,5 @@
+//go:build integration
+
 package catalogapp
 
 import (
@@ -25,6 +27,7 @@ func (f catalogPlanFunc) Create(ctx context.Context, request rollout.CreateReque
 }
 
 func TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership(t *testing.T) {
+	t.Parallel()
 	s, request := catalogAssetsFixture(t)
 	request.ActorID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	if _, err := s.pool.Exec(t.Context(), `INSERT INTO installed_charts(id,cluster_id,release_name,status)
@@ -74,7 +77,9 @@ func TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership(t *t
 	}
 }
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory(t *testing.T) {
+	t.Parallel()
 	for _, reject := range []bool{false, true} {
 		name := "commit_before_preview"
 		if reject {

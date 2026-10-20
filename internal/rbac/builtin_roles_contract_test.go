@@ -123,7 +123,7 @@ func loadSeededRoles(t *testing.T) map[string]seededRole {
 		t.Fatal("failed to resolve caller path")
 	}
 	migrationsDir := filepath.Join(filepath.Dir(file), "..", "db", "migrations")
-	files := []string{filepath.Join(migrationsDir, "001_initial.up.sql")}
+	files := []string{filepath.Join(migrationsDir, "00001_initial.sql")}
 
 	roles := make(map[string]seededRole)
 	scope := ""

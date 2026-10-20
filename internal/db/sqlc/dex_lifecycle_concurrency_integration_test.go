@@ -1,3 +1,5 @@
+//go:build integration
+
 package sqlc
 
 import (
@@ -11,16 +13,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 // This is an opt-in real PostgreSQL test because the unit-test environment has
 // no database. CI/release rehearsals set DEX_CONCURRENCY_TEST_DATABASE_URL to a
 // disposable database; the test creates and drops an isolated schema.
 func TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore(t *testing.T) {
-	dsn := os.Getenv("DEX_CONCURRENCY_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DEX_CONCURRENCY_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	c1, err := pgx.Connect(ctx, dsn)
@@ -46,7 +48,7 @@ INSERT INTO dex_settings(id) VALUES('00000000-0000-0000-0000-000000000001'); INS
 	if _, err = c1.Exec(ctx, ddl); err != nil {
 		t.Fatal(err)
 	}
-	initialSQL, err := os.ReadFile("../migrations/001_initial.up.sql")
+	initialSQL, err := os.ReadFile("../migrations/00001_initial.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

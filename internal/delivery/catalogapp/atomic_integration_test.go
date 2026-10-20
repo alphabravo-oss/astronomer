@@ -1,3 +1,5 @@
+//go:build integration
+
 package catalogapp
 
 import (
@@ -7,7 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether(t *testing.T) {
+	t.Parallel()
 	for _, reject := range []bool{false, true} {
 		name := "commit"
 		if reject {

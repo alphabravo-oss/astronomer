@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -10,6 +12,7 @@ import (
 )
 
 func TestPreferencePostgresAttachmentFailureRollsBackReplacementAuditAndReservation(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	actor := preferencePostgresUser(t, ctx, tx)
 	state := &preferencePostgresBoundary{}
@@ -44,6 +47,7 @@ func TestPreferencePostgresAttachmentFailureRollsBackReplacementAuditAndReservat
 }
 
 func TestPreferencePostgresReplayReturnsReceiptWithoutOverwritingLaterReplacement(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	actor := preferencePostgresUser(t, ctx, tx)
 	state := &preferencePostgresBoundary{}

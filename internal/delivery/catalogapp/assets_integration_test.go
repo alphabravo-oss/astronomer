@@ -1,22 +1,22 @@
+//go:build integration
+
 package catalogapp
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func catalogAssetsFixture(t *testing.T) (*Service, InstallRequest) {
 	t.Helper()
-	dsn := os.Getenv("ASTRONOMER_CATALOG_APPLICATION_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("ASTRONOMER_CATALOG_APPLICATION_TEST_DATABASE_URL is not set")
-	}
+	dsn := testdb.DSN(t)
 	admin, err := pgx.Connect(t.Context(), dsn)
 	if err != nil {
 		t.Fatal("cannot connect to owned catalog test database")
@@ -49,6 +49,7 @@ func catalogAssetsFixture(t *testing.T) (*Service, InstallRequest) {
 }
 
 func TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration(t *testing.T) {
+	t.Parallel()
 	s, request := catalogAssetsFixture(t)
 	seedCuratedCatalogChart(t, s, request)
 	first, generation, err := s.ensureAssets(t.Context(), request, false)
@@ -99,6 +100,7 @@ func seedCuratedCatalogChart(t *testing.T, s *Service, request InstallRequest) {
 }
 
 func TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger(t *testing.T) {
+	t.Parallel()
 	s, request := catalogAssetsFixture(t)
 	if _, _, err := s.ensureAssets(t.Context(), request, false); err != nil {
 		t.Fatal(err)
@@ -110,6 +112,7 @@ func TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger(t *testin
 }
 
 func TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites(t *testing.T) {
+	t.Parallel()
 	s, request := catalogAssetsFixture(t)
 	request.ValuesYAML = "[invalid: yaml"
 	if _, _, err := s.ensureAssets(t.Context(), request, false); err == nil {

@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -79,7 +81,10 @@ func assertControlPlanePlan(t *testing.T, nodes []paginationPlanNode, index stri
 	}
 	return found
 }
+
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
+	t.Parallel()
 	for _, collection := range []string{"alerts", "silences"} {
 		t.Run(collection, func(t *testing.T) {
 			ctx, tx := paginationPostgresTx(t)
@@ -195,7 +200,10 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 // Selective predicates can examine more index entries than the response size.
 // Retain actual generated initial/continuation plans without claiming that
 // the 201-row unfiltered seek bound applies to arbitrary selective filters.
+//
+//nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestControlPlaneCursorPostgresSelectiveFilterPlans(t *testing.T) {
+	t.Parallel()
 	ctx, tx := paginationPostgresTx(t)
 	controller := "f-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
 	other := "o-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
