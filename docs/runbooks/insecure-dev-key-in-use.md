@@ -11,7 +11,7 @@ repository**. Treat it as a credential compromise, not a config nit.
   `{user_id: <any admin uuid>, token_type: "access"}` and sign it; revocation
   does not help because a forged token carries whatever `jti`/`iat` the attacker
   chooses.
-- The alert fires with `key="encryption_key"`: the Fernet key that wraps every
+- The alert fires with `key="encryption_key"`: the age key that seals every
   stored credential is public — cluster kubeconfigs, agent tokens, git PATs,
   registry passwords, cloud credentials, SSO client secrets.
 - The server and worker logs carry an ERROR at boot:
@@ -48,9 +48,9 @@ render fails until real keys are supplied.
 1. Rotate both keys with the multi-key procedure in
    [`../secret-rotation-runbook.md`](../secret-rotation-runbook.md) — add the new
    key as primary, keep the old one for the validation/decrypt window, run
-   `cmd/keyrotate` for the Fernet columns, then drop the old key. Do not swap a
-   key in place: dropping the old Fernet key before re-encryption makes every
-   wrapped column undecryptable.
+   `astro admin rotate-keys` for the sealed columns, then drop the old key. Do
+   not swap a key in place: dropping the old age key before re-encryption makes
+   every sealed column undecryptable.
 2. Invalidate outstanding sessions once the new signing key is primary (per-user
    invalidation cutoff / forced re-login), so any token minted under the public
    key is dead rather than merely expiring.
@@ -59,10 +59,10 @@ render fails until real keys are supplied.
 
    ```
    openssl rand -base64 32 > ./jwt-key
-   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ./fernet-key
+   astro admin generate-encryption-key --label rotated > ./encryption-key
    helm upgrade astronomer ./deploy/chart \
      --set-file secrets.secretKey=./jwt-key \
-     --set-file secrets.encryptionKey=./fernet-key
+     --set-file secrets.encryptionKey=./encryption-key
    ```
 
    Or pre-create the Secret and set `secrets.existingSecret`, which is the
@@ -71,7 +71,7 @@ render fails until real keys are supplied.
 ### Local dev (`make helm-install`, `scripts/k3d-bootstrap.sh`)
 
 Both paths default to their own published laptop values, so the alert is
-expected there and the recovery above is overkill — but the Fernet key they pass
+expected there and the recovery above is overkill — but the encryption key they pass
 is **not** the one the chart used to default to. Re-running either against a
 cluster bootstrapped before the chart defaults were removed swaps the key under
 the existing Postgres PVC, and every credential stored by the old install stops

@@ -14,5 +14,7 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0006](0006-tailwind-v4-css-first.md) | Tailwind v4 CSS-first configuration | accepted |
 | [0007](0007-rest-to-connect-rpc.md) | REST/OpenAPI to Connect-RPC migration strategy | proposed |
 | [0008](0008-charlie-integration-retained.md) | Charlie integration is retained | accepted |
+| [0009](0009-goose-embedded-migrations.md) | goose migrations embedded in the server, applied at boot | accepted |
+| [0010](0010-age-column-encryption.md) | age column encryption with a (key_id, algorithm, ciphertext, nonce) row shape | accepted |
 
 The threat model lives next to these decisions: [`../threat-model.md`](../threat-model.md).

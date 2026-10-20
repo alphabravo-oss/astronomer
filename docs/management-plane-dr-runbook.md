@@ -79,10 +79,10 @@ Do **not** use this runbook for:
   manager (Vault, AWS Secrets Manager, sealed-secrets, etc.) **before** you
   start the database restore.
 
-**The single most important invariant**: `secrets.encryptionKey` (the Fernet
+**The single most important invariant**: `secrets.encryptionKey` (the age
 key) must be the same value before and after the restore. Every encrypted blob
 in the restored DB — agent tokens, SSO client secrets, integration tokens —
-was Fernet-wrapped with that key. If the key changes, every decrypted column
+was age-sealed with that key. If the key changes, every decrypted column
 becomes garbage and agents can not re-authenticate.
 
 ---
@@ -90,7 +90,7 @@ becomes garbage and agents can not re-authenticate.
 ## Key custody and the encryption-key backup (F4)
 
 The nightly `pg_dump` captures ciphertext. It does **not**, on its own, capture
-the Fernet/JWT key that decrypts it — that key lives in a Kubernetes Secret
+the age/JWT key that decrypts it — that key lives in a Kubernetes Secret
 (`<release>-secrets`), not in Postgres. A restore onto a brand-new cluster where
 that Secret is gone brings back rows that are permanently undecryptable.
 
@@ -111,7 +111,7 @@ The chart closes this gap when you wire
   the delete-capable identity and supports dry-run review.
 - The weekly restore-drill (`managementRestoreDrill.decryptCheck`) downloads the
   latest wrapped key bundle, unwraps it with the **same** passphrase, and
-  Fernet-verifies one known encrypted column in the restored DB. If it can't
+  age-decrypts one known sealed column in the restored DB. If it can't
   decrypt, the drill **fails** — so a broken key backup can no longer hide
   behind a green drill.
 
@@ -461,10 +461,10 @@ kubectl -n astronomer patch cronjob astronomer-management-backup \
 ## What to do if SSO is broken after restore
 
 Symptom: the UI loads, but every SSO redirect throws "invalid client secret"
-/ "decryption failed" / "fernet token invalid". Agents in managed clusters
+/ "decryption failed" / "crypto: unknown key id". Agents in managed clusters
 flap between `connecting` and `error`.
 
-Almost always, the root cause is **encryption-key mismatch**: the Fernet key
+Almost always, the root cause is **encryption-key mismatch**: the age key
 in the running pod is not the key that wrapped the encrypted columns in the
 dump.
 
@@ -497,7 +497,7 @@ env var, so a full recreate that omits them would silently blank those consumers
 
 ```bash
 kubectl -n astronomer patch secret <release>-secrets --type merge \
-  -p '{"stringData":{"ASTRONOMER_ENCRYPTION_KEY":"<original-fernet-key>"}}'
+  -p '{"stringData":{"ASTRONOMER_ENCRYPTION_KEY":"<original-age-keyring>"}}'
 
 # If the JWT signing key also drifted, patch it in the same call:
 kubectl -n astronomer patch secret <release>-secrets --type merge \

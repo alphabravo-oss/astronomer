@@ -11,7 +11,7 @@ this file summarises what an agent or new contributor needs to act.
 
 ## Repository map
 
-- `cmd/`: `server`, `worker`, `agent`, `astro` composition roots (+ `migrator`, `keyrotate`, `dexconfigcheck` until Phase 1).
+- `cmd/`: `server`, `worker`, `agent`, `astro` composition roots (+ `dexconfigcheck` until Phase 1).
 - `internal/`: Go domains and infrastructure; `internal/handler/` is the legacy flat HTTP package being split per domain.
 - `internal/db/queries/` (sqlc source) and `internal/db/sqlc/` (generated, never hand-edited).
 - `frontend/`: Vite + React 19 + TanStack Router/Query dashboard; `frontend/tests/e2e-live/` is the real-server Playwright suite.
