@@ -8,9 +8,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * last-sync status; the detail page handles per-source actions.
  */
 import { useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, GitBranch, Plus, Trash2 } from "lucide-react";
+import { GitBranch, Plus, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -189,15 +188,7 @@ function GitOpsSourcesPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · GitOps"
           title="GitOps cluster registration"
           description="Operators commit ClusterRegistration YAML to a tracked repo; Astronomer reconciles every 60s."
           actions={

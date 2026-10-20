@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Download, FileArchive, Plus } from "lucide-react";
+import { Download, FileArchive, Plus } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { downloadBlob } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
@@ -139,15 +139,7 @@ function CompliancePage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · Compliance"
           title="Compliance exports"
           description="Build a ZIP of audit + RBAC + config for a date range. Large windows may take longer, but the export downloads directly when complete."
         />

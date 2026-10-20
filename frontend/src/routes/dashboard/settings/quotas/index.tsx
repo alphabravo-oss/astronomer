@@ -5,9 +5,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * breaches and worst-cap utilization let operators spot hot plans without
  * clicking through.
  */
-import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ExternalLink, Gauge, Plus } from "lucide-react";
+import { ExternalLink, Gauge, Plus } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -176,15 +175,7 @@ function QuotasPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · Quotas"
           title="Quota plans"
           description="Per-tenant caps on projects, clusters, namespaces, membership, API tokens, and streams."
           actions={

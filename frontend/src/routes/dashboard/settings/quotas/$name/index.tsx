@@ -282,7 +282,7 @@ function QuotaPlanDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </RouterLink>
-        <PageHeader eyebrow="Settings · Quota plan" title="Edit plan" />
+        <PageHeader title="Edit plan" />
         <QuotaPlanInner />
       </PageShell>
     </SettingsAuthGate>

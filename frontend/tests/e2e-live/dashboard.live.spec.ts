@@ -1,22 +1,55 @@
 import { expect, test } from "@playwright/test";
 
-// The overview's Clusters KPI reads from the same source the Clusters list
-// is paged from, so the tile and the list total can never disagree.
-test("dashboard Clusters KPI equals the clusters count", async ({ page, context }) => {
+// Every cluster count on the overview derives from one selector over the
+// clusters list: the verdict strip, the health board, the agents panel and
+// the capacity list must agree with each other and with the API.
+test("overview counts agree with each other and with the clusters API", async ({
+  page,
+  context,
+}) => {
+  const list = await context.request.get("/api/v1/clusters/?limit=200");
+  expect(list.status()).toBe(200);
+  const body = (await list.json()) as {
+    pagination?: { total?: number };
+    data?: Array<{ status: string; pod_count?: number }>;
+  };
+  const rows = body.data ?? [];
+  const total = body.pagination?.total ?? rows.length;
+  const byStatus = (status: string) =>
+    rows.filter((row) => row.status === status).length;
+  const expected = {
+    healthy: byStatus("active"),
+    disconnected: byStatus("disconnected"),
+    registering: byStatus("pending"),
+    attention: rows.length - byStatus("active") - byStatus("disconnected") - byStatus("pending"),
+  };
+  const pods = rows.reduce((sum, row) => sum + (row.pod_count ?? 0), 0);
+
   await page.goto("/dashboard");
   await expect(page.getByTestId("app-shell")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
 
-  const list = await context.request.get("/api/v1/clusters/?page_size=1");
-  expect(list.status()).toBe(200);
-  const body = (await list.json()) as { pagination?: { total?: number }; data?: unknown[] };
-  const total = body.pagination?.total ?? body.data?.length ?? 0;
+  const verdict = page.getByTestId("fleet-verdict");
+  const number = (id: string) =>
+    verdict.locator(`[data-verdict-number="${id}"] span`).first();
+  await expect(number("clusters")).toHaveText(String(total));
+  await expect(number("disconnected")).toHaveText(String(expected.disconnected));
+  await expect(number("pods")).toHaveText(pods.toLocaleString("en-US"));
 
-  const tile = page.getByRole("link", { name: /^Clusters\s/ }).first();
-  await expect(tile).toBeVisible();
-  await expect(tile).toContainText(String(total));
-  // Verdict strip carries the same number.
-  await expect(page.getByRole("status").filter({ hasText: "clusters" }).first()).toContainText(String(total));
+  for (const key of ["healthy", "attention", "disconnected", "registering"] as const) {
+    await expect(page.getByTestId(`health-${key}-count`)).toHaveText(String(expected[key]));
+    await expect(
+      page.getByTestId(`agents-${key}`).locator("[data-value]"),
+    ).toHaveText(String(expected[key]));
+  }
+  // The board accounts for every cluster exactly once.
+  expect(Object.values(expected).reduce((a, b) => a + b, 0)).toBe(Math.min(total, 200));
+
+  if (total > 0) {
+    await expect(page.getByTestId("capacity-list").locator("li")).toHaveCount(
+      Math.min(total, 8),
+    );
+  }
 });
 
 // Settings is two layers: the settings sidebar → the page (no hub cards).

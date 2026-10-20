@@ -95,8 +95,6 @@ export function CharlieAdminContent() {
   return (
     <PageShell>
       <ResourceMasthead
-        backTo="/dashboard/settings"
-        backLabel="Back to settings"
         title="Charlie"
         description="Connect and govern the external Charlie service and its Astronomer product agent."
       />

@@ -174,7 +174,6 @@ function NewReadAuditPolicyPage() {
           Back to read-side audit policies
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · Read-side audit · New"
           title="New read-audit policy"
         />
         <NewReadAuditPolicyForm />

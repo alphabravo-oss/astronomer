@@ -110,8 +110,6 @@ function VaultConnectionsPage() {
   return (
     <PageShell>
       <ResourceMasthead
-        backTo="/dashboard/settings"
-        backLabel="Back to settings"
         title="Vault connections"
         actions={
           <BareButton

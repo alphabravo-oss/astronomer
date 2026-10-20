@@ -20,6 +20,13 @@ import {
 import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
 
+/** "kubernetes_version_unsupported" → "Kubernetes version unsupported". */
+export function humanizeCode(value: string): string {
+  if (!/^[a-z0-9]+(?:[_.-][a-z0-9]+)+$/.test(value)) return value;
+  const words = value.replace(/[_.-]+/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function isForbiddenError(error: unknown): boolean {
   return Boolean(
     error &&
@@ -168,11 +175,7 @@ function AttentionList({
         <RouterLink
           key={`${item.clusterId}-${item.reason}`}
           to={clusterHref(item.clusterId)}
-          className={
-            item.severity === "error"
-              ? "flex items-center justify-between rounded-md border border-status-error/30 bg-status-error/10 p-3"
-              : "flex items-center justify-between rounded-md border border-status-warning/30 bg-status-warning/10 p-3"
-          }
+          className="flex items-center justify-between gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-accent/40"
         >
           <span className="flex items-center gap-2">
             <AlertTriangle
@@ -183,7 +186,7 @@ function AttentionList({
               }
             />
             <span>
-              <strong>{item.clusterName}</strong> — {item.detail}
+              <strong>{item.clusterName}</strong> · {humanizeCode(item.detail)}
             </span>
           </span>
           <DeliveryPhaseBadge value={item.reason} />

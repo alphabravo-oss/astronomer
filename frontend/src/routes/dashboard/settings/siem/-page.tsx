@@ -8,8 +8,8 @@
  * server-side; SettingsAuthGate mirrors that in the UI.
  */
 import { useState } from "react";
-import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Plus } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 import { DataTable } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
@@ -108,15 +108,7 @@ export default function SIEMForwardersPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · SIEM"
           title="SIEM Forwarders"
           description="Stream audit + platform events to external SIEMs over syslog, Splunk HEC, or NDJSON-HTTPS. Use Test to ship a synthetic event through the real pipeline and confirm delivery."
         />

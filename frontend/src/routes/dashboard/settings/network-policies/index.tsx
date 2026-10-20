@@ -24,8 +24,7 @@ import {
 import { useState } from "react";
 import { useNetworkPolicyTemplates } from "@/lib/hooks/policy-queries";
 import { QueryStates } from "@/components/ui/query-states";
-import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2, Save, Copy, Loader2 } from "lucide-react";
+import { Plus, Trash2, Save, Copy, Loader2 } from "lucide-react";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
@@ -193,12 +192,6 @@ function NetworkPoliciesPanel() {
 
   return (
     <PageShell className="space-y-4">
-      <RouterLink
-        to="/dashboard/settings"
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
-      </RouterLink>
       <PageHeader
         title="Network policy templates"
         description="Pre-built Kubernetes NetworkPolicy bundles. Built-in rows are read-only — clone to create an editable custom row. Apply templates to namespaces from the cluster detail page's Network policies tab."

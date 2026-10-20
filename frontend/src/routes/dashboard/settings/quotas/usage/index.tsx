@@ -224,7 +224,6 @@ function QuotaUsagePage() {
           Back to quotas
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · Quota usage"
           title="Deployment-wide quota usage"
         />
         <UsageInner />

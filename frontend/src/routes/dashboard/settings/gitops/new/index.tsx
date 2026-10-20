@@ -294,7 +294,7 @@ function NewGitOpsSourcePage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to GitOps sources
         </RouterLink>
-        <PageHeader eyebrow="Settings · GitOps" title="New GitOps source" />
+        <PageHeader title="New GitOps source" />
         <GitOpsForm />
       </PageShell>
     </SettingsAuthGate>

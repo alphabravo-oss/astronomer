@@ -8,8 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * push keys that actually changed.
  */
 import { useMemo, useEffect, useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Pencil, Save } from "lucide-react";
+import { Pencil, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
@@ -559,15 +558,7 @@ function PlatformSettingsPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · Platform"
           title="Platform settings"
           description="Branding, banners, feature flags, token TTL, telemetry. Changes apply across the dashboard."
         />

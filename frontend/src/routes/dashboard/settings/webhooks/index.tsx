@@ -7,9 +7,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * status / time come from the backend joined to the subscription row.
  */
 import { useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2, Webhook } from "lucide-react";
+import { Plus, Trash2, Webhook } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
@@ -166,15 +165,7 @@ function WebhooksPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
-          eyebrow="Settings · Webhooks"
           title="Webhooks"
           description="Outbound HTTP subscribers for platform events. Slack / PagerDuty / generic JSON."
           actions={

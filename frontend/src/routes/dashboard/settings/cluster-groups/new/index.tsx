@@ -203,7 +203,6 @@ function NewClusterGroupPage() {
         Back to cluster groups
       </RouterLink>
       <PageHeader
-        eyebrow="Settings · Cluster groups · New"
         title="New cluster group"
       />
       <NewClusterGroupForm />
