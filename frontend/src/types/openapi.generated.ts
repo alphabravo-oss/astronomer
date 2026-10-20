@@ -2787,6 +2787,7 @@ export interface OpenAPIComponents {
     DeliverySystemCompatibility: {
           "contract": OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
           "current_release": OpenAPIComponents['schemas']['DeliverySystemRelease'] | null;
+          "pending_release"?: OpenAPIComponents['schemas']['DeliverySystemRelease'] | null;
           "current_rollout": OpenAPIComponents['schemas']['DeliverySystemRollout'] | null;
           "observed_inventory": OpenAPIComponents['schemas']['DeliveryCompatibilityCount'][];
         };
@@ -7051,6 +7052,7 @@ export interface OpenAPIReadComponents {
     DeliverySystemCompatibility: {
           "contract": OpenAPIReadComponents['schemas']['DeliveryCompatibilityContract'];
           "current_release": OpenAPIReadComponents['schemas']['DeliverySystemRelease'] | null;
+          "pending_release"?: OpenAPIReadComponents['schemas']['DeliverySystemRelease'] | null;
           "current_rollout": OpenAPIReadComponents['schemas']['DeliverySystemRollout'] | null;
           "observed_inventory": OpenAPIReadComponents['schemas']['DeliveryCompatibilityCount'][];
         };

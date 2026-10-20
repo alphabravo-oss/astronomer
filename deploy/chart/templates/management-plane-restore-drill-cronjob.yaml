@@ -23,7 +23,7 @@
   drill to even resolve a backup to restore.
 
   Companion bits:
-    - internal/db/migrations/041_backup_drill.up.sql  (status table)
+    - internal/db/migrations (backup_drill_results status table)
     - internal/handler/admin_drill.go                 (read-side endpoint)
     - deploy/chart/templates/prometheus-rules.yaml    (staleness alert)
     - docs/runbooks/backup-restore-drill-failed.md    (when this fails)
@@ -243,16 +243,16 @@ spec:
 
                   # --- Schema-sanity check -----------------------------------
                   ROW="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
-                    "SELECT version || '|' || dirty FROM schema_migrations ORDER BY version DESC LIMIT 1;" \
+                    "SELECT max(version_id) FILTER (WHERE is_applied) || '|' || bool_or(NOT is_applied) FROM public.goose_db_version;" \
                     2>/dev/null || true)"
                   if [ -z "${ROW}" ]; then
-                    fail_and_exit "schema_migrations is empty in restored DB"
+                    fail_and_exit "goose_db_version is empty in restored DB"
                   fi
                   SCHEMA_VERSION="${ROW%%|*}"
                   DIRTY="${ROW##*|}"
-                  echo "schema_migrations latest: version=${SCHEMA_VERSION} dirty=${DIRTY}"
+                  echo "goose_db_version latest: version=${SCHEMA_VERSION} rolled_back_rows=${DIRTY}"
                   if [ "${DIRTY}" = "t" ] || [ "${DIRTY}" = "true" ]; then
-                    fail_and_exit "schema_migrations.dirty=true (version=${SCHEMA_VERSION})"
+                    fail_and_exit "goose_db_version has rolled-back rows (version=${SCHEMA_VERSION})"
                   fi
                   if [ "${SCHEMA_VERSION}" -lt "${EXPECTED_MIN_SCHEMA_VERSION}" ]; then
                     fail_and_exit "schema_version ${SCHEMA_VERSION} < expected min ${EXPECTED_MIN_SCHEMA_VERSION}"

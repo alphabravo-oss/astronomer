@@ -259,44 +259,9 @@ spec:
               This can block vacuum, migrations, and schema changes.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/db-runtime-contention.md
 
-        # ── Migration health and duration ───────────────────────────────
-        # kube-state-metrics exposes Job start/completion/failure times.
-        # The migration Job should usually finish in seconds; 15 minutes
-        # means it is blocked on connectivity, a dirty schema, or an
-        # unexpected lock.
-        - alert: AstronomerMigrationJobLongRunning
-          expr: |
-            max(
-              (time() - kube_job_status_start_time{job_name=~".*-migrate.*"})
-              unless on(job_name)
-              kube_job_status_completion_time{job_name=~".*-migrate.*"}
-            ) > 900
-          for: 5m
-          labels:
-            severity: warning
-            component: database
-          annotations:
-            summary: "Astronomer migration Job has been running for >15 minutes"
-            description: |
-              The release migration Job is still running after 15 minutes.
-              Check for schema lock contention, invalid DATABASE_URL, or a
-              dirty schema_migrations row.
-            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/failed-migration.md
-
-        - alert: AstronomerMigrationJobFailed
-          expr: |
-            sum(increase(kube_job_status_failed{job_name=~".*-migrate.*"}[24h])) > 0
-          for: 5m
-          labels:
-            severity: critical
-            component: database
-          annotations:
-            summary: "Astronomer migration Job failed in the last 24h"
-            description: |
-              A migration Job failed. Do not roll the application forward
-              until schema_migrations is inspected and the failed migration
-              is either safely retried or forward-fixed.
-            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/failed-migration.md
+        # Migrations run inside the server at boot (goose, advisory lock); a
+        # failing migration keeps the server from becoming ready, which the
+        # availability alerts above already cover.
 
         # ── External Postgres replication lag ───────────────────────────
         # This rule is intentionally best-effort. It fires only when the
