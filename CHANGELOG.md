@@ -2,14 +2,52 @@
 
 ## Unreleased
 
-Target release: **2.0.1**.
+### Realignment with the AlphaBravo Technology Selection Guide (Phase 0)
 
-### Changes
+- Removed committed CI evidence, plan trees, generated inventories,
+  compatibility ledgers, qualification-only scripts, binaries, packages and 20
+  workflows (git ls-files 10,408 → ~5,100). Evidence lives in CI artifacts, not
+  git. Previous history is intact.
+- Toolchain: Go 1.27.3, Node 24.22.0 LTS, Helm 4.3.1, golangci-lint 2.15,
+  gotestsum 1.13, Air 1.67. Dependencies refreshed (`go get -u`, npm bumps:
+  React 19.3.1, TypeScript 7.0.2, Vite 8.3.4, TanStack Query 5.104.5, vitest
+  5.0.5, Playwright 1.64.1, eslint 10, lucide-react 1.59).
+- Canonical `Makefile` (`dev build test test-integration lint vet fmt generate
+  migrate check security fips-build updates docker-build helm-lint e2e`);
+  `GO_VERSION` derived from `go.mod` for every image build.
+- Distroless multi-stage Dockerfiles (`USER 65532`), digest-pinned bases;
+  `database-cache-helper` no longer baked into the server image.
+- Air live reload per binary, `scripts/dev.sh` one-command stack, single
+  `deploy/docker-compose.yml` with Postgres 17, Redis 8, Tempo 3.1 (OTLP gRPC),
+  Loki 3.7, Grafana Alloy, Prometheus 3.15, Grafana 13.2.
+- Security gates as `make security` (gosec fail-on-HIGH SARIF, govulncheck
+  SARIF, gitleaks full history); `make fips-build` stamps `pkg/version.FIPSMode`.
+- Conformance: middleware order (recovery → request-id/tracing → logging),
+  `service_build_info` gauge, `astronomer_request_errors_total{route,reason}`,
+  OTLP gRPC exporter by default (`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`
+  opt-in), session cookie takes precedence over bearer, `SERVER_ADDR`
+  configurable, standalone proxy env reads moved into `internal/config`.
+- Charlie: the artifact reconciler now persists the applied chart/image
+  digests to `charlie_connections` after a successful Helm apply and caps Helm
+  history at 5, so the agent release is no longer re-applied every interval.
+- ADRs 0001–0008 under `docs/decisions/`; `CLAUDE.md` principles with a
+  derived `AGENTS.md`.
+- Playwright live tier (`frontend/playwright.live.config.ts`) is the default
+  `npm run test:e2e`: real login persisted as storageState, cluster list,
+  settings, metrics and refresh/revocation journeys against the Air-served
+  binary. The OpenAPI-stub tier remains as `test:e2e:stubbed`.
 
-- Fix offline toolkit downloads by allowing the exact GitHub release-asset redirect
-  while preserving public destination checks, TLS, digest verification and bounds.
-  The incomplete v2.0.0 publication retains its immutable tag and signed images;
-  v2.0.1 rebuilds and qualifies the complete artifact set from its own source.
+## 2.0.1 - 2026-10-11
+
+- Fix offline toolkit downloads by allowing the exact GitHub release-asset
+  redirect while preserving public destination checks, TLS, digest
+  verification and bounds. The incomplete v2.0.0 publication retains its
+  immutable tag and signed images; v2.0.1 rebuilds and qualifies the complete
+  artifact set from its own source.
+- The release owner renewed the v1.2.1 qualification deferrals and upstream
+  vulnerability risk acceptance for v2.0.1 on 2026-10-12.
+
+## 2.0.0 - 2026-10-11
 
 - Integrate the technology-guide implementation: updated toolchain and dependency
   authority, API and generated-client contracts, pagination, typed database and

@@ -1,5 +1,7 @@
 # Astronomer v1 upgrade and rollback
 
+> **Note (2026-10 realignment):** `scripts/upgrade-release.sh` was removed with the CI tooling sweep; the upgrade driver it wrapped lives in `internal/ops/upgradecli` and is exposed through the `astro` CLI in Phase 1. Until then use `git show 4904e8c:scripts/upgrade-release.sh`.
+
 This runbook upgrades an existing, healthy Astronomer v1 Helm release to one
 exact tagged v1 release. The supported path is ordinary Helm ownership of the
 dependency-free management-plane chart. Flux controllers remain agent-managed

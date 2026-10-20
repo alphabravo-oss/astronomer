@@ -1,5 +1,7 @@
 # Air-gapped installation and upgrade
 
+> **Note (2026-10 realignment):** the Python/Bash mirroring helpers referenced below (`mirror-release.py`, `check-build-capacity.sh`, `safe-disk-cleanup.sh`, `application-catalog-airgap.sh`) were removed with the CI tooling sweep; they return as `astro airgap` subcommands in Phase 1. Until then use the versions in git history (`git show 4904e8c:scripts/mirror-release.py`).
+
 This runbook installs one immutable Astronomer release without allowing the
 management or member clusters to reach a public registry. A release is a single
 compatibility unit: management chart and images, agent, the downstream Flux

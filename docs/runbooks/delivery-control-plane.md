@@ -1,5 +1,7 @@
 # Flux-native delivery control-plane operations
 
+> **Note (2026-10 realignment):** `scripts/run-delivery-resilience-drill.py` and its fixtures were removed with the CI tooling sweep (`git show 4904e8c:scripts/run-delivery-resilience-drill.py`).
+
 This runbook covers the Astronomer-owned delivery API, durable rollout engine,
 cluster-agent protocol, and the exact signed Flux distribution. Treat
 PostgreSQL as the control-plane authority and the agent-reported Flux inventory
