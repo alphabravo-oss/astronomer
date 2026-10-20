@@ -476,7 +476,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// so there is nothing stored to preserve and no agent that could have
 	// advertised the capability, which makes `enforce` unreachable at create
 	// time by construction.
-	annotations, ok := guardDownstreamImpersonationAnnotation(w, r, h.queries, uuid.Nil, nil, annotations)
+	annotations, ok := guardDownstreamImpersonationAnnotation(w, r, &h.authz, h.queries, uuid.Nil, nil, annotations)
 	if !ok {
 		return
 	}
@@ -631,7 +631,7 @@ func (h *ClusterHandler) Update(w http.ResponseWriter, r *http.Request) {
 			if mergeErr != nil {
 				return sqlc.Cluster{}, mergeErr
 			}
-			annotations, ok := guardDownstreamImpersonationAnnotation(w, r, q, id, existing.Annotations, params.Annotations)
+			annotations, ok := guardDownstreamImpersonationAnnotation(w, r, &h.authz, q, id, existing.Annotations, params.Annotations)
 			if !ok {
 				return sqlc.Cluster{}, errClusterUpdateResponseWritten
 			}

@@ -213,18 +213,6 @@ func TestSCIMTokenAdmin_ListIsBounded(t *testing.T) {
 	}
 }
 
-func TestSCIMTokenAdmin_NonSuperuserForbidden(t *testing.T) {
-	callerID := uuid.New()
-	q := newFakeSCIMTokenAdminQuerier(sqlc.User{ID: callerID, IsSuperuser: false})
-	h := NewSCIMTokenAdminHandler(q)
-
-	rec := httptest.NewRecorder()
-	h.Create(rec, authedRequest(http.MethodPost, "/api/v1/admin/scim-tokens/", callerID, []byte(`{"name":"x"}`)))
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("non-superuser create status = %d, want 403; body=%s", rec.Code, rec.Body.String())
-	}
-}
-
 func TestSCIMTokenAdmin_DeleteRevokes(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSCIMTokenAdminQuerier(sqlc.User{ID: callerID, IsSuperuser: true})

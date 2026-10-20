@@ -1233,15 +1233,6 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 // population.
 func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := handler.RequireSuperuser(w, r, deps.CoreAuth.AuthQueries, handler.SuperuserGateConfig{
-			StoreUnavailableStatus:  http.StatusInternalServerError,
-			StoreUnavailableCode:    "internal_error",
-			StoreUnavailableMessage: "User store not configured",
-			ForbiddenMessage:        "Key status requires superuser privileges",
-		}); !ok {
-			return
-		}
-
 		encKeys := 0
 		encKeyInventory := []iauth.EncryptionKeyInfo{}
 		if deps.CoreAuth.Encryptor != nil {

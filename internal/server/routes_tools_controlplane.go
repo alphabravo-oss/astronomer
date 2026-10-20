@@ -5,21 +5,35 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
-// requireSuperuser returns middleware that admits only superusers, reusing the
-// shared handler.RequireSuperuser gate. Used for platform-admin surfaces whose
-// handlers carry no per-request authorization of their own (e.g. the
-// control-plane controllers routes).
-func requireSuperuser(deps RouterDependencies) func(http.Handler) http.Handler {
+// requireSuperuser admits only platform superusers. The rbac engine grants
+// superuser solely through the binding the RBAC store synthesizes for a user
+// whose is_superuser flag is set, so this is the engine's view of the same fact
+// the users table holds.
+func requireSuperuser(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil {
+		return unavailableSecurityDependency("RBAC authorization")
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, ok := handler.RequireSuperuser(w, r, deps.CoreAuth.AuthQueries, handler.SuperuserGateConfig{
-				ForbiddenMessage: "This action requires superuser privileges",
-			}); !ok {
+			user, ok := reqctx.AuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required to access this resource")
+				return
+			}
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
+				return
+			}
+			if !engine.CheckSuperuser(bindings) {
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "This action requires superuser privileges")
 				return
 			}
 			next.ServeHTTP(w, r)

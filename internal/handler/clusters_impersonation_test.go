@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -202,6 +203,7 @@ func TestDownstreamImpersonationFlagIsSuperuserWriteOnly(t *testing.T) {
 			q.conditions = []byte(tt.conditions)
 
 			h := NewClusterHandler(q)
+			h.SetAuthorization(rbac.NewEngine(), impersonationBindings{superuser: tt.superuser})
 			setClusterTestRunTx(h, q)
 			w := httptest.NewRecorder()
 			h.Update(w, updateClusterRequest(t, clusterID, tt.incoming, q.user))
@@ -286,4 +288,15 @@ func TestDownstreamImpersonationDefaultsOffOnTheResponse(t *testing.T) {
 	if resp.DownstreamImpersonation != string(callerid.ModeOff) {
 		t.Fatalf("downstream_impersonation = %q, want off", resp.DownstreamImpersonation)
 	}
+}
+
+// impersonationBindings is the RBAC store's view of the caller: the synthetic
+// superuser binding for a superuser, nothing otherwise.
+type impersonationBindings struct{ superuser bool }
+
+func (b impersonationBindings) GetUserBindings(_ context.Context, userID string) ([]rbac.RoleBinding, error) {
+	if b.superuser {
+		return []rbac.RoleBinding{{UserID: userID, IsSuperuser: true}}, nil
+	}
+	return nil, nil
 }

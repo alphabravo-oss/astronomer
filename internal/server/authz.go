@@ -346,7 +346,7 @@ func (a *routeAuthorizer) single(p Permission) func(http.Handler) http.Handler {
 	var eval func(http.Handler) http.Handler
 	switch {
 	case p.Superuser:
-		eval = requireSuperuser(a.deps)
+		eval = requireSuperuser(engine, querier)
 	case p.Scope == ScopeRoute:
 		eval = requirePermission(engine, querier, p.Resource, p.Verb)
 	case p.Scope == ScopeQueryNamespace:

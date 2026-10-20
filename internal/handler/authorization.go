@@ -50,24 +50,6 @@ type superuserGateConfig struct {
 	ForbiddenMessage        string
 }
 
-type SuperuserGateConfig struct {
-	StoreUnavailableStatus  int
-	StoreUnavailableCode    apiutil.Code
-	StoreUnavailableMessage string
-	InvalidUserStatus       int
-	InvalidUserCode         apiutil.Code
-	InvalidUserMessage      string
-	ForbiddenMessage        string
-}
-
-func (cfg SuperuserGateConfig) internal() superuserGateConfig {
-	return superuserGateConfig(cfg)
-}
-
-func RequireSuperuser(w http.ResponseWriter, r *http.Request, querier UserByIDQuerier, cfg SuperuserGateConfig) (sqlc.User, bool) {
-	return requireSuperuser(w, r, querier, cfg.internal())
-}
-
 func authenticatedUserFromRequest(r *http.Request, querier userByIDQuerier) (sqlc.User, error) {
 	caller, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || caller == nil {
@@ -340,6 +322,24 @@ func (a *authorizationSupport) authorizeGlobalAction(w http.ResponseWriter, r *h
 	}
 	if !a.allowsGlobal(bindings, resource, verb) {
 		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
+		return false
+	}
+	return true
+}
+
+// authorizeSuperuser is the data-dependent elevation check for the few
+// operations whose superuser requirement depends on the request body (route
+// rows in the server's routePermissions table cover every route-level one).
+// It asks the rbac engine, which grants superuser only through the binding the
+// RBAC store synthesizes for platform superusers.
+func (a *authorizationSupport) authorizeSuperuser(w http.ResponseWriter, r *http.Request, message string) bool {
+	bindings, _, err := a.bindingsForContext(r.Context())
+	if err != nil {
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RBACUnavailable, "Authorization is unavailable")
+		return false
+	}
+	if a == nil || a.engine == nil || !a.engine.CheckSuperuser(bindings) {
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, message)
 		return false
 	}
 	return true

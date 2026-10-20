@@ -98,6 +98,7 @@ func agentAdvertisedImpersonation(ctx context.Context, q any, clusterID uuid.UUI
 func guardDownstreamImpersonationAnnotation(
 	w http.ResponseWriter,
 	r *http.Request,
+	authz *authorizationSupport,
 	q any,
 	clusterID uuid.UUID,
 	stored json.RawMessage,
@@ -147,9 +148,7 @@ func guardDownstreamImpersonationAnnotation(
 	}
 
 	// A real change. Superuser only.
-	if _, ok := RequireSuperuser(w, r, clusterUserByIDQuerier(q), SuperuserGateConfig{
-		ForbiddenMessage: "Only a superuser may change the downstream-impersonation mode",
-	}); !ok {
+	if !authz.authorizeSuperuser(w, r, "Only a superuser may change the downstream-impersonation mode") {
 		return nil, false
 	}
 	if mode.RequiresAgentCapability() && !agentAdvertisedImpersonation(r.Context(), q, clusterID) {
@@ -200,14 +199,4 @@ func spliceAnnotation(obj map[string]json.RawMessage, key, value string, fallbac
 		return fallback
 	}
 	return raw
-}
-
-// clusterUserByIDQuerier adapts the cluster querier to the superuser gate's
-// interface. Returns nil when the querier cannot resolve users, which
-// RequireSuperuser turns into a 503 rather than an accidental allow.
-func clusterUserByIDQuerier(q any) UserByIDQuerier {
-	if uq, ok := q.(UserByIDQuerier); ok {
-		return uq
-	}
-	return nil
 }

@@ -193,11 +193,7 @@ func TestRouteAuthorizationReadOnlyAndAdmin(t *testing.T) {
 		rec := h.do(t, mutationRequest(method, key), readOnlyToken)
 		var body apiutil.Body
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
-		wantCode := apiutil.PermissionDenied
-		if perm.Superuser {
-			wantCode = apiutil.Forbidden // handler.RequireSuperuser's code until it is folded into the engine
-		}
-		if rec.Code != http.StatusForbidden || body.Error.Code != wantCode {
+		if rec.Code != http.StatusForbidden || body.Error.Code != apiutil.PermissionDenied {
 			t.Errorf("%s as read-only: status %d code %q, want 403 permission_denied (body %s)", key, rec.Code, body.Error.Code, rec.Body.String())
 			continue
 		}

@@ -110,10 +110,8 @@ func (h *SCIMTokenAdminHandler) superuser(w http.ResponseWriter, r *http.Request
 		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "SCIM token store not configured")
 		return false
 	}
-	_, ok := RequireSuperuser(w, r, h.queries, SuperuserGateConfig{
-		ForbiddenMessage: "Managing SCIM tokens requires superuser privileges",
-	})
-	return ok
+	// Superuser-only is enforced by the route authorizer (routePermissions).
+	return true
 }
 
 // openapi:request-operation postAdminScimTokens
