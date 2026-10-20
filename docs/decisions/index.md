@@ -18,6 +18,7 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0010](0010-age-column-encryption.md) | age column encryption with a (key_id, algorithm, ciphertext, nonce) row shape | accepted |
 | [0011](0011-zerolog-logging-with-slog-bridge.md) | zerolog via pkg/logging, with a log/slog bridge | accepted |
 | [0012](0012-otel-meter-provider-prometheus-exporter.md) | pkg/telemetry: one Init for tracer and meter providers, one /metrics | accepted |
+| [0013](0013-operator-wire-lifecycle.md) | Operator split into wire (composition) and lifecycle (reconcile engine) | accepted |
 | [0015](0015-image-signature-admission.md) | Image signature admission with per-vendor authorities | accepted |
 | [0016](0016-api-error-contract-and-route-authorization.md) | One API error contract (apiutil) and one route authorizer | accepted |
 

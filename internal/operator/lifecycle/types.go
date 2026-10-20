@@ -1,8 +1,4 @@
-// Package crd contains the retained Kubernetes-native management API.
-// Delivery intent is represented by the first-party delivery API and Flux
-// objects; the former Argo-specific baseline, bundle, and target CRDs are not
-// part of this scheme.
-package crd
+package lifecycle
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,9 +8,6 @@ import (
 
 var GroupVersion = schema.GroupVersion{Group: "management.astronomer.io", Version: "v1alpha1"}
 var GroupVersionV1Beta1 = schema.GroupVersion{Group: "management.astronomer.io", Version: "v1beta1"}
-var TrivyGroupVersion = schema.GroupVersion{Group: "aquasecurity.github.io", Version: "v1alpha1"}
-
-const TrivyVulnerabilityReportKind = "VulnerabilityReport"
 
 var SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 

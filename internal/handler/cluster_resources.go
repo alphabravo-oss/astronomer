@@ -41,8 +41,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/mirror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -491,4 +491,4 @@ func mirrorDecodeStringMap(b []byte) map[string]string {
 // crd's prune metric don't bit-rot the import on this file (the
 // handler reads no crd-package state directly today, but we keep the
 // import for a future per-kind metric label).
-var _ = crd.KindIngressClass
+var _ = mirror.KindIngressClass

@@ -702,6 +702,6 @@ type MirrorEventPayload struct {
 	Name      string        `json:"name"`
 	// Object is the raw unstructured JSON body of the resource. Empty on
 	// delete events. The server passes this through to
-	// internal/crd.Ingest{Kind} via unstructured.Unstructured{Object: …}.
+	// internal/operator/mirror.Ingest{Kind} via unstructured.Unstructured{Object: …}.
 	Object json.RawMessage `json:"object,omitempty"`
 }

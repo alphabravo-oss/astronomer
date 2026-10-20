@@ -1,13 +1,13 @@
 // Sprint 069 — unit tests for the CRD-mirror v2 ingest layer.
 //
 // Each Ingest* function is exercised against a tiny in-memory
-// MirrorQuerier fake that records the upsert params verbatim, so the
+// Querier fake that records the upsert params verbatim, so the
 // tests assert both the wire decode (annotation → is_default,
 // labels → is_managed, conditions → accepted_status) and the
 // idempotency property (re-ingesting the same object preserves
 // created_at and only refreshes updated_at).
 
-package crd
+package mirror
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// fakeMirrorQuerier is a tiny in-memory MirrorQuerier. Upserts respect
+// fakeMirrorQuerier is a tiny in-memory Querier. Upserts respect
 // the natural-key idempotency: a second insert with the same
 // (cluster_id, name [, namespace]) tuple bumps updated_at but
 // preserves created_at, matching the DB-level ON CONFLICT ... DO UPDATE
@@ -275,7 +275,7 @@ func ifNewTime(prev, fresh time.Time) time.Time {
 }
 
 // Compile-time assert the fake satisfies the interface.
-var _ MirrorQuerier = (*fakeMirrorQuerier)(nil)
+var _ Querier = (*fakeMirrorQuerier)(nil)
 
 // ---------------------------------------------------------------------
 // Fixtures

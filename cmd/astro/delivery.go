@@ -32,6 +32,7 @@ and control rollouts. Cluster Agents are a separate command: astro cluster-agent
 		newDeliveryRolloutCmd(),
 		newDeliveryDeploymentCmd(),
 		newDeliveryInventoryCmd(),
+		newDeliverySystemRolloutCmd(),
 	)
 	return cmd
 }

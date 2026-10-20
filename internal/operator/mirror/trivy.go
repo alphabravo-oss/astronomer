@@ -11,7 +11,7 @@
 // scanner exposes — no import on internal/scanner itself — so the crd
 // package keeps its existing zero-deps-on-handler-graph property.
 
-package crd
+package mirror
 
 import (
 	"context"
@@ -20,7 +20,15 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+// TrivyGroupVersion is the trivy-operator API group the mirrored
+// VulnerabilityReport CRs belong to.
+var TrivyGroupVersion = schema.GroupVersion{Group: "aquasecurity.github.io", Version: "v1alpha1"}
+
+// TrivyVulnerabilityReportKind is the trivy-operator report kind.
+const TrivyVulnerabilityReportKind = "VulnerabilityReport"
 
 // VulnIngester is the slice of internal/scanner.Ingester the watcher
 // needs. We accept the interface so this package doesn't have to

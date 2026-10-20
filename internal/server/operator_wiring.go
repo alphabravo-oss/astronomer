@@ -18,19 +18,20 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/lifecycle"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/wire"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-// crdClusterAdapter implements crd.ClusterSync against the existing sqlc
+// crdClusterAdapter implements lifecycle.ClusterSync against the existing sqlc
 // queries used by the REST handler. We deliberately do not
 // import internal/handler here — the controller talks to the DB directly so
 // the dependency graph stays:
 //
-//	internal/crd  -> (interfaces only)
-//	internal/server -> internal/crd, internal/handler, internal/db/sqlc
+//	internal/operator/lifecycle -> (interfaces only)
+//	internal/server -> internal/operator/{lifecycle,wire}, internal/db/sqlc
 //
 // — which means a unit test of the controller package can be written without
 // dragging the entire server graph along.
@@ -113,17 +114,17 @@ type crdClusterAdapter struct {
 //     description, environment, region, labels, annotations).
 //   - Return the resulting ClusterStatus: cluster UUID, coarse phase, agent
 //     version, last reconciled stamp.
-func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterSpec) (crd.ClusterStatus, error) {
+func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec lifecycle.ClusterSpec) (lifecycle.ClusterStatus, error) {
 	if a == nil || a.queries == nil {
-		return crd.ClusterStatus{}, errors.New("crdClusterAdapter: queries not wired")
+		return lifecycle.ClusterStatus{}, errors.New("crdClusterAdapter: queries not wired")
 	}
 	if strings.TrimSpace(spec.Name) == "" {
-		return crd.ClusterStatus{}, errors.New("ClusterSpec.name is required")
+		return lifecycle.ClusterStatus{}, errors.New("ClusterSpec.name is required")
 	}
 
 	existing, err := a.queries.GetClusterByName(ctx, spec.Name)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return crd.ClusterStatus{}, fmt.Errorf("lookup cluster: %w", err)
+		return lifecycle.ClusterStatus{}, fmt.Errorf("lookup cluster: %w", err)
 	}
 
 	envVal := spec.Environment
@@ -148,7 +149,7 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 			AgentOverrides: json.RawMessage(`{}`),
 		})
 		if cerr != nil {
-			return crd.ClusterStatus{}, fmt.Errorf("create cluster: %w", cerr)
+			return lifecycle.ClusterStatus{}, fmt.Errorf("create cluster: %w", cerr)
 		}
 		existing = created
 	}
@@ -166,7 +167,7 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 		AgentOverrides: existing.AgentOverrides,
 	})
 	if uerr != nil {
-		return crd.ClusterStatus{}, fmt.Errorf("update cluster: %w", uerr)
+		return lifecycle.ClusterStatus{}, fmt.Errorf("update cluster: %w", uerr)
 	}
 	existing = updated
 
@@ -177,14 +178,14 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 	default:
 		liveness, livenessErr := a.queries.GetClusterLiveness(ctx, existing.ID)
 		if livenessErr != nil && !errors.Is(livenessErr, pgx.ErrNoRows) {
-			return crd.ClusterStatus{}, fmt.Errorf("get cluster liveness: %w", livenessErr)
+			return lifecycle.ClusterStatus{}, fmt.Errorf("get cluster liveness: %w", livenessErr)
 		}
 		if livenessErr == nil && liveness.LastHeartbeat.Valid {
 			phase = "registered"
 		}
 	}
 
-	status := crd.ClusterStatus{
+	status := lifecycle.ClusterStatus{
 		ClusterID:    existing.ID.String(),
 		Phase:        phase,
 		AgentVersion: existing.AgentVersion,
@@ -194,7 +195,7 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 
 // ValidateClusterOwnership prevents a CR from silently claiming a row that was
 // created through REST/UI/API ownership. The transfer path must be explicit.
-func (a *crdClusterAdapter) ValidateClusterOwnership(ctx context.Context, spec crd.ClusterSpec, ref crd.ObjectRef) error {
+func (a *crdClusterAdapter) ValidateClusterOwnership(ctx context.Context, spec lifecycle.ClusterSpec, ref lifecycle.ObjectRef) error {
 	if a == nil || a.queries == nil {
 		return errors.New("crdClusterAdapter: queries not wired")
 	}
@@ -221,7 +222,7 @@ func (a *crdClusterAdapter) ValidateClusterOwnership(ctx context.Context, spec c
 // RecordClusterOwnership marks the DB row as CRD-owned after a successful
 // spec sync. This gives REST/UI paths a durable way to detect ownership
 // conflicts and gives restore/repair jobs a stable Kubernetes external ref.
-func (a *crdClusterAdapter) RecordClusterOwnership(ctx context.Context, spec crd.ClusterSpec, ref crd.ObjectRef) error {
+func (a *crdClusterAdapter) RecordClusterOwnership(ctx context.Context, spec lifecycle.ClusterSpec, ref lifecycle.ObjectRef) error {
 	if a == nil || a.queries == nil {
 		return errors.New("crdClusterAdapter: queries not wired")
 	}
@@ -253,7 +254,7 @@ func (a *crdClusterAdapter) RecordClusterOwnership(ctx context.Context, spec crd
 // the same thing — we duplicate the orchestration here (rather than calling
 // the handler) so the CRD path doesn't need a synthetic *http.Request.
 //
-// Returns crd.ErrInProgress while the decommission row is still pending /
+// Returns lifecycle.ErrInProgress while the decommission row is still pending /
 // running; nil once the cluster row is gone (or no row ever existed).
 func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error {
 	if a == nil || a.queries == nil {
@@ -276,7 +277,7 @@ func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error
 	if existing, err := a.queries.GetLatestClusterDecommissionByCluster(ctx, cluster.ID); err == nil {
 		switch existing.Status {
 		case "pending", "running":
-			return crd.ErrInProgress
+			return lifecycle.ErrInProgress
 		case "succeeded":
 			// Cluster row should be tombstoned at this point — the
 			// reconciler stamps decommissioned_at when it completes. If we
@@ -285,7 +286,7 @@ func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error
 			if cluster.DecommissionedAt.Valid {
 				return nil
 			}
-			return crd.ErrInProgress
+			return lifecycle.ErrInProgress
 		case "failed":
 			// Fall through and create a fresh attempt.
 		}
@@ -298,25 +299,25 @@ func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error
 	if err != nil {
 		return fmt.Errorf("create decommission: %w", err)
 	}
-	return crd.ErrInProgress
+	return lifecycle.ErrInProgress
 }
 
-// crdProjectAdapter implements crd.ProjectSync.
+// crdProjectAdapter implements lifecycle.ProjectSync.
 type crdProjectAdapter struct {
 	queries *sqlc.Queries
 	log     zerolog.Logger
 }
 
 // EnsureFromCRD upserts the projects row to match the spec.
-func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectSpec) (crd.ProjectStatus, error) {
+func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec lifecycle.ProjectSpec) (lifecycle.ProjectStatus, error) {
 	if a == nil || a.queries == nil {
-		return crd.ProjectStatus{}, errors.New("crdProjectAdapter: queries not wired")
+		return lifecycle.ProjectStatus{}, errors.New("crdProjectAdapter: queries not wired")
 	}
 	if strings.TrimSpace(spec.Name) == "" {
-		return crd.ProjectStatus{}, errors.New("ProjectSpec.name is required")
+		return lifecycle.ProjectStatus{}, errors.New("ProjectSpec.name is required")
 	}
 	if len(spec.Clusters) == 0 {
-		return crd.ProjectStatus{}, errors.New("ProjectSpec.clusters must list at least one cluster name")
+		return lifecycle.ProjectStatus{}, errors.New("ProjectSpec.clusters must list at least one cluster name")
 	}
 
 	// Resolve cluster by name; the first entry wins, the rest are recorded
@@ -324,9 +325,9 @@ func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectS
 	cluster, err := a.queries.GetClusterByName(ctx, spec.Clusters[0])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return crd.ProjectStatus{}, fmt.Errorf("cluster %q not found", spec.Clusters[0])
+			return lifecycle.ProjectStatus{}, fmt.Errorf("cluster %q not found", spec.Clusters[0])
 		}
-		return crd.ProjectStatus{}, fmt.Errorf("lookup cluster: %w", err)
+		return lifecycle.ProjectStatus{}, fmt.Errorf("lookup cluster: %w", err)
 	}
 
 	// Find existing project by (name, cluster_id). The (name, cluster_id)
@@ -336,7 +337,7 @@ func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectS
 		ClusterID: cluster.ID,
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return crd.ProjectStatus{}, fmt.Errorf("lookup project: %w", err)
+		return lifecycle.ProjectStatus{}, fmt.Errorf("lookup project: %w", err)
 	}
 
 	pss := spec.PodSecurityProfile
@@ -366,7 +367,7 @@ func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectS
 			ResourceQuotaPodCount:    spec.ResourceQuota.PodCount,
 		})
 		if cerr != nil {
-			return crd.ProjectStatus{}, fmt.Errorf("create project: %w", cerr)
+			return lifecycle.ProjectStatus{}, fmt.Errorf("create project: %w", cerr)
 		}
 		existing = created
 	} else {
@@ -384,12 +385,12 @@ func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectS
 			ResourceQuotaPodCount:    spec.ResourceQuota.PodCount,
 		})
 		if uerr != nil {
-			return crd.ProjectStatus{}, fmt.Errorf("update project: %w", uerr)
+			return lifecycle.ProjectStatus{}, fmt.Errorf("update project: %w", uerr)
 		}
 		existing = updated
 	}
 
-	return crd.ProjectStatus{
+	return lifecycle.ProjectStatus{
 		ProjectID:         existing.ID.String(),
 		Phase:             "active",
 		ResolvedClusterID: cluster.ID.String(),
@@ -398,7 +399,7 @@ func (a *crdProjectAdapter) EnsureFromCRD(ctx context.Context, spec crd.ProjectS
 
 // ValidateProjectOwnership prevents a Project CR from silently claiming an
 // existing UI/API-owned project row.
-func (a *crdProjectAdapter) ValidateProjectOwnership(ctx context.Context, spec crd.ProjectSpec, ref crd.ObjectRef) error {
+func (a *crdProjectAdapter) ValidateProjectOwnership(ctx context.Context, spec lifecycle.ProjectSpec, ref lifecycle.ObjectRef) error {
 	if a == nil || a.queries == nil {
 		return errors.New("crdProjectAdapter: queries not wired")
 	}
@@ -438,7 +439,7 @@ func (a *crdProjectAdapter) ValidateProjectOwnership(ctx context.Context, spec c
 // RecordProjectOwnership marks a project row as CRD-owned after a successful
 // spec sync. Project names are unique per cluster, so the first cluster ref in
 // spec.clusters is resolved the same way EnsureFromCRD resolves it.
-func (a *crdProjectAdapter) RecordProjectOwnership(ctx context.Context, spec crd.ProjectSpec, ref crd.ObjectRef) error {
+func (a *crdProjectAdapter) RecordProjectOwnership(ctx context.Context, spec lifecycle.ProjectSpec, ref lifecycle.ObjectRef) error {
 	if a == nil || a.queries == nil {
 		return errors.New("crdProjectAdapter: queries not wired")
 	}
@@ -527,7 +528,7 @@ func marshalStringMap(m map[string]string) json.RawMessage {
 // clusterAnnotationsWithAgentProfile builds the annotation map the CRD reconcile
 // writes for a Cluster CR. `stored` is the row's current annotations, needed
 // because this map REPLACES them wholesale in UpdateCluster.
-func clusterAnnotationsWithAgentProfile(spec crd.ClusterSpec, stored json.RawMessage) map[string]string {
+func clusterAnnotationsWithAgentProfile(spec lifecycle.ClusterSpec, stored json.RawMessage) map[string]string {
 	annotations := make(map[string]string, len(spec.Annotations)+3)
 	for k, v := range spec.Annotations {
 		annotations[k] = v
@@ -572,7 +573,7 @@ func clusterAnnotationsWithAgentProfile(spec crd.ClusterSpec, stored json.RawMes
 // alongside the flat ResourceQuotaCpuLimit / MemoryLimit / PodCount columns.
 // The structured form is what the REST handler also writes, so the two paths
 // converge to the same row shape.
-func projectResourceQuotaJSON(q crd.ProjectResourceQuota) json.RawMessage {
+func projectResourceQuotaJSON(q lifecycle.ProjectResourceQuota) json.RawMessage {
 	payload := map[string]any{
 		"cpu_limit":    q.CPULimit,
 		"memory_limit": q.MemoryLimit,
@@ -585,7 +586,7 @@ func projectResourceQuotaJSON(q crd.ProjectResourceQuota) json.RawMessage {
 	return b
 }
 
-func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref crd.ObjectRef) bool {
+func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref lifecycle.ObjectRef) bool {
 	return apiVersion == ref.APIVersion &&
 		kind == ref.Kind &&
 		namespace == ref.Namespace &&
@@ -637,13 +638,13 @@ func buildCRDControllerRunner(logger zerolog.Logger, cfg *config.Config, queries
 	}
 	pAdapter := &crdProjectAdapter{queries: queries, log: logger}
 
-	mgr, err := crd.New(crd.ControllerConfig{
+	op, err := wire.New(wire.Config{
 		K8sConfig:               restCfg,
 		WatchNamespace:          crdWatchNamespace(cfg.CRDWatchNamespace),
 		LeaderElection:          true,
 		LeaderElectionNamespace: crdWatchNamespace(cfg.CRDWatchNamespace),
-		ClusterHandler:          cAdapter,
-		ProjectHandler:          pAdapter,
+		ClusterSync:             cAdapter,
+		ProjectSync:             pAdapter,
 		Log:                     logging.Slog(logger),
 	})
 	if err != nil {
@@ -657,7 +658,7 @@ func buildCRDControllerRunner(logger zerolog.Logger, cfg *config.Config, queries
 
 	return func(ctx context.Context) error {
 		logger.Info().Str("watch_namespace", crdWatchNamespace(cfg.CRDWatchNamespace)).Msg("crd_controller_starting")
-		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := op.Manager.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error().Err(err).Msg("crd_controller_stopped")
 			return err
 		}

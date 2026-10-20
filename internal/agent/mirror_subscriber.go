@@ -1,7 +1,7 @@
 // Sprint 069 — CRD-mirror v2 agent-side subscriber.
 //
 // MirrorSubscriber is the agent-side counterpart to the server's
-// internal/crd ingester (ingest_v2.go). It runs a SharedInformerFactory
+// internal/operator/mirror ingester (ingest.go). It runs a SharedInformerFactory
 // for the five sprint-069 mirrored GVKs and emits one
 // protocol.MsgMirrorEvent per Add/Update/Delete callback.
 //
@@ -45,8 +45,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/mirror"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -114,7 +114,7 @@ type MirrorSubscriber struct {
 
 	// stores holds the live informer caches so the reconnect-replay
 	// goroutine can iterate them on every tunnel reconnect. Keyed by
-	// kind (crd.KindIngressClass / KindVulnerabilityReport / …).
+	// kind (mirror.KindIngressClass / KindVulnerabilityReport / …).
 	// Populated as each informer's cache syncs.
 	storeMu sync.RWMutex
 	stores  map[string]informerStoreEntry
@@ -228,22 +228,22 @@ func (s *MirrorSubscriber) Run(ctx context.Context) {
 	// IngressClass — networking.k8s.io/v1, cluster-scoped.
 	ic := factory.Networking().V1().IngressClasses().Informer()
 	s.attachIngressClass(ic)
-	s.recordStore(crd.KindIngressClass, ic.GetStore(), false)
+	s.recordStore(mirror.KindIngressClass, ic.GetStore(), false)
 
 	// NetworkPolicy — networking.k8s.io/v1, namespace-scoped (all namespaces).
 	np := factory.Networking().V1().NetworkPolicies().Informer()
 	s.attachNetworkPolicy(np)
-	s.recordStore(crd.KindNetworkPolicy, np.GetStore(), false)
+	s.recordStore(mirror.KindNetworkPolicy, np.GetStore(), false)
 
 	// ResourceQuota — core/v1.
 	rq := factory.Core().V1().ResourceQuotas().Informer()
 	s.attachResourceQuota(rq)
-	s.recordStore(crd.KindResourceQuota, rq.GetStore(), false)
+	s.recordStore(mirror.KindResourceQuota, rq.GetStore(), false)
 
 	// LimitRange — core/v1.
 	lr := factory.Core().V1().LimitRanges().Informer()
 	s.attachLimitRange(lr)
-	s.recordStore(crd.KindLimitRange, lr.GetStore(), false)
+	s.recordStore(mirror.KindLimitRange, lr.GetStore(), false)
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -254,15 +254,15 @@ func (s *MirrorSubscriber) Run(ctx context.Context) {
 	// other. Each goroutine retries every 60s until the CRD is
 	// installed, then attaches the informer and blocks until ctx done.
 	if s.dyn != nil {
-		go s.runDynamicGVR(ctx, gatewayClassGVR, crd.KindGatewayClass, stopCh, attachKind{
-			add: func(obj any) { s.dispatchUnstructured(protocol.MirrorOpAdded, crd.KindGatewayClass, obj) },
-			upd: func(_, n any) { s.dispatchUnstructured(protocol.MirrorOpModified, crd.KindGatewayClass, n) },
-			del: func(obj any) { s.dispatchDeleteUnstructured(crd.KindGatewayClass, obj) },
+		go s.runDynamicGVR(ctx, gatewayClassGVR, mirror.KindGatewayClass, stopCh, attachKind{
+			add: func(obj any) { s.dispatchUnstructured(protocol.MirrorOpAdded, mirror.KindGatewayClass, obj) },
+			upd: func(_, n any) { s.dispatchUnstructured(protocol.MirrorOpModified, mirror.KindGatewayClass, n) },
+			del: func(obj any) { s.dispatchDeleteUnstructured(mirror.KindGatewayClass, obj) },
 		})
-		go s.runDynamicGVR(ctx, vulnerabilityReportGVR, crd.KindVulnerabilityReport, stopCh, attachKind{
-			add: func(obj any) { s.dispatchUnstructured(protocol.MirrorOpAdded, crd.KindVulnerabilityReport, obj) },
-			upd: func(_, n any) { s.dispatchUnstructured(protocol.MirrorOpModified, crd.KindVulnerabilityReport, n) },
-			del: func(obj any) { s.dispatchDeleteUnstructured(crd.KindVulnerabilityReport, obj) },
+		go s.runDynamicGVR(ctx, vulnerabilityReportGVR, mirror.KindVulnerabilityReport, stopCh, attachKind{
+			add: func(obj any) { s.dispatchUnstructured(protocol.MirrorOpAdded, mirror.KindVulnerabilityReport, obj) },
+			upd: func(_, n any) { s.dispatchUnstructured(protocol.MirrorOpModified, mirror.KindVulnerabilityReport, n) },
+			del: func(obj any) { s.dispatchDeleteUnstructured(mirror.KindVulnerabilityReport, obj) },
 		})
 	}
 
@@ -488,13 +488,13 @@ func (s *MirrorSubscriber) replayAll(ctx context.Context) {
 func (s *MirrorSubscriber) attachIngressClass(inf cache.SharedIndexInformer) {
 	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			s.dispatchTyped(protocol.MirrorOpAdded, crd.KindIngressClass, obj)
+			s.dispatchTyped(protocol.MirrorOpAdded, mirror.KindIngressClass, obj)
 		},
 		UpdateFunc: func(_, newObj any) {
-			s.dispatchTyped(protocol.MirrorOpModified, crd.KindIngressClass, newObj)
+			s.dispatchTyped(protocol.MirrorOpModified, mirror.KindIngressClass, newObj)
 		},
 		DeleteFunc: func(obj any) {
-			s.dispatchDelete(crd.KindIngressClass, obj)
+			s.dispatchDelete(mirror.KindIngressClass, obj)
 		},
 	})
 }
@@ -502,13 +502,13 @@ func (s *MirrorSubscriber) attachIngressClass(inf cache.SharedIndexInformer) {
 func (s *MirrorSubscriber) attachNetworkPolicy(inf cache.SharedIndexInformer) {
 	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			s.dispatchTyped(protocol.MirrorOpAdded, crd.KindNetworkPolicy, obj)
+			s.dispatchTyped(protocol.MirrorOpAdded, mirror.KindNetworkPolicy, obj)
 		},
 		UpdateFunc: func(_, newObj any) {
-			s.dispatchTyped(protocol.MirrorOpModified, crd.KindNetworkPolicy, newObj)
+			s.dispatchTyped(protocol.MirrorOpModified, mirror.KindNetworkPolicy, newObj)
 		},
 		DeleteFunc: func(obj any) {
-			s.dispatchDelete(crd.KindNetworkPolicy, obj)
+			s.dispatchDelete(mirror.KindNetworkPolicy, obj)
 		},
 	})
 }
@@ -516,13 +516,13 @@ func (s *MirrorSubscriber) attachNetworkPolicy(inf cache.SharedIndexInformer) {
 func (s *MirrorSubscriber) attachResourceQuota(inf cache.SharedIndexInformer) {
 	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			s.dispatchTyped(protocol.MirrorOpAdded, crd.KindResourceQuota, obj)
+			s.dispatchTyped(protocol.MirrorOpAdded, mirror.KindResourceQuota, obj)
 		},
 		UpdateFunc: func(_, newObj any) {
-			s.dispatchTyped(protocol.MirrorOpModified, crd.KindResourceQuota, newObj)
+			s.dispatchTyped(protocol.MirrorOpModified, mirror.KindResourceQuota, newObj)
 		},
 		DeleteFunc: func(obj any) {
-			s.dispatchDelete(crd.KindResourceQuota, obj)
+			s.dispatchDelete(mirror.KindResourceQuota, obj)
 		},
 	})
 }
@@ -530,13 +530,13 @@ func (s *MirrorSubscriber) attachResourceQuota(inf cache.SharedIndexInformer) {
 func (s *MirrorSubscriber) attachLimitRange(inf cache.SharedIndexInformer) {
 	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			s.dispatchTyped(protocol.MirrorOpAdded, crd.KindLimitRange, obj)
+			s.dispatchTyped(protocol.MirrorOpAdded, mirror.KindLimitRange, obj)
 		},
 		UpdateFunc: func(_, newObj any) {
-			s.dispatchTyped(protocol.MirrorOpModified, crd.KindLimitRange, newObj)
+			s.dispatchTyped(protocol.MirrorOpModified, mirror.KindLimitRange, newObj)
 		},
 		DeleteFunc: func(obj any) {
-			s.dispatchDelete(crd.KindLimitRange, obj)
+			s.dispatchDelete(mirror.KindLimitRange, obj)
 		},
 	})
 }

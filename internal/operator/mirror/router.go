@@ -1,6 +1,6 @@
 // Sprint 069 — CRD-mirror v2 server-side router.
 //
-// MirrorRouter is the small adapter the tunnel handler calls when an
+// Router is the small adapter the tunnel handler calls when an
 // agent emits a protocol.MsgMirrorEvent frame (see
 // internal/tunnel/handler.go::handleMirrorEvent). It satisfies the
 // tunnel.MirrorIngester interface and dispatches into the per-kind
@@ -11,7 +11,7 @@
 // DB-layer upsert in another — same pattern as sprint-014's
 // ClusterSync / ProjectSync adapter shape.
 
-package crd
+package mirror
 
 import (
 	"context"
@@ -24,12 +24,12 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// MirrorRouter wires a MirrorQuerier into the tunnel.MirrorIngester
+// Router wires a Querier into the tunnel.MirrorIngester
 // interface. Construct one at server boot, pass it to
 // hub.SetMirrorIngester. Zero-value safe: a nil router is treated as
 // "no ingester wired" by the hub.
-type MirrorRouter struct {
-	Queries MirrorQuerier
+type Router struct {
+	Queries Querier
 	// Vuln is the trivy-operator VulnerabilityReport ingester. Optional;
 	// when nil, VulnerabilityReport events are matched + dropped (so
 	// they don't fall into the unknown-kind error path that would
@@ -37,18 +37,18 @@ type MirrorRouter struct {
 	Vuln VulnIngester
 }
 
-// NewMirrorRouter constructs a router. q must not be nil; the hub-side
+// NewRouter constructs a router. q must not be nil; the hub-side
 // nil-safety gate fires before we get here. vuln may be nil — see the
-// field doc on MirrorRouter.Vuln.
-func NewMirrorRouter(q MirrorQuerier) *MirrorRouter {
-	return &MirrorRouter{Queries: q}
+// field doc on Router.Vuln.
+func NewRouter(q Querier) *Router {
+	return &Router{Queries: q}
 }
 
 // SetVulnIngester wires the trivy VulnerabilityReport ingester. Returns
-// the router so callers can chain it onto NewMirrorRouter in one
+// the router so callers can chain it onto NewRouter in one
 // expression. Pass nil to disable VulnerabilityReport mirroring (the
 // kind will still match — events get dropped rather than erroring).
-func (r *MirrorRouter) SetVulnIngester(v VulnIngester) *MirrorRouter {
+func (r *Router) SetVulnIngester(v VulnIngester) *Router {
 	if r != nil {
 		r.Vuln = v
 	}
@@ -62,7 +62,7 @@ func (r *MirrorRouter) SetVulnIngester(v VulnIngester) *MirrorRouter {
 //   - Unknown kind → error, logged + dropped by the caller (no retry).
 //   - Marshal/unmarshal failure → error, same disposition.
 //   - DB error → propagated to caller; agent's next resync will retry.
-func (r *MirrorRouter) RouteMirrorEvent(ctx context.Context, clusterID uuid.UUID, payload protocol.MirrorEventPayload) error {
+func (r *Router) RouteMirrorEvent(ctx context.Context, clusterID uuid.UUID, payload protocol.MirrorEventPayload) error {
 	if r == nil || r.Queries == nil {
 		return fmt.Errorf("mirror router: nil queries")
 	}

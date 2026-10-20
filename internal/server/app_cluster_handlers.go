@@ -10,8 +10,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/mirror"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
@@ -101,7 +101,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	// handler reads them back out for the cluster-detail page. Periodic
 	// prune (every 30m) is wired via worker/scheduler.go.
 	clusterResourcesHandler := handler.NewClusterResourcesHandler(queries)
-	mirrorRouter := crd.NewMirrorRouter(queries)
+	mirrorRouter := mirror.NewRouter(queries)
 	// Sprint 062: wire the trivy VulnerabilityReport ingester into the
 	// same MirrorRouter the sprint-069 GVKs use. The agent emits trivy
 	// CRs via the same MIRROR_EVENT channel with Kind=VulnerabilityReport;
@@ -131,7 +131,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	})
 	trivyIngester := scanner.NewIngester(queries, database.Pool(), nil, trivyAuditHook)
 	trivyIngester.SetEventBus(bus)
-	mirrorRouter.SetVulnIngester(crd.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
+	mirrorRouter.SetVulnIngester(mirror.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
 	hub.SetMirrorIngester(mirrorRouter)
 	apiserverAuditHandler := handler.NewApiserverAuditHandler(handler.NewApiserverAuditStoreAdapter(queries))
 	hub.SetAuditPersister(apiserverAuditHandler)

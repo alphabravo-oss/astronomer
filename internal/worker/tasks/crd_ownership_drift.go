@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/lifecycle"
 )
 
 const (
@@ -109,7 +109,7 @@ func checkCRDOwnedClusterRef(ctx context.Context, deps CRDOwnershipDriftDeps, ro
 }
 
 func ownershipGVR(row sqlc.FleetOwnership) (schema.GroupVersionResource, error) {
-	gv := crd.GroupVersion
+	gv := lifecycle.GroupVersion
 	if raw := strings.TrimSpace(row.ExternalRefApiVersion); raw != "" {
 		parsed, err := schema.ParseGroupVersion(raw)
 		if err != nil {

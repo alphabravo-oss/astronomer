@@ -3,7 +3,7 @@
 #
 # Every target is phony. VERSION/COMMIT/DATE use ?= so CI can override them.
 
-.PHONY: help dev dev-down dev-status dev-logs build test test-integration lint vet fmt \
+.PHONY: help dev dev-down dev-status dev-logs build test test-integration envtest lint vet fmt \
         generate sqlc migrate check security gosec govulncheck secrets-scan \
         fips-build updates go-image-check docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
         frontend-check clean $(BINARIES)
@@ -36,6 +36,10 @@ GOTESTSUM           ?= go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION)
 SQLC                ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 OAPI_CODEGEN        ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 TEST_RESULTS_DIR    ?= test-results
+# envtest (kube-apiserver + etcd) for the operator integration tests.
+SETUP_ENVTEST       ?= go run sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.25.2
+ENVTEST_K8S_VERSION ?= 1.37.0
+ENVTEST_BIN_DIR     ?= $(or $(TMPDIR),/tmp)/astronomer-envtest
 
 # ── Images ───────────────────────────────────────────────────────────────────
 IMG_REGISTRY ?= ghcr.io/alphabravo-oss
@@ -87,7 +91,11 @@ test: ## Unit tests (no Docker) with race detector, JUnit XML in test-results/
 
 test-integration: ## Unit + integration tests (`integration` build tag): testcontainers Postgres 17 + Redis, pgtestdb clone per test
 	@mkdir -p $(TEST_RESULTS_DIR)
-	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration -p 8 ./...
+	KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path)" \
+	  $(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration -p 8 ./...
+
+envtest: ## Download the envtest kube-apiserver/etcd binaries and print KUBEBUILDER_ASSETS
+	@echo "KUBEBUILDER_ASSETS=$$($(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path)"
 
 e2e: e2e-live ## Alias for e2e-live
 

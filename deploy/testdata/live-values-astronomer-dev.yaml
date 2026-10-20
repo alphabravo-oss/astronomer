@@ -215,7 +215,8 @@ postgres:
 preflight:
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 81
+    # live captured 81; the chart pins this to the embedded schema (deploy: drop it or set 83)
+    targetVersion: 83
   enabled: true
   image:
     digest: sha256:1e939126481e0a6c46c2fc78c9e991cdb450c6ce22c9f1d7b2a1d745bc145cd8
@@ -592,7 +593,8 @@ release:
       "schema_version": 1
     }
 secrets:
-  encryptionKey: aGVsbS1saW50LW9ubHktZmVybmV0LWtleS0wMDAwMDA=
+  # Placeholder: the live release still carries a Fernet key; the deploy must switch to an age identity.
+  encryptionKey: AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9
   internalPSK: live-values-test-internal-psk-0000000000000000000000000000000000
   internalPSKKey: ASTRONOMER_INTERNAL_PSK
   internalPSKPrevious: ""

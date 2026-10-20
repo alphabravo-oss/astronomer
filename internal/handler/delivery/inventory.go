@@ -93,12 +93,12 @@ func (h *InventoryHandler) SystemCompatibility(w http.ResponseWriter, r *http.Re
 		respondDatabaseError(w, r, err)
 		return
 	}
-	var currentRelease any
-	for _, release := range releases {
-		if release.State == "released" {
-			currentRelease = release
-			break
-		}
+	var currentRelease, pendingRelease any
+	if current := currentSystemRelease(releases); current != nil {
+		currentRelease = *current
+	}
+	if pending := pendingSystemRelease(releases); pending != nil {
+		pendingRelease = *pending
 	}
 	var currentRollout any
 	rollout, err := h.queries.GetCurrentDeliverySystemRollout(r.Context())
@@ -124,9 +124,36 @@ func (h *InventoryHandler) SystemCompatibility(w http.ResponseWriter, r *http.Re
 			"agent_protocol":        protocol.DeliveryProtocolVersion,
 			"required_capabilities": []string{protocol.FeatureDeliveryAssignmentsV2, protocol.FeatureDeliveryStatusV2, protocol.FeatureDeliverySystemV2},
 		},
-		"current_release": currentRelease, "current_rollout": currentRollout,
+		"current_release": currentRelease, "pending_release": pendingRelease, "current_rollout": currentRollout,
 		"observed_inventory": counts,
 	})
+}
+
+// currentSystemRelease is the newest released system release; releases are
+// ordered by release_sequence descending.
+func currentSystemRelease(releases []sqlc.ListDeliverySystemReleasesRow) *sqlc.ListDeliverySystemReleasesRow {
+	for i := range releases {
+		if releases[i].State == "released" {
+			return &releases[i]
+		}
+	}
+	return nil
+}
+
+// pendingSystemRelease is the newest draft release newer than the current
+// released one: what a server upgrade staged and what
+// `astro delivery system-rollout start` promotes by default.
+func pendingSystemRelease(releases []sqlc.ListDeliverySystemReleasesRow) *sqlc.ListDeliverySystemReleasesRow {
+	var floor int64 = -1
+	if current := currentSystemRelease(releases); current != nil {
+		floor = current.ReleaseSequence
+	}
+	for i := range releases {
+		if releases[i].State == "draft" && releases[i].ReleaseSequence > floor {
+			return &releases[i]
+		}
+	}
+	return nil
 }
 
 type DeliveryFleet struct {

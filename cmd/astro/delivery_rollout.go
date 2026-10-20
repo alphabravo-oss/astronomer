@@ -180,7 +180,7 @@ func deliveryDefaultRolloutStrategy() map[string]any {
 	return map[string]any{
 		"type":                        "all_at_once",
 		"max_concurrent":              10,
-		"max_unavailable":             map[string]any{"type": "count", "value": 0},
+		"max_unavailable":             map[string]any{"type": "count", "value": 1},
 		"min_ready":                   "0s",
 		"progress_deadline":           "30m",
 		"failure_threshold":           map[string]any{"type": "count", "value": 1},

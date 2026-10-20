@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/lifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -97,9 +97,9 @@ func TestCRDClusterDecommissionCommitsRowTaskAndSystemAuditTogether(t *testing.T
 }
 
 func TestClusterAnnotationsWithAdoptionPolicy(t *testing.T) {
-	got := clusterAnnotationsWithAgentProfile(crd.ClusterSpec{
+	got := clusterAnnotationsWithAgentProfile(lifecycle.ClusterSpec{
 		Annotations: map[string]string{"existing": "kept"},
-		AdoptionPolicy: crd.ClusterAdoptionPolicySpec{
+		AdoptionPolicy: lifecycle.ClusterAdoptionPolicySpec{
 			Mode:                   "auto",
 			AllowedManagementModes: []string{"helm", "", "flux"},
 		},
@@ -126,7 +126,7 @@ func TestClusterAnnotationsWithAdoptionPolicy(t *testing.T) {
 // superuser-set mode on the next sync.
 func TestClusterCRCannotWriteImpersonationMode(t *testing.T) {
 	t.Run("a CR cannot raise the mode", func(t *testing.T) {
-		got := clusterAnnotationsWithAgentProfile(crd.ClusterSpec{
+		got := clusterAnnotationsWithAgentProfile(lifecycle.ClusterSpec{
 			Annotations: map[string]string{
 				"existing":              "kept",
 				callerid.ModeAnnotation: string(callerid.ModeEnforce),
@@ -143,7 +143,7 @@ func TestClusterCRCannotWriteImpersonationMode(t *testing.T) {
 
 	t.Run("a CR cannot clear a superuser-set mode", func(t *testing.T) {
 		stored := json.RawMessage(`{"` + callerid.ModeAnnotation + `":"attribute"}`)
-		got := clusterAnnotationsWithAgentProfile(crd.ClusterSpec{
+		got := clusterAnnotationsWithAgentProfile(lifecycle.ClusterSpec{
 			Annotations: map[string]string{"existing": "kept"},
 		}, stored)
 
@@ -154,7 +154,7 @@ func TestClusterCRCannotWriteImpersonationMode(t *testing.T) {
 
 	t.Run("a CR cannot lower a superuser-set mode", func(t *testing.T) {
 		stored := json.RawMessage(`{"` + callerid.ModeAnnotation + `":"enforce"}`)
-		got := clusterAnnotationsWithAgentProfile(crd.ClusterSpec{
+		got := clusterAnnotationsWithAgentProfile(lifecycle.ClusterSpec{
 			Annotations: map[string]string{callerid.ModeAnnotation: string(callerid.ModeOff)},
 		}, stored)
 

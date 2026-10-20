@@ -277,9 +277,9 @@ func (h *Hub) Locator() *Locator {
 
 // MirrorIngester is the narrow handler-side interface the Hub calls
 // when an agent emits a MIRROR_EVENT frame. The implementation lives in
-// internal/crd (RouteMirrorEvent) and depends on *sqlc.Queries; we keep
+// internal/operator/mirror (RouteMirrorEvent) and depends on *sqlc.Queries; we keep
 // the surface as an interface so the tunnel package doesn't import
-// internal/crd directly (which would drag controller-runtime into the
+// internal/operator/mirror directly (which would drag controller-runtime into the
 // tunnel build path).
 type MirrorIngester interface {
 	RouteMirrorEvent(ctx context.Context, clusterID uuid.UUID, payload protocol.MirrorEventPayload) error
