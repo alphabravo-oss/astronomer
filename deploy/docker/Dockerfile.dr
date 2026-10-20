@@ -9,6 +9,7 @@ RUN apk add --no-cache \
       aws-cli \
       ca-certificates \
       postgresql16-client \
+      age \
       py3-cryptography \
       python3
 

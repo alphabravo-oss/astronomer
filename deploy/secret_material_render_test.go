@@ -1,7 +1,7 @@
 // Package deploy — chart-render coverage for the unconditional key-material
 // guard (dev-keys-default-and-silent).
 //
-// The chart used to ship a working JWT signing key and Fernet key as its
+// The chart used to ship a working JWT signing key and encryption key as its
 // defaults and only rejected them under config.env=production, so
 // `helm install astronomer ./deploy/chart` produced a management plane whose
 // tokens anyone holding this repository could forge. The guard now runs on
@@ -16,7 +16,7 @@ import (
 
 const (
 	devSentinelSecretKey     = "local-dev-secret-key-change-in-production"
-	devSentinelEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+	devSentinelEncryptionKey = "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7"
 )
 
 func TestChartRefusesToRenderWithoutKeyMaterial(t *testing.T) {
@@ -27,7 +27,7 @@ func TestChartRefusesToRenderWithoutKeyMaterial(t *testing.T) {
 		// The message has to carry the generation recipe, or the operator's
 		// next move is to go looking for a default to copy.
 		"openssl rand -base64 32",
-		"Fernet.generate_key()",
+		"astro admin generate-encryption-key",
 		"secrets.existingSecret",
 	} {
 		if !strings.Contains(errOut, want) {
@@ -48,9 +48,9 @@ func TestChartRefusesTheHistoricalDevSentinels(t *testing.T) {
 			want: "secrets.secretKey is the chart's published development value",
 		},
 		{
-			name: "fernet key",
+			name: "encryption key",
 			sets: []string{testRenderSecretKeySet, "secrets.encryptionKey=" + devSentinelEncryptionKey},
-			want: "secrets.encryptionKey is the chart's published development Fernet key",
+			want: "secrets.encryptionKey contains the chart's published development age key",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,5 +100,23 @@ func TestChartRejectsExistingSecretWithBundledPostgres(t *testing.T) {
 	)
 	if !strings.Contains(errOut, "secrets.existingSecret cannot be combined with postgres.bundled.enabled=true") {
 		t.Fatalf("unsafe bundled database Secret posture was not rejected:\n%s", errOut)
+	}
+}
+
+// The published dev identity is caught as a previous keyring entry too, and a
+// Fernet key (or any non-age entry) is refused outright.
+func TestChartRejectsNonAgeOrDevKeyringEntries(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, want string
+	}{
+		{"dev key as previous entry", "new:AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U\\,old:" + devSentinelEncryptionKey, "published development age key"},
+		{"fernet key", "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=", "not an age identity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			errOut := helmTemplateExpectError(t, nil, testRenderSecretKeySet, "secrets.encryptionKey="+tc.key, "config.env=development")
+			if !strings.Contains(errOut, tc.want) {
+				t.Fatalf("render error missing %q:\n%s", tc.want, errOut)
+			}
+		})
 	}
 }

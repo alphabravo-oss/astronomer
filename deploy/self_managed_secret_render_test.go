@@ -15,7 +15,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		"--kube-version", "1.35.0",
 		"--set", "secrets.existingSecret=core-credentials",
 		"--set", "secrets.secretKeyKey=SIGNING_KEY",
-		"--set", "secrets.encryptionKeyKey=FERNET_KEY",
+		"--set", "secrets.encryptionKeyKey=AGE_KEYRING",
 		"--set", "secrets.secretKey=INLINE-SIGNING-CANARY",
 		"--set", "secrets.encryptionKey=INLINE-ENCRYPTION-CANARY",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
@@ -40,7 +40,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 	}
 	rendered := stdout.String()
 	for _, want := range []string{
-		"core-credentials", "SIGNING_KEY", "FERNET_KEY",
+		"core-credentials", "SIGNING_KEY", "AGE_KEYRING",
 		"bootstrap-credentials", "initial-password",
 		"database-credentials", "dsn",
 		"redis-credentials", "url", "dex-runtime",
@@ -102,7 +102,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "redis.external.urlSecretRef.name=redis-credentials", "--set", "redis.external.urlSecretRef.key=url",
 		"--set", "secrets.existingSecret=core-credentials",
 		"--set", "secrets.secretKeyKey=SIGNING_KEY",
-		"--set", "secrets.encryptionKeyKey=FERNET_KEY",
+		"--set", "secrets.encryptionKeyKey=AGE_KEYRING",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "bootstrap.email=admin@example.com",
 		"--set", "dex.runtimeSecretName=dex-runtime",
@@ -162,7 +162,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		`find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
 		`cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/`,
 		`/var/run/astronomer-keys-source/SIGNING_KEY" /var/run/astronomer-keys/SECRET_KEY`,
-		`/var/run/astronomer-keys-source/FERNET_KEY" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY`,
+		`/var/run/astronomer-keys-source/AGE_KEYRING" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY`,
 	} {
 		if !strings.Contains(rendered, canonicalItem) {
 			t.Fatalf("backup key projection missing canonical item %q", canonicalItem)
@@ -206,7 +206,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 			t.Fatalf("independent backup bundle missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"astronomer-keys-source/SIGNING_KEY", "astronomer-keys-source/FERNET_KEY"} {
+	for _, forbidden := range []string{"astronomer-keys-source/SIGNING_KEY", "astronomer-keys-source/AGE_KEYRING"} {
 		if strings.Contains(overrideRendered, forbidden) {
 			t.Fatalf("independent canonical bundle incorrectly used runtime key name %q", forbidden)
 		}

@@ -166,7 +166,7 @@ docker-build-%: ## Build one image: docker-build-server|worker|agent|shell|dr
 # lint with the dev profile, the qualified kube minor and throwaway lint-only keys.
 HELM_LINT_ARGS = -f deploy/chart/values-dev.yaml --kube-version 1.35.0 \
 	--set-string secrets.secretKey=helm-lint-only-jwt-signing-key-0000 \
-	--set-string secrets.encryptionKey=aGVsbS1saW50LW9ubHktZmVybmV0LWtleS0wMDAwMDA=
+	--set-string secrets.encryptionKey=AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9
 helm-lint: ## helm lint + template dry-run of deploy/chart
 	helm lint deploy/chart $(HELM_LINT_ARGS)
 	helm template astronomer deploy/chart $(HELM_LINT_ARGS) > /dev/null

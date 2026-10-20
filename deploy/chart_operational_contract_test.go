@@ -41,7 +41,7 @@ var productionWiringSets = []string{
 	"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
 	"redis.external.address=redis.astronomer.svc.cluster.local:6379",
 	"secrets.secretKey=prod-jwt-signing-key",
-	"secrets.encryptionKey=prod-fernet-key",
+	"secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U",
 	"bootstrap.email=admin@example.com",
 	// F8: production requires a pinned bootstrap password (or existingSecret).
 	"bootstrap.password=prod-admin-initial",
@@ -1048,7 +1048,7 @@ func TestSecretsCarryResourcePolicyKeep(t *testing.T) {
 	secret := findRenderedDoc(t, docs, "Secret", "astronomer-secrets")
 	annotations := nestedMap(secret, "metadata", "annotations")
 	if annotations == nil {
-		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the Fernet/JWT keys survive helm uninstall")
+		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the encryption/JWT keys survive helm uninstall")
 	}
 	if got := stringValue(annotations["helm.sh/resource-policy"]); got != "keep" {
 		t.Fatalf("astronomer-secrets helm.sh/resource-policy = %q, want keep", got)
@@ -1077,7 +1077,7 @@ func TestProductionRequiresBackupsWired(t *testing.T) {
 
 // OPS-01: production with backups enabled must also require encryption-key
 // wrap custody. S3-only wiring leaves CronJobs green but key backup inert —
-// a restore onto a new cluster then cannot decrypt Fernet columns.
+// a restore onto a new cluster then cannot decrypt sealed columns.
 func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 

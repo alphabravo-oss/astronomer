@@ -104,7 +104,7 @@ Nightly pg_dump is ENABLED.
   Retention   : daily={{ .Values.managementBackup.retention.daily }} weekly={{ .Values.managementBackup.retention.weekly }} monthly={{ .Values.managementBackup.retention.monthly }}
 {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryption.wrappingSecretRef.name }}
   Encryption  : AES-256-GCM client-side envelopes plus authenticated manifests.
-  Key backup  : ENABLED — the Fernet/JWT key Secret is protected by the separately
+  Key backup  : ENABLED — the age/JWT key Secret is protected by the separately
                 held encryption secret and stored under {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" }}/.
   Immutability: Object Lock validated before every writer run.
   Retention   : separate identity; dry-run={{ .Values.managementBackup.retention.dryRun }}
@@ -113,7 +113,7 @@ Nightly pg_dump is ENABLED.
   WARNING: encryption-key backup is NOT wired (F4). pg_dump alone is NOT a
   recoverable backup — a restore onto a new cluster would bring back rows whose
   agent tokens / SSO secrets / delivery credentials are permanently UNDECRYPTABLE,
-  because the Fernet key lives in a Secret, not in Postgres. Wire it:
+  because the age encryption key lives in a Secret, not in Postgres. Wire it:
 
     --set managementBackup.encryption.wrappingSecretRef.name=<secret> \
     --set managementBackup.encryption.sourceIdentity=<stable-installation-id>
