@@ -164,6 +164,8 @@ updates: ## Pending dependency upgrades (Go modules + npm)
 
 # ── Container images ─────────────────────────────────────────────────────────
 docker-build: go-image-check $(addprefix docker-build-,$(IMAGES)) ## Build every production image
+	@for img in $(IMAGES); do repo=$$(case $$img in server|worker|agent) echo astronomer-go-$$img;; *) echo astronomer-$$img;; esac); \
+	  scripts/check-image-go.sh $(IMG_REGISTRY)/$$repo:$(IMG_TAG) || exit 1; done
 
 # Fails when go.mod's Go version and the go-image.lock pin disagree, or when the
 # pinned digest is not the current index digest of golang:<version>-alpine.

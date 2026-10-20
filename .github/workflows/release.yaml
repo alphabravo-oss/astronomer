@@ -70,10 +70,7 @@ jobs:
           - { name: server,   context: .,        dockerfile: deploy/docker/Dockerfile.server,  image: astronomer-go-server }
           - { name: worker,   context: .,        dockerfile: deploy/docker/Dockerfile.worker,  image: astronomer-go-worker }
           - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   image: astronomer-go-agent }
-          # kubectl is the upstream release binary (latest v1.35 patch), built by
-          # Kubernetes with go1.26.8; its stdlib/x/net findings are tracked in
-          # docs/security-exceptions.md, not fixable here.
-          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   image: astronomer-shell, trivy_skip_files: /usr/local/bin/kubectl }
+          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   image: astronomer-shell }
           - { name: dr,       context: .,        dockerfile: deploy/docker/Dockerfile.dr,      image: astronomer-dr }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              image: astronomer-frontend }
     steps:
@@ -117,6 +114,12 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.image }}:${{ needs.preflight.outputs.version }}
           provenance: mode=max
           sbom: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Every Go binary built with go >= go.mod (both platforms)
+        run: scripts/check-image-go.sh "${REGISTRY}/${IMAGE_OWNER}/${{ matrix.component.image }}@${{ steps.build.outputs.digest }}" linux/amd64 linux/arm64
       - name: Scan image (HIGH/CRITICAL fail)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -124,7 +127,6 @@ jobs:
           format: table
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          skip-files: ${{ matrix.component.trivy_skip_files }}
           exit-code: "1"
       - name: Sign by digest
         env:
