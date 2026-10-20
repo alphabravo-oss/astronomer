@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 func databaseRestartFixture(t *testing.T) (DatabaseRestartInspectionOptions, DatabaseAuthoritySnapshot, *registryFixture) {

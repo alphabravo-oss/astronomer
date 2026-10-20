@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"gopkg.in/yaml.v3"
 )
 
 func TestEvaluate(t *testing.T) {

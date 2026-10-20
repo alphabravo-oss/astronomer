@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
+
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 )
 
 func TestLocalFluxBootstrapSupportsEveryPinnedDistributionObject(t *testing.T) {

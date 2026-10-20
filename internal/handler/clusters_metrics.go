@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"k8s.io/client-go/kubernetes"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/jackc/pgx/v5"
-	"k8s.io/client-go/kubernetes"
-	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // SetMetricsLocalClient wires the in-process kubernetes clientset used to

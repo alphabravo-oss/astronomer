@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
 	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 // OfflineArtifactMetadata preserves unchanged manifest/config/legacy signature

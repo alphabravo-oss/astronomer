@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 )
 
 func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {

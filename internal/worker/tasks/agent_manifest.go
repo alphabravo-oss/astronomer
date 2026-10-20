@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/hibiken/asynq"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 )
 
 // AgentManifestPayload contains parameters for generating an agent manifest.

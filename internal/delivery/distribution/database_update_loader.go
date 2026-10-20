@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // DatabaseUpdateOptions is constructor-owned immutable candidate, trust and

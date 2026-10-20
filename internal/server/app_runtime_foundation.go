@@ -90,15 +90,15 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 	metricsPublisher := livemetrics.New(c.bus, c.queries, c.clusterHandler.MetricsProvider(), logger)
 	runReconcilers := func(ctx context.Context) error {
 		loops := []namedRuntimeLoop{
-			namedRuntimeLoop{name: "monitoring", run: c.monitoringHandler.RunReconciler},
-			namedRuntimeLoop{name: "backup", run: c.backupHandler.RunReconciler},
-			namedRuntimeLoop{name: "tool", run: c.toolHandler.RunReconciler},
-			namedRuntimeLoop{name: "catalog", run: c.catalogHandler.RunReconciler},
-			namedRuntimeLoop{name: "logging", run: c.loggingHandler.RunReconciler},
-			namedRuntimeLoop{name: "control-plane", run: c.controlPlaneHandler.RunEvaluator},
-			namedRuntimeLoop{name: "workload", run: c.workloadHandler.RunReconciler},
-			namedRuntimeLoop{name: "live-metrics", run: metricsPublisher.Run},
-			namedRuntimeLoop{name: "cluster-probes", run: func(ctx context.Context) {
+			{name: "monitoring", run: c.monitoringHandler.RunReconciler},
+			{name: "backup", run: c.backupHandler.RunReconciler},
+			{name: "tool", run: c.toolHandler.RunReconciler},
+			{name: "catalog", run: c.catalogHandler.RunReconciler},
+			{name: "logging", run: c.loggingHandler.RunReconciler},
+			{name: "control-plane", run: c.controlPlaneHandler.RunEvaluator},
+			{name: "workload", run: c.workloadHandler.RunReconciler},
+			{name: "live-metrics", run: metricsPublisher.Run},
+			{name: "cluster-probes", run: func(ctx context.Context) {
 				runClusterProbeReconciler(ctx, logger, c.queries, c.requester)
 			}},
 		}

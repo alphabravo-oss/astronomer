@@ -12,9 +12,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/spf13/cobra"
 )
 
 func authCommand(t *testing.T, server, token string) *cobra.Command {

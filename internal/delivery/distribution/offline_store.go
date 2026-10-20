@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // StoredSubject identifies unchanged vendor manifests and their unchanged

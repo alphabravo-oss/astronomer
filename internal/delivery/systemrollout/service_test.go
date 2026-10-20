@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )

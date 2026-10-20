@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -16,7 +18,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
-	"github.com/redis/go-redis/v9"
 )
 
 func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {

@@ -4,11 +4,12 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/google/uuid"
 )
 
 // List handles GET /clusters/{cluster_id}/shell/sessions/.

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 
-	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -15,6 +14,8 @@ import (
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 )
 
 const localFluxFieldManager = "astronomer-local-flux-bootstrap"

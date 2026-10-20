@@ -11,8 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
 
 // Parse accepts Asynq's standard Redis URI forms and Astronomer's extended

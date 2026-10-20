@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestClusterInventoryDeploymentObservationReadback(t *testing.T) {

@@ -403,7 +403,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 
 	return func(ctx context.Context) error {
 		loops := []namedRuntimeLoop{
-			namedRuntimeLoop{name: "local-agent-observers", run: func(ctx context.Context) {
+			{name: "local-agent-observers", run: func(ctx context.Context) {
 				// Wait until the tunnel reports connected so the first heartbeat isn't
 				// dropped on the floor by the send-buffer fast path and so the informer
 				// subscriber only starts once outbound STATE_UPDATE sends can succeed.
@@ -429,7 +429,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 					logger.Error("embedded local agent observer stopped", "error", err)
 				}
 			}},
-			namedRuntimeLoop{name: "local-agent-tunnel", run: func(ctx context.Context) {
+			{name: "local-agent-tunnel", run: func(ctx context.Context) {
 				logger.Info("starting embedded local agent",
 					"cluster_id", cfg.ClusterID,
 					"agent_id", cfg.AgentID,

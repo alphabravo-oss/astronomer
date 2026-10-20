@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 func testGateway(t *testing.T, proxy func(http.ResponseWriter, *http.Request, Target)) (*Gateway, string, string) {

@@ -5,12 +5,13 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/coder/websocket"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/coder/websocket"
 )
 
 // ExecProxy is the slice of *tunnel.ExecConsumer this handler needs in

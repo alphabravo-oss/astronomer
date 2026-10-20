@@ -5,10 +5,11 @@ import (
 	"math"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ktesting "k8s.io/client-go/testing"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestInventoryNumberRejectsNonIntegralAndUnrepresentableValues(t *testing.T) {

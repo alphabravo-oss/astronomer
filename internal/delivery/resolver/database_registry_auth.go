@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"oras.land/oras-go/v2/registry/remote"
 	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 // DatabaseRegistryAuthentication is constructor authority, never artifact data.

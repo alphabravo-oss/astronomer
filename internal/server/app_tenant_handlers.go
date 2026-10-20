@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
@@ -12,8 +15,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
 )
 
 func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {

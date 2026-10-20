@@ -2,9 +2,10 @@ package provider
 
 import (
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 )
 
 func TestOwnedScanCapacityRefusesUnresolvedAllocationsAndAllowsOnlyExistingClaimReuse(t *testing.T) {

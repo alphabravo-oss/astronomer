@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // Preview handles GET /api/v1/admin/gitops-sources/{id}/preview/.

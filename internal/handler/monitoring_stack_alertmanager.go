@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/google/uuid"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
 func (h *MonitoringHandler) updateSharedAlertmanagerMetadata(ctx context.Context, backend sqlc.MonitoringBackend, req SharedAlertmanagerRequest, status string) error {

@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func (h *MonitoringHandler) applyMonitoringStack(ctx context.Context, clusterID string, msgType protocol.MessageType, req MonitoringStackRequest, values map[string]any) (*protocol.HelmResultPayload, error) {

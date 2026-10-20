@@ -3,9 +3,10 @@ package server
 import (
 	"log/slog"
 
+	"github.com/hibiken/asynq"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
-	"github.com/hibiken/asynq"
 )
 
 func (c *productionComposition) composeManagementRouterDependencies(cfg *config.Config, logger *slog.Logger, deps *RouterDependencies) {

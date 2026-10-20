@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
 	"github.com/spf13/cobra"
+
+	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
 )
 
 func executeConfigCommand(t *testing.T, args ...string) (string, error) {

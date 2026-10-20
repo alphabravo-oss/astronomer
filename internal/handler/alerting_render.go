@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
-	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
 func (h *AlertingHandler) syncSharedAlertingAssets(ctx context.Context) error {

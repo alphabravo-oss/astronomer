@@ -11,11 +11,12 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	charliecontract "github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 type charlieCreatorFake struct {

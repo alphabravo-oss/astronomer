@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestPodLogsForwardsPreviousContainerFlag(t *testing.T) {

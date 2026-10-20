@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	ctrlrt "sigs.k8s.io/controller-runtime"
 
+	"k8s.io/client-go/rest"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
@@ -20,7 +22,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"k8s.io/client-go/rest"
 )
 
 // crdClusterAdapter implements crd.ClusterSync against the existing sqlc

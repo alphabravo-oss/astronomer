@@ -8,11 +8,12 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 const deliveryRouteMaxBodyBytes = 1 << 20

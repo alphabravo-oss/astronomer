@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // Health handles POST /api/v1/admin/vault-connections/{id}/health/.

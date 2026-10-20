@@ -14,9 +14,6 @@ import (
 	"testing"
 	"time"
 
-	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
-	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +25,10 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 const localQAFluxNamespace = "astronomer-delivery-system"

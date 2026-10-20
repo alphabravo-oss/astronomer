@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {

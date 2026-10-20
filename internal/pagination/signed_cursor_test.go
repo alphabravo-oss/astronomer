@@ -3,10 +3,11 @@ package pagination
 import (
 	"encoding/base64"
 	"errors"
-	"github.com/google/uuid"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestSignedCursorAuthorityRotationScopeAndExpiry(t *testing.T) {

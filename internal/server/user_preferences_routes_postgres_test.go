@@ -16,14 +16,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
 	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // This fixture requires a separately live-fenced, exclusively owned database.

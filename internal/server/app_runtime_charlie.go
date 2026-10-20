@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
 
 func (c *productionComposition) composeCharlieLifecycles(cfg *config.Config, logger *slog.Logger, deps RouterDependencies) (*charlieLifecycleGroup, error) {

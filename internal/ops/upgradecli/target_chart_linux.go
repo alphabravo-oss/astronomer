@@ -19,14 +19,15 @@ import (
 	"strings"
 	"syscall"
 
+	yaml "gopkg.in/yaml.v3"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	sigsyaml "sigs.k8s.io/yaml"
+
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
-	yaml "gopkg.in/yaml.v3"
-	chart "helm.sh/helm/v4/pkg/chart/v2"
-	sigsyaml "sigs.k8s.io/yaml"
 )
 
 const targetChartCompressedMaximum = int64(64 << 20)

@@ -11,11 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/coder/websocket"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"

@@ -8,10 +8,11 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type CharlieFindingAccess interface {

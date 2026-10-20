@@ -15,8 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 const CookieName = "__Host-astronomer_tool"

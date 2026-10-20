@@ -14,8 +14,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	digest "github.com/opencontainers/go-digest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // This is actual canonical TLS/challenge/range qualification when executed,

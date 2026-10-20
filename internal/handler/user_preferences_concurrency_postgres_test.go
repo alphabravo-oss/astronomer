@@ -12,12 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 // These two-connection fixtures need a committed synthetic actor visible to

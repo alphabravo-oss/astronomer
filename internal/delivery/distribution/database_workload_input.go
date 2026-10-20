@@ -5,8 +5,9 @@ import (
 	"errors"
 	"io"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 )
 
 // ReadWorkloadImageMetadata is a content-only read beneath the SAME pinned

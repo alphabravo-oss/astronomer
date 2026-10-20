@@ -5,9 +5,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"k8s.io/apimachinery/pkg/api/validate/content"
 	"k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 var inventoryKindPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)

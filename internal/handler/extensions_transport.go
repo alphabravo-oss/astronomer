@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // ExtensionBindingsQuerier resolves the caller's RBAC bindings. Same shape as

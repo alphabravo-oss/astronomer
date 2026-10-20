@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {

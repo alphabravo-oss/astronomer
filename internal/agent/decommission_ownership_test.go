@@ -22,8 +22,9 @@ import (
 	"k8s.io/client-go/rest"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/coder/websocket"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func pendingDecommissionFixture(t *testing.T, h *DecommissionHandler, ctx context.Context) (*protocol.Message, *decommissionReply) {

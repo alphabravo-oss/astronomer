@@ -7,8 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
 )
 
 func TestStarredTypesRoundTripAndAudit(t *testing.T) {

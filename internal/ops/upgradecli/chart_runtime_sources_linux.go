@@ -9,10 +9,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
-	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 	"github.com/distribution/reference"
 	yaml "gopkg.in/yaml.v3"
+
+	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
+	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 )
 
 // RuntimeSources resolves the six historical argument roles from authenticated

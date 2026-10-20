@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 )
 
 func TestServiceMissingCapabilitiesRemainExplicit(t *testing.T) {

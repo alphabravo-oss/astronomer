@@ -4,10 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // Sync handles POST /api/v1/admin/gitops-sources/{id}/sync/.

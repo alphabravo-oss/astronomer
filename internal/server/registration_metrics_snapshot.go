@@ -6,9 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/jackc/pgx/v5"
 )
 
 var errRegistrationMetricsBudget = errors.New("registration metrics observation exceeds owner budget")

@@ -18,8 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // Type is the event-type discriminator used by clients to filter / dispatch.

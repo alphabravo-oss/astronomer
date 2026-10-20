@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 var (

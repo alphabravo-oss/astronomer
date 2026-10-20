@@ -19,10 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	"helm.sh/helm/v4/pkg/helmpath"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 func TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity(t *testing.T) {

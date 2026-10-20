@@ -11,9 +11,10 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 const testSecret = "test-secret-key-for-auth-middleware"

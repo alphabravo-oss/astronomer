@@ -3,11 +3,12 @@ package server
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/go-chi/chi/v5"
 )
 
 // requireSuperuser returns middleware that admits only superusers, reusing the

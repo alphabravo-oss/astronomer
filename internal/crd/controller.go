@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +22,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 )
 
 type ClusterSync interface {

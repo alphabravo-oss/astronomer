@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-	"github.com/google/uuid"
 )
 
 var charlieAuditDigestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)

@@ -4,11 +4,12 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/jackc/pgx/v5"
 )
 
 func (h *MonitoringHandler) GetBackendConfig(w http.ResponseWriter, r *http.Request) {

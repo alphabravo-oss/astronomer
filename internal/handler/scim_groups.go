@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type scimGroupMutationResult struct {

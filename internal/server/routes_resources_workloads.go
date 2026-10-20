@@ -7,10 +7,11 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
+	"github.com/go-chi/chi/v5"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/go-chi/chi/v5"
 )
 
 // requireListPermission wraps appmiddleware.RequireListPermission with the same

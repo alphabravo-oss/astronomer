@@ -11,9 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 )
 
 // This fixture executes the actual chart/metadata signature and OCI-content

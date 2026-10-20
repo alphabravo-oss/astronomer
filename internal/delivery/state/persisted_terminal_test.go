@@ -1,8 +1,9 @@
 package state
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 func TestPersistedTerminalClusterStatesRemainReadableAndCannotResume(t *testing.T) {

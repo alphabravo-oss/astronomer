@@ -5,10 +5,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/hibiken/asynq"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
 )
 
 type routerComposition struct {

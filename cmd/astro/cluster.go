@@ -12,8 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/spf13/cobra"
+
+	"github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 type clusterRow struct {

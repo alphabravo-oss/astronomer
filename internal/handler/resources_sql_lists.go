@@ -3,11 +3,12 @@ package handler
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"net/http"
-	"strings"
 )
 
 func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {

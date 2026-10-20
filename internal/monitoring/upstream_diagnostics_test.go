@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 func TestMonitoringUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {

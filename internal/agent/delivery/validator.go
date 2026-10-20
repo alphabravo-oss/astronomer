@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"sigs.k8s.io/yaml"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 const (

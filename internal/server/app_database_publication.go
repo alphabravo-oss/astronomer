@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/provider"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
-	"github.com/google/uuid"
 )
 
 // DatabasePublicationCommandOptions belongs only to the protected process

@@ -6,8 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 )
 
 // Upstream database bytes are unchanged; Astronomer endorses their immutable

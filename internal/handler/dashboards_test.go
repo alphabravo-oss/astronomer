@@ -13,11 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeDashboardQuerier is the in-memory DashboardQuerier the handler

@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 // WorkloadImageMetadata is immutable content DATA. A workload is not a vendor

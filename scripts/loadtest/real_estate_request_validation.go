@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 )
 
 func validateEstateDeliveryBody(raw []byte, m estateMember, mode string, a *estateAssignment) error {

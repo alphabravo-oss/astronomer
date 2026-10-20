@@ -2,10 +2,12 @@ package handler
 
 import (
 	"errors"
+	"net/http"
+
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/jackc/pgx/v5"
-	"net/http"
 )
 
 func (h *CatalogHandler) catalogUpgradeConfiguration(w http.ResponseWriter, r *http.Request, installed sqlc.InstalledChart, version sqlc.HelmChartVersion, valuesOverride string, hasOverride bool, fromVersion string) (sqlc.HelmChartVersion, string, bool) {

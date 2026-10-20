@@ -2,9 +2,11 @@ package handler
 
 import (
 	"context"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
 func (h *MonitoringHandler) backendClient(ctx context.Context, clusterID string) (*imonitoring.Client, monitoringContext, bool, error) {

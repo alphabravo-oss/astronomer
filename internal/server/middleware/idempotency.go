@@ -44,8 +44,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // idempotencyTTL is the default lifetime of a cached response. Long enough

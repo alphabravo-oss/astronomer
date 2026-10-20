@@ -5,10 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 )
 
 type catalogPreviewFunc func(context.Context, uuid.UUID) (rollout.PlanningSnapshot, placement.Result, error)

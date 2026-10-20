@@ -5,10 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
-	"github.com/go-chi/chi/v5"
 )
 
 // registerPublicRoutes owns the intentionally unauthenticated health,

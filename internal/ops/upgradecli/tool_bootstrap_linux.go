@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"os"
 	"path/filepath"
 	"runtime"
 	"syscall"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 
 	canonical "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli/toolchain"
 )

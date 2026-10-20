@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
-	"github.com/google/uuid"
 )
 
 func TestDatabaseImportCannotGrantAuthorityFromUnownedDataOrRelabelFailedAttempt(t *testing.T) {

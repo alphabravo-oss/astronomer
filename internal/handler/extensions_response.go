@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type ExtensionRecordResponse struct {

@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zip.Writer, log *sectionLog) {

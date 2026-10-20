@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/jackc/pgx/v5"
 )
 
 func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {

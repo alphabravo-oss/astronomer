@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hibiken/asynq"
+
 	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/hibiken/asynq"
 )
 
 const managementBackupObservationRetryDelay = 15 * time.Second

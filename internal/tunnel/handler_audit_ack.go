@@ -2,9 +2,10 @@ package tunnel
 
 import (
 	"encoding/json"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"log/slog"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // sendApiserverAuditAck sends a MsgApiserverAuditAck back to the SAME agent

@@ -3,8 +3,9 @@ package tasks
 import (
 	"fmt"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/hibiken/asynq"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 )
 
 // CharlieAlertRuntime owns the complete worker-side alert planning and

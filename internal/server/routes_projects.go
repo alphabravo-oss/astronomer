@@ -1,9 +1,10 @@
 package server
 
 import (
+	"github.com/go-chi/chi/v5"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/go-chi/chi/v5"
 )
 
 // Code organization: this file holds a domain-specific slice of the

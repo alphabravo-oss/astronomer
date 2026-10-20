@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 type ClusterRequester interface {

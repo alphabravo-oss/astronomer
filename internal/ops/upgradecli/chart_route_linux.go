@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 	"oras.land/oras-go/v2/registry"
+
+	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
 
 // captureOperatorRoute preserves CHART_REF's actual Helm credential/plugin

@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 // This actual keyed registry proves the same base consumer boundary. Its

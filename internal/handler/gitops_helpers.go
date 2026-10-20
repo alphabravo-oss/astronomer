@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	gitopsdomain "github.com/alphabravocompany/astronomer-go/internal/gitops"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func enqueueGitOpsSourceSync(r *http.Request, q GitOpsQuerier, outbox tasks.TaskOutboxWriter, sourceID uuid.UUID) (gitOpsSyncMutationResult, error) {

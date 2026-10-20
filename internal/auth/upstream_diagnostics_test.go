@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/oauth2"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 func TestAuthUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {

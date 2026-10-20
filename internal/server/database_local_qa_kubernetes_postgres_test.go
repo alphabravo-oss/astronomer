@@ -8,17 +8,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
-	"github.com/alphabravocompany/astronomer-go/internal/scanner/databasejob"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
+	"os"
+
 	"github.com/google/uuid"
 	digest "github.com/opencontainers/go-digest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
+	"github.com/alphabravocompany/astronomer-go/internal/scanner/databasejob"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 type localQAKubernetesInput struct {

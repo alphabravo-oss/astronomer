@@ -9,10 +9,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/jackc/pgx/v5/pgtype"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 )
 
 type sectionLog struct {

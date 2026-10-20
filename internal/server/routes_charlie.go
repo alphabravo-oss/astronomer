@@ -3,11 +3,12 @@ package server
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/go-chi/chi/v5"
 )
 
 // registerCharlieRoutes exposes only the local onboarding verifier/consumer.

@@ -6,13 +6,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/grafanaproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // ProxyClusterGrafana rechecks cluster RBAC and issues a one-use identity ticket

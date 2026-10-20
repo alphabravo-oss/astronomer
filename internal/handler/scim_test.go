@@ -15,9 +15,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/jackc/pgx/v5"
 )
 
 // fakeSCIMQuerier is the minimal SCIMQuerier the test needs: an in-memory

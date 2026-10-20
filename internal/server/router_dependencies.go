@@ -1,8 +1,9 @@
 package server
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/toolui"
 	"net/http"
+
+	"github.com/alphabravocompany/astronomer-go/internal/toolui"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"

@@ -1,8 +1,9 @@
 package middleware
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // Derived policies have stable evidence IDs but never occupy editable policy

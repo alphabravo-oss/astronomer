@@ -5,8 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // PublishVerified runs after the actual publisher writes and signs child/feed

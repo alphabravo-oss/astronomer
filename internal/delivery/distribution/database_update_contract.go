@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"oras.land/oras-go/v2/registry/remote"
+
+	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 )
 
 const DatabaseUpdateMediaType = "application/vnd.astronomer.vulnerability-db-update.v1+json"

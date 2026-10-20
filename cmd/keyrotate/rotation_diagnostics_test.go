@@ -11,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 type diagnosticDriver struct{ stage, ciphertext string }

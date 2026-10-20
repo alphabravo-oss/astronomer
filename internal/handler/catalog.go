@@ -2,12 +2,17 @@ package handler
 
 import (
 	"context"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -17,9 +22,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/sync/singleflight"
 )
 
 // CatalogQuerier abstracts the catalog-related database queries needed by CatalogHandler.

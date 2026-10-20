@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"helm.sh/helm/v4/pkg/cli"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestHelmSettingsForNamespaceIsRequestLocal(t *testing.T) {

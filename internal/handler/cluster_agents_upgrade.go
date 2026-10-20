@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/google/uuid"
 )
 
 func (h *ClusterAgentHandler) UpgradePlan(w http.ResponseWriter, r *http.Request) {

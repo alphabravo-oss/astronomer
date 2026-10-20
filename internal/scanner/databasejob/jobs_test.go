@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 )
 
 func ownedJobFixture(private bool) (JobRequest, distribution.DatabaseScanImages) {

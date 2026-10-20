@@ -13,9 +13,10 @@ import (
 	"testing"
 	"time"
 
-	appdb "github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	appdb "github.com/alphabravocompany/astronomer-go/internal/db"
 )
 
 // These fixtures clone migrated table definitions into a unique schema in an

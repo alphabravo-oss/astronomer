@@ -13,8 +13,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 // This driver models a valid first row followed by a connection/iterator error.

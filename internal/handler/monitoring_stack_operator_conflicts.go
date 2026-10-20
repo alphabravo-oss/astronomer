@@ -7,8 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	appsv1 "k8s.io/api/apps/v1"
+
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // MonitoringOperatorConflict describes a Prometheus operator that can

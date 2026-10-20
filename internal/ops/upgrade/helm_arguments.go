@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 	digest "github.com/opencontainers/go-digest"
 	"oras.land/oras-go/v2/registry"
+
+	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 )
 
 // HelmInputs is assembled only after signature, exact artifact byte/checksum,

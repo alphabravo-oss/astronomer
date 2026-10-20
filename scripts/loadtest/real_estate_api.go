@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 	"io"
 	"net/http"
 	"net/url"
 	"slices"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 )
 
 // A dedicated transport prevents redirect credential forwarding and permits socket-free tests.

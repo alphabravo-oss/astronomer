@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 const databaseRangeBytes int64 = 64 << 20

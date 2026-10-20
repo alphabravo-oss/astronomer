@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/google/uuid"
 )
 
 type catalogNetworkRoundTrip func(*http.Request) (*http.Response, error)

@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
 
 func TestDatabaseSeparateStageKeepsCanonicalPreTrustRefusals(t *testing.T) {

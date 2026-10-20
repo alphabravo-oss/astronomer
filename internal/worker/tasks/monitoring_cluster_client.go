@@ -2,9 +2,11 @@ package tasks
 
 import (
 	"context"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
 func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imonitoring.Client, monitoringSelector, bool, error) {

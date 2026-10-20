@@ -10,11 +10,12 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 func grafanaAuthed(method, target, body string) *http.Request {

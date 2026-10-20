@@ -3,11 +3,13 @@ package tasks
 import (
 	"context"
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/google/uuid"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type capturedGaugeFixture struct {

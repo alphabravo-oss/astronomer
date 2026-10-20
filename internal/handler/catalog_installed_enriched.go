@@ -22,11 +22,12 @@ package handler
 import (
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ListClusterApps handles GET /api/v1/clusters/{cluster_id}/apps/.

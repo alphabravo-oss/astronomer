@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/google/uuid"
 )
 
 func TestVerifiedVersionTransitionPreservesOwnershipAndFencesContent(t *testing.T) {

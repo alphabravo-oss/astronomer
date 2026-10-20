@@ -13,9 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // Exercise the real TLS HTTP/2 client, including parsers that accept numeric

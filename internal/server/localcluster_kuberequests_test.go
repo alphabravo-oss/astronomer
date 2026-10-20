@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/agent"
-	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/prometheus/client_golang/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/agent"
+	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 )
 
 type localRequestTransport func(*http.Request) (*http.Response, error)

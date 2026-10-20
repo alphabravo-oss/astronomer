@@ -6,12 +6,13 @@ import (
 	"io"
 	"os"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/builtin"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/provider"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/google/uuid"
 )
 
 func builtinCAAuthorizer(loader builtin.CatalogLoader, policy httpclient.DestinationPolicy) provider.BuiltinCAAuthorizer {

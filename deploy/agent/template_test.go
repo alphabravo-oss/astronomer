@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"gopkg.in/yaml.v3"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestRBACRulesYAMLProfiles(t *testing.T) {

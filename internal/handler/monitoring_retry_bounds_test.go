@@ -2,9 +2,10 @@ package handler
 
 import (
 	"encoding/json"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"math"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestMonitoringRetryAttemptsRejectsOverflowAndFractions(t *testing.T) {

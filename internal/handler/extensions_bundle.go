@@ -12,10 +12,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/jackc/pgx/v5"
 )
 
 // SetTrustedBundleKey installs the base64 (std encoding) Ed25519 public key

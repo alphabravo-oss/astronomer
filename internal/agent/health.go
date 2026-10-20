@@ -17,11 +17,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/httpserver"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // inventoryPageSize bounds one page of the fallback inventory LISTs (the path

@@ -53,13 +53,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // DashboardQuerier is the narrow DB surface the handler reads + writes.

@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 func completeMaintenanceRuntime(t *testing.T) MaintenanceRuntime {

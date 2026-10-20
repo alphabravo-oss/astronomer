@@ -1,9 +1,10 @@
 package server
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 )
 
 // Return the same copied configuration used for the initial typed client so

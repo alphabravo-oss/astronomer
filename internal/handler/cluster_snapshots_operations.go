@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
+
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Request) {

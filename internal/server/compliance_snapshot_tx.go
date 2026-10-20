@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
-	"github.com/jackc/pgx/v5"
 )
 
 // Each collection section sees one PostgreSQL snapshot, including its count,

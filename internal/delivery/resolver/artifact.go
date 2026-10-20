@@ -6,8 +6,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	digest "github.com/opencontainers/go-digest"
+
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
 // FetchVerifiedOCIArtifact authenticates the pinned subject using the canonical

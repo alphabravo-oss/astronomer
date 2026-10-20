@@ -34,8 +34,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 )
 
 // locatorKeyPrefix is the redis key prefix. Each cluster's address is

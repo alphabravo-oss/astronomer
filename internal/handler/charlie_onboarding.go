@@ -12,9 +12,10 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/google/uuid"
 )
 
 type CharlieOnboardingConsumer interface {
