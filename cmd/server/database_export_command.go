@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"syscall"
 
+	digest "github.com/opencontainers/go-digest"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/server"
-	digest "github.com/opencontainers/go-digest"
 )
 
 const databaseExportUsage = "astronomer-server database-update-export --feed-digest sha256:HEX --output /ABSOLUTE/NEW/PRIVATE/DIRECTORY\n"

@@ -10,7 +10,7 @@ import (
 // resource identity to this worker binary rather than the API service settings.
 func workerTracingConfig(cfg *config.Config) observability.TracingConfig {
 	return observability.TracingConfig{
-		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Endpoint: cfg.OTELExporterEndpoint, Protocol: cfg.OTELExporterProtocol, Insecure: cfg.OTELExporterInsecure,
 		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
 		ServiceName: "astronomer-worker", ServiceVersion: version.Version,
 		Environment: cfg.Env, ServiceNamespace: "astronomer", ServiceInstanceID: cfg.ProcessHostname,

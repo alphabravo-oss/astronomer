@@ -19,6 +19,7 @@ formatters:
         - github.com/alphabravocompany/astronomer-go
   exclusions:
     paths:
+      - frontend
       - internal/db/sqlc
       - pkg/astroclient
       - internal/charlie/contract/pinned
@@ -63,6 +64,7 @@ linters:
         - -ST1022
   exclusions:
     paths:
+      - frontend
       - internal/db/sqlc
       - pkg/astroclient
       - internal/charlie/contract/pinned

@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 const (
@@ -52,6 +54,7 @@ func respondData(w http.ResponseWriter, status int, value any) {
 }
 
 func respondError(w http.ResponseWriter, status int, code, message string) {
+	observability.RecordRequestError("", status)
 	writeJSON(w, status, errorEnvelope{Error: apiError{Code: code, Message: message}})
 }
 

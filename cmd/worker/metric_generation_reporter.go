@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 

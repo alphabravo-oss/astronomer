@@ -3,9 +3,10 @@ package observability_test
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestRegistrationMetricProjectionKeepsDomainPhases(t *testing.T) {

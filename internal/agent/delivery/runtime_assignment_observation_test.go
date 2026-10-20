@@ -174,7 +174,7 @@ func TestRuntimeAssignmentDirtyStatusDuringResponseWait(t *testing.T) {
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-done:
+		case <-done: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		case <-time.After(5 * time.Second):
 			t.Error("runtime/source shutdown blocked")
 		}

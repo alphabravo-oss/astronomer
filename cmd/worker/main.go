@@ -12,6 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -37,10 +42,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
-	"github.com/hibiken/asynq"
-	"github.com/redis/go-redis/v9"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 // unavailableDeliveryDecryptor keeps public, credential-free source

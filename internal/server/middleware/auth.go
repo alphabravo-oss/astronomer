@@ -64,23 +64,22 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 	return AuthWithQueries(jwtManager, nil)
 }
 
-// AuthWithQueries authenticates requests via JWT, API token, or the browser
-// HttpOnly session cookie, using DB lookups when provided. Authorization
-// headers take precedence so headless API-token callers are unaffected even
-// when a browser cookie is also present.
+// AuthWithQueries authenticates requests via the browser HttpOnly session
+// cookie, a JWT bearer token, or an API token, using DB lookups when provided.
+// The session cookie takes precedence over the Authorization header (guide
+// ch.06: "the server accepts cookie and bearer, cookie first"); a cookie-bearing
+// mutation must also carry the CSRF double-submit header.
 func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			usedSessionCookie := false
-			if header == "" {
-				if c, err := auth.BrowserCookie(r, auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
-					header = "Bearer " + c.Value
-					usedSessionCookie = true
-				} else {
-					authError(w, "authentication_required", "Authorization header or session cookie is required")
-					return
-				}
+			if c, err := auth.BrowserCookie(r, auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+				header = "Bearer " + c.Value
+				usedSessionCookie = true
+			} else if header == "" {
+				authError(w, "authentication_required", "Authorization header or session cookie is required")
+				return
 			}
 			if usedSessionCookie && !isSafeMethod(r.Method) && !auth.ValidateCSRF(r) {
 				authError(w, "csrf_required", "CSRF token is required")

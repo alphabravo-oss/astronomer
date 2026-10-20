@@ -29,7 +29,7 @@ func preserveTracingGlobals(t *testing.T) {
 func TestTracingRejectsMalformedEndpointWithoutCredentialDisclosure(t *testing.T) {
 	preserveTracingGlobals(t)
 	for _, endpoint := range []string{"not-a-url", "ftp://collector.invalid", "https://synthetic-user:synthetic-secret@collector.invalid", "https://collector.invalid?token=synthetic-secret", "https://collector.invalid#synthetic-secret"} {
-		shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: endpoint})
+		shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: endpoint, Protocol: ProtocolHTTPProtobuf})
 		if shutdown != nil {
 			_ = shutdown(context.Background())
 		}
@@ -79,7 +79,7 @@ func TestTracingFlushesRealOTLPResourceAndSpan(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 	}))
 	defer server.Close()
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, SamplerRatio: 1, ServiceName: "astronomer-fixture", ServiceNamespace: "qualification", ServiceInstanceID: "owned-instance", ServiceVersion: "fixture", Environment: "owned", Headers: map[string]string{"X-Fixture": "synthetic-collector"}})
+	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1, ServiceName: "astronomer-fixture", ServiceNamespace: "qualification", ServiceInstanceID: "owned-instance", ServiceVersion: "fixture", Environment: "owned", Headers: map[string]string{"X-Fixture": "synthetic-collector"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestTracingShutdownBoundsUnresponsiveCollector(t *testing.T) {
 	entered, release := make(chan struct{}, 1), make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { entered <- struct{}{}; <-release }))
 	defer server.Close()
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, SamplerRatio: 1})
+	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestTracingShutdownBoundsUnresponsiveCollector(t *testing.T) {
 	defer func() {
 		close(release)
 		select {
-		case <-flushing:
+		case <-flushing: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		case <-time.After(time.Second):
 			t.Error("export did not join after fixture released response")
 		}

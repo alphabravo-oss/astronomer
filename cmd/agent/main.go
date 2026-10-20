@@ -81,7 +81,7 @@ func runConnect(logger *slog.Logger) error {
 		instanceID = cfg.ClusterID
 	}
 	otelShutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{
-		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Endpoint: cfg.OTELExporterEndpoint, Protocol: cfg.OTELExporterProtocol, Insecure: cfg.OTELExporterInsecure,
 		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
 		ServiceName: "astronomer-agent", ServiceVersion: version.Version,
 		Environment: cfg.Environment, ServiceNamespace: "astronomer", ServiceInstanceID: instanceID,

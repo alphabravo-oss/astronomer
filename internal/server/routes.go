@@ -107,8 +107,15 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		return rateLimiter.Middleware(class)
 	}
 
-	// Middleware
+	// Middleware order (guide ch.03): recovery -> request-id + tracing ->
+	// logging -> metrics/body limits -> authn -> authz -> handler.
+	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.RequestID)
+	// Rename the otelhttp server span to use chi's route pattern once routing
+	// has run. otelhttp.NewHandler wraps the router with only the HTTP method
+	// as a placeholder span name; this middleware upgrades it to
+	// "METHOD /api/v1/path/{id}" so traces aggregate by route.
+	r.Use(chiRoutePatternSpanName)
 	r.Use(appmiddleware.TrustedRealIP(cfg.TrustedProxyCIDRs))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
@@ -117,7 +124,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	})
 	r.Use(appmiddleware.SecurityHeaders)
 	r.Use(appmiddleware.RequestLogger)
-	r.Use(chimiddleware.Recoverer)
 	r.Use(appmiddleware.Metrics)
 	// Keep the server-level ReadTimeout at zero for WebSockets/SSE while still
 	// bounding every REST/SCIM mutation body by bytes and socket read time.
@@ -125,12 +131,6 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	// Split tool hosts before normalizing first-party API paths.
 	r.Use(deps.CoreAuth.ToolUI.Dispatch)
 	r.Use(appmiddleware.NormalizeAPITrailingSlash)
-	// Rename the otelhttp server span to use chi's route pattern
-	// once routing has run. otelhttp.NewHandler wraps the router with
-	// only the HTTP method as a placeholder span name; this middleware
-	// upgrades it to "METHOD /api/v1/path/{id}" so traces aggregate by
-	// route instead of by raw URL.
-	r.Use(chiRoutePatternSpanName)
 	// NOTE: chimiddleware.Timeout is applied per-group below — it MUST NOT be
 	// applied globally because /api/v1/ws/... carries long-lived WebSocket
 	// connections that would otherwise be force-closed at the timeout.

@@ -50,7 +50,7 @@ func TestOTLPActualWireRedactsSecretsAcrossSpanFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 	}))
 	defer server.Close()
-	shutdown, err := InitTracing(context.Background(), slog.New(NewJSONHandler(io.Discard, nil)), TracingConfig{Endpoint: server.URL, SamplerRatio: 1, ServiceName: "safe-service", ServiceVersion: "Bearer synthetic-resource-secret"})
+	shutdown, err := InitTracing(context.Background(), slog.New(NewJSONHandler(io.Discard, nil)), TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1, ServiceName: "safe-service", ServiceVersion: "Bearer synthetic-resource-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}

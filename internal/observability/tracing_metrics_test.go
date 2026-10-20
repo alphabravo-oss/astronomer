@@ -85,7 +85,7 @@ func TestTracingEnabledWithZeroSamplingDoesNotImplyExports(t *testing.T) {
 	}))
 	defer server.Close()
 	beforeSuccess, beforeFailure := tracingMetrics.success.Load(), tracingMetrics.failure.Load()
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, SamplerRatio: 0})
+	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 0})
 	if err != nil {
 		t.Fatal(err)
 	}

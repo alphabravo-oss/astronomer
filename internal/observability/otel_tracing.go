@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -30,10 +31,14 @@ const tracingExportTimeout = 5 * time.Second
 // at init time. All fields are optional; an empty Endpoint disables
 // tracing entirely (no-op provider).
 type TracingConfig struct {
-	// Endpoint is the OTLP/HTTP collector base, e.g.
-	// "http://otel-collector.observability:4318". When empty, tracing
-	// is disabled.
+	// Endpoint is the OTLP collector, e.g. "http://otel-collector:4317"
+	// (gRPC, the default) or "http://otel-collector:4318" with
+	// Protocol "http/protobuf". When empty, tracing is disabled.
 	Endpoint string
+
+	// Protocol selects the OTLP transport: "grpc" (default, guide ch.05)
+	// or "http/protobuf" for collectors that only expose the HTTP receiver.
+	Protocol string
 
 	// Insecure forces the exporter to use plain HTTP instead of HTTPS.
 	// Defaults to true when the Endpoint scheme is http://.
@@ -148,19 +153,7 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		return noopShutdown, err
 	}
 
-	exporterOpts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpointURL(endpoint),
-		otlptracehttp.WithTimeout(tracingExportTimeout),
-		otlptracehttp.WithHeaders(cfg.Headers),
-	}
-	// Endpoint URL takes precedence; for backwards compat with
-	// non-URL forms ("collector:4318") the explicit Insecure knob is
-	// still honored.
-	if cfg.Insecure || strings.HasPrefix(endpoint, "http://") {
-		exporterOpts = append(exporterOpts, otlptracehttp.WithInsecure())
-	}
-
-	exporter, err := otlptracehttp.New(ctx, exporterOpts...)
+	exporter, err := newTraceExporter(ctx, cfg, endpoint)
 	if err != nil {
 		return noopShutdown, fmt.Errorf("otel exporter: %w", err)
 	}
@@ -191,6 +184,7 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 
 	log.Info("otel tracing initialized",
 		"sampler_ratio", ratio,
+		"protocol", normalizedProtocol(cfg.Protocol),
 		"service_name", serviceName)
 
 	return tp.Shutdown, nil
@@ -269,4 +263,48 @@ func samplerForRatio(ratio float64) sdktrace.Sampler {
 		return sdktrace.NeverSample()
 	}
 	return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio))
+}
+
+// OTLP transport selection. gRPC is the canonical exporter (guide ch.05);
+// "http/protobuf" remains available for collectors without a gRPC receiver.
+const (
+	ProtocolGRPC         = "grpc"
+	ProtocolHTTPProtobuf = "http/protobuf"
+)
+
+func normalizedProtocol(protocol string) string {
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case ProtocolHTTPProtobuf, "http":
+		return ProtocolHTTPProtobuf
+	default:
+		return ProtocolGRPC
+	}
+}
+
+func newTraceExporter(ctx context.Context, cfg TracingConfig, endpoint string) (sdktrace.SpanExporter, error) {
+	insecure := cfg.Insecure || strings.HasPrefix(endpoint, "http://")
+	if normalizedProtocol(cfg.Protocol) == ProtocolHTTPProtobuf {
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpointURL(endpoint),
+			otlptracehttp.WithTimeout(tracingExportTimeout),
+			otlptracehttp.WithHeaders(cfg.Headers),
+		}
+		if insecure {
+			opts = append(opts, otlptracehttp.WithInsecure())
+		}
+		return otlptracehttp.New(ctx, opts...)
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	opts := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(parsed.Host),
+		otlptracegrpc.WithTimeout(tracingExportTimeout),
+		otlptracegrpc.WithHeaders(cfg.Headers),
+	}
+	if insecure {
+		opts = append(opts, otlptracegrpc.WithInsecure())
+	}
+	return otlptracegrpc.New(ctx, opts...)
 }

@@ -369,7 +369,7 @@ func stopRestartQualificationProcess(t *testing.T, process *restartQualification
 		}
 	case <-time.After(12 * time.Second):
 		_ = process.cmd.Process.Kill()
-		<-done
+		<-done //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		t.Fatal("restart helper did not stop gracefully")
 	}
 }

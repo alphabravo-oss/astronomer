@@ -8,8 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 var immutableDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)

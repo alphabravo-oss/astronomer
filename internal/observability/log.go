@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
 func WithEvent(log *slog.Logger, event string) *slog.Logger {

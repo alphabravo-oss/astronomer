@@ -1,8 +1,9 @@
 package config
 
 import (
-	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/spf13/viper"
+
+	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 )
 
 func bindOptionalEnvironment(v *viper.Viper) error {

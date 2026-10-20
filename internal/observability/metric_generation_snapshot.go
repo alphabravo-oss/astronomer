@@ -5,8 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type MetricGenerationBegin func(context.Context, pgx.TxOptions) (pgx.Tx, error)

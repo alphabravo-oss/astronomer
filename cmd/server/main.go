@@ -46,7 +46,11 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "grafana-proxy" {
-		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_PUBLIC_PATH"), os.Getenv("GRAFANA_PROXY_KEY"))
+		env, err := config.LoadStandaloneProxyEnv()
+		var cfg grafanaproxy.Config
+		if err == nil {
+			cfg, err = grafanaproxy.ParseConfig(env.ListenAddr, env.GrafanaUpstream, env.AstronomerURL, env.GrafanaPublicPath, env.GrafanaProxyKey)
+		}
 		if err == nil {
 			err = grafanaproxy.Run(cfg)
 		}
@@ -58,7 +62,11 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "loki-auth" {
-		cfg, err := lokiauth.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("LOKI_UPSTREAM"), os.Getenv("HASHES_PATH"), os.Getenv("ACL_PATH"), os.Getenv("QUERY_KEY_PATH"))
+		env, err := config.LoadStandaloneProxyEnv()
+		var cfg lokiauth.Config
+		if err == nil {
+			cfg, err = lokiauth.ParseConfig(env.ListenAddr, env.LokiUpstream, env.HashesPath, env.ACLPath, env.QueryKeyPath)
+		}
 		if err == nil {
 			err = lokiauth.Run(cfg)
 		}
@@ -109,12 +117,12 @@ func main() {
 	)
 
 	// Distributed tracing foundation. No-op when
-	// OTEL_EXPORTER_OTLP_ENDPOINT is unset; otherwise wires an OTLP/HTTP
-	// exporter behind the global TracerProvider so the chi otelhttp
+	// OTEL_EXPORTER_OTLP_ENDPOINT is unset; otherwise wires an OTLP gRPC
+	// exporter (OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf opts into HTTP) behind the global TracerProvider so the chi otelhttp
 	// middleware, pgx OTel tracer, and tunnel originator spans all
 	// flow into the same backend.
 	tracingCfg := observability.TracingConfig{
-		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Endpoint: cfg.OTELExporterEndpoint, Protocol: cfg.OTELExporterProtocol, Insecure: cfg.OTELExporterInsecure,
 		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
 		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
 		SamplerRatio: cfg.OTELSamplerRatio,
@@ -248,7 +256,7 @@ func main() {
 	}
 
 	runtimeResults := make(chan error, 1)
-	go func() { runtimeResults <- srv.Start(":8000") }()
+	go func() { runtimeResults <- srv.Start(cfg.ServerAddr) }()
 	runtimeFailed := false
 	runtimeJoined := false
 	select {

@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // statusClientClosedRequest is nginx's conventional code for a request whose
@@ -44,6 +46,7 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 	if requestID != "" {
 		errObj["request_id"] = requestID
 	}
+	observability.RecordRequestError("", status)
 	resp := map[string]any{"error": errObj}
 	writeJSON(w, status, resp)
 }
@@ -73,6 +76,7 @@ func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, cod
 	if requestID != "" {
 		errObj["request_id"] = requestID
 	}
+	observability.RecordRequestError(observability.RoutePattern(r), status)
 	writeJSON(w, status, map[string]any{"error": errObj})
 }
 

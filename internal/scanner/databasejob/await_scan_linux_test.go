@@ -55,7 +55,7 @@ func TestOwnedNoNetworkReadinessWaitsForJoinedInitialMeasurement(t *testing.T) {
 		_ = joinedObserver(t, done, cancel)
 		mark()
 		select {
-		case <-ready:
+		case <-ready: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		case <-time.After(time.Second):
 			t.Fatal("readiness goroutine remained unjoined")
 		}

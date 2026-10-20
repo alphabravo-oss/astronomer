@@ -144,7 +144,7 @@ func joinedSDKLifecycle(t *testing.T, owner context.Context, cancel context.Canc
 	waitJoinedSignal(t, stage.canceled, "owned body did not cancel")
 	waitJoinedSignal(t, stage.networkStopped, "owned server did not observe body cancellation")
 	select {
-	case <-result:
+	case <-result: //nolint:errcheck // the goroutine was cancelled on purpose; its exit error carries no signal here
 		t.Fatal("joined adapter returned while SDK worker was still held")
 	default:
 	}

@@ -195,7 +195,11 @@ type Config struct {
 	ServerMetricsAddr             string `mapstructure:"server_metrics_addr"`
 	WorkerMetricsAddr             string `mapstructure:"worker_metrics_addr"`
 
+	// ServerAddr is the API listener address (default ":8000").
+	ServerAddr string `mapstructure:"server_addr"`
+
 	OTELExporterEndpoint string  `mapstructure:"otel_exporter_otlp_endpoint"`
+	OTELExporterProtocol string  `mapstructure:"otel_exporter_otlp_protocol"`
 	OTELExporterInsecure bool    `mapstructure:"otel_exporter_otlp_insecure"`
 	OTELExporterHeaders  string  `mapstructure:"otel_exporter_otlp_headers"`
 	OTELServiceName      string  `mapstructure:"otel_service_name"`
@@ -503,7 +507,9 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "kubectl_shell_image", Value: "astronomer-shell:dev"},
 		envconfig.Default{Key: "kubectl_shell_idle_timeout_minutes", Value: 30},
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
+		envconfig.Default{Key: "server_addr", Value: ":8000"},
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
+		envconfig.Default{Key: "otel_exporter_otlp_protocol", Value: "grpc"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "otel_traces_sampler_arg", Value: 0.05},
 		envconfig.Default{Key: "agent_otel_traces_sampler_arg", Value: 0.05},
