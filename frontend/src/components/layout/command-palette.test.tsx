@@ -71,7 +71,7 @@ describe("CommandPalette", () => {
   it("surfaces every global nav destination by label search", () => {
     render(<CommandPaletteDialog />);
     const input = screen.getByPlaceholderText(
-      "Search clusters, pages, actions...",
+      "Search pages, clusters, resources and actions",
     );
     for (const group of globalNavGroups) {
       for (const item of group.items) {
@@ -88,20 +88,20 @@ describe("CommandPalette", () => {
     useUIStore.setState({ commandPaletteOpen: false });
     render(<CommandPalette />);
     expect(
-      screen.queryByPlaceholderText("Search clusters, pages, actions..."),
+      screen.queryByPlaceholderText("Search pages, clusters, resources and actions"),
     ).toBeNull();
     fireEvent.keyDown(document, { key: "k", ctrlKey: true });
     const input = await screen.findByPlaceholderText(
-      "Search clusters, pages, actions...",
+      "Search pages, clusters, resources and actions",
     );
     fireEvent.change(input, { target: { value: "clusters" } });
     fireEvent.keyDown(document, { key: "Escape" });
     expect(
-      screen.queryByPlaceholderText("Search clusters, pages, actions..."),
+      screen.queryByPlaceholderText("Search pages, clusters, resources and actions"),
     ).toBeNull();
     fireEvent.keyDown(document, { key: "k", metaKey: true });
     expect(
-      await screen.findByPlaceholderText("Search clusters, pages, actions..."),
+      await screen.findByPlaceholderText("Search pages, clusters, resources and actions"),
     ).toHaveValue("");
   });
 });

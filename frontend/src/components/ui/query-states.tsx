@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 
-import { apiErrorStatus, extractApiErrorMessage } from "@/lib/api/errors";
+import {
+  apiErrorRequestId,
+  apiErrorStatus,
+  extractApiErrorMessage,
+} from "@/lib/api/errors";
 import {
   ErrorState,
   LoadingState,
@@ -103,6 +107,7 @@ export function QueryStates<T>({
           `The API returned status ${status}.`
         }
         onRetry={retry}
+        correlationId={apiErrorRequestId(query.error)}
         className={className}
       />
     );

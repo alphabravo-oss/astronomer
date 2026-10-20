@@ -26,10 +26,10 @@ export interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
 
 const intentClass: Record<ActionIntent, string> = {
   default: "border border-border bg-background text-foreground hover:bg-accent",
-  primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-  destructive: "bg-status-error text-background hover:bg-status-error/90",
+  primary: "bg-brand text-brand-foreground hover:bg-brand/90",
+  destructive: "bg-status-error text-white hover:bg-status-error/90",
   ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
-  link: "text-primary underline-offset-4 hover:underline",
+  link: "text-foreground underline-offset-4 hover:underline",
   bare: "",
 };
 
@@ -85,7 +85,7 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
           aria-label={label}
           title={disabledReason}
           className={cn(
-            "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",
             intentClass[intent],
             sizeClass[size],
             className,

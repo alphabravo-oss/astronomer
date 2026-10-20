@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronDown,
@@ -10,106 +9,82 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { logoutCurrentSession } from "@/lib/api/account-security";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { BareButton } from "@/components/form/bare-button";
+import {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
+} from "@/ui";
+
 export function TopbarAccountMenu() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const signOut = async () => {
+    // POST /auth/logout first so the backend can revoke the session and (for
+    // SSO users) hand us a Dex end_session URL. Local state is cleared
+    // regardless.
+    let redirectUrl: string | undefined;
+    try {
+      const res = await logoutCurrentSession();
+      redirectUrl = res.redirectUrl;
+    } catch {
+      // Network failure / 401 — still clear local state.
+    }
+    logout();
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    } else {
+      void navigate({ to: "/auth/login" });
+    }
+  };
   return (
-    <Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
-      <PopoverTrigger asChild>
+    <Menu modal={false}>
+      <MenuTrigger asChild>
         <BareButton
           aria-label="User menu"
-          className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors font-normal"
+          className="flex h-8 items-center gap-1.5 rounded-md pl-1 pr-1.5 transition-colors hover:bg-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <div className="w-6 h-6 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
-            <User className="h-3 w-3 text-primary-foreground" />
-          </div>
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <User className="h-3.5 w-3.5" />
+          </span>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </BareButton>
-      </PopoverTrigger>
-      <PopoverContent
-        data-header-popover
-        align="end"
-        className="w-56 overflow-hidden rounded-lg p-0 shadow-xl"
-      >
-        <div className="px-3 py-2.5 border-b border-border">
-          <p className="text-sm font-medium text-foreground">
+      </MenuTrigger>
+      <MenuContent data-header-popover className="w-60">
+        <MenuLabel className="space-y-0.5">
+          <span className="block truncate text-sm font-medium text-foreground">
             {user?.displayName || user?.username}
-          </p>
-          <p className="text-xs text-muted-foreground">{user?.email}</p>
-        </div>
-        <div className="p-1">
-          <BareButton
-            onClick={() => {
-              void navigate({ to: "/dashboard/account/preferences" });
-              setUserMenuOpen(false);
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            Preferences
-          </BareButton>
-          <BareButton
-            onClick={() => {
-              void navigate({ to: "/dashboard/settings" });
-              setUserMenuOpen(false);
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </BareButton>
-          <BareButton
-            onClick={() => {
-              void navigate({ to: "/dashboard/account/security" });
-              setUserMenuOpen(false);
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
-          >
-            <Shield className="h-4 w-4" />
-            Security
-          </BareButton>
-          <BareButton
-            onClick={async () => {
-              // POST /auth/logout first so the backend can revoke the
-              // session and (for SSO users) hand us a Dex end_session
-              // URL to bounce through. We clear local state regardless
-              // — even if the call fails the user has clicked "sign
-              // out" and shouldn't be left looking authenticated.
-              let redirectUrl: string | undefined;
-              try {
-                const res = await logoutCurrentSession();
-                redirectUrl = res.redirectUrl;
-              } catch {
-                // Network failure / 401 — still clear local state.
-              }
-              logout();
-              if (redirectUrl) {
-                // Top-level navigation to Dex's end_session endpoint.
-                // Dex eventually redirects back to /api/v1/auth/logout-done/
-                // which lands the SPA back on /auth/login.
-                window.location.href = redirectUrl;
-              } else {
-                void navigate({ to: "/auth/login" });
-              }
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </BareButton>
-        </div>
-      </PopoverContent>
-    </Popover>
+          </span>
+          <span className="block truncate text-meta font-normal">
+            {user?.email}
+          </span>
+        </MenuLabel>
+        <MenuSeparator />
+        <MenuItem
+          onSelect={() => void navigate({ to: "/dashboard/account/preferences" })}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Preferences
+        </MenuItem>
+        <MenuItem onSelect={() => void navigate({ to: "/dashboard/settings" })}>
+          <Settings className="h-4 w-4" />
+          Settings
+        </MenuItem>
+        <MenuItem
+          onSelect={() => void navigate({ to: "/dashboard/account/security" })}
+        >
+          <Shield className="h-4 w-4" />
+          Security
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem onSelect={() => void signOut()}>
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }

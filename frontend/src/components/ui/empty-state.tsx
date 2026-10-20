@@ -128,7 +128,7 @@ export function StatePanel({
         (actionHref && !disabled ? (
           <RouterLink
             to={actionHref}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-medium transition-colors hover:bg-accent"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             {ActionIcon && <ActionIcon className="h-4 w-4" />}
             {actionLabel}
@@ -208,19 +208,34 @@ export function ErrorState({
   description,
   actionLabel = "Retry",
   onRetry,
+  correlationId,
   className,
 }: {
   title?: string;
   description?: ReactNode;
   actionLabel?: string;
   onRetry?: () => void;
+  /** Request/correlation id surfaced for support. */
+  correlationId?: string | null;
   className?: string;
 }) {
   return (
     <StatePanel
       icon={AlertCircle}
       title={title}
-      description={description}
+      description={
+        correlationId ? (
+          <>
+            {description}
+            <span className="mt-1 block text-micro">
+              Reference{" "}
+              <code className="font-mono text-foreground">{correlationId}</code>
+            </span>
+          </>
+        ) : (
+          description
+        )
+      }
       tone="danger"
       actionLabel={onRetry ? actionLabel : undefined}
       onAction={onRetry}

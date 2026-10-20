@@ -23,34 +23,46 @@ function renderMenu() {
   );
 }
 
-describe("TopbarAccountMenu popover", () => {
-  it("portals the panel out of an overflow-hidden header and tracks aria-expanded", async () => {
+function openMenu() {
+  const trigger = screen.getByRole("button", { name: "User menu" });
+  // Radix menus open from the keyboard (pointer activation needs real
+  // pointer events, which jsdom does not synthesise).
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  return trigger;
+}
+
+describe("TopbarAccountMenu menu", () => {
+  it("portals the menu out of an overflow-hidden header and tracks aria-expanded", async () => {
     renderMenu();
     const trigger = screen.getByRole("button", { name: "User menu" });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(trigger);
-    const panel = await screen.findByRole("dialog");
+    openMenu();
+    const menu = await screen.findByRole("menu");
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(panel.closest("header")).toBeNull();
-    expect(panel).toHaveTextContent("ada@example.com");
+    expect(menu.closest("header")).toBeNull();
+    expect(menu).toHaveTextContent("ada@example.com");
   });
 
   it("closes on Escape and returns focus to the trigger", async () => {
     renderMenu();
-    const trigger = screen.getByRole("button", { name: "User menu" });
-    trigger.focus();
-    fireEvent.click(trigger);
-    const panel = await screen.findByRole("dialog");
-    fireEvent.keyDown(panel, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const trigger = openMenu();
+    const menu = await screen.findByRole("menu");
+    fireEvent.keyDown(menu, { key: "Escape" });
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+    );
     await vi.waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("navigates and closes when an entry is chosen", async () => {
     renderMenu();
-    fireEvent.click(screen.getByRole("button", { name: "User menu" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    openMenu();
+    await screen.findByRole("menu");
+    const item = screen.getByRole("menuitem", { name: "Settings" });
+    fireEvent.keyDown(item, { key: "Enter" });
     expect(navigate).toHaveBeenCalledWith({ to: "/dashboard/settings" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+    );
   });
 });

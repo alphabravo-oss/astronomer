@@ -1,15 +1,14 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { CharlieCapability } from "./charlie-capability";
 
-export { useCharlie } from "./charlie-context";
+export { useCharlie, useCharlieOptional } from "./charlie-context";
 export { productModeCopy, productModePresentation } from "./charlie-mode";
 
-const CharlieCapability = lazy(() =>
-  import("./charlie-capability").then((module) => ({
-    default: module.CharlieCapability,
-  })),
-);
-
-/** Inactive installations do not load the optional assistant capability. */
+/**
+ * Wraps the dashboard in the assistant context so the header icon (and ⌘J)
+ * can open the drawer. Inactive installations render children alone: no
+ * context, no icon, no drawer chunk.
+ */
 export function CharlieShell({
   children,
   enabled = true,
@@ -17,14 +16,6 @@ export function CharlieShell({
   children: ReactNode;
   enabled?: boolean;
 }) {
-  return (
-    <>
-      {children}
-      {enabled && (
-        <Suspense fallback={null}>
-          <CharlieCapability />
-        </Suspense>
-      )}
-    </>
-  );
+  if (!enabled) return <>{children}</>;
+  return <CharlieCapability>{children}</CharlieCapability>;
 }
