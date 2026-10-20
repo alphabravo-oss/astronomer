@@ -255,6 +255,36 @@ Then:
 7. hold the release until normal latency and error budgets remain stable for
    the enterprise observation window.
 
+### Required: promote the delivery-system release
+
+A new server version stages its signed delivery-system release (the Flux
+distribution and the matching agent version) as a **draft**. It is not
+delivered to any managed cluster until a system rollout promotes it; until
+then the fleet keeps running the previous release and the new release stays
+`draft`. This step is part of every upgrade:
+
+```bash
+# The pending (draft) release and any rollout in flight.
+astro delivery system-rollout status
+
+# Start the rollout of the pending release. Default strategy: one cluster at a
+# time, pause on the first failure. Override with --strategy @strategy.json;
+# --release <uuid> picks a release other than the pending one.
+astro delivery system-rollout start
+
+# Approve the gated rollout (uses the current rollout's fencing generation).
+astro delivery system-rollout approve
+
+# Follow progress until state is `succeeded`; inspect per-cluster phases.
+astro delivery system-rollout status
+astro delivery system-rollout status <rollout-id> --clusters
+```
+
+When the rollout succeeds the release becomes `released` and `status` reports
+no pending release. A paused rollout (a cluster failed) is inspected with
+`--clusters` and continued or rolled back through the REST endpoints under
+`/api/v1/delivery/system/rollouts/{id}/` (`resume`, `retry`, `rollback`).
+
 ## Rollback
 
 If Helm fails during the upgrade, `--atomic` handles the release rollback. If a

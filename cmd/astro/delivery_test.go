@@ -26,11 +26,12 @@ func TestDeliveryCommandTreeCoversContinuousDeliverySurface(t *testing.T) {
 	}
 
 	cases := map[string][]string{
-		"source":     {"list", "get", "create", "update", "delete", "verify", "rotate-credential"},
-		"bundle":     {"list", "get", "create", "delete", "version-create", "version-list"},
-		"target":     {"list", "get", "apply", "delete", "preview"},
-		"rollout":    {"list", "get", "start", "pause", "resume", "approve", "abort", "retry", "rollback", "watch"},
-		"deployment": {"list", "get", "reconcile", "suspend", "resume", "events"},
+		"source":         {"list", "get", "create", "update", "delete", "verify", "rotate-credential"},
+		"bundle":         {"list", "get", "create", "delete", "version-create", "version-list"},
+		"target":         {"list", "get", "apply", "delete", "preview"},
+		"rollout":        {"list", "get", "start", "pause", "resume", "approve", "abort", "retry", "rollback", "watch"},
+		"deployment":     {"list", "get", "reconcile", "suspend", "resume", "events"},
+		"system-rollout": {"start", "approve", "status"},
 	}
 	for parent, children := range cases {
 		cmd, _, err := root.Find([]string{parent})

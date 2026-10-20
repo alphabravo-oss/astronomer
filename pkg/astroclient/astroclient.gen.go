@@ -6759,6 +6759,9 @@ type DeliverySystemCompatibility struct {
 	CurrentRelease    *DeliverySystemRelease        `json:"current_release"`
 	CurrentRollout    *DeliverySystemRollout        `json:"current_rollout"`
 	ObservedInventory []DeliveryCompatibilityCount  `json:"observed_inventory"`
+
+	// PendingRelease Newest draft system release above current_release (staged by a server upgrade, promoted by a system rollout).
+	PendingRelease *DeliverySystemRelease `json:"pending_release"`
 }
 
 // DeliverySystemCompatibilityEnvelope defines model for DeliverySystemCompatibilityEnvelope.

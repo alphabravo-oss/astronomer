@@ -11588,6 +11588,10 @@ components:
         current_release:
           allOf: [{$ref: '#/components/schemas/DeliverySystemRelease'}]
           nullable: true
+        pending_release:
+          description: Newest draft system release above current_release (staged by a server upgrade, promoted by a system rollout).
+          allOf: [{$ref: '#/components/schemas/DeliverySystemRelease'}]
+          nullable: true
         current_rollout:
           allOf: [{$ref: '#/components/schemas/DeliverySystemRollout'}]
           nullable: true
