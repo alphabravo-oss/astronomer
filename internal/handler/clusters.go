@@ -132,6 +132,7 @@ type ClusterHandler struct {
 	grafanaFolders       grafanaFolderReconciler
 	agentImage           string
 	systemArtifactURL    string
+	imageRegistry        string
 	systemArtifactDigest string
 	systemOIDCIssuer     string
 	systemOIDCIdentity   string

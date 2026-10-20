@@ -178,7 +178,7 @@ func (r *Resolver) Resolve(ctx context.Context, ref string) (Resolved, error) {
 		return out, nil
 	}
 	out := Resolved{Layer: LayerFailClosed}
-	r.Logger.Log(ctx, slog.LevelError, "registry resolution", "layer", LayerFailClosed, "ref", ref, "misses", misses)
+	r.Logger.Log(ctx, slog.LevelError, "registry resolution", "layer", LayerFailClosed, "ref", ref, "misses", strings.Join(misses, "; "))
 	return out, fmt.Errorf("%w for %s: %s", ErrFailClosed, ref, strings.Join(misses, "; "))
 }
 

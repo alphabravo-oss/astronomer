@@ -60,6 +60,12 @@ worker and agent log their out-of-cluster endpoints once at startup
    Populate zot with `astro airgap mirror --to <node>:30500 --plain-http
    <node>:30500` (or through a port-forward) before installing workloads.
 
+   First install ordering: the preflight hook runs before zot exists, so the
+   first `helm install` uses `--set preflight.enabled=false` (workloads back
+   off until the mirror lands, then start); later upgrades run preflight from
+   zot normally. On kube-router (k3s) a pod can egress for a moment before its
+   NetworkPolicy rules sync; do not treat that window as a boundary.
+
 3. Optional fallbacks (`registry.fallbacks`) are consulted only after a
    layer-1 miss, only for digest-pinned references, and only when they serve
    the exact pinned digest. Policy-controller users: see

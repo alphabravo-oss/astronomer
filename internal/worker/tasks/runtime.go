@@ -169,14 +169,16 @@ type AlertNotificationMutationTx interface {
 type AlertNotificationRunTx func(context.Context, func(AlertNotificationMutationTx) error) error
 
 type RuntimeDependencies struct {
-	Queries                   RuntimeQuerier
-	ManagementBackup          ManagementBackupExecutor
-	HTTPClient                *http.Client
-	CatalogHTTPClient         *http.Client
-	CatalogNetwork            *httpclient.DestinationPolicy
-	Log                       *slog.Logger
-	AgentImageRepo            string
-	AgentImageTag             string
+	Queries           RuntimeQuerier
+	ManagementBackup  ManagementBackupExecutor
+	HTTPClient        *http.Client
+	CatalogHTTPClient *http.Client
+	CatalogNetwork    *httpclient.DestinationPolicy
+	Log               *slog.Logger
+	AgentImageRepo    string
+	AgentImageTag     string
+	// ImageRegistry is REGISTRY_LOCAL for rendered agent install manifests.
+	ImageRegistry             string
 	SystemArtifactURL         string
 	SystemArtifactDigest      string
 	SystemOIDCIssuer          string

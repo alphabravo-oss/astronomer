@@ -127,6 +127,14 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 	h.agentImage = targetAgentImage(repository, tag)
 }
 
+// SetImageRegistry sets REGISTRY_LOCAL for rendered install manifests: the
+// embedded Flux controller images are re-hosted onto the cluster-local registry.
+func (h *ClusterHandler) SetImageRegistry(local string) {
+	if h != nil {
+		h.imageRegistry = strings.TrimSpace(local)
+	}
+}
+
 // SetAgentTelemetry carries non-secret trace routing into newly rendered agent
 // manifests. OTLP authentication headers are intentionally not copied across
 // the management/adopted-cluster trust boundary.
@@ -638,6 +646,7 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		OTELInsecure:         h.agentOTELInsecure,
 		OTELSamplerRatio:     h.agentOTELSampler,
 		Environment:          h.agentEnvironment,
+		ImageRegistry:        h.imageRegistry,
 	}
 	if len(agentOnly) > 0 && agentOnly[0] {
 		return agenttemplate.RenderAgentYAML(data), nil

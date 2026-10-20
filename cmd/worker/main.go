@@ -241,6 +241,7 @@ func main() {
 		Queries:                       sqlc.New(database.Pool()),
 		Log:                           log,
 		AgentImageRepo:                cfg.AgentImageRepository,
+		ImageRegistry:                 cfg.RegistryLocal,
 		AgentImageTag:                 cfg.AgentImageTag,
 		SystemArtifactURL:             cfg.DeliveryFluxDistributionRepository,
 		SystemArtifactDigest:          cfg.DeliveryFluxDistributionDigest,

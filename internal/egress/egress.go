@@ -49,13 +49,9 @@ func (s *Set) Log(ctx context.Context, logger *slog.Logger, service string) {
 	slices.Sort(static)
 	dynamic := slices.Clone(s.dynamic)
 	slices.Sort(dynamic)
-	if static == nil {
-		static = []string{}
-	}
-	if dynamic == nil {
-		dynamic = []string{}
-	}
-	logger.InfoContext(ctx, "egress endpoints", "service", service, "endpoints", static, "dynamic", dynamic)
+	// Comma-joined strings, not slices: the redacting JSON handler omits
+	// structured values, and the line must stay greppable.
+	logger.InfoContext(ctx, "egress endpoints", "service", service, "endpoints", strings.Join(static, ","), "count", len(static), "dynamic", strings.Join(dynamic, ","))
 }
 
 // Host extracts the host from a URL, oci:// reference or host[:port][/path].
