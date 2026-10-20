@@ -69,6 +69,12 @@ Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
 - Release candidates are tagged `vX.Y.Z-rc.N`; the policy-controller subject
   regex in `deploy/policy-controller/cip-astronomer.yaml` admits them.
 
+### Fixed during the 2.1.0 deploy
+
+- The management-plane (`local`) cluster's system-release assignment now
+  follows the released release after a server upgrade
+  (`RetargetLocalDeliverySystemAssignment` before each observation); it used
+  to keep the release current at enrollment and sit in `applying` forever.
 - `astronomer_agent_connections` no longer keeps a stale
   `astronomer_instance_id="unknown"` series at 0 when the reporter publishes
   before the instance id is resolved (it kept `AstronomerAgentDisconnected`
