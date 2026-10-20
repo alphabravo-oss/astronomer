@@ -137,7 +137,7 @@ func renderCRDs(t *testing.T) string {
 		"-f", filepath.Join(chart, "values.yaml"), "-f", filepath.Join(chart, "values-dev.yaml"),
 		"--set", "crds.enabled=true",
 		"--set", "secrets.secretKey=envtest-render-jwt-signing-key",
-		"--set", "secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=",
+		"--set", "secrets.encryptionKey=AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9",
 		"--show-only", "templates/crd-cluster.yaml",
 		"--show-only", "templates/crd-project.yaml",
 		"--show-only", "templates/crd-agentprofile.yaml",

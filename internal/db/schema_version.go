@@ -30,7 +30,7 @@ func (d *DB) Migrate(ctx context.Context, logger *slog.Logger) (migrations.Resul
 	cfg := d.pool.Config().ConnConfig.Copy()
 	cfg.Tracer = nil
 	sqlDB := stdlib.OpenDB(*cfg)
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 	sqlDB.SetMaxIdleConns(0)
 	return migrations.Up(ctx, sqlDB, logger)
 }

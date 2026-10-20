@@ -52,24 +52,6 @@ func (node paginationPlanNode) rowsExamined() float64 {
 	return (node.ActualRows + node.RowsRemovedByFilter + node.RowsRemovedByIndexRecheck) * node.ActualLoops
 }
 
-func assertBoundedChartPlan(t *testing.T, nodes []paginationPlanNode) bool {
-	t.Helper()
-	found := false
-	for _, node := range nodes {
-		if node.NodeType == "Sort" || node.NodeType == "Seq Scan" {
-			t.Fatalf("chart continuation materialized unordered rows: %s", node.NodeType)
-		}
-		if node.IndexName == "idx_helm_charts_keyset" {
-			found = true
-			if node.ActualRows < 0 || node.RowsRemovedByFilter < 0 || node.RowsRemovedByIndexRecheck < 0 || node.ActualLoops <= 0 || node.rowsExamined() > 201 {
-				t.Fatalf("chart index read%g rows for201-row sentinel", node.rowsExamined())
-			}
-		}
-		found = assertBoundedChartPlan(t, node.Plans) || found
-	}
-	return found
-}
-
 func (capture *paginationSQLCapture) Query(ctx context.Context, statement string, args ...any) (pgx.Rows, error) {
 	if capture.statement == "" && strings.Contains(statement, "-- name: ListFilteredHelmChartsAfter") {
 		capture.statement = statement

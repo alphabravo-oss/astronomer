@@ -14,7 +14,7 @@ import (
 )
 
 // TestMigrateDoesNotLeakSessionStateIntoPool is the regression for the
-// boot-time defect found on the live proof: 00001 sets search_path='' for its
+// boot-time defect found on the live proof: 00001 sets search_path=” for its
 // session, and running migrations through the application pool left a pooled
 // connection unable to resolve unqualified table names (SQLSTATE 42P01).
 func TestMigrateDoesNotLeakSessionStateIntoPool(t *testing.T) {
