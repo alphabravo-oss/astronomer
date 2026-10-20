@@ -44,3 +44,18 @@ managementRestoreDrill:
       repository: docker.io/library/postgres
       tag: 17-alpine
       digest: sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+# Replaces delivery/secret-astronomer-delivery-trust.yaml + delivery-trust-overlay.yaml:
+# the chart renders Secret astronomer-delivery-trust (same name, byte-identical
+# trusted_root.json). Adopt the hand-made Secret before the upgrade:
+#   kubectl -n astronomer label secret astronomer-delivery-trust app.kubernetes.io/managed-by=Helm
+#   kubectl -n astronomer annotate secret astronomer-delivery-trust \
+#     meta.helm.sh/release-name=astronomer meta.helm.sh/release-namespace=astronomer
+delivery:
+  sourceResolution:
+    trustKeys:
+      existingSecret: ""
+# ghcr.io/dexidp/dex carries Dex's keyless signature (docker.io does not);
+# same digest, so policy-controller can verify it instead of passing it.
+dex:
+  image:
+    repository: ghcr.io/dexidp/dex

@@ -529,7 +529,8 @@
               "additionalProperties": false,
               "required": ["existingSecret"],
               "properties": {
-                "existingSecret": { "type": "string", "maxLength": 253 }
+                "existingSecret": { "type": "string", "maxLength": 253 },
+                "chartManagedTrustedRoot": { "type": "boolean" }
               }
             }
           }

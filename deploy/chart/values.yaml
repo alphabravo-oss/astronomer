@@ -734,6 +734,12 @@ delivery:
     # through the API.
     trustKeys:
       existingSecret: ""
+      # With existingSecret empty the chart renders <fullname>-delivery-trust
+      # holding only trusted_root.json: the Sigstore public-good trusted root
+      # pinned in files/sigstore/trusted_root.json (byte-identical to the one
+      # compiled into the astro CLI). Without it verified-release mode cannot
+      # verify keyless-signed release artifacts. Rotate by bumping the chart.
+      chartManagedTrustedRoot: true
 
   rollout:
     workerConcurrency: 16
@@ -781,7 +787,8 @@ dex:
     maxSkew: 1
     whenUnsatisfiable: ScheduleAnyway
   image:
-    repository: dexidp/dex
+    # ghcr.io carries the keyless signature (same digest as docker.io/dexidp/dex).
+    repository: ghcr.io/dexidp/dex
     tag: v2.45.1
     digest: ""
     registry: ""              # T23 air-gapped override; falls back to image.registry

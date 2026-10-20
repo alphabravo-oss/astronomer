@@ -715,3 +715,17 @@ rendered manifest.
     {{- end }}
   {{- end }}
 {{- end }}
+
+{{/*
+Secret mounted at /etc/astronomer/delivery-trust: the operator's
+delivery.sourceResolution.trustKeys.existingSecret, else the chart-managed
+<fullname>-delivery-trust with the pinned Sigstore trusted_root.json, else empty.
+*/}}
+{{- define "astronomer.deliveryTrustSecretName" -}}
+{{- $trust := .Values.delivery.sourceResolution.trustKeys -}}
+{{- if $trust.existingSecret -}}
+{{- $trust.existingSecret -}}
+{{- else if $trust.chartManagedTrustedRoot -}}
+{{- printf "%s-delivery-trust" (include "astronomer.fullname" .) -}}
+{{- end -}}
+{{- end }}

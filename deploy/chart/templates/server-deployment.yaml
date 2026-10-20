@@ -252,7 +252,7 @@ spec:
               mountPath: /var/run/secrets/astronomer/delivery-source-ca
               readOnly: true
             {{- end }}
-            {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+            {{- if include "astronomer.deliveryTrustSecretName" . }}
             - name: delivery-source-trust
               mountPath: /etc/astronomer/delivery-trust
               readOnly: true
@@ -345,10 +345,10 @@ spec:
               - key: {{ .Values.delivery.sourceResolution.ca.key | quote }}
                 path: ca.pem
         {{- end }}
-        {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+        {{- if include "astronomer.deliveryTrustSecretName" . }}
         - name: delivery-source-trust
           secret:
-            secretName: {{ .Values.delivery.sourceResolution.trustKeys.existingSecret | quote }}
+            secretName: {{ include "astronomer.deliveryTrustSecretName" . | quote }}
             defaultMode: 0444
         {{- end }}
         {{- if .Values.managementBackup.s3.ca.existingSecret }}
