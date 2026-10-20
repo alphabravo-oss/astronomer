@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+// Starts unauthenticated on purpose: this journey exercises the real login path.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 import {
   CSRF_COOKIE,
   SESSION_COOKIE,

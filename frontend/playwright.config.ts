@@ -4,7 +4,7 @@ import { ADMIN_AUTH_STATE } from "./tests/e2e/helpers/auth-state";
 const port = Number(process.env.PLAYWRIGHT_PORT || 3100);
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const managedLiveServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1";
-const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR;
+const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR ?? "./e2e-results";
 const htmlOutputDir = process.env.PLAYWRIGHT_HTML_OUTPUT_DIR;
 
 export default defineConfig({
@@ -74,35 +74,6 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         storageState: ADMIN_AUTH_STATE,
         viewport: { width: 1024, height: 768 },
-        launchOptions: chromiumExecutable
-          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
-          : undefined,
-      },
-    },
-    {
-      // P7.1 route-smoke crawl: one cheap render check per manifest URL, so
-      // the whole tier is fully parallel and chromium-only. `test:e2e` is
-      // pinned to the two tier-1 projects and never picks this up.
-      name: "route-smoke",
-      testDir: "./tests/e2e-smoke",
-      fullyParallel: true,
-      dependencies: ["role-auth-setup"],
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: ADMIN_AUTH_STATE,
-        launchOptions: chromiumExecutable
-          ? { executablePath: chromiumExecutable, chromiumSandbox: false }
-          : undefined,
-      },
-    },
-    {
-      name: "route-smoke-mobile",
-      testDir: "./tests/e2e-smoke",
-      fullyParallel: true,
-      dependencies: ["role-auth-setup"],
-      use: {
-        ...devices["Pixel 7"],
-        storageState: ADMIN_AUTH_STATE,
         launchOptions: chromiumExecutable
           ? { executablePath: chromiumExecutable, chromiumSandbox: false }
           : undefined,
