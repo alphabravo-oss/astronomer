@@ -109,7 +109,7 @@ func publishConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now ti
 		}
 	}
 	for key, owner := range connectionMetricOwners.rows {
-		if key.instance == instance && !current[key] && owner.created <= watermark {
+		if connectionMetricOwnerRetired(key, owner, instance, current, watermark) {
 			finalOwners--
 		}
 	}
@@ -121,7 +121,7 @@ func publishConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now ti
 	// Drop removed entries first so the registry never transiently exceeds its
 	// hard cap while an equally sized observation replaces them.
 	for key, owner := range connectionMetricOwners.rows {
-		if key.instance != instance || current[key] || owner.created > watermark {
+		if !connectionMetricOwnerRetired(key, owner, instance, current, watermark) {
 			continue
 		}
 		if owner.gauges {
@@ -161,4 +161,17 @@ func publishConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now ti
 func deleteConnectionGauges(key connectionMetricKey, name string) {
 	agentConnectionsGauge.DeleteLabelValues(key.instance, key.cluster, name)
 	agentLastSeenSecondsGauge.DeleteLabelValues(key.instance, key.cluster, name)
+}
+
+// connectionMetricOwnerRetired reports whether a published owner must be
+// removed by this observation: a cluster no longer listed, or any series
+// published under a different instance identity. The reporter can publish
+// before EnsureInstanceID resolves the persisted id (2.1.0 boots migrations
+// first), which left astronomer_instance_id="unknown" series at 0 forever and
+// kept AstronomerAgentDisconnected firing for connected clusters.
+func connectionMetricOwnerRetired(key connectionMetricKey, owner *connectionMetricOwner, instance string, current map[connectionMetricKey]bool, watermark uint64) bool {
+	if key.instance != instance {
+		return true
+	}
+	return !current[key] && owner.created <= watermark
 }
