@@ -38,6 +38,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type stats struct {
@@ -66,7 +67,13 @@ func main() {
 	)
 	flag.Parse()
 
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	zl, err := logging.New(logging.ConfigFromEnv("keyrotate"))
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "keyrotate: %v\n", err)
+		os.Exit(2)
+	}
+	logging.SetDefault(zl)
+	log := logging.Slog(zl)
 
 	if *dbURL == "" {
 		log.Error("--database-url or env DATABASE_URL is required")

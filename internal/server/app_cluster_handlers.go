@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -14,9 +14,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeClusterHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeClusterHandlers(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	bus := c.bus
@@ -54,7 +55,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 		// feature.control_plane_snapshots is additionally enabled). The task
 		// registry declares this handler optional when the chart feature is off.
 		controlPlaneSnapshotRuntime = tasks.ControlPlaneSnapshotRuntime{
-			Deps:         tasks.ControlPlaneSnapshotSweepDeps{Queries: queries, Log: logger},
+			Deps:         tasks.ControlPlaneSnapshotSweepDeps{Queries: queries, Log: logging.Slog(logger)},
 			Applier:      controlPlaneSnapshotHandler.ApplySnapshotJob,
 			StatusReader: controlPlaneSnapshotHandler.ReadSnapshotJobStatus,
 		}
@@ -81,7 +82,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	clusterSnapshotRuntime := tasks.ClusterSnapshotRuntime{Deps: tasks.ClusterSnapshotDeps{
 		Queries:        queries,
 		Driver:         handler.NewVeleroDriverAdapter(requester),
-		Log:            logger,
+		Log:            logging.Slog(logger),
 		Bus:            c.bus,
 		CaptureMetrics: handler.CaptureSnapshotWorkerMetrics(queries),
 	}}

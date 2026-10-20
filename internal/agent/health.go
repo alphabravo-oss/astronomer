@@ -54,7 +54,8 @@ type InventorySource interface {
 
 // HealthReporter sends periodic health data to the server.
 type HealthReporter struct {
-	client kubernetes.Interface
+	metricsHandler http.Handler
+	client         kubernetes.Interface
 	// impersonation caches the agent's SelfSubjectAccessReview answer to
 	// "may I impersonate the pinned astronomer proxy subject?", advertised in
 	// EnabledFeatures / DeniedFeatures. See impersonation_probe.go.
@@ -98,6 +99,12 @@ func NewHealthReporter(client kubernetes.Interface, log *slog.Logger, heartbeatS
 		metricsInterval:   time.Duration(metricsSec) * time.Second,
 		startedAt:         time.Now(),
 	}
+}
+
+// SetMetricsHandler serves the process telemetry registry (telemetry.Init)
+// on /metrics; without one the default client_golang registry is served.
+func (hr *HealthReporter) SetMetricsHandler(handler http.Handler) {
+	hr.metricsHandler = handler
 }
 
 // SetClusterID sets the cluster ID reported by the /healthz JSON endpoint.
@@ -750,7 +757,11 @@ func (hr *HealthReporter) healthMux() *http.ServeMux {
 			hr.writeHealthJSON(w, http.StatusServiceUnavailable, "not_connected")
 		}
 	})
-	mux.Handle("/metrics", promhttp.Handler())
+	metrics := hr.metricsHandler
+	if metrics == nil {
+		metrics = promhttp.Handler()
+	}
+	mux.Handle("/metrics", metrics)
 
 	return mux
 }

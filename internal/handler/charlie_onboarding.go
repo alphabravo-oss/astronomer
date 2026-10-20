@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type CharlieOnboardingConsumer interface {
@@ -69,7 +69,7 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 	}
 	status, err := h.consumer.Consume(r.Context(), validated, actorID)
 	if err != nil {
-		charlie.LogOperationalFailure(r.Context(), h.log, charlie.OnboardingFailureCode(err), reqctx.CorrelationID(r.Context()))
+		charlie.LogOperationalFailure(r.Context(), *logging.Default(), charlie.OnboardingFailureCode(err), reqctx.CorrelationID(r.Context()))
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie onboarding could not be consumed safely")
 		return
 	}

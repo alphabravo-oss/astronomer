@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
@@ -10,12 +11,12 @@ import (
 // NewApp creates a fully wired production server in explicit phases. Each
 // phase owns one dependency domain; productionComposition is the typed hand-off
 // into route composition and background-runtime startup.
-func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Server, error) {
+func NewApp(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*Server, error) {
 	composition := &productionComposition{runtime: newRuntimeSupervisor(logger)}
 	// Ownership transfers to the Server before any runtime goroutine starts.
 	// Pre-runtime failures close only the still-composition-owned authority.
 	defer composition.closeUntransferredDatabaseAuthority()
-	phases := []func(context.Context, *config.Config, *slog.Logger) error{
+	phases := []func(context.Context, *config.Config, zerolog.Logger) error{
 		composition.initializePersistence,
 		composition.initializeCoreHandlers,
 		composition.initializeTenantHandlers,

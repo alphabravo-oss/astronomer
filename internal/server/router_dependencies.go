@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 
+	"github.com/rs/zerolog"
+
 	"github.com/alphabravocompany/astronomer-go/internal/toolui"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -31,6 +33,9 @@ type RouterDependencies struct {
 // CoreAuthDependencies contains cross-cutting identity, authorization,
 // persistence, documentation, and readiness dependencies.
 type CoreAuthDependencies struct {
+	// Logger receives the per-request summary and audit lines. The zero
+	// value discards them (focused route tests).
+	Logger             zerolog.Logger
 	ToolUI             *toolui.Gateway
 	JWT                *auth.JWTManager
 	Encryptor          *auth.Encryptor

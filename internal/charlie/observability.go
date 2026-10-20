@@ -2,8 +2,9 @@ package charlie
 
 import (
 	"context"
-	"log/slog"
 	"strings"
+
+	"github.com/rs/zerolog"
 )
 
 // DecisionLog is a deliberately content-free authority event. Correlation IDs
@@ -103,53 +104,48 @@ var operationalFailureCodes = map[string]struct{}{
 // LogAuthorityDecision remains the compatibility entry point for focused
 // callers. Production paths should use LogAuthorityDecisionContext so request
 // cancellation and trace context remain attached to the record.
-func LogAuthorityDecision(logger *slog.Logger, event DecisionLog) {
+func LogAuthorityDecision(logger zerolog.Logger, event DecisionLog) {
 	LogAuthorityDecisionContext(context.Background(), logger, event)
 }
 
-func LogAuthorityDecisionContext(ctx context.Context, logger *slog.Logger, event DecisionLog) {
-	logCharlieOperational(ctx, logger, operationalLogRecord{kind: operationalLogAuthority, decision: event})
+func LogAuthorityDecisionContext(ctx context.Context, logger zerolog.Logger, event DecisionLog) {
+	logCharlieOperational(logger, operationalLogRecord{kind: operationalLogAuthority, decision: event})
 }
 
 // LogOperationalFailure accepts only the closed failure-code vocabulary
 // above. An unknown value is represented by a fixed fallback rather than
 // copying caller, provider, database, or model text into the log.
-func LogOperationalFailure(ctx context.Context, logger *slog.Logger, failureCode, correlationID string) {
+func LogOperationalFailure(ctx context.Context, logger zerolog.Logger, failureCode, correlationID string) {
 	if _, ok := operationalFailureCodes[failureCode]; !ok {
 		failureCode = "charlie.unclassified_failure"
 	}
-	logCharlieOperational(ctx, logger, operationalLogRecord{kind: operationalLogFailure, failureCode: failureCode, correlationID: correlationID})
+	logCharlieOperational(logger, operationalLogRecord{kind: operationalLogFailure, failureCode: failureCode, correlationID: correlationID})
 }
 
 // LogHTTPAudit serializes only bounded protocol metadata. Request and
 // correlation identifiers are one-way digests; paths, query values, headers,
 // bodies, resource identifiers, IPs, and response text have no representation.
-func LogHTTPAudit(ctx context.Context, logger *slog.Logger, method string, statusCode int, durationMS int64, requestID, correlationID string) {
-	logCharlieOperational(ctx, logger, operationalLogRecord{
+func LogHTTPAudit(ctx context.Context, logger zerolog.Logger, method string, statusCode int, durationMS int64, requestID, correlationID string) {
+	logCharlieOperational(logger, operationalLogRecord{
 		kind: operationalLogHTTP, method: method, statusCode: statusCode, durationMS: durationMS,
 		requestID: requestID, correlationID: correlationID,
 	})
 }
 
-func LogRuntimeEvent(ctx context.Context, logger *slog.Logger, state string) {
+func LogRuntimeEvent(ctx context.Context, logger zerolog.Logger, state string) {
 	switch state {
 	case "inactive_reconciliation_failed", "reconciliation_pending", "activated", "listener_stopped":
 	default:
 		state = "unclassified"
 	}
-	logCharlieOperational(ctx, logger, operationalLogRecord{kind: operationalLogRuntime, runtimeState: state})
+	logCharlieOperational(logger, operationalLogRecord{kind: operationalLogRuntime, runtimeState: state})
 }
 
-// logCharlieOperational is the only slog serialization sink for Charlie
+// logCharlieOperational is the only serialization sink for Charlie
 // operational records. Every key and non-digest value comes from a closed
-// vocabulary selected here.
-func logCharlieOperational(ctx context.Context, logger *slog.Logger, record operationalLogRecord) {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+// vocabulary selected here. The request context is deliberately not attached:
+// correlation identifiers appear only as digests.
+func logCharlieOperational(logger zerolog.Logger, record operationalLogRecord) {
 	switch record.kind {
 	case operationalLogAuthority:
 		event := record.decision
@@ -171,12 +167,12 @@ func logCharlieOperational(ctx context.Context, logger *slog.Logger, record oper
 		if event.Effect != EffectRead && event.Effect != EffectWrite {
 			effect = "unknown"
 		}
-		logger.LogAttrs(ctx, slog.LevelInfo, "Charlie operational event",
-			slog.String("event", "charlie_authority_decision"),
-			slog.String("session_digest", digestBytes([]byte(event.SessionID))),
-			slog.String("action_digest", digestBytes([]byte(event.ActionID))),
-			slog.String("capability", capability), slog.String("mode", string(mode)),
-			slog.String("effect", effect), slog.String("result", result), slog.String("code", code))
+		logger.Info().Str("event", "charlie_authority_decision").
+			Str("session_digest", digestBytes([]byte(event.SessionID))).
+			Str("action_digest", digestBytes([]byte(event.ActionID))).
+			Str("capability", capability).Str("mode", string(mode)).
+			Str("effect", effect).Str("result", result).Str("code", code).
+			Msg("Charlie operational event")
 	case operationalLogHTTP:
 		method := strings.ToUpper(strings.TrimSpace(record.method))
 		switch method {
@@ -203,24 +199,24 @@ func logCharlieOperational(ctx context.Context, logger *slog.Logger, record oper
 		case status >= 400 && status < 500:
 			outcome = "rejected"
 		}
-		logger.LogAttrs(ctx, slog.LevelInfo, "Charlie operational event",
-			slog.String("event", "charlie.http.mutation"), slog.String("outcome_code", outcome),
-			slog.String("method", method), slog.Int("status_code", status), slog.Int64("duration_ms", duration),
-			slog.String("request_digest", digestBytes([]byte(record.requestID))),
-			slog.String("correlation_digest", digestBytes([]byte(record.correlationID))))
+		logger.Info().Str("event", "charlie.http.mutation").Str("outcome_code", outcome).
+			Str("method", method).Int("status_code", status).Int64("duration_ms", duration).
+			Str("request_digest", digestBytes([]byte(record.requestID))).
+			Str("correlation_digest", digestBytes([]byte(record.correlationID))).
+			Msg("Charlie operational event")
 	case operationalLogFailure:
-		logger.LogAttrs(ctx, slog.LevelWarn, "Charlie operational event",
-			slog.String("event", "charlie.operational.failure"), slog.String("failure_code", record.failureCode),
-			slog.String("correlation_digest", digestBytes([]byte(record.correlationID))))
+		logger.Warn().Str("event", "charlie.operational.failure").Str("failure_code", record.failureCode).
+			Str("correlation_digest", digestBytes([]byte(record.correlationID))).
+			Msg("Charlie operational event")
 	case operationalLogRuntime:
-		level := slog.LevelWarn
+		level := zerolog.WarnLevel
 		switch record.runtimeState {
 		case "activated":
-			level = slog.LevelInfo
+			level = zerolog.InfoLevel
 		case "inactive_reconciliation_failed":
-			level = slog.LevelDebug
+			level = zerolog.DebugLevel
 		}
-		logger.LogAttrs(ctx, level, "Charlie operational event",
-			slog.String("event", "charlie.runtime.lifecycle"), slog.String("state", record.runtimeState))
+		logger.WithLevel(level).Str("event", "charlie.runtime.lifecycle").Str("state", record.runtimeState).
+			Msg("Charlie operational event")
 	}
 }

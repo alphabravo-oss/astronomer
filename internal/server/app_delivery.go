@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	deliverybuiltin "github.com/alphabravocompany/astronomer-go/internal/delivery/builtin"
@@ -13,7 +14,7 @@ import (
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
 )
 
-func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	encryptor := c.encryptor

@@ -2,16 +2,17 @@ package server
 
 import (
 	"bytes"
-	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
 
 func TestDisconnectedFirstBootDoesNotScheduleLegacyRepositories(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	logger := zerolog.New(&output)
 	composition := &productionComposition{} // nil query/queue exposes any legacy bootstrap access
 	cfg := &config.Config{DistributionDestinationPolicy: `{"restricted":true,"origins":[{"url":"https://10.42.1.7","cidrs":["10.42.1.7/32"]}]}`}
 	if err := composition.startApplicationCatalog(t.Context(), cfg, logger); err != nil {

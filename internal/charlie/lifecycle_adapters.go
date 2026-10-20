@@ -10,6 +10,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type lifecycleAuditWriter interface {
@@ -77,12 +78,12 @@ func (a *DBLifecycleAuditor) record(ctx context.Context, action, resourceType st
 
 func (a *DBLifecycleAuditor) recordResource(ctx context.Context, action, resourceType, resourceID string, actorID uuid.UUID, detail map[string]any) error {
 	if a == nil || a.writer == nil {
-		LogOperationalFailure(ctx, nil, "charlie.lifecycle_audit_persist_failed", "")
+		LogOperationalFailure(ctx, *logging.Default(), "charlie.lifecycle_audit_persist_failed", "")
 		return fmt.Errorf("Charlie lifecycle audit persistence is unavailable")
 	}
 	encoded, err := EncodeCharlieAuditDetail(action, resourceType, detail)
 	if err != nil {
-		LogOperationalFailure(ctx, nil, "charlie.lifecycle_audit_encode_failed", "")
+		LogOperationalFailure(ctx, *logging.Default(), "charlie.lifecycle_audit_encode_failed", "")
 		return fmt.Errorf("Charlie lifecycle audit encoding failed")
 	}
 	actor := pgtype.UUID{}
@@ -103,7 +104,7 @@ func (a *DBLifecycleAuditor) recordResource(ctx context.Context, action, resourc
 		// The lifecycle API is intentionally fire-and-observe because several
 		// records describe outcomes that have already happened. Never hide a
 		// persistence failure, and never log the event payload or identifiers.
-		LogOperationalFailure(ctx, nil, "charlie.lifecycle_audit_persist_failed", "")
+		LogOperationalFailure(ctx, *logging.Default(), "charlie.lifecycle_audit_persist_failed", "")
 		return fmt.Errorf("Charlie lifecycle audit persistence failed")
 	}
 	return nil

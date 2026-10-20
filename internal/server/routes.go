@@ -5,13 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -23,8 +20,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 const charlieAdminReconciliationTimeout = 7 * time.Minute
@@ -123,7 +122,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		})
 	})
 	r.Use(appmiddleware.SecurityHeaders)
-	r.Use(appmiddleware.RequestLogger)
+	r.Use(appmiddleware.RequestLogger(deps.CoreAuth.Logger))
 	r.Use(appmiddleware.Metrics)
 	// Keep the server-level ReadTimeout at zero for WebSockets/SSE while still
 	// bounding every REST/SCIM mutation body by bytes and socket read time.
@@ -139,8 +138,8 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSOrigins(),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID"},
-		ExposedHeaders:   []string{"Link", "X-Request-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Request-ID", "X-Correlation-ID", "Traceparent", "Tracestate"},
+		ExposedHeaders:   []string{"Link", "X-Request-ID", "X-Correlation-ID"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
@@ -164,13 +163,13 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// Authentication failures return before authenticated middleware
 			// can observe the request. Record only Charlie's unauthenticated
 			// mutation denials here, using its content-free audit contract.
-			authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(slog.Default(), deps.CoreAuth.Queries))
+			authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(deps.CoreAuth.Logger, deps.CoreAuth.Queries))
 		}
 		authenticated.Use(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
 		if deps.CoreAuth.Queries != nil {
 			// Keep the normal mutation auditor immediately after auth so it
 			// receives actor context and still observes write-scope/RBAC denials.
-			authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.CoreAuth.Queries))
+			authenticated.Use(appmiddleware.AuditLogWithWriter(deps.CoreAuth.Logger, deps.CoreAuth.Queries))
 		}
 		// Default-deny scope backstop: a read-only API token can never
 		// reach a mutating handler, regardless of whether the specific
@@ -568,11 +567,7 @@ func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetai
 			intentDetail["terminal_state"] = "unknown_until_outcome"
 			intentDetail["reconcile_if_outcome_missing"] = true
 			if err := recordMandatoryK8sProxyAudit(r.Context(), r, auditWriter, action+".intent", clusterID, resourceName, 0, 0, intentDetail); err != nil {
-				slog.Default().Error("mandatory kubernetes proxy audit intent failed",
-					"cluster_id", clusterID,
-					"method", r.Method,
-					"error", err,
-				)
+				logging.Ctx(r.Context(), *logging.Default()).Error().Str("cluster_id", clusterID).Str("method", r.Method).Err(err).Msg("mandatory kubernetes proxy audit intent failed")
 				writeRouteAuthError(w, http.StatusServiceUnavailable, "audit_unavailable", "Mandatory audit storage is unavailable; the Kubernetes mutation was not forwarded")
 				return
 			}
@@ -595,12 +590,7 @@ func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetai
 			outcomeCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Second)
 			defer cancel()
 			if err := recordMandatoryK8sProxyAudit(outcomeCtx, r, auditWriter, action+".outcome", clusterID, resourceName, status, time.Since(started).Milliseconds(), outcomeDetail); err != nil {
-				slog.Default().Error("mandatory kubernetes proxy audit outcome failed; durable intent requires reconciliation",
-					"cluster_id", clusterID,
-					"method", r.Method,
-					"status_code", status,
-					"error", err,
-				)
+				logging.Ctx(r.Context(), *logging.Default()).Error().Str("cluster_id", clusterID).Str("method", r.Method).Int("status_code", status).Err(err).Msg("mandatory kubernetes proxy audit outcome failed; durable intent requires reconciliation")
 			}
 		})
 	}

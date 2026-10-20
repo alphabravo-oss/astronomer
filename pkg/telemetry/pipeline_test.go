@@ -1,4 +1,4 @@
-package observability
+package telemetry
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -18,18 +20,29 @@ import (
 
 func preserveTracingGlobals(t *testing.T) {
 	t.Helper()
-	provider, propagator, errorHandler := otel.GetTracerProvider(), otel.GetTextMapPropagator(), otel.GetErrorHandler()
+	provider, meters, propagator, errorHandler := otel.GetTracerProvider(), otel.GetMeterProvider(), otel.GetTextMapPropagator(), otel.GetErrorHandler()
 	t.Cleanup(func() {
 		otel.SetTracerProvider(provider)
+		otel.SetMeterProvider(meters)
 		otel.SetTextMapPropagator(propagator)
 		otel.SetErrorHandler(errorHandler)
 	})
 }
 
+// initForTest runs Init against a private Prometheus registry so repeated
+// initialisation in one test binary never shares exporter collectors.
+func initForTest(t *testing.T, logger zerolog.Logger, cfg Config) (Shutdown, error) {
+	t.Helper()
+	registry := prometheus.NewRegistry()
+	cfg.Registerer, cfg.Gatherer, cfg.Logger = registry, registry, logger
+	shutdown, _, err := Init(context.Background(), cfg)
+	return shutdown, err
+}
+
 func TestTracingRejectsMalformedEndpointWithoutCredentialDisclosure(t *testing.T) {
 	preserveTracingGlobals(t)
 	for _, endpoint := range []string{"not-a-url", "ftp://collector.invalid", "https://synthetic-user:synthetic-secret@collector.invalid", "https://collector.invalid?token=synthetic-secret", "https://collector.invalid#synthetic-secret"} {
-		shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: endpoint, Protocol: ProtocolHTTPProtobuf})
+		shutdown, err := initForTest(t, zerolog.Nop(), Config{Endpoint: endpoint, Protocol: ProtocolHTTPProtobuf})
 		if shutdown != nil {
 			_ = shutdown(context.Background())
 		}
@@ -46,7 +59,7 @@ func TestTracingDisabledInstallsNoopProvider(t *testing.T) {
 	prior := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
 	defer func() { _ = prior.Shutdown(context.Background()) }()
 	otel.SetTracerProvider(prior)
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{})
+	shutdown, err := initForTest(t, zerolog.Nop(), Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +92,7 @@ func TestTracingFlushesRealOTLPResourceAndSpan(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 	}))
 	defer server.Close()
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1, ServiceName: "astronomer-fixture", ServiceNamespace: "qualification", ServiceInstanceID: "owned-instance", ServiceVersion: "fixture", Environment: "owned", Headers: map[string]string{"X-Fixture": "synthetic-collector"}})
+	shutdown, err := initForTest(t, zerolog.Nop(), Config{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SampleRate: 1, ServiceName: "astronomer-fixture", ServiceNamespace: "qualification", ServiceInstanceID: "owned-instance", ServiceVersion: "fixture", Environment: "owned", Headers: map[string]string{"X-Fixture": "synthetic-collector"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +132,7 @@ func TestTracingShutdownBoundsUnresponsiveCollector(t *testing.T) {
 	entered, release := make(chan struct{}, 1), make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { entered <- struct{}{}; <-release }))
 	defer server.Close()
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1})
+	shutdown, err := initForTest(t, zerolog.Nop(), Config{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SampleRate: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,14 +170,14 @@ func TestTracingShutdownBoundsUnresponsiveCollector(t *testing.T) {
 
 func TestTracingEndpointPreservesExplicitPathAndLegacyHostPort(t *testing.T) {
 	for _, test := range []struct {
-		cfg  TracingConfig
+		cfg  Config
 		want string
 	}{
-		{TracingConfig{Endpoint: "http://collector.invalid:4318"}, "http://collector.invalid:4318/v1/traces"},
-		{TracingConfig{Endpoint: "http://collector.invalid:4318/"}, "http://collector.invalid:4318/v1/traces"},
-		{TracingConfig{Endpoint: "https://collector.invalid/custom/traces"}, "https://collector.invalid/custom/traces"},
-		{TracingConfig{Endpoint: "collector.invalid:4318", Insecure: true}, "http://collector.invalid:4318/v1/traces"},
-		{TracingConfig{Endpoint: "collector.invalid:4318"}, "https://collector.invalid:4318/v1/traces"},
+		{Config{Endpoint: "http://collector.invalid:4318"}, "http://collector.invalid:4318/v1/traces"},
+		{Config{Endpoint: "http://collector.invalid:4318/"}, "http://collector.invalid:4318/v1/traces"},
+		{Config{Endpoint: "https://collector.invalid/custom/traces"}, "https://collector.invalid/custom/traces"},
+		{Config{Endpoint: "collector.invalid:4318", Insecure: true}, "http://collector.invalid:4318/v1/traces"},
+		{Config{Endpoint: "collector.invalid:4318"}, "https://collector.invalid:4318/v1/traces"},
 	} {
 		got, err := tracingEndpoint(test.cfg)
 		if err != nil || got != test.want {

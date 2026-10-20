@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/rs/zerolog"
 )
 
 // runtimeSupervisor owns the process-lifetime goroutines started by the API
@@ -15,7 +16,7 @@ import (
 // Returning before cancellation is an unexpected exit; critical exits fail
 // readiness and wake Server.Start so the process can shut down in order.
 type runtimeSupervisor struct {
-	log *slog.Logger
+	log zerolog.Logger
 
 	mu       sync.Mutex
 	ctx      context.Context
@@ -35,10 +36,7 @@ type runtimeLoopState struct {
 	err      error
 }
 
-func newRuntimeSupervisor(log *slog.Logger) *runtimeSupervisor {
-	if log == nil {
-		log = slog.Default()
-	}
+func newRuntimeSupervisor(log zerolog.Logger) *runtimeSupervisor {
 	return &runtimeSupervisor{
 		log:      log,
 		loops:    make(map[string]runtimeLoopState),
@@ -144,10 +142,10 @@ func (s *runtimeSupervisor) loopExited(name string, err error, canceled bool) {
 	s.mu.Unlock()
 
 	if intentional {
-		s.log.Debug("runtime loop stopped", "component", name)
+		s.log.Debug().Str("component", name).Msg("runtime loop stopped")
 		return
 	}
-	s.log.Error("runtime loop exited unexpectedly", "component", name, "critical", state.critical, "error", err)
+	s.log.Error().Str("component", name).Bool("critical", state.critical).Err(err).Msg("runtime loop exited unexpectedly")
 	if publishFailure && failure != nil {
 		select {
 		case s.failures <- failure:

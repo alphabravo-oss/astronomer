@@ -13,11 +13,11 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -78,7 +78,7 @@ func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 		"DEX_BUNDLED_RUNTIME_SECRET_NAME": "astronomer-dex-runtime",
 		"DEX_BUNDLED_ISSUER_URL":          "https://astronomer.example.com/dex",
 	}
-	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	seeded, err := seedBundledDexSettings(context.Background(), q, zerolog.Nop(), env.lookup)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestDexBootstrap_NoOpWhenSettingsExist(t *testing.T) {
 		"DEX_BUNDLED_ENABLED":    "true",
 		"DEX_BUNDLED_ISSUER_URL": "https://astronomer.example.com/dex",
 	}
-	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	seeded, err := seedBundledDexSettings(context.Background(), q, zerolog.Nop(), env.lookup)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestDexBootstrap_ReconcilesOnlyImplicitMigratedRuntimeName(t *testing.T) {
 		ConfigmapName: "custom-dex-config", PublicClients: []byte(`[]`), Expiry: []byte(`{}`), Extra: []byte(`{}`),
 	}}
 	env := envMap{"DEX_BUNDLED_ENABLED": "true", "DEX_BUNDLED_ISSUER_URL": "https://operator.example/dex", "DEX_BUNDLED_RUNTIME_SECRET_NAME": "custom-dex-runtime"}
-	changed, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	changed, err := seedBundledDexSettings(context.Background(), q, zerolog.Nop(), env.lookup)
 	if err != nil || !changed || q.upsertLastParam.RuntimeSecretName != "custom-dex-runtime" || string(q.upsertLastParam.PublicClients) != "[]" {
 		t.Fatalf("changed=%v err=%v params=%#v", changed, err, q.upsertLastParam)
 	}
@@ -150,7 +150,7 @@ func TestDexBootstrap_NoOpWhenBundledDisabled(t *testing.T) {
 		{"DEX_BUNDLED_ENABLED": "false"},
 		{"DEX_BUNDLED_ENABLED": "0"},
 	} {
-		seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+		seeded, err := seedBundledDexSettings(context.Background(), q, zerolog.Nop(), env.lookup)
 		if err != nil {
 			t.Fatalf("env=%v: unexpected error: %v", env, err)
 		}
@@ -166,7 +166,7 @@ func TestDexBootstrap_NoOpWhenBundledDisabled(t *testing.T) {
 func TestDexBootstrap_NoOpWhenIssuerEmpty(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{}
 	env := envMap{"DEX_BUNDLED_ENABLED": "true"} // DEX_BUNDLED_ISSUER_URL deliberately omitted
-	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	seeded, err := seedBundledDexSettings(context.Background(), q, zerolog.Nop(), env.lookup)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestDexBootstrap_UsesFallbackDefaultsForMissingEnv(t *testing.T) {
 		"DEX_BUNDLED_ISSUER_URL": "https://astronomer.example.com/dex/",
 		// Intentionally no namespace/release/configmap — fallback defaults must kick in.
 	}
-	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
+	seeded, err := seedBundledDexSettings(context.Background(), q, zerolog.Nop(), env.lookup)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestStartupWarning_LegacySSORows(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			q := &fakeLegacySSOQuerier{count: tc.count}
-			err := WarnIfLegacySSORowsActive(context.Background(), q, slog.Default())
+			err := WarnIfLegacySSORowsActive(context.Background(), q, zerolog.Nop())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -246,14 +246,14 @@ func TestStartupWarning_LegacySSORows(t *testing.T) {
 func TestStartupWarning_LegacySSO_ErrorPropagated(t *testing.T) {
 	wanted := errors.New("db gone")
 	q := &fakeLegacySSOQuerier{err: wanted}
-	err := WarnIfLegacySSORowsActive(context.Background(), q, slog.Default())
+	err := WarnIfLegacySSORowsActive(context.Background(), q, zerolog.Nop())
 	if !errors.Is(err, wanted) {
 		t.Fatalf("expected wrapped db error; got %v", err)
 	}
 }
 
 func TestStartupWarning_NilQuerierIsSafe(t *testing.T) {
-	if err := WarnIfLegacySSORowsActive(context.Background(), nil, slog.Default()); err != nil {
+	if err := WarnIfLegacySSORowsActive(context.Background(), nil, zerolog.Nop()); err != nil {
 		t.Fatalf("nil querier should be a no-op; got %v", err)
 	}
 }

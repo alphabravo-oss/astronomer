@@ -1,4 +1,4 @@
-package observability
+package telemetry
 
 import (
 	"context"
@@ -16,7 +16,7 @@ func TestNormalizedProtocolDefaultsToGRPC(t *testing.T) {
 
 func TestTraceExporterConstructsForBothTransports(t *testing.T) {
 	t.Parallel()
-	for name, cfg := range map[string]TracingConfig{"grpc-default": {Insecure: true}, "http-protobuf": {Protocol: ProtocolHTTPProtobuf}} {
+	for name, cfg := range map[string]Config{"grpc-default": {Insecure: true}, "http-protobuf": {Protocol: ProtocolHTTPProtobuf}} {
 		exporter, err := newTraceExporter(context.Background(), cfg, "http://collector.invalid:4317/v1/traces")
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)

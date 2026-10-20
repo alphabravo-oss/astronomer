@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 func TestRequestIDMiddleware_GeneratesID(t *testing.T) {
@@ -143,7 +144,7 @@ func TestGetGeneratedRequestID(t *testing.T) {
 	}
 
 	t.Run("a client-supplied correlation id is not reported as generated", func(t *testing.T) {
-		shared, generated := capture(t, func(r *http.Request) { r.Header.Set(correlationIDHeader, "client-chosen") })
+		shared, generated := capture(t, func(r *http.Request) { r.Header.Set(logging.CorrelationIDHeader, "client-chosen") })
 		if shared != "client-chosen" {
 			t.Fatalf("shared id = %q, want the client value preserved", shared)
 		}
@@ -153,14 +154,14 @@ func TestGetGeneratedRequestID(t *testing.T) {
 	})
 
 	t.Run("a client-supplied request id is not reported as generated", func(t *testing.T) {
-		shared, generated := capture(t, func(r *http.Request) { r.Header.Set(requestIDHeader, "client-chosen") })
+		shared, generated := capture(t, func(r *http.Request) { r.Header.Set(logging.RequestIDHeader, "client-chosen") })
 		if shared != "client-chosen" || generated != "" {
 			t.Fatalf("shared = %q, generated = %q", shared, generated)
 		}
 	})
 
 	t.Run("a rejected client value is regenerated and therefore trusted", func(t *testing.T) {
-		shared, generated := capture(t, func(r *http.Request) { r.Header.Set(requestIDHeader, "bad\x00id") })
+		shared, generated := capture(t, func(r *http.Request) { r.Header.Set(logging.RequestIDHeader, "bad\x00id") })
 		if generated != shared || generated == "" {
 			t.Fatalf("shared = %q, generated = %q; a regenerated id is server-minted", shared, generated)
 		}
@@ -198,4 +199,25 @@ func TestGetRequestID(t *testing.T) {
 			t.Fatalf("expected empty string, got %q", got)
 		}
 	})
+}
+
+func TestRequestIDAdoptsTraceparentTraceID(t *testing.T) {
+	t.Parallel()
+	const traceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+	var seen, logged string
+	handler := RequestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen = reqctx.CorrelationID(r.Context())
+		logged = logging.CorrelationID(r.Context())
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("traceparent", "00-"+traceID+"-00f067aa0ba902b7-01")
+	req.Header.Set(logging.CorrelationIDHeader, "ignored-when-traceparent-present")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if seen != traceID || logged != traceID {
+		t.Fatalf("correlation id = %q / %q, want trace id %q", seen, logged, traceID)
+	}
+	if rec.Header().Get(logging.CorrelationIDHeader) != traceID || rec.Header().Get(logging.RequestIDHeader) != traceID {
+		t.Fatalf("response headers do not echo the correlation id: %v", rec.Header())
+	}
 }

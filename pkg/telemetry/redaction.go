@@ -1,4 +1,4 @@
-package observability
+package telemetry
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 // diagnosticExporter applies the same credential field policy before OTLP
@@ -23,7 +25,7 @@ func (exporter diagnosticExporter) ExportSpans(ctx context.Context, spans []sdkt
 
 type diagnosticSpan struct{ sdktrace.ReadOnlySpan }
 
-func (span diagnosticSpan) Name() string { return ScrubDiagnosticText(span.ReadOnlySpan.Name()) }
+func (span diagnosticSpan) Name() string { return logging.Scrub(span.ReadOnlySpan.Name()) }
 func (span diagnosticSpan) Attributes() []attribute.KeyValue {
 	return diagnosticAttributes(span.ReadOnlySpan.Attributes())
 }
@@ -32,7 +34,7 @@ func (span diagnosticSpan) Status() sdktrace.Status {
 	// Error descriptions can embed arbitrary server-supplied SQL literals or
 	// response bodies. Preserve the status code without exporting that text.
 	if status.Description != "" {
-		status.Description = redacted
+		status.Description = logging.Redacted
 	}
 	return status
 }
@@ -42,7 +44,7 @@ func (span diagnosticSpan) Resource() *resource.Resource {
 func (span diagnosticSpan) Events() []sdktrace.Event {
 	events := append([]sdktrace.Event(nil), span.ReadOnlySpan.Events()...)
 	for i := range events {
-		events[i].Name = ScrubDiagnosticText(events[i].Name)
+		events[i].Name = logging.Scrub(events[i].Name)
 		events[i].Attributes = diagnosticAttributes(events[i].Attributes)
 	}
 	return events
@@ -58,16 +60,16 @@ func (span diagnosticSpan) Links() []sdktrace.Link {
 func diagnosticAttributes(attributes []attribute.KeyValue) []attribute.KeyValue {
 	clean := make([]attribute.KeyValue, 0, len(attributes))
 	for _, attr := range attributes {
-		if sensitiveDiagnosticKey(string(attr.Key)) {
+		if logging.SensitiveKey(string(attr.Key)) {
 			continue
 		}
 		switch attr.Value.Type() {
 		case attribute.STRING:
-			attr.Value = attribute.StringValue(ScrubDiagnosticText(attr.Value.AsString()))
+			attr.Value = attribute.StringValue(logging.Scrub(attr.Value.AsString()))
 		case attribute.STRINGSLICE:
 			values := append([]string(nil), attr.Value.AsStringSlice()...)
 			for i := range values {
-				values[i] = ScrubDiagnosticText(values[i])
+				values[i] = logging.Scrub(values[i])
 			}
 			attr.Value = attribute.StringSliceValue(values)
 		}

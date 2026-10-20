@@ -20,7 +20,12 @@ datasources:
     jsonData:
       derivedFields:
         - name: TraceID
-          matcherRegex: '"trace_id":"([a-f0-9]+)"'
+          matcherRegex: '"trace_id":"([a-f0-9]{32})"'
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+        # A traceparent-adopted correlation_id is the 32-hex trace id.
+        - name: CorrelationTrace
+          matcherRegex: '"correlation_id":"([a-f0-9]{32})"'
           datasourceUid: tempo
           url: '$${__value.raw}'
 
@@ -30,11 +35,17 @@ datasources:
     access: proxy
     url: http://tempo:3200
     jsonData:
+      # Trace -> logs: every request-summary line carries trace_id (and, when
+      # the caller sent traceparent, correlation_id == trace id), so a line
+      # filter on the trace id finds the request's logs in either field.
       tracesToLogsV2:
         datasourceUid: loki
-        filterByTraceID: true
         spanStartTimeShift: -5m
         spanEndTimeShift: 5m
+        customQuery: true
+        query: '{job="astronomer"} |= "$${__trace.traceId}" | json'
+      tracesToMetrics:
+        datasourceUid: prometheus
       serviceMap:
         datasourceUid: prometheus
       nodeGraph:
