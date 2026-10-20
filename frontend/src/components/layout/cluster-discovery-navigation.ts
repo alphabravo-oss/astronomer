@@ -3,6 +3,7 @@ import type { ClusterDiscovery } from "./cluster-discovery-model";
 import type { NavGroup, NavItem } from "./sidebar-navigation";
 import { filterNavigationItems, navGroupItems } from "./nav-group-items";
 import { crdGroupLabel } from "@/lib/crd-group-labels";
+import { CLUSTER_MANAGE_GROUP } from "./cluster-nav-groups";
 
 export function filterNavGroupsByDiscovery(
   groups: NavGroup[],
@@ -71,7 +72,7 @@ export function withDiscoveredNavigation(
     })
     .filter((subgroup) => subgroup.items.length > 0);
   return groups.map((group) =>
-    group.label === "More Resources"
+    group.label === CLUSTER_MANAGE_GROUP
       ? {
           ...group,
           subgroups: [
@@ -83,7 +84,7 @@ export function withDiscoveredNavigation(
                     label: "Browse",
                     items: [
                       {
-                        label: "All custom resources →",
+                        label: "All custom resources",
                         href: base,
                         icon: Puzzle,
                         permission: {

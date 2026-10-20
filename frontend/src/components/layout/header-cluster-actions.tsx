@@ -1,15 +1,28 @@
 import { lazy, Suspense, useState } from "react";
-import { Download, Upload } from "lucide-react";
+import {
+  ChevronDown,
+  Copy,
+  Download,
+  Settings2,
+  TerminalSquare,
+  Upload,
+} from "lucide-react";
 
-import { ActionButton } from "@/components/ui/action-button";
-import { useDismissable } from "@/components/layout/cluster-scope-controls";
 import {
   useClusterKubeconfig,
   type ClusterKubeconfigPermission,
 } from "@/lib/hooks/kubernetes-proxy";
-import { cn } from "@/lib/utils";
+import { openClusterShellWindow } from "@/lib/window-manager-store";
 import type { Cluster } from "@/types";
-import { BareButton } from "@/components/form/bare-button";
+import {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
+  ScopeChip,
+} from "@/ui";
 
 const CreateResourceDialog = lazy(() =>
   import("@/components/resources/create-resource-dialog").then((module) => ({
@@ -18,98 +31,85 @@ const CreateResourceDialog = lazy(() =>
 );
 
 /**
- * Header-wide cluster actions rendered next to the ClusterShellLauncher in
- * the topbar whenever a cluster is in scope. Previously "download a
- * kubeconfig" and "apply a manifest" only existed on the cluster overview
- * page, which meant navigating away from whatever resource page you were on
- * (and, for import, first to the specific kind's list page) just to reach
- * them. Both are now one click from anywhere in the cluster.
+ * One "Cluster actions" menu in the header for everything that used to be
+ * four icon buttons: cluster shell, kubeconfig (proxy download/copy, direct
+ * download) and YAML import.
  */
 export function HeaderClusterActions({
   clusterId,
   cluster,
   directPermission,
+  shellDisabledReason,
 }: {
   clusterId: string;
   cluster: Pick<Cluster, "name" | "apiServerUrl" | "isLocal"> | undefined;
   directPermission: ClusterKubeconfigPermission;
+  shellDisabledReason?: string;
 }) {
   const kubeconfig = useClusterKubeconfig(clusterId, cluster, directPermission);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const closeMenu = () => setMenuOpen(false);
-  const menuRef = useDismissable(menuOpen, closeMenu);
-
-  const items: Array<{
-    label: string;
-    onClick: () => void;
-    disabled?: boolean;
-    disabledReason?: string;
-  }> = [
-    {
-      label: "Download proxy",
-      onClick: () => void kubeconfig.downloadProxy(),
-      disabled: kubeconfig.proxyPending,
-    },
-    {
-      label: "Copy proxy",
-      onClick: () => void kubeconfig.copyProxy(),
-      disabled: kubeconfig.proxyPending,
-    },
-    {
-      label: "Download direct",
-      onClick: () => void kubeconfig.downloadDirect(),
-      disabled: kubeconfig.directPending || !!kubeconfig.directDisabledReason,
-      disabledReason: kubeconfig.directDisabledReason,
-    },
-  ];
+  const clusterName = cluster?.name;
 
   return (
     <>
-      <div ref={menuRef} className="relative">
-        <ActionButton
-          size="icon"
-          icon={<Download className="h-3.5 w-3.5" />}
-          onClick={() => setMenuOpen((value) => !value)}
-          aria-label="Kubeconfig"
-          tooltip="Kubeconfig"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-        />
-        {menuOpen && (
-          <div
-            role="menu"
-            className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
+      <Menu modal={false}>
+        <MenuTrigger asChild>
+          <ScopeChip
+            aria-label="Cluster actions"
+            icon={<Settings2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+            className="max-w-none"
           >
-            {items.map((item) => (
-              <BareButton
-                disabledReason={item.disabledReason}
-                key={item.label}
-                role="menuitem"
-                disabled={item.disabled}
-                onClick={() => {
-                  if (item.disabled) return;
-                  item.onClick();
-                  closeMenu();
-                }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-popover-foreground transition-colors hover:bg-accent font-normal whitespace-normal shrink",
-                  item.disabled && "cursor-not-allowed opacity-50",
-                )}
-              >
-                {item.label}
-              </BareButton>
-            ))}
-          </div>
-        )}
-      </div>
-      <ActionButton
-        size="icon"
-        icon={<Upload className="h-3.5 w-3.5" />}
-        onClick={() => setImportOpen(true)}
-        aria-label="Import"
-        tooltip="Import YAML: apply manifests to this cluster"
-      />
+            <span className="flex items-center gap-1">
+              <span className="hidden 2xl:inline">Cluster actions</span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+          </ScopeChip>
+        </MenuTrigger>
+        <MenuContent className="w-64">
+          <MenuItem
+            disabled={!!shellDisabledReason}
+            title={shellDisabledReason}
+            onSelect={() => openClusterShellWindow(clusterId, clusterName)}
+          >
+            <TerminalSquare className="h-4 w-4" />
+            Open cluster shell
+            <span className="ml-auto font-mono text-micro text-muted-foreground">
+              Ctrl+`
+            </span>
+          </MenuItem>
+          <MenuSeparator />
+          <MenuLabel>Kubeconfig</MenuLabel>
+          <MenuItem
+            disabled={kubeconfig.proxyPending}
+            onSelect={() => void kubeconfig.downloadProxy()}
+          >
+            <Download className="h-4 w-4" />
+            Download proxy kubeconfig
+          </MenuItem>
+          <MenuItem
+            disabled={kubeconfig.proxyPending}
+            onSelect={() => void kubeconfig.copyProxy()}
+          >
+            <Copy className="h-4 w-4" />
+            Copy proxy kubeconfig
+          </MenuItem>
+          <MenuItem
+            disabled={
+              kubeconfig.directPending || !!kubeconfig.directDisabledReason
+            }
+            title={kubeconfig.directDisabledReason}
+            onSelect={() => void kubeconfig.downloadDirect()}
+          >
+            <Download className="h-4 w-4" />
+            Download direct kubeconfig
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem onSelect={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4" />
+            Import YAML…
+          </MenuItem>
+        </MenuContent>
+      </Menu>
       {importOpen && (
         <Suspense fallback={<span role="status">Loading YAML importer…</span>}>
           <CreateResourceDialog

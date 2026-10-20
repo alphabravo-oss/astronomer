@@ -4,15 +4,15 @@ import { SETTINGS_NAVIGATION } from "@/components/settings/settings-navigation";
 
 describe("dashboard breadcrumbs", () => {
   it.each([
-    ["audit", "Audit"],
+    ["audit", "Audit log"],
     ["catalog", "Catalog"],
-    ["network-policies", "Network Policies"],
+    ["network-policies", "Network policies"],
   ])("labels %s as %s", (segment, expected) => {
     expect(breadcrumbLabel(segment)).toBe(expected);
   });
 
-  it("title-cases an unmapped route slug", () => {
-    expect(breadcrumbLabel("cloud-credentials")).toBe("Cloud Credentials");
+  it("sentence-cases an unmapped route slug", () => {
+    expect(breadcrumbLabel("cloud-credentials")).toBe("Cloud credentials");
   });
 
   it("preserves opaque IDs and resolves known cluster names", () => {
@@ -26,7 +26,7 @@ describe("dashboard breadcrumbs", () => {
       "Overview",
       "Clusters",
       "production-east",
-      "Network Policies",
+      "Network policies",
     ]);
   });
 });

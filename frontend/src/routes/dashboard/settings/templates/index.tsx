@@ -68,7 +68,7 @@ function NotificationTemplatesList() {
         {(items) => (
           <div className="rounded-lg border border-border overflow-hidden">
             <Table className="w-full text-sm">
-              <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHeader className="bg-muted/50 text-left text-xs text-muted-foreground">
                 <TableRow>
                   <TableHead className="px-4 py-2 font-medium">Key</TableHead>
                   <TableHead className="px-4 py-2 font-medium">

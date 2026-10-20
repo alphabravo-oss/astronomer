@@ -20,3 +20,4 @@ playwright-report
 tests
 gallery
 playwright.config.ts
+playwright.live.config.ts

@@ -1,52 +1,67 @@
-import { SkeletonText } from "@/components/ui/skeleton";
-import type { ComponentPropsWithoutRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
+import { Activity, Plus, Rocket, ShieldCheck } from "lucide-react";
 
-import { useClusterEstateSummary, useClusters } from "@/lib/hooks/clusters";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useActivityFeed } from "@/lib/hooks/audit";
 import { queryKeys } from "@/lib/query-keys";
 import { useAlertEventSummary } from "@/lib/hooks/alerting";
-import { useTools } from "@/lib/hooks/tools";
 import { useLatestBackupDrill } from "@/components/settings/backup-drill-hooks";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { liveFallback } from "@/lib/live/status-store";
+import { getDeliveryEstate } from "@/lib/api/delivery-system";
+import { useAuthStore } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
-import { PageHeader, PageShell } from "@/components/ui/page";
-import { MetricCard } from "@/components/ui/metric-card";
 import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderGlobal } from "@/lib/api/dashboards";
-import {
-  Server,
-  Activity,
-  AlertTriangle,
-  WifiOff,
-  ArrowRight,
-  PackagePlus,
-  TerminalSquare,
-  Bell,
-  Boxes,
-  ShieldCheck,
-  Package,
-  Layers,
-} from "lucide-react";
-import { Link as RouterLink } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
 import { EstateClustersTable } from "@/components/clusters/estate-clusters-table";
-import { ClustersSectionHeader } from "@/components/dashboards/clusters-section-header";
 import { WelcomeBanner } from "@/components/dashboards/welcome-banner";
+import { ActionButton } from "@/components/ui/action-button";
+import { SkeletonText } from "@/components/ui/skeleton";
+import {
+  PageHeader,
+  PageSection,
+  PageShell,
+  StatCard,
+  StatGrid,
+  VerdictBanner,
+  type VerdictTone,
+} from "@/ui";
+import type { Cluster } from "@/types";
+import {
+  FLEET_PAGE_SIZE,
+  fleetModel,
+  type FleetHealth,
+  type FleetModel,
+} from "./-fleet-model";
 
+const CAPACITY_ROWS = 8;
+const BOARD_NAMES = 6;
+
+/**
+ * Fleet-first overview (A1). Every cluster count on this page — verdict
+ * strip, health board, agents panel, capacity list and the clusters table —
+ * derives from ONE query (the clusters list, one page of up to 200) through
+ * the `fleetModel` selector, so no two panels can disagree.
+ */
 export function DashboardPage() {
   const navigate = useNavigate();
-  const clustersQuery = useClusters({
-    pageSize: 10,
-  });
-  const clusterSummaryQuery = useClusterEstateSummary();
+  const user = useAuthStore((state) => state.user);
+  const clustersQuery = useClusters({ pageSize: FLEET_PAGE_SIZE });
   const { data: activityData, isLoading: activityLoading } =
     useActivityFeed(10);
   const { data: alertSummary } = useAlertEventSummary();
-  const { data: toolsData } = useTools();
-  // T7.3 — backup-drill health row. The CronJob writes one row
-  // per drill run; useLatestBackupDrill returns the most recent.
   const { data: latestDrill } = useLatestBackupDrill();
+  const canReadDelivery = can(user, "delivery_inventory", "read");
+  const deliveryQuery = useQuery({
+    queryKey: queryKeys.delivery.estate,
+    queryFn: ({ signal }) => getDeliveryEstate(signal),
+    enabled: canReadDelivery,
+    refetchInterval: liveFallback(60_000),
+    throwOnError: false,
+  });
 
   useLiveQueryInvalidation(
     [
@@ -62,255 +77,97 @@ export function DashboardPage() {
     [queryKeys.clusters.all, queryKeys.activity()],
   );
 
-  const clusters = clustersQuery.data?.data || [];
-  const clusterTotal = clustersQuery.data?.pagination?.total ?? clusters.length;
-  const clusterSummary = clusterSummaryQuery.data;
-  const activity = activityData || [];
-  const tools = toolsData || [];
-
-  const activeClusters = clusterSummary?.clustersActive ?? 0;
-  const warningClusters = clusterSummary?.clustersWarning ?? 0;
-  const disconnectedClusters = clusterSummary?.clustersDisconnected ?? 0;
-  const totalNodes = clusterSummary?.nodesTotal ?? 0;
-  const totalPods = clusterSummary?.podsTotal ?? 0;
-  const criticalAlerts = alertSummary?.firingCritical ?? 0;
-  const warningAlerts = alertSummary?.firingWarning ?? 0;
-  const totalTools = Array.isArray(tools) ? tools.length : 0;
+  const loading = clustersQuery.isLoading;
+  const fleet = fleetModel(
+    clustersQuery.data?.data,
+    clustersQuery.data?.pagination?.total,
+  );
+  const firing = alertSummary?.firing ?? 0;
+  const critical = alertSummary?.firingCritical ?? 0;
+  const delivery = deliveryQuery.data;
+  const activity = activityData ?? [];
+  const verdict = fleetVerdict(fleet, { critical, firing, loading });
 
   return (
     <PageShell>
       <PageHeader
-        title="Platform Overview"
-        description="Real-time status of your Kubernetes infrastructure"
+        title="Overview"
+        description="Fleet health, capacity, agents and delivery across every cluster you manage."
+        actions={
+          <ActionButton
+            intent="primary"
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => void navigate({ to: "/dashboard/clusters/register" })}
+          >
+            Register cluster
+          </ActionButton>
+        }
       />
 
-      <WelcomeBanner estateEmpty={clusterTotal === 0} />
+      <WelcomeBanner estateEmpty={!loading && fleet.total === 0} />
 
-      {/* At-a-glance metric strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <MetricTile
-          destination="clusters"
-          label="Clusters"
-          value={clusterSummary?.clustersTotal ?? "—"}
-          sublabel={`${activeClusters} active`}
-          icon={<Server className="h-4 w-4" />}
-          tone="default"
-        />
-        <MetricTile
-          destination="clusters-warning"
-          label="Warnings"
-          value={warningClusters}
-          sublabel="needs attention"
-          icon={<AlertTriangle className="h-4 w-4" />}
-          tone={warningClusters > 0 ? "warning" : "default"}
-        />
-        <MetricTile
-          destination="clusters-disconnected"
-          label="Disconnected"
-          value={disconnectedClusters}
-          sublabel="agent offline"
-          icon={<WifiOff className="h-4 w-4" />}
-          tone={disconnectedClusters > 0 ? "error" : "default"}
-        />
-        <MetricTile
-          destination="alerting"
-          label="Open Alerts"
-          value={alertSummary?.firing ?? "—"}
-          sublabel={
-            criticalAlerts > 0
-              ? `${criticalAlerts} critical`
-              : warningAlerts > 0
-                ? `${warningAlerts} warning`
-                : "all clear"
-          }
-          icon={<Bell className="h-4 w-4" />}
-          tone={
-            criticalAlerts > 0
-              ? "error"
-              : warningAlerts > 0
-                ? "warning"
-                : "default"
-          }
-        />
-        <MetricTile
-          destination="clusters"
-          label="Pods"
-          value={clusterSummary ? totalPods.toLocaleString() : "—"}
-          sublabel={`across ${totalNodes} nodes`}
-          icon={<Boxes className="h-4 w-4" />}
-          tone="default"
+      <div data-testid="fleet-verdict">
+        <VerdictBanner
+          tone={verdict.tone}
+          sentence={verdict.sentence}
+          numbers={[
+            { id: "clusters", label: "clusters", value: loading ? "—" : fleet.total },
+            {
+              id: "disconnected",
+              label: "disconnected",
+              value: loading ? "—" : fleet.counts.disconnected,
+              tone: fleet.counts.disconnected > 0 ? "error" : "default",
+            },
+            {
+              id: "alerts",
+              label: "firing alerts",
+              value: alertSummary ? firing : "—",
+              tone: critical > 0 ? "error" : firing > 0 ? "warning" : "default",
+            },
+            {
+              id: "pods",
+              label: "pods",
+              value: loading ? "—" : fleet.pods.toLocaleString(),
+            },
+          ]}
         />
       </div>
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ActionCard
-          destination="register-cluster"
-          icon={<Server className="h-4 w-4" />}
-          title="Register cluster"
-          description="Generate an install command for a new cluster"
-        />
-        <ActionCard
-          destination="catalog"
-          icon={<PackagePlus className="h-4 w-4" />}
-          title="Browse catalog"
-          description="Install Helm charts across managed clusters"
-        />
-        <ActionCard
-          destination="alerting"
-          icon={<Bell className="h-4 w-4" />}
-          title="Review alerts"
-          description="Acknowledge firing alerts and manage routing"
-        />
-        <ActionCard
-          destination="projects"
-          icon={<Layers className="h-4 w-4" />}
-          title="Manage projects"
-          description="Quotas, members, and project-scoped resources"
-        />
-      </div>
+      {/* Health board: which clusters, not how many (the strip says how many). */}
+      <PageSection
+        title="Clusters by health"
+        actions={
+          <RouterLink
+            to="/dashboard/clusters"
+            className="text-meta text-muted-foreground hover:text-foreground"
+          >
+            All clusters
+          </RouterLink>
+        }
+      >
+        <HealthBoard fleet={fleet} loading={loading} />
+      </PageSection>
 
-      {/* Clusters table */}
-      <section className="space-y-3">
-        <ClustersSectionHeader shown={clusters.length} total={clusterTotal} />
+      <div className="grid grid-cols-1 gap-(--gap-section) xl:grid-cols-3">
+        <PageSection
+          title="Capacity"
+          description={
+            fleet.total > CAPACITY_ROWS
+              ? `Busiest ${CAPACITY_ROWS} of ${fleet.total} clusters by CPU or memory`
+              : "CPU and memory per cluster"
+          }
+          className="xl:col-span-2"
+        >
+          <CapacityList fleet={fleet} loading={loading} />
+        </PageSection>
 
-        {!clustersQuery.isLoading &&
-        !clustersQuery.isError &&
-        clusters.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 rounded-lg border border-dashed border-border">
-            <Server className="h-8 w-8 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground mb-3">
-              No clusters registered yet
-            </p>
-            <RouterLink
-              to="/dashboard/clusters/register"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              Register Cluster
-            </RouterLink>
-          </div>
-        ) : (
-          <EstateClustersTable
-            clusters={clusters}
-            loading={clustersQuery.isLoading}
-            isError={clustersQuery.isError}
-            error={clustersQuery.error}
-            onRetry={() => void clustersQuery.refetch()}
-            onRowClick={(cluster) =>
-              void navigate({ to: `/dashboard/clusters/${cluster.id}` })
-            }
-          />
-        )}
-      </section>
-
-      {/* Two-column: Recent Activity (wider) + Platform health (signals) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-(--gap-section)">
-        <section className="lg:col-span-2 space-y-3">
-          <h2 className="text-lg font-medium text-foreground">
-            Recent Activity
-          </h2>
-          <div className="rounded-lg border border-border overflow-hidden">
-            {activityLoading ? (
-              <div role="status" aria-busy aria-label="Loading activity">
-                <SkeletonText lines={5} className="h-48 p-4" />
-              </div>
-            ) : activity.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-                <Activity className="h-6 w-6 mb-2" />
-                <p className="text-sm">No recent activity</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border max-h-105 overflow-y-auto">
-                {activity.map((event) => (
-                  <div
-                    key={event.id}
-                    className="px-4 py-3 hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${
-                          event.type === "cluster"
-                            ? "bg-status-info"
-                            : event.type === "workload"
-                              ? "bg-status-success"
-                              : event.type === "deployment"
-                                ? "bg-primary"
-                                : event.type === "rbac"
-                                  ? "bg-status-warning"
-                                  : "bg-muted-foreground"
-                        }`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground leading-snug">
-                          {event.message}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {event.user && (
-                            <span className="text-xs text-muted-foreground">
-                              {event.user}
-                            </span>
-                          )}
-                          <span className="text-xs text-muted-foreground/60">
-                            {formatRelativeTime(event.timestamp)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Platform health — at-a-glance signals + drill-down links */}
-        <section className="space-y-3">
-          <h2 className="text-lg font-medium text-foreground">
-            Platform Health
-          </h2>
-          <div className="rounded-lg border border-border bg-card divide-y divide-border">
+        <PageSection title="Agents" description="One agent per cluster">
+          <AgentsPanel fleet={fleet} loading={loading} />
+          <div className="divide-y divide-border rounded-lg border border-border bg-card">
             <HealthRow
-              destination="alerting"
-              icon={<Bell className="h-4 w-4" />}
-              label="Firing alerts"
-              value={alertSummary?.firing ?? "—"}
-              tone={
-                criticalAlerts > 0
-                  ? "error"
-                  : warningAlerts > 0
-                    ? "warning"
-                    : "success"
-              }
-              hint={
-                criticalAlerts > 0
-                  ? `${criticalAlerts} critical`
-                  : warningAlerts > 0
-                    ? `${warningAlerts} warning`
-                    : "All clear"
-              }
-            />
-            <HealthRow
-              destination="clusters-disconnected"
-              icon={<WifiOff className="h-4 w-4" />}
-              label="Agent offline"
-              value={disconnectedClusters}
-              tone={disconnectedClusters > 0 ? "error" : "success"}
-              hint={
-                disconnectedClusters > 0 ? "reconnect needed" : "all reachable"
-              }
-            />
-            <HealthRow
-              destination="tools"
-              icon={<Package className="h-4 w-4" />}
-              label="Tools installed"
-              value={totalTools}
-              tone="default"
-              hint="across all clusters"
-            />
-            <HealthRow
-              destination="backup-settings"
+              to="/dashboard/settings/backup"
               icon={<ShieldCheck className="h-4 w-4" />}
-              label="Astronomer backup"
+              label="Platform backup"
               value={latestDrill?.latest?.status ?? "—"}
               tone={
                 latestDrill?.latest?.status === "success"
@@ -323,172 +180,472 @@ export function DashboardPage() {
               }
               hint={
                 latestDrill?.latest?.finishedAt
-                  ? `last drill ${formatRelativeTime(latestDrill.latest.finishedAt)}`
-                  : "drill never run"
+                  ? `drill ${formatRelativeTime(latestDrill.latest.finishedAt)}`
+                  : "no drill yet"
               }
             />
           </div>
-          <RouterLink
-            to="/dashboard/clusters"
-            className="block text-center text-xs text-muted-foreground hover:text-foreground py-1"
-          >
-            <TerminalSquare className="inline h-3 w-3 mr-1" />
-            Open kubectl shell on any cluster
-          </RouterLink>
-        </section>
+        </PageSection>
       </div>
 
-      {/* Custom widgets — only renders when operators have configured them.
-          Hidden via hideWhenEmpty so the dashboard stays clean on fresh
-          installs. */}
+      {canReadDelivery ? (
+        <PageSection
+          title="Delivery"
+          description="Fleet assignments and rollouts"
+          actions={
+            <RouterLink
+              to="/dashboard/delivery"
+              className="text-meta text-muted-foreground hover:text-foreground"
+            >
+              Open delivery fleet
+            </RouterLink>
+          }
+        >
+          <DeliveryStrip
+            summary={delivery?.summary}
+            attention={delivery?.attention ?? []}
+            loading={deliveryQuery.isLoading}
+            fleetTotal={fleet.total}
+          />
+        </PageSection>
+      ) : null}
+
+      <PageSection title="Clusters" description="Most recently registered">
+        <EstateClustersTable
+          clusters={fleet.clusters}
+          loading={loading}
+          isError={clustersQuery.isError}
+          error={clustersQuery.error}
+          onRetry={() => void clustersQuery.refetch()}
+          onRowClick={(cluster) =>
+            void navigate({ to: `/dashboard/clusters/${cluster.id}` })
+          }
+        />
+      </PageSection>
+
+      <PageSection title="Recent activity">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          {activityLoading ? (
+            <div role="status" aria-busy aria-label="Loading activity">
+              <SkeletonText lines={5} className="h-48 p-4" />
+            </div>
+          ) : activity.length === 0 ? (
+            <div className="flex h-32 flex-col items-center justify-center text-muted-foreground">
+              <Activity className="mb-2 h-5 w-5" />
+              <p className="text-sm">No recent activity</p>
+            </div>
+          ) : (
+            <ul className="max-h-105 divide-y divide-border overflow-y-auto">
+              {activity.map((event) => (
+                <li key={event.id} className="px-4 py-2.5">
+                  <p className="text-sm leading-snug text-foreground">
+                    {event.message}
+                  </p>
+                  <p className="mt-0.5 text-meta text-muted-foreground">
+                    {event.user ? `${event.user} · ` : ""}
+                    {formatRelativeTime(event.timestamp)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </PageSection>
+
       <section className="space-y-3">
         <WidgetGrid fetcher={renderGlobal} hideWhenEmpty />
       </section>
-
-      {/* §HostMounts mount point 2 — enabled `dashboardWidget` extensions append
-          cards here. Renders nothing when no extension declares one. */}
       <ExtensionSlot
         point="dashboardWidget"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
       />
     </PageShell>
   );
 }
 
-type DashboardDestination =
-  | "alerting"
-  | "backup-settings"
-  | "catalog"
-  | "clusters"
-  | "clusters-disconnected"
-  | "clusters-warning"
-  | "projects"
-  | "register-cluster"
-  | "tools";
-
-function DashboardLink({
-  destination,
-  ...props
-}: { destination: DashboardDestination } & Omit<
-  ComponentPropsWithoutRef<"a">,
-  "href"
->) {
-  switch (destination) {
-    case "clusters":
-      return <RouterLink to="/dashboard/clusters" {...props} />;
-    case "clusters-warning":
-      return (
-        <RouterLink
-          to="/dashboard/clusters"
-          search={{ status: "error" }}
-          {...props}
-        />
-      );
-    case "clusters-disconnected":
-      return (
-        <RouterLink
-          to="/dashboard/clusters"
-          search={{ status: "disconnected" }}
-          {...props}
-        />
-      );
-    case "alerting":
-      return <RouterLink to="/dashboard/alerting" {...props} />;
-    case "backup-settings":
-      return <RouterLink to="/dashboard/settings/backup" {...props} />;
-    case "catalog":
-      return <RouterLink to="/dashboard/catalog" {...props} />;
-    case "projects":
-      return <RouterLink to="/dashboard/projects" {...props} />;
-    case "register-cluster":
-      return <RouterLink to="/dashboard/clusters/register" {...props} />;
-    case "tools":
-      return <RouterLink to="/dashboard/tools" {...props} />;
-  }
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-function MetricTile({
-  destination,
-  label,
-  value,
-  sublabel,
-  icon,
-  tone,
-}: {
-  destination: DashboardDestination;
+function fleetVerdict(
+  fleet: FleetModel,
+  {
+    critical,
+    firing,
+    loading,
+  }: { critical: number; firing: number; loading: boolean },
+): { tone: VerdictTone; sentence: string } {
+  const { total, counts } = fleet;
+  if (loading) return { tone: "info", sentence: "Checking the fleet…" };
+  if (total === 0)
+    return {
+      tone: "info",
+      sentence: "No clusters registered yet. Register one to start managing it.",
+    };
+  if (counts.disconnected > 0 || critical > 0)
+    return {
+      tone: "critical",
+      sentence:
+        counts.disconnected > 0
+          ? `${counts.disconnected} of ${plural(total, "cluster")} ${counts.disconnected === 1 ? "is" : "are"} disconnected.`
+          : `${plural(critical, "critical alert")} firing.`,
+    };
+  if (counts.attention > 0 || counts.registering > 0 || firing > 0)
+    return {
+      tone: "degraded",
+      sentence:
+        counts.attention > 0
+          ? `${plural(counts.attention, "cluster")} need${counts.attention === 1 ? "s" : ""} attention; the rest of the fleet is healthy.`
+          : counts.registering > 0
+            ? `${plural(counts.registering, "cluster")} still registering; the rest of the fleet is healthy.`
+            : `${plural(firing, "alert")} firing; every cluster is connected.`,
+    };
+  return {
+    tone: "ok",
+    sentence: `All ${plural(total, "cluster")} connected and no alerts firing.`,
+  };
+}
+
+const boardColumns: Array<{
+  key: FleetHealth;
   label: string;
-  value: string | number;
-  sublabel?: string;
-  icon: React.ReactNode;
-  tone: "default" | "warning" | "error";
-}) {
-  const toneRing =
-    tone === "error"
-      ? "ring-status-error/20 hover:ring-status-error/40"
-      : tone === "warning"
-        ? "ring-status-warning/20 hover:ring-status-warning/40"
-        : "ring-transparent";
+  dot: string;
+  status?: string;
+}> = [
+  { key: "healthy", label: "Healthy", dot: "bg-status-success", status: "active" },
+  { key: "attention", label: "Needs attention", dot: "bg-status-warning", status: "error" },
+  {
+    key: "disconnected",
+    label: "Disconnected",
+    dot: "bg-status-error",
+    status: "disconnected",
+  },
+  { key: "registering", label: "Registering", dot: "bg-status-info", status: "pending" },
+];
+
+function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
   return (
-    <DashboardLink destination={destination} className="block">
-      <MetricCard
-        dense
-        label={label}
-        value={value}
-        subtitle={sublabel}
-        icon={icon}
-        tone={tone === "default" ? undefined : tone}
-        className={cn("ring-2 ring-inset", toneRing)}
-      />
-    </DashboardLink>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {boardColumns.map((column) => {
+        const members = fleet.byHealth[column.key];
+        return (
+          <div
+            key={column.key}
+            data-testid={`health-${column.key}`}
+            className="rounded-lg border border-border bg-card"
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-2">
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <span aria-hidden className={cn("h-2 w-2 rounded-full", column.dot)} />
+                {column.label}
+              </span>
+              <span
+                data-testid={`health-${column.key}-count`}
+                className="text-meta tabular-nums text-muted-foreground"
+              >
+                {loading ? "—" : members.length}
+              </span>
+            </div>
+            {loading ? (
+              <div role="status" aria-busy className="p-4">
+                <SkeletonText lines={2} />
+              </div>
+            ) : members.length === 0 ? (
+              <p className="px-4 py-3 text-meta text-muted-foreground">None</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {members.slice(0, BOARD_NAMES).map((cluster) => (
+                  <li key={cluster.id}>
+                    <RouterLink
+                      to="/dashboard/clusters/$id"
+                      params={{ id: cluster.id }}
+                      className="flex items-baseline justify-between gap-3 px-4 py-1.5 text-sm transition-colors hover:bg-accent/40"
+                    >
+                      <span className="min-w-0 truncate font-medium text-foreground">
+                        {cluster.displayName || cluster.name}
+                      </span>
+                      <span className="shrink-0 text-meta text-muted-foreground">
+                        {cluster.environment || cluster.region || ""}
+                      </span>
+                    </RouterLink>
+                  </li>
+                ))}
+                {members.length > BOARD_NAMES ? (
+                  <li>
+                    <RouterLink
+                      to="/dashboard/clusters"
+                      search={{ status: column.status }}
+                      className="block px-4 py-1.5 text-meta text-muted-foreground hover:text-foreground"
+                    >
+                      and {members.length - BOARD_NAMES} more
+                    </RouterLink>
+                  </li>
+                ) : null}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-function ActionCard({
-  destination,
-  icon,
-  title,
-  description,
-}: {
-  destination: DashboardDestination;
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
+function AgentsPanel({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
+  const versions = new Map<string, number>();
+  for (const cluster of fleet.clusters) {
+    if (!cluster.agentVersion) continue;
+    versions.set(cluster.agentVersion, (versions.get(cluster.agentVersion) ?? 0) + 1);
+  }
+  const rows: Array<{ key: FleetHealth; label: string; tone: "success" | "warning" | "error" | "default" }> = [
+    { key: "healthy", label: "Connected", tone: "success" },
+    { key: "attention", label: "Connected, degraded", tone: "warning" },
+    { key: "disconnected", label: "Disconnected", tone: "error" },
+    { key: "registering", label: "Never connected", tone: "default" },
+  ];
   return (
-    <DashboardLink
-      destination={destination}
-      className="group flex items-start gap-3 rounded-lg border border-border bg-card p-3 hover:bg-card/80 hover:border-foreground/20 transition-colors"
-    >
-      <div className="shrink-0 w-8 h-8 rounded-md bg-muted flex items-center justify-center text-muted-foreground group-hover:text-foreground transition-colors">
-        {icon}
+    <div className="space-y-2">
+      <div
+        data-testid="agents-panel"
+        className="divide-y divide-border rounded-lg border border-border bg-card"
+      >
+        {rows.map((row) => (
+          <HealthRow
+            key={row.key}
+            to="/dashboard/agents"
+            label={row.label}
+            value={loading ? "—" : fleet.counts[row.key]}
+            tone={fleet.counts[row.key] > 0 ? row.tone : "default"}
+            testId={`agents-${row.key}`}
+          />
+        ))}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-          {description}
+      {versions.size > 0 ? (
+        <p className="text-micro text-muted-foreground">
+          Agent versions:{" "}
+          {[...versions.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([version, count]) => `${version} × ${count}`)
+            .join(" · ")}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CapacityList({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
+  if (loading) {
+    return (
+      <div role="status" aria-busy className="rounded-lg border border-border bg-card p-4">
+        <SkeletonText lines={4} />
       </div>
-    </DashboardLink>
+    );
+  }
+  if (fleet.clusters.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        Capacity appears here once a cluster reports metrics.
+      </div>
+    );
+  }
+  const load = (cluster: Cluster) =>
+    Math.max(cluster.cpuPercentage ?? 0, cluster.memoryPercentage ?? 0);
+  const rows = [...fleet.clusters]
+    .sort((a, b) => load(b) - load(a))
+    .slice(0, CAPACITY_ROWS);
+  return (
+    <ul
+      data-testid="capacity-list"
+      className="divide-y divide-border rounded-lg border border-border bg-card"
+    >
+      {rows.map((cluster) => (
+        <li
+          key={cluster.id}
+          className="grid grid-cols-[minmax(0,1.2fr)_1fr_1fr] items-center gap-4 px-4 py-2.5"
+        >
+          <div className="min-w-0">
+            <RouterLink
+              to="/dashboard/clusters/$id"
+              params={{ id: cluster.id }}
+              className="block truncate text-sm font-medium text-foreground hover:underline"
+            >
+              {cluster.displayName || cluster.name}
+            </RouterLink>
+            <p className="text-meta text-muted-foreground">
+              {plural(cluster.nodeCount ?? 0, "node")} · {plural(cluster.podCount ?? 0, "pod")}
+            </p>
+          </div>
+          <CapacityBar label="CPU" value={cluster.cpuPercentage} />
+          <CapacityBar label="Memory" value={cluster.memoryPercentage} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CapacityBar({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null | undefined;
+}) {
+  const pct =
+    value == null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value));
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between text-meta text-muted-foreground">
+        <span>{label}</span>
+        <span className="tabular-nums text-foreground">
+          {pct == null ? "—" : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`}
+        </span>
+      </div>
+      <div
+        className="gauge-bar mt-1"
+        role="meter"
+        aria-label={`${label} ${pct == null ? "no data" : `${Math.round(pct)}%`}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct == null ? undefined : Math.round(pct)}
+      >
+        <div
+          className={cn(
+            "gauge-bar-fill",
+            pct != null && pct >= 90
+              ? "bg-status-error"
+              : pct != null && pct >= 75
+                ? "bg-status-warning"
+                : "bg-muted-foreground/60",
+          )}
+          style={{ width: `${pct ?? 0}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DeliveryStrip({
+  summary,
+  attention,
+  loading,
+  fleetTotal,
+}: {
+  summary:
+    | {
+        fluxReady: number;
+        assignments: number;
+        activeRollouts: number;
+        failed: number;
+        drifted: number;
+      }
+    | undefined;
+  attention: Array<{
+    clusterId: string;
+    clusterName: string;
+    severity: "error" | "warning";
+    reason: string;
+    detail: string;
+  }>;
+  loading: boolean;
+  fleetTotal: number;
+}) {
+  const failed = summary?.failed ?? 0;
+  const drifted = summary?.drifted ?? 0;
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="lg:col-span-2">
+        <StatGrid columns={4}>
+          <StatCard
+            label="Flux-ready"
+            value={summary ? summary.fluxReady : "—"}
+            hint={`of ${plural(fleetTotal, "cluster")}`}
+            icon={<Rocket className="h-4 w-4" />}
+            to="/dashboard/delivery"
+            loading={loading}
+          />
+          <StatCard
+            label="Assignments"
+            value={summary ? summary.assignments : "—"}
+            to="/dashboard/delivery/targets"
+            loading={loading}
+          />
+          <StatCard
+            label="Active rollouts"
+            value={summary ? summary.activeRollouts : "—"}
+            to="/dashboard/delivery/rollouts"
+            loading={loading}
+          />
+          <StatCard
+            label="Failed or drifted"
+            value={summary ? failed + drifted : "—"}
+            hint={summary ? `${failed} failed · ${drifted} drifted` : undefined}
+            tone={failed > 0 ? "error" : drifted > 0 ? "warning" : "default"}
+            to="/dashboard/delivery/deployments"
+            loading={loading}
+          />
+        </StatGrid>
+      </div>
+      <div className="rounded-lg border border-border bg-card">
+        <p className="border-b border-border px-4 py-2 text-meta font-medium text-muted-foreground">
+          Needs attention
+        </p>
+        {loading ? (
+          <div role="status" aria-busy className="p-4">
+            <SkeletonText lines={3} />
+          </div>
+        ) : attention.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+            Nothing needs attention.
+          </p>
+        ) : (
+          <ol className="max-h-56 divide-y divide-border overflow-y-auto">
+            {attention.slice(0, 6).map((item, index) => (
+              <li key={`${item.clusterId}-${item.reason}-${index}`}>
+                <RouterLink
+                  to="/dashboard/clusters/$id/delivery"
+                  params={{ id: item.clusterId }}
+                  className="flex items-start gap-2 px-4 py-2 text-sm hover:bg-accent/40"
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                      item.severity === "error" ? "bg-status-error" : "bg-status-warning",
+                    )}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-foreground">
+                      {item.clusterName}
+                    </span>
+                    <span className="block truncate text-meta text-muted-foreground">
+                      {item.reason}
+                    </span>
+                  </span>
+                </RouterLink>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </div>
   );
 }
 
 function HealthRow({
-  destination,
+  to,
   icon,
   label,
   value,
   tone,
   hint,
+  testId,
 }: {
-  destination: DashboardDestination;
-  icon: React.ReactNode;
+  to: string;
+  icon?: React.ReactNode;
   label: string;
   value: string | number;
   tone: "default" | "warning" | "error" | "success";
   hint?: string;
+  testId?: string;
 }) {
   const dot =
     tone === "error"
@@ -499,21 +656,25 @@ function HealthRow({
           ? "bg-status-success"
           : "bg-muted-foreground";
   return (
-    <DashboardLink
-      destination={destination}
-      className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors"
+    <RouterLink
+      to={to}
+      data-testid={testId}
+      className="flex items-center justify-between px-3 py-2.5 transition-colors hover:bg-accent/40"
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <span className={cn("h-2 w-2 rounded-full shrink-0", dot)} />
-        <span className="text-muted-foreground shrink-0">{icon}</span>
-        <span className="text-sm text-foreground truncate">{label}</span>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-        <span className="text-sm font-medium tabular-nums text-foreground">
+      <span className="flex min-w-0 items-center gap-2">
+        <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+        {icon ? <span className="shrink-0 text-muted-foreground">{icon}</span> : null}
+        <span className="truncate text-sm text-foreground">{label}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        {hint && <span className="text-meta text-muted-foreground">{hint}</span>}
+        <span
+          data-value=""
+          className="text-sm font-medium tabular-nums text-foreground"
+        >
           {value}
         </span>
-      </div>
-    </DashboardLink>
+      </span>
+    </RouterLink>
   );
 }

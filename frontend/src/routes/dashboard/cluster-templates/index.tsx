@@ -54,7 +54,7 @@ function ClusterTemplatesPage() {
   if (!canRead) {
     return (
       <PageShell>
-        <PageHeader title="Onboarding Bundles" />
+        <PageHeader title="Onboarding templates" />
         <PermissionState
           permission="cluster_templates:read"
           description={
@@ -161,7 +161,7 @@ function ClusterTemplatesPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Onboarding Bundles"
+        title="Onboarding templates"
         description="Reusable bundles of tools, policy, and project defaults applied to a cluster after you register it — they shape an adopted cluster, they don't create one."
         actions={
           canWrite ? (

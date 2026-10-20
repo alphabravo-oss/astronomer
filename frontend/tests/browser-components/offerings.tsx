@@ -9,7 +9,7 @@ import "./styles.css";
 
 function OfferingFixture() {
   const [manager, setManager] = useState<
-    "Applications" | "Platform Tools" | null
+    "Applications" | "Tools" | null
   >(null);
   const [namespace, setNamespace] = useState("observability");
   return (
@@ -20,7 +20,7 @@ function OfferingFixture() {
         is performed.
       </p>
       <div className="flex flex-wrap gap-4">
-        <ActionButton onClick={() => setManager("Platform Tools")}>
+        <ActionButton onClick={() => setManager("Tools")}>
           Preview Platform Tools
         </ActionButton>
         <ActionButton onClick={() => setManager("Applications")}>
@@ -44,7 +44,7 @@ function OfferingFixture() {
             projectName="Observability"
             manager={manager}
             releases={
-              manager === "Platform Tools"
+              manager === "Tools"
                 ? [
                     {
                       namespace,

@@ -157,7 +157,7 @@ describe("MetricCard", () => {
 
   it("uses a tighter type scale in dense mode", () => {
     render(<MetricCard title="Pods" value="3" dense />);
-    expect(screen.getByText("3")).toHaveClass("text-lg");
+    expect(screen.getByText("3")).toHaveClass("text-xl");
   });
 });
 

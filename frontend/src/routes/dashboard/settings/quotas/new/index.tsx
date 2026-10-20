@@ -227,7 +227,7 @@ function NewQuotaPlanPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </RouterLink>
-        <PageHeader eyebrow="Settings · Quotas · New" title="New quota plan" />
+        <PageHeader title="New quota plan" />
         <NewQuotaPlanForm />
       </PageShell>
     </SettingsAuthGate>

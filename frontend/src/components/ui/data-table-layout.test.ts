@@ -279,9 +279,9 @@ describe("ordering and pinning", () => {
       { start: ["name", "ns"], end: ["b", "a"] },
       SELECT_COLUMN_WIDTH,
     );
-    expect(placements.get("name")).toMatchObject({ side: "start", offset: 40 });
+    expect(placements.get("name")).toMatchObject({ side: "start", offset: 32 });
     expect(placements.get("ns")).toMatchObject({
-      offset: 240,
+      offset: 232,
       edge: true,
     });
     expect(placements.get("name")?.edge).toBe(false);

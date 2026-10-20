@@ -69,7 +69,7 @@ export function MetricCard({
         )}
       >
         {heading && (
-          <p className="text-sm font-medium text-muted-foreground">{heading}</p>
+          <p className="text-meta font-medium text-muted-foreground">{heading}</p>
         )}
         <span className="sr-only" role="status">
           Loading {heading ?? "metric"}
@@ -83,15 +83,15 @@ export function MetricCard({
     <Wrapper
       {...wrapperProps}
       className={cn(
-        "block rounded-lg border border-border bg-card transition-colors hover:bg-card/80",
-        dense ? "p-3" : "p-(--card-p)",
+        "block rounded-lg border border-border bg-card transition-colors hover:bg-accent/40",
+        dense ? "p-3" : "p-4",
         className,
       )}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           {heading && (
-            <p className="text-body font-medium text-muted-foreground">
+            <p className="text-meta font-medium text-muted-foreground">
               {heading}
             </p>
           )}
@@ -99,8 +99,8 @@ export function MetricCard({
             <span
               className={cn(
                 dense
-                  ? "text-lg font-semibold tracking-tight"
-                  : "text-2xl font-semibold tracking-tight",
+                  ? "text-xl font-semibold tabular-nums tracking-tight"
+                  : "text-stat font-semibold tabular-nums tracking-tight",
                 tone
                   ? toneTextClasses[tone]
                   : percentage !== undefined
@@ -121,7 +121,7 @@ export function MetricCard({
 
         <div className="flex flex-col items-end gap-2">
           {icon && (
-            <div className="rounded-md bg-muted p-2 text-muted-foreground">
+            <div className="text-muted-foreground" aria-hidden="true">
               {icon}
             </div>
           )}
@@ -165,7 +165,7 @@ export function MetricCard({
             return (
               <div
                 key={i}
-                className="flex-1 rounded-t-sm bg-primary/20 transition-all"
+                className="flex-1 rounded-t-sm bg-muted-foreground/30 transition-all"
                 style={{ height: `${Math.max(height, 4)}%` }}
               />
             );

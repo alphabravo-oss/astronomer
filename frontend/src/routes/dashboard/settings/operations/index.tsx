@@ -48,8 +48,6 @@ function OperationsBody() {
             : ""}
       </p>
       <ResourceMasthead
-        backTo="/dashboard/settings"
-        backLabel="Back to Settings"
         title="Operations"
         description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
       />

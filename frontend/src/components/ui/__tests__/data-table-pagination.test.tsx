@@ -85,8 +85,8 @@ it.each([
   expect(
     screen.getByText(
       total
-        ? "Showing 1-25 of 200"
-        : `Showing 1-${size} of at least ${size + 1}`,
+        ? "Showing 1–25 of 200"
+        : `Showing 1–${size} of at least ${size + 1}`,
     ),
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Next page" }));
@@ -106,7 +106,7 @@ it("keeps a way back from an empty later page", () => {
       }}
     />,
   );
-  expect(screen.getByText("Showing 0-0 of 0")).toBeVisible();
+  expect(screen.getByText("Showing 0–0 of 0")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
   expect(change).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 25 });
 });

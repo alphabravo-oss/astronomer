@@ -41,7 +41,7 @@ export default defineConfig({
       // Specs that reuse the persisted real session.
       name: "live",
       dependencies: ["live-auth-setup"],
-      testMatch: /(clusters|settings|metrics)\.live\.spec\.ts/,
+      testMatch: /(clusters|settings|metrics|shell|palette|charlie|dashboard|a11y)\.live\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         storageState: LIVE_ADMIN_AUTH_STATE,
@@ -55,7 +55,7 @@ export default defineConfig({
       dependencies: ["live"],
       testIgnore: [
         /live-auth\.setup\.ts/,
-        /(clusters|settings|metrics)\.live\.spec\.ts/,
+        /(clusters|settings|metrics|shell|palette|charlie|dashboard|a11y)\.live\.spec\.ts/,
         // Needs an adopted member cluster plus LIVE_FIXTURE_* seed data
         // (cluster, project, rollouts, Loki output, Velero backup, restricted
         // user). Selected explicitly by exporting LIVE_FIXTURE_CLUSTER_ID.

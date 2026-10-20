@@ -1,13 +1,15 @@
 import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { useClusterResourceCounts } from "@/lib/hooks/kubernetes-proxy";
 
-// Hook to fetch resource counts for a cluster.
-//
-// Counts are fetched in one metadata-only request per expanded group. The
-// server applies per-resource and namespace RBAC and never returns object
-// bodies; collapsed groups create no member-cluster traffic.
-const RESOURCE_COUNT_GROUPS = {
-  Cluster: ["nodes", "namespaces"],
+/**
+ * Inventory counts for a cluster, one metadata-only request per group. The
+ * server applies per-resource and namespace RBAC and never returns object
+ * bodies. Counts are shown on the cluster overview (group headers), never in
+ * the sidebar — the same hook feeds both the KPI tiles and the inventory so
+ * the two can never disagree.
+ */
+export const RESOURCE_COUNT_GROUPS = {
+  Overview: ["nodes", "namespaces"],
   Workloads: [
     "pods",
     "deployments",
@@ -15,8 +17,9 @@ const RESOURCE_COUNT_GROUPS = {
     "statefulsets",
     "jobs",
     "cronjobs",
+    "hpa",
   ],
-  "Service Discovery": ["services", "ingresses", "hpa"],
+  Networking: ["services", "ingresses", "networkpolicies"],
   Storage: [
     "persistentvolumes",
     "persistentvolumeclaims",
@@ -24,21 +27,20 @@ const RESOURCE_COUNT_GROUPS = {
     "configmaps",
     "secrets",
   ],
-  Policy: [
-    "networkpolicies",
+  "Policy & access": [
     "resourcequotas",
     "limitranges",
     "poddisruptionbudgets",
-  ],
-  RBAC: [
     "serviceaccounts",
     "k8s-clusterroles",
     "k8s-clusterrolebindings",
     "k8s-roles",
     "k8s-rolebindings",
   ],
-  "More Resources": ["crds", "endpoints", "replicasets"],
+  Manage: ["crds", "endpoints", "replicasets"],
 } as const;
+
+export type ResourceCountGroup = keyof typeof RESOURCE_COUNT_GROUPS;
 
 export function useSidebarResourceCounts(
   clusterId: string,
@@ -50,11 +52,11 @@ export function useSidebarResourceCounts(
   const countNamespaces =
     selectedNamespaces === undefined ? [] : selectedNamespaces;
   const scopeReady = selectedNamespaces !== undefined;
-  const cluster = useClusterResourceCounts(
+  const overview = useClusterResourceCounts(
     clusterId,
-    RESOURCE_COUNT_GROUPS.Cluster,
+    RESOURCE_COUNT_GROUPS.Overview,
     countNamespaces,
-    scopeReady && openGroups.has("Cluster"),
+    scopeReady && openGroups.has("Overview"),
   );
   const workloads = useClusterResourceCounts(
     clusterId,
@@ -62,11 +64,11 @@ export function useSidebarResourceCounts(
     countNamespaces,
     scopeReady && openGroups.has("Workloads"),
   );
-  const serviceDiscovery = useClusterResourceCounts(
+  const networking = useClusterResourceCounts(
     clusterId,
-    RESOURCE_COUNT_GROUPS["Service Discovery"],
+    RESOURCE_COUNT_GROUPS.Networking,
     countNamespaces,
-    scopeReady && openGroups.has("Service Discovery"),
+    scopeReady && openGroups.has("Networking"),
   );
   const storage = useClusterResourceCounts(
     clusterId,
@@ -76,32 +78,25 @@ export function useSidebarResourceCounts(
   );
   const policy = useClusterResourceCounts(
     clusterId,
-    RESOURCE_COUNT_GROUPS.Policy,
+    RESOURCE_COUNT_GROUPS["Policy & access"],
     countNamespaces,
-    scopeReady && openGroups.has("Policy"),
+    scopeReady && openGroups.has("Policy & access"),
   );
-  const rbacCounts = useClusterResourceCounts(
+  const manage = useClusterResourceCounts(
     clusterId,
-    RESOURCE_COUNT_GROUPS.RBAC,
+    RESOURCE_COUNT_GROUPS.Manage,
     countNamespaces,
-    scopeReady && openGroups.has("RBAC"),
-  );
-  const more = useClusterResourceCounts(
-    clusterId,
-    RESOURCE_COUNT_GROUPS["More Resources"],
-    countNamespaces,
-    scopeReady && openGroups.has("More Resources"),
+    scopeReady && openGroups.has("Manage"),
   );
 
   const counts = Object.assign(
     {},
-    cluster.data?.counts,
+    overview.data?.counts,
     workloads.data?.counts,
-    serviceDiscovery.data?.counts,
+    networking.data?.counts,
     storage.data?.counts,
     policy.data?.counts,
-    rbacCounts.data?.counts,
-    more.data?.counts,
+    manage.data?.counts,
   );
   return {
     ...counts,
@@ -112,4 +107,11 @@ export function useSidebarResourceCounts(
     k8sRoles: counts["k8s-roles"],
     k8sRolebindings: counts["k8s-rolebindings"],
   };
+}
+
+const ALL_GROUPS = new Set<string>(Object.keys(RESOURCE_COUNT_GROUPS));
+
+/** Every inventory group at once (cluster overview). */
+export function useClusterInventoryCounts(clusterId: string) {
+  return useSidebarResourceCounts(clusterId, ALL_GROUPS);
 }

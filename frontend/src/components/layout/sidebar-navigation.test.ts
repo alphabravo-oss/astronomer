@@ -55,7 +55,7 @@ describe("sidebar accordion group selection", () => {
 
 describe("navLabelForHref", () => {
   it("finds the label for a global nav item by href", () => {
-    expect(navLabelForHref("/dashboard/delivery")).toBe("Estate");
+    expect(navLabelForHref("/dashboard/delivery")).toBe("Fleet");
     expect(navLabelForHref("/dashboard/security")).toBe("Security");
   });
 

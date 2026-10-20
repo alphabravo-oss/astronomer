@@ -105,7 +105,7 @@ describe("ToolInstallPage release plans", () => {
     );
     expect(
       screen.getByRole("region", { name: "Installation destination" }),
-    ).toHaveTextContent("Managed through Platform Tools");
+    ).toHaveTextContent("Managed through Tools");
     expect(screen.getByLabelText("Support: Experimental")).toBeVisible();
     expect(
       within(

@@ -1,23 +1,13 @@
 import { TopbarAccountMenu } from "./topbar-account-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTheme } from "@/lib/theme";
 import {
   Bell,
-  ChevronRight,
-  Sun,
-  Moon,
-  Monitor,
   AlertTriangle,
   AlertCircle,
   Info,
-  Menu,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useAuthStore } from "@/lib/store";
@@ -30,27 +20,37 @@ import {
 import { useAlertEvents, useAlertEventSummary } from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
-import { GlobalSearch } from "@/components/layout/global-search";
 import { listCharlieFindings } from "@/lib/api/charlie";
 import { queryKeys } from "@/lib/query-keys";
 import { selectImportantCharlieFindings } from "@/components/charlie/topbar-findings";
 import { usePageBreadcrumbs } from "@/lib/use-page-breadcrumbs";
-import type { Breadcrumb } from "@/lib/breadcrumbs";
+import { breadcrumbLabel } from "@/lib/breadcrumbs";
 import { liveFallback } from "@/lib/live/status-store";
 import {
   ClusterScopeControls,
   clusterIdFromPath,
 } from "@/components/layout/cluster-scope-controls";
 import { clusterScopeApplicability } from "@/components/layout/cluster-scope-applicability";
-import { ClusterShellLauncher } from "@/components/window-manager/cluster-shell-launcher";
 import { ClusterSwitcherMenu } from "@/components/layout/cluster-switcher-menu";
 import { LazyHeaderClusterActions as HeaderClusterActions } from "@/components/layout/lazy-header-cluster-actions";
-import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { can } from "@/lib/permissions";
 import { useClustersUpdate } from "@/lib/permission-hooks";
+import { useCharlieOptional } from "@/components/charlie/charlie-context";
+import { useSidebarNavigation } from "./use-sidebar-navigation";
+import { navGroupItems } from "./nav-group-items";
+import {
+  Breadcrumbs,
+  Header,
+  HeaderIconButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  SearchTrigger,
+  ThemeToggle,
+  type BreadcrumbItem,
+} from "@/ui";
+import { useSlashToOpenPalette } from "@/components/layout/global-search";
 import { BareButton } from "@/components/form/bare-button";
-
-// --- Breadcrumb generation ---
 
 const severityIcon: Record<string, React.ElementType> = {
   critical: AlertCircle,
@@ -63,53 +63,6 @@ const severityColor: Record<string, string> = {
   warning: "text-status-warning",
   info: "text-status-info",
 };
-
-/** Breadcrumb trail shown outside cluster context (see Topbar). */
-function TopbarBreadcrumbs({
-  breadcrumbs,
-  navigate,
-}: {
-  breadcrumbs: Breadcrumb[];
-  navigate: (opts: { to: string }) => unknown;
-}) {
-  return (
-    <nav className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm">
-      {breadcrumbs.map((crumb, i) => {
-        const isLast = i === breadcrumbs.length - 1;
-        return (
-          <div
-            key={crumb.href}
-            // Ancestor crumbs collapse below `sm`: the always-mounted
-            // cluster switcher chip leaves too little room on narrow
-            // viewports for their clickable text to clear the 24px
-            // touch-target minimum. The current page's plain-text crumb
-            // always stays visible.
-            className={cn(
-              "items-center gap-1.5 min-w-0",
-              isLast ? "flex" : "hidden sm:flex",
-            )}
-          >
-            {i > 0 && (
-              <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
-            )}
-            {isLast ? (
-              <span className="text-foreground font-medium truncate">
-                {crumb.label}
-              </span>
-            ) : (
-              <BareButton
-                onClick={() => void navigate({ to: crumb.href })}
-                className="text-muted-foreground hover:text-foreground transition-colors truncate inline-block font-normal whitespace-normal shrink"
-              >
-                {crumb.label}
-              </BareButton>
-            )}
-          </div>
-        );
-      })}
-    </nav>
-  );
-}
 
 function TopbarNotifications() {
   const navigate = useNavigate();
@@ -140,32 +93,26 @@ function TopbarNotifications() {
   return (
     <Popover open={notificationOpen} onOpenChange={setNotificationOpen}>
       <PopoverTrigger asChild>
-        <BareButton
+        <HeaderIconButton
           aria-label={
             notificationCount > 0
               ? `Notifications, ${notificationCount} unread`
               : "Notifications"
           }
-          className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
-          text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
+          badge={notificationCount}
         >
           <Bell className="h-4 w-4" />
-          {notificationCount > 0 && (
-            <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-status-error text-10 font-bold text-white">
-              {notificationCount > 99 ? "99+" : notificationCount}
-            </span>
-          )}
-        </BareButton>
+        </HeaderIconButton>
       </PopoverTrigger>
       <PopoverContent
         data-header-popover
         align="end"
-        className="w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg p-0 shadow-xl"
+        className="w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg p-0"
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h4 className="text-sm font-medium text-foreground">Notifications</h4>
           {(alertEventSummary?.firing ?? 0) > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-medium">
+            <span className="rounded-full bg-status-error/10 px-2 py-0.5 text-xs font-medium text-status-error">
               {alertEventSummary?.firing} firing
             </span>
           )}
@@ -180,7 +127,7 @@ function TopbarNotifications() {
                 });
                 setNotificationOpen(false);
               }}
-              className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50 font-normal whitespace-normal shrink"
+              className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50"
             >
               <AlertCircle
                 className={cn(
@@ -218,24 +165,24 @@ function TopbarNotifications() {
               return (
                 <div
                   key={alert.id}
-                  className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
+                  className="flex items-start gap-3 border-b border-border px-4 py-3 transition-colors last:border-0 hover:bg-accent/50"
                 >
                   <SevIcon
                     className={cn(
-                      "h-4 w-4 shrink-0 mt-0.5",
+                      "mt-0.5 h-4 w-4 shrink-0",
                       severityColor[alert.severity] || "text-muted-foreground",
                     )}
                   />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground font-medium truncate">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
                       {alert.ruleName}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {alert.message}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="mt-1 flex items-center gap-2">
                       <StatusBadge status={alert.status} size="sm" />
-                      <span className="text-2xs text-muted-foreground">
+                      <span className="text-micro text-muted-foreground">
                         {formatRelativeTime(alert.firedAt)}
                       </span>
                     </div>
@@ -245,19 +192,36 @@ function TopbarNotifications() {
             })
           )}
         </div>
-        <div className="px-4 py-2 border-t border-border">
+        <div className="border-t border-border px-4 py-2">
           <BareButton
             onClick={() => {
               void navigate({ to: "/dashboard/alerting" });
               setNotificationOpen(false);
             }}
-            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1 inline-block font-normal whitespace-normal shrink"
+            className="w-full py-1 text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             View all alerts
           </BareButton>
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function CharlieHeaderButton() {
+  const charlie = useCharlieOptional();
+  if (!charlie) return null;
+  return (
+    <HeaderIconButton
+      tooltip="Charlie (⌘J)"
+      aria-label="Open Charlie assistant"
+      aria-expanded={charlie.open}
+      aria-controls="charlie-assistant-drawer"
+      onClick={() => charlie.setOpen(true)}
+      data-testid="charlie-header-button"
+    >
+      <Sparkles className="h-4 w-4" />
+    </HeaderIconButton>
   );
 }
 
@@ -274,44 +238,71 @@ export function Topbar() {
     pathname,
     location.searchStr,
   );
-  const rememberedClusterId = useClusterScopeStore(
-    (state) => state.lastClusterId,
-  );
-  const activeClusterId = currentClusterId ?? rememberedClusterId ?? undefined;
   const directPermission = useClustersUpdate(currentClusterId ?? "");
-  const navigate = useNavigate();
-  const { setMobileSidebarOpen } = useUIStore();
+  const { setMobileSidebarOpen, setCommandPaletteOpen } = useUIStore();
   const { user } = useAuthStore();
-  // Clusters are still fetched here so breadcrumbs can resolve the
-  // /dashboard/clusters/{id}/... slug into the human-readable cluster name.
+  // Clusters are fetched so breadcrumbs can resolve the /clusters/{id} slug
+  // into the human-readable cluster name.
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const {
     data: activeCluster,
     isLoading: activeClusterLoading,
     isError: activeClusterError,
-  } = useCluster(activeClusterId ?? "");
-
-  const { theme, setTheme } = useTheme();
+  } = useCluster(currentClusterId ?? "");
+  const { navGroups: clusterGroups } = useSidebarNavigation(currentClusterId);
+  useSlashToOpenPalette();
 
   const clusterMap = useMemo(() => {
-    // Breadcrumbs use the technical RFC-1123 cluster name rather than the
-    // pretty displayName — it matches the URL slug, the kubeconfig context
-    // name, and the kubectl prompt the user is likely to compare against.
     const map: Record<string, string> = {};
     for (const c of clustersData?.data || []) {
-      map[c.id] = c.name || c.displayName;
+      map[c.id] = c.displayName || c.name;
     }
     return map;
   }, [clustersData?.data]);
 
-  const breadcrumbs = usePageBreadcrumbs(pathname, clusterMap);
+  const pageCrumbs = usePageBreadcrumbs(pathname, clusterMap);
 
-  const canOpenClusterShell = activeClusterId
-    ? can(user, "shell", "exec", { type: "cluster", id: activeClusterId })
+  const breadcrumbs = useMemo<BreadcrumbItem[]>(() => {
+    if (currentClusterId) {
+      // "All clusters" is the real breadcrumb back out of the cluster; the
+      // chip already names the cluster, so the trail continues with the
+      // page path inside it (labels from the cluster panel registry).
+      const base = `/dashboard/clusters/${currentClusterId}`;
+      const rest = pathname.slice(base.length).split("/").filter(Boolean);
+      const items = clusterGroups.flatMap(navGroupItems);
+      const trail: BreadcrumbItem[] = [
+        { label: "All clusters", to: "/dashboard/clusters" },
+      ];
+      if (rest.length === 0) {
+        trail.push({ label: "Overview" });
+        return trail;
+      }
+      let path = base;
+      rest.forEach((segment, index) => {
+        path += `/${segment}`;
+        const registered = items.find((item) => item.href === path);
+        const label = registered?.label ?? breadcrumbLabel(segment);
+        trail.push(
+          index === rest.length - 1 ? { label } : { label, to: path },
+        );
+      });
+      return trail;
+    }
+    // Global: drop the always-generic root ("Overview") so depth counts from
+    // the pillar; the kit renders nothing below two crumbs.
+    return pageCrumbs.slice(1).map((crumb, index, all) =>
+      index === all.length - 1
+        ? { label: crumb.label }
+        : { label: crumb.label, to: crumb.href },
+    );
+  }, [clusterGroups, currentClusterId, pageCrumbs, pathname]);
+
+  const canOpenClusterShell = currentClusterId
+    ? can(user, "shell", "exec", { type: "cluster", id: currentClusterId })
     : false;
   const shellDisabledReason = activeClusterLoading
     ? "Loading cluster details"
-    : activeClusterError || (activeClusterId && !activeCluster)
+    : activeClusterError || (currentClusterId && !activeCluster)
       ? "The active cluster is unavailable"
       : activeCluster?.isLocal
         ? "Cluster shell is unavailable on the management plane cluster"
@@ -319,82 +310,46 @@ export function Topbar() {
           ? "You need shell:exec access for this cluster"
           : undefined;
 
-  const cycleTheme = () => {
-    if (theme === "light") setTheme("dark");
-    else if (theme === "dark") setTheme("system");
-    else setTheme("light");
-  };
-
-  const visibleTheme = theme || "system";
-  const ThemeIcon =
-    visibleTheme === "dark" ? Moon : visibleTheme === "light" ? Sun : Monitor;
-
   return (
-    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
-      <BareButton
-        onClick={() => setMobileSidebarOpen(true)}
-        className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden font-normal"
-        aria-label="Open navigation"
-      >
-        <Menu className="h-4 w-4" />
-      </BareButton>
-      {/* Left: always-mounted cluster switcher, then either the cluster
-          scope controls (cluster context — the chip already says which
-          cluster, so breadcrumbs would be redundant noise) or breadcrumbs
-          (everywhere else). */}
-      <ClusterSwitcherMenu
-        clusterId={currentClusterId}
-        clusterName={activeCluster?.displayName || activeCluster?.name}
-      />
-      {currentClusterId ? (
-        <ClusterScopeControls
-          clusterId={currentClusterId}
-          applicability={applicableScope}
+    <Header
+      onOpenMobileNav={() => setMobileSidebarOpen(true)}
+      scope={
+        currentClusterId ? (
+          <>
+            <ClusterSwitcherMenu
+              clusterId={currentClusterId}
+              clusterName={activeCluster?.displayName || activeCluster?.name}
+            />
+            <ClusterScopeControls
+              clusterId={currentClusterId}
+              applicability={applicableScope}
+            />
+          </>
+        ) : null
+      }
+      breadcrumbs={<Breadcrumbs items={breadcrumbs} />}
+      search={
+        <SearchTrigger
+          onOpen={() => setCommandPaletteOpen(true)}
+          placeholder="Search pages, clusters and resources"
         />
-      ) : (
-        <TopbarBreadcrumbs breadcrumbs={breadcrumbs} navigate={navigate} />
-      )}
-
-      {/* Center: Cross-cluster Global Search (Phase A3). Its own kbd hint
-          covers the command palette shortcut, so the topbar no longer needs
-          a separate ⌘K chip. */}
-      <div className="flex min-w-44 max-w-md flex-1 justify-center px-2 lg:min-w-60">
-        <GlobalSearch />
-      </div>
-
-      {/* Right: Actions */}
-      <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
-        <ClusterShellLauncher
-          clusterId={activeClusterId}
-          clusterName={
-            activeCluster?.displayName || activeCluster?.name || undefined
-          }
-          disabled={Boolean(shellDisabledReason)}
-          disabledReason={shellDisabledReason}
-        />
-        {currentClusterId ? (
-          <HeaderClusterActions
-            clusterId={currentClusterId}
-            cluster={activeCluster}
-            directPermission={directPermission}
-          />
-        ) : null}
-
-        {/* Theme Toggle */}
-        <BareButton
-          tooltip={`Theme: ${visibleTheme}`}
-          aria-label={`Theme: ${visibleTheme}`}
-          onClick={cycleTheme}
-          className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
-        >
-          <ThemeIcon className="h-4 w-4" />
-        </BareButton>
-
-        <TopbarNotifications />
-
-        <TopbarAccountMenu />
-      </div>
-    </header>
+      }
+      actions={
+        <>
+          {currentClusterId ? (
+            <HeaderClusterActions
+              clusterId={currentClusterId}
+              cluster={activeCluster}
+              directPermission={directPermission}
+              shellDisabledReason={shellDisabledReason}
+            />
+          ) : null}
+          <CharlieHeaderButton />
+          <ThemeToggle />
+          <TopbarNotifications />
+          <TopbarAccountMenu />
+        </>
+      }
+    />
   );
 }

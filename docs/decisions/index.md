@@ -22,5 +22,6 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0014](0014-airgap-layered-registry.md) | Air-gap layered registry: cluster-local zot, opt-in fallbacks, fail closed | accepted |
 | [0015](0015-image-signature-admission.md) | Image signature admission with per-vendor authorities | accepted |
 | [0016](0016-api-error-contract-and-route-authorization.md) | One API error contract (apiutil) and one route authorizer | accepted |
+| [0017](0017-ui-operator-console-and-shared-kit.md) | A1 Operator Console UI and the shared AlphaBravo UI kit | accepted |
 
 The threat model lives next to these decisions: [`../threat-model.md`](../threat-model.md).

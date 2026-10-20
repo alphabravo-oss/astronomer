@@ -10,6 +10,8 @@ type CharlieState = {
 };
 
 export const CharlieContext = createContext<CharlieState | null>(null);
+/** Null when the assistant capability is not mounted (feature off/dormant). */
+export const useCharlieOptional = () => useContext(CharlieContext);
 export const useCharlie = () => {
   const v = useContext(CharlieContext);
   if (!v) throw new Error("useCharlie must be inside CharlieShell");

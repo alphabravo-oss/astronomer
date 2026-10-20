@@ -15,6 +15,7 @@ import { MAX_TABLE_VIEWS, type TableView } from "@/lib/api/table-views";
 import { useTableViews } from "@/lib/hooks/table-views";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { ToolbarButton } from "@/ui/data-table";
 
 interface DataTableViewsMenuProps {
   /** Normalized server table key. */
@@ -61,18 +62,15 @@ export function DataTableViewsMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
+        <ToolbarButton active={views.length > 0}>
           <Bookmark className="h-4 w-4" />
           Views
           {views.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              ({views.length})
+            <span className="text-meta tabular-nums text-muted-foreground">
+              {views.length}
             </span>
           )}
-        </button>
+        </ToolbarButton>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-2">
         <p className="px-1 pb-1 text-xs font-medium text-muted-foreground">

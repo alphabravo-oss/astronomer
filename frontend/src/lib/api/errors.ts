@@ -49,6 +49,24 @@ export function apiErrorStatus(err: unknown): number | undefined {
   return obj.status ?? obj.response?.status;
 }
 
+/** Request/correlation id echoed by the server (header or body), for support. */
+export function apiErrorRequestId(err: unknown): string | undefined {
+  if (!err || typeof err !== "object") return undefined;
+  const obj = err as {
+    response?: {
+      headers?: Record<string, unknown>;
+      data?: { request_id?: unknown; error?: { request_id?: unknown } };
+    };
+  };
+  const header =
+    obj.response?.headers?.["x-request-id"] ??
+    obj.response?.headers?.["X-Request-Id"];
+  const body =
+    obj.response?.data?.error?.request_id ?? obj.response?.data?.request_id;
+  const value = header ?? body;
+  return typeof value === "string" && value ? value : undefined;
+}
+
 export function apiErrorCode(err: unknown): string | undefined {
   if (!err || typeof err !== "object") return undefined;
   const obj = err as APIErrorShape;

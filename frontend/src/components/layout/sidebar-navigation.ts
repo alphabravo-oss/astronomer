@@ -6,18 +6,20 @@ import {
   Box,
   FileText,
   FolderKanban,
+  Gauge,
   Layers,
   LayoutDashboard,
+  LayoutGrid,
+  Package,
   Puzzle,
   Rocket,
   ScrollText,
-  Search,
   Server,
   Settings,
   Shield,
   ShieldCheck,
-  Sparkles,
   Star,
+  Users,
   Wrench,
 } from "lucide-react";
 
@@ -63,16 +65,15 @@ export type NavGroup = {
   defaultOpen?: boolean;
   // Rendered without a group header/toggle and always expanded — for the
   // small set of top-level destinations that don't belong under a labeled
-  // section (e.g. the global "Home" group).
+  // section (e.g. the global "Overview" group).
   hideLabel?: boolean;
-  // Icon shown for the whole group in the collapsed sidebar rail
-  // (sidebar-rail.tsx). Falls back to the first item's icon when omitted —
-  // set it explicitly whenever that fallback would collide with another
-  // group's icon in the same rail.
+  // Icon shown for the whole group in the rail (one icon per pillar).
   icon?: typeof Box;
+  /** The pillar's landing page, used by the global rail. */
+  href?: string;
 };
 
-export const INSTALLED_TOOLS_NAV_GROUP = "Tool UIs";
+export const INSTALLED_TOOLS_NAV_GROUP = "Tool links";
 
 export function activeNavGroupLabel(
   groups: readonly NavGroup[],
@@ -98,11 +99,17 @@ export function defaultOpenNavGroupLabel(
   );
 }
 
-// Default (global) navigation groups
+/**
+ * Global navigation: seven pillars (A1 "Operator Console"). The rail shows one
+ * icon per pillar; the expanded sidebar shows the pillar's items. Labels are
+ * sentence case; one icon per item within a group.
+ */
 export const globalNavGroups: NavGroup[] = [
   {
-    label: "Home",
+    label: "Overview",
     hideLabel: true,
+    icon: LayoutDashboard,
+    href: "/dashboard",
     items: [
       {
         label: "Overview",
@@ -110,6 +117,14 @@ export const globalNavGroups: NavGroup[] = [
         icon: LayoutDashboard,
         exact: true,
       },
+    ],
+  },
+  {
+    label: "Clusters",
+    icon: Server,
+    href: "/dashboard/clusters",
+    defaultOpen: true,
+    items: [
       {
         label: "Clusters",
         href: "/dashboard/clusters",
@@ -117,28 +132,37 @@ export const globalNavGroups: NavGroup[] = [
         permission: { resource: "clusters", verb: "list" },
       },
       {
-        label: "Search",
-        href: "/dashboard/search",
-        icon: Search,
+        label: "Onboarding templates",
+        href: "/dashboard/cluster-templates",
+        icon: Layers,
+        permission: { resource: "cluster_templates", verb: "list" },
       },
       {
-        label: "Charlie",
-        href: "/dashboard/charlie",
-        icon: Sparkles,
-        permission: { resource: "charlie", verb: "read" },
-        featureFlag: "feature.charlie",
-        requiresCharlieActivated: true,
+        label: "Tools",
+        href: "/dashboard/tools",
+        icon: Wrench,
+        permission: { resource: "catalog", verb: "read" },
+        featureFlag: "feature.catalog",
+      },
+      {
+        label: "Catalog",
+        href: "/dashboard/catalog",
+        icon: Package,
+        permission: { resource: "catalog", verb: "read" },
+        featureFlag: "feature.catalog",
       },
     ],
   },
   {
-    label: "Continuous Delivery",
+    label: "Delivery",
     icon: Rocket,
+    href: "/dashboard/delivery",
     items: DELIVERY_DESTINATIONS,
   },
   {
     label: "Observability",
-    icon: BarChart3,
+    icon: Gauge,
+    href: "/dashboard/monitoring",
     items: [
       {
         label: "Metrics",
@@ -151,7 +175,7 @@ export const globalNavGroups: NavGroup[] = [
       {
         label: "Shared stacks",
         href: "/dashboard/monitoring/stacks",
-        icon: Layers,
+        icon: LayoutGrid,
         permission: { resource: "monitoring", verb: "read" },
         featureFlag: "feature.monitoring",
       },
@@ -172,6 +196,7 @@ export const globalNavGroups: NavGroup[] = [
   {
     label: "Security",
     icon: ShieldCheck,
+    href: "/dashboard/security",
     items: [
       {
         label: "Security",
@@ -181,7 +206,7 @@ export const globalNavGroups: NavGroup[] = [
         featureFlag: "feature.security",
       },
       {
-        label: "Cluster Agents",
+        label: "Agents",
         href: "/dashboard/agents",
         icon: Activity,
         permission: { resource: "cluster_agents", verb: "read" },
@@ -189,11 +214,12 @@ export const globalNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Users & Access",
-    icon: Shield,
+    label: "Access",
+    icon: Users,
+    href: "/dashboard/rbac",
     items: [
       {
-        label: "RBAC",
+        label: "Access control",
         href: "/dashboard/rbac",
         icon: Shield,
         permission: { resource: "rbac", verb: "read" },
@@ -206,7 +232,7 @@ export const globalNavGroups: NavGroup[] = [
         featureFlag: "feature.projects",
       },
       {
-        label: "Audit Log",
+        label: "Audit log",
         href: "/dashboard/audit",
         icon: FileText,
         permission: { resource: "audit_logs", verb: "read" },
@@ -214,24 +240,18 @@ export const globalNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Configuration",
-    icon: Layers,
+    label: "Settings",
+    icon: Settings,
+    href: "/dashboard/settings",
     items: [
+      // Superuser-only. Prefix-match so Dex/SSO under /settings/auth
+      // highlights Settings instead of a sibling Auth row.
       {
-        label: "Onboarding templates",
-        href: "/dashboard/cluster-templates",
-        icon: Layers,
-        permission: { resource: "cluster_templates", verb: "list" },
+        label: "Settings",
+        href: "/dashboard/settings",
+        icon: Settings,
+        superuserOnly: true,
       },
-      {
-        label: "Cluster Tools",
-        href: "/dashboard/tools",
-        icon: Wrench,
-        permission: { resource: "catalog", verb: "read" },
-        featureFlag: "feature.catalog",
-      },
-      // Helm marketplace lives on the cluster (Apps), matching Rancher Apps.
-      // Estate-wide repos stay reachable from Apps → Repositories.
       {
         label: "Extensions",
         href: "/dashboard/extensions",
@@ -240,21 +260,13 @@ export const globalNavGroups: NavGroup[] = [
         featureFlag: "feature.extensions",
         optIn: true,
       },
-      // Superuser-only hub. Prefix-match so Dex/SSO under /settings/auth
-      // highlights Settings instead of a sibling Auth row.
-      {
-        label: "Settings",
-        href: "/dashboard/settings",
-        icon: Settings,
-        superuserOnly: true,
-      },
     ],
   },
 ];
 
 // The single label registry for breadcrumbs, the command palette, and the
 // sidebar itself: given a route href, return the same label the nav (or the
-// settings hub) shows for it, so a destination never carries a different
+// settings registry) shows for it, so a destination never carries a different
 // name in different chrome.
 export function navLabelForHref(href: string): string | undefined {
   for (const group of globalNavGroups) {
@@ -281,7 +293,16 @@ export function withFavoriteNavigation(
     return item ? [{ ...item, icon: Star }] : [];
   });
   return items.length > 0
-    ? [{ label: "Favorites", items, defaultOpen: true, icon: Star }, ...groups]
+    ? [
+        {
+          label: "Favorites",
+          items,
+          defaultOpen: true,
+          icon: Star,
+          href: items[0].href,
+        },
+        ...groups,
+      ]
     : groups;
 }
 

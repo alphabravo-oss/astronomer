@@ -34,12 +34,12 @@ export function DataTablePagination<T extends RowData>({
 
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-muted-foreground">
+      <span className="text-muted-foreground tabular-nums">
         {countUnavailable ? (
           "Row count unavailable"
         ) : (
           <>
-            Showing {currentRowCount === 0 ? 0 : page * pageSize + 1}-
+            Showing {currentRowCount === 0 ? 0 : page * pageSize + 1}–
             {currentRowCount === 0 ? 0 : page * pageSize + currentRowCount} of{" "}
             {rowCountIsLowerBound ? "at least " : ""}
             {rowCount.toLocaleString()}
@@ -68,7 +68,7 @@ export function DataTablePagination<T extends RowData>({
             className={cn(
               "inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition-colors",
               pageNumber === page
-                ? "bg-primary text-primary-foreground"
+                ? "bg-foreground text-background"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >

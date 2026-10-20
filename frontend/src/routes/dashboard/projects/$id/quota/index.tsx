@@ -42,7 +42,7 @@ function ProjectQuotaPage() {
       <section className="rounded-xl border border-border bg-card p-(--card-p)">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <p className="text-xs font-medium text-muted-foreground">
               Effective plan
             </p>
             <h2 className="text-lg font-semibold text-foreground mt-1">
@@ -124,7 +124,7 @@ function UsageTile({
   return (
     <div className="rounded-xl border border-border bg-card p-(--card-p) space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <Icon className="h-3.5 w-3.5" />
           {label}
         </div>

@@ -186,7 +186,7 @@ export function DeploymentsPage() {
     >
       <PageShell>
         <PageHeader
-          title="Deployments"
+          title="Releases"
           description={
             workspaceClusterId
               ? "Desired and observed state for delivery targets on this cluster."

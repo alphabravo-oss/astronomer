@@ -148,7 +148,7 @@ function AuditLogPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Audit Log"
+        title="Audit log"
         description={
           filters.audience === "system"
             ? `${total.toLocaleString()} automated system events`
@@ -376,7 +376,8 @@ function AuditLogPage() {
         columns={columns.map((column) => ({ ...column, sortable: false }))}
         keyExtractor={(row) => row.id}
         searchable={false}
-        exportCsv={{ filename: "audit-log" }}
+        // The page header owns the single Export action (server-side CSV).
+        exportCsv={false}
         pageSize={PAGE_SIZE}
         loading={auditQuery.isLoading}
         isError={auditQuery.isError}

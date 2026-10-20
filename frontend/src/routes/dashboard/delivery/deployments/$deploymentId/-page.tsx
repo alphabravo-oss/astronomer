@@ -206,7 +206,7 @@ export function DeploymentDetailPage() {
               </DetailGrid>
               {deployment.lastMessage && (
                 <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Last reported sanitized message
                   </p>
                   <p className="mt-1">{deployment.lastMessage}</p>

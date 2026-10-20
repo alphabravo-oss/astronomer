@@ -98,7 +98,7 @@ export function AuditTab() {
       <div className="flex flex-wrap items-center gap-3">
         <label
           htmlFor="audit-class-filter"
-          className="text-xs uppercase tracking-wide text-muted-foreground"
+          className="text-xs text-muted-foreground"
         >
           Class
         </label>

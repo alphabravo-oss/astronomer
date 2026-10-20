@@ -185,7 +185,6 @@ function NewGroupMappingPage() {
           Back to group mappings
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · Group mappings · New"
           title="New group mapping"
         />
         <NewGroupMappingForm />

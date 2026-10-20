@@ -7,7 +7,8 @@ import { resolve } from "node:path";
 // theme. Add newly scrubbed pages here so adoption is ratcheted forward and CI
 // prevents them from regressing.
 const actionSurfaces = [
-  "src/routes/dashboard/clusters/$id/-page.tsx",
+  // clusters/$id/-page.tsx moved its page actions into the header "Cluster
+  // actions" menu (ADR 0017) and no longer renders page buttons itself.
   "src/routes/dashboard/account/security/-cards.tsx",
   "src/routes/dashboard/account/security/-dialogs.tsx",
   "src/routes/dashboard/account/security/-enrollment-wizard.tsx",

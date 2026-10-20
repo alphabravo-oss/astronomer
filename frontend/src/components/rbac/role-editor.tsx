@@ -202,7 +202,7 @@ export function RoleEditor({
           ? "Edit Role"
           : mode === "duplicate"
             ? "Duplicate Role"
-            : "Create Role"
+            : "Create role"
       }
       onClose={onClose}
       size="lg"
@@ -217,7 +217,7 @@ export function RoleEditor({
             loading={createRole.isPending || updateRole.isPending}
             onClick={() => void handleSave()}
           >
-            {mode === "edit" ? "Update Role" : "Create Role"}
+            {mode === "edit" ? "Update role" : "Create role"}
           </ActionButton>
         </>
       }

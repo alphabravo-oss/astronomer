@@ -103,7 +103,7 @@ export function SharedMonitoringStacksPage() {
               Object storage is required only for Thanos below — it reads
               historical blocks from a bucket. To simply collect metrics on a
               cluster you don&apos;t need a bucket: install the per-cluster
-              Prometheus stack from that cluster&apos;s Monitoring Stack page,
+              Prometheus stack from that cluster&apos;s Monitoring stack page,
               which defaults to in-cluster rolling storage (15-day retention).
             </p>
           </div>

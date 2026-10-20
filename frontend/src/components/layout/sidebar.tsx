@@ -1,101 +1,243 @@
-import { useMobileNavigation } from "./use-mobile-navigation";
 import { useEffect } from "react";
-import { Link as RouterLink, useLocation } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  BookOpen,
-  ChevronLeft,
-  ChevronRight,
-  Orbit,
-} from "lucide-react";
+import { useLocation } from "@tanstack/react-router";
+import { ExternalLink, Star } from "lucide-react";
 
 import { ExtensionNavItems } from "@/components/extensions/ExtensionNavItems";
 import {
-  InstalledToolLinks,
-  SidebarGroup,
-} from "@/components/layout/sidebar-navigation-view";
-import { INSTALLED_TOOLS_NAV_GROUP } from "@/components/layout/sidebar-navigation";
+  INSTALLED_TOOLS_NAV_GROUP,
+  type NavGroup,
+  type NavItem,
+} from "@/components/layout/sidebar-navigation";
 import { useOpenNavGroups } from "@/components/layout/nav-open-groups";
 import { OverlayBackdrop } from "@/components/ui/overlay-shell";
-import { APP_VERSION } from "@/lib/env";
 import { useUIStore } from "@/lib/store";
 import { cn, formatK8sVersion } from "@/lib/utils";
-import { useSidebarResourceCounts } from "@/components/layout/use-sidebar-resource-counts";
-import { useProductName } from "@/lib/hooks/public-settings";
 import { useSidebarNavigation } from "./use-sidebar-navigation";
 import { useStarredNavControls } from "./use-starred-nav-controls";
-import { useCRDNavCounts } from "./use-crd-nav-counts";
-import { useVisibleNavGroups } from "./use-visible-nav-groups";
-import { Tooltip } from "@/components/ui/tooltip";
-import { BareButton } from "@/components/form/bare-button";
+import { useMobileNavigation } from "./use-mobile-navigation";
+import { useInstalledToolLinks } from "./use-installed-tool-links";
+import { navGroupItems } from "./nav-group-items";
+import {
+  Rail,
+  RailGroup,
+  RailItem,
+  SidebarBrand,
+  SidebarFrame,
+  SidebarGroup,
+  SidebarItem,
+  StatusDot,
+  Tooltip,
+} from "@/ui";
+import { ActionButton } from "@/components/ui/action-button";
 
-// Vite stamps APP_VERSION from the release tag; local builds use the current
-// package fallback in lib/env.ts.
+export function clusterIdFromPathname(pathname: string): string | undefined {
+  const segment = pathname.match(/^\/dashboard\/clusters\/([^/]+)/)?.[1];
+  return segment && segment !== "new" && segment !== "register"
+    ? segment
+    : undefined;
+}
 
+function isItemActive(item: NavItem, pathname: string): boolean {
+  return item.exact
+    ? pathname === item.href
+    : pathname === item.href || pathname.startsWith(`${item.href}/`);
+}
+
+/** The longest matching href wins so nested routes highlight one row. */
+function activeHref(items: NavItem[], pathname: string): string | undefined {
+  return items
+    .filter((item) => isItemActive(item, pathname))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
+
+function groupIsActive(group: NavGroup, pathname: string): boolean {
+  return navGroupItems(group).some((item) => isItemActive(item, pathname));
+}
+
+/**
+ * Two-level navigation (A1): a global rail of pillars that is always
+ * visible, and either the pillar panel (global context) or the cluster panel
+ * (six groups) beside it. Counts never appear here.
+ */
 export function Sidebar() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const searchStr = useLocation({ select: (location) => location.searchStr });
   const {
     sidebarCollapsed,
     mobileSidebarOpen,
     toggleSidebarCollapsed,
     setMobileSidebarOpen,
   } = useUIStore();
-  const productName = useProductName();
 
-  // Detect cluster context from URL. Static sub-routes (new, register) are NOT
-  // cluster ids — treating them as such fires cluster-detail queries with a
-  // bogus id (e.g. /clusters/register/resources/... -> 400/503).
-  const clusterMatch = pathname.match(/^\/dashboard\/clusters\/([^/]+)/);
-  const clusterSegment = clusterMatch?.[1];
-  const clusterId =
-    clusterSegment && clusterSegment !== "new" && clusterSegment !== "register"
-      ? clusterSegment
-      : undefined;
+  const clusterId = clusterIdFromPathname(pathname);
   const isClusterContext = !!clusterId;
-  const { cluster, discovery, navGroups } = useSidebarNavigation(clusterId);
+  const { cluster, navGroups } = useSidebarNavigation(clusterId);
+  const { navGroups: globalGroups } = useSidebarNavigation(undefined);
   const stars = useStarredNavControls();
 
   useEffect(() => {
     setMobileSidebarOpen(false);
   }, [pathname, setMobileSidebarOpen]);
 
-  useEffect(() => {
-    if (!mobileSidebarOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileSidebarOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [mobileSidebarOpen, setMobileSidebarOpen]);
-
   const { ref: mobileNavigationRef, closed: mobileNavigationClosed } =
     useMobileNavigation(mobileSidebarOpen, () => setMobileSidebarOpen(false));
 
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
-
-  // Expand one section at a time, independently in global and cluster scope.
   const { openGroups, toggleGroup } = useOpenNavGroups(
     isClusterContext ? "cluster" : "global",
     navGroups,
     pathname,
   );
-  const { visibleGroups, onFlyoutChange } = useVisibleNavGroups(
-    collapsed,
-    openGroups,
+  const project = new URLSearchParams(searchStr).get("project");
+  const withProject = (href: string) =>
+    project && href.includes("/delivery")
+      ? `${href}?project=${encodeURIComponent(project)}`
+      : href;
+
+  const renderItems = (group: NavGroup, starrable: boolean) => {
+    const items = navGroupItems(group);
+    const active = activeHref(items, pathname);
+    const row = (item: NavItem) => {
+      const starred =
+        !!item.resourceType && !!stars.types.includes(item.resourceType);
+      return (
+        <SidebarItem
+          key={item.href}
+          to={withProject(item.href)}
+          icon={item.icon}
+          label={item.label}
+          active={item.href === active}
+          trailing={
+            starrable && item.resourceType ? (
+              <ActionButton
+                intent="ghost"
+                size="icon-xs"
+                aria-label={`${starred ? "Unstar" : "Star"} ${item.label}`}
+                aria-pressed={starred}
+                disabled={
+                  stars.disabled || (!starred && stars.types.length >= 20)
+                }
+                disabledReason={
+                  !starred && stars.types.length >= 20
+                    ? "You can star up to 20 resource types"
+                    : undefined
+                }
+                onClick={() => stars.toggle(item.resourceType!)}
+                icon={
+                  <Star
+                    className={cn("h-3.5 w-3.5", starred && "fill-current")}
+                  />
+                }
+                className={cn(
+                  !starred &&
+                    "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 [@media(hover:none)]:opacity-100",
+                )}
+              />
+            ) : undefined
+          }
+        />
+      );
+    };
+    return (
+      <>
+        {group.items.map(row)}
+        {group.subgroups?.map((subgroup) => (
+          <div key={subgroup.label} className="pt-1">
+            <p className="px-3 pb-1 pt-2 text-micro font-semibold text-muted-foreground">
+              {subgroup.label}
+            </p>
+            {subgroup.items.map(row)}
+          </div>
+        ))}
+      </>
+    );
+  };
+
+  // ---- Global rail (always visible on desktop) ----
+  const rail = (
+    <Rail className="w-(--rail-w) shrink-0 border-r border-sidebar-border">
+      {globalGroups.map((group) => {
+        const active = isClusterContext
+          ? group.label === "Clusters"
+          : groupIsActive(group, pathname);
+        const Icon = group.icon ?? group.items[0]?.icon;
+        if (!Icon) return null;
+        const items = navGroupItems(group);
+        if (items.length <= 1 || group.hideLabel) {
+          const target = items[0];
+          if (!target) return null;
+          return (
+            <RailItem
+              key={group.label}
+              to={withProject(target.href)}
+              icon={Icon}
+              label={group.label}
+              active={active}
+            />
+          );
+        }
+        return (
+          <RailGroup
+            key={group.label}
+            icon={Icon}
+            label={group.label}
+            active={active}
+          >
+            {renderItems(group, false)}
+          </RailGroup>
+        );
+      })}
+    </Rail>
   );
 
-  // Fetch resource counts when in cluster context — only for groups that are
-  // currently expanded (see useResourceCounts).
-  const counts = useSidebarResourceCounts(
-    isClusterContext ? clusterId! : "",
-    visibleGroups,
+  // ---- Panel content ----
+  const panel = isClusterContext ? (
+    <>
+      {navGroups.map((group) => (
+        <SidebarGroup
+          key={group.label}
+          label={group.label}
+          open={openGroups.has(group.label)}
+          onToggle={() => toggleGroup(group.label)}
+        >
+          {renderItems(group, true)}
+        </SidebarGroup>
+      ))}
+      <InstalledToolLinks
+        clusterId={clusterId!}
+        open={openGroups.has(INSTALLED_TOOLS_NAV_GROUP)}
+        onToggle={() => toggleGroup(INSTALLED_TOOLS_NAV_GROUP)}
+      />
+    </>
+  ) : (
+    <>
+      {navGroups.map((group) => {
+        // A pillar with one destination renders as a flat row: a header that
+        // repeats the row's label would be noise.
+        const flat =
+          group.hideLabel ||
+          (navGroupItems(group).length === 1 && !group.subgroups?.length);
+        return (
+          <SidebarGroup
+            key={group.label}
+            label={flat ? undefined : group.label}
+            open={flat || openGroups.has(group.label)}
+            onToggle={flat ? undefined : () => toggleGroup(group.label)}
+          >
+            {renderItems(group, false)}
+          </SidebarGroup>
+        );
+      })}
+      <ExtensionNavItems pathname={pathname} collapsed={false} />
+    </>
   );
-  const crdCounts = useCRDNavCounts(
-    clusterId ?? "",
-    navGroups,
-    discovery,
-    visibleGroups,
-  );
+
+  const clusterStatusTone =
+    cluster?.status === "active"
+      ? "success"
+      : cluster?.status === "error"
+        ? "error"
+        : "neutral";
 
   return (
     <>
@@ -106,157 +248,90 @@ export function Sidebar() {
           onClose={() => setMobileSidebarOpen(false)}
         />
       )}
-      <aside
+      <SidebarFrame
         ref={mobileNavigationRef}
         inert={mobileNavigationClosed}
-        aria-hidden={mobileNavigationClosed || undefined}
+        mobileOpen={mobileSidebarOpen}
+        collapsed={collapsed}
+        onToggleCollapsed={toggleSidebarCollapsed}
+        navLabel={isClusterContext ? "Cluster" : "Primary"}
+        brand={<SidebarBrand to="/dashboard" subtitle="by AlphaBravo" />}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-screen w-60 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width]",
-          mobileSidebarOpen && "translate-x-0",
-          sidebarCollapsed ? "lg:w-16" : "lg:w-60",
+          !collapsed &&
+            "w-[calc(var(--rail-w)+var(--sidebar-w))] lg:w-[calc(var(--rail-w)+var(--sidebar-w))]",
         )}
-      >
-        {/* Logo + collapse toggle */}
-        <div className="flex items-center h-14 px-4 border-b border-sidebar-border">
-          {!collapsed && (
-            <RouterLink
-              to="/dashboard"
-              activeOptions={{ exact: true }}
-              className="flex items-center gap-2.5 min-w-0"
-            >
-              <div className="shrink-0 w-7 h-7 rounded-lg bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-                <Orbit className="h-4 w-4 text-white" />
+        context={
+          isClusterContext && !collapsed ? (
+            <div className="flex items-start gap-0">
+              <div className="w-(--rail-w) shrink-0" />
+              <div className="min-w-0 flex-1 border-b border-sidebar-border px-4 py-2.5">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {cluster?.displayName || cluster?.name || "Cluster"}
+                </p>
+                <div className="mt-0.5 flex items-center gap-2 text-micro text-muted-foreground">
+                  <StatusDot
+                    tone={clusterStatusTone}
+                    label={cluster?.status ? capitalize(cluster.status) : "Unknown"}
+                    className="text-micro"
+                  />
+                  {cluster?.kubernetesVersion ? (
+                    <span className="font-mono">
+                      {formatK8sVersion(cluster.kubernetesVersion)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold text-foreground tracking-tight truncate leading-tight">
-                  {productName}
-                </span>
-                <span className="text-10 text-muted-foreground leading-tight">
-                  by AlphaBravo
-                </span>
-              </div>
-            </RouterLink>
-          )}
-          <BareButton
-            tooltip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={toggleSidebarCollapsed}
-            className={cn(
-              "nav-item font-normal whitespace-normal shrink",
-              collapsed
-                ? "w-full justify-center px-0"
-                : "ml-auto hidden lg:flex",
-            )}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
-          </BareButton>
-        </div>
-
-        {/* Cluster context header */}
-        {isClusterContext && !collapsed && (
-          <div className="px-2 py-2 border-b border-sidebar-border">
-            <RouterLink
-              to="/dashboard/clusters"
-              activeOptions={{ exact: true }}
-              className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>All Clusters</span>
-            </RouterLink>
-            {cluster?.kubernetesVersion && (
-              <p className="text-2xs text-muted-foreground mt-1 px-3">
-                {formatK8sVersion(cluster.kubernetesVersion)}
-              </p>
-            )}
-          </div>
-        )}
-        {isClusterContext && collapsed && (
-          <div className="px-2 py-2 border-b border-sidebar-border">
-            <Tooltip content="Back to Clusters">
-              <RouterLink
-                aria-label={"Back to Clusters"}
-                to="/dashboard/clusters"
-                activeOptions={{ exact: true }}
-                className="nav-item group justify-center px-0"
-              >
-                <ArrowLeft className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </RouterLink>
-            </Tooltip>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-2 px-1 no-scrollbar">
-          {navGroups.map((group) => (
-            <SidebarGroup
-              key={group.label}
-              group={group}
-              pathname={pathname}
-              collapsed={collapsed}
-              counts={
-                isClusterContext ? { ...counts, ...crdCounts } : undefined
-              }
-              stars={isClusterContext ? stars : undefined}
-              isOpen={openGroups.has(group.label)}
-              onToggle={() => toggleGroup(group.label)}
-              onFlyoutChange={onFlyoutChange}
-            />
-          ))}
-          {isClusterContext && (
-            <InstalledToolLinks
-              clusterId={clusterId!}
-              collapsed={collapsed}
-              isOpen={openGroups.has(INSTALLED_TOOLS_NAV_GROUP)}
-              onToggle={() => toggleGroup(INSTALLED_TOOLS_NAV_GROUP)}
-            />
-          )}
-          {/* §HostMounts mount point 1 — enabled `sidebar` extensions append
-            full-page nav links here (global context only; routes are
-            host-fixed under /dashboard/extensions/{name}). The component
-            renders nothing (header included) when no extension declares a
-            sidebar point, so the nav is unchanged on a fresh install. */}
-          {!isClusterContext && (
-            <ExtensionNavItems pathname={pathname} collapsed={collapsed} />
-          )}
-        </nav>
-
-        {/* Bottom links */}
-        <div className="mt-auto px-2 py-2 border-t border-sidebar-border space-y-1">
-          <Tooltip content="Documentation">
-            <a
-              href="/astronomer-docs/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="nav-item w-full"
-            >
-              <BookOpen className="h-4 w-4" />
-              {!collapsed && <span className="text-xs">Documentation</span>}
-            </a>
-          </Tooltip>
-          {!collapsed && (
-            <div className="px-3 py-1 space-y-0.5">
-              <p className="text-10 text-muted-foreground">
-                {productName} {APP_VERSION}
-              </p>
-              <p className="text-10 text-muted-foreground">
-                Built by{" "}
-                <a
-                  href="https://alphabravo.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground underline-offset-2 hover:underline"
-                >
-                  AlphaBravo
-                </a>
-              </p>
             </div>
-          )}
-        </div>
-      </aside>
+          ) : null
+        }
+      >
+        {collapsed ? (
+          rail
+        ) : (
+          <div className="flex h-full items-stretch">
+            <div className="-ml-2 -mt-2 -mb-2 flex shrink-0 flex-col pt-2">
+              {rail}
+            </div>
+            <div className="min-w-0 flex-1 pl-2">{panel}</div>
+          </div>
+        )}
+      </SidebarFrame>
     </>
+  );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Installed tool UIs (proxied links) at the bottom of the cluster panel. */
+function InstalledToolLinks({
+  clusterId,
+  open,
+  onToggle,
+}: {
+  clusterId: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const links = useInstalledToolLinks(clusterId);
+  if (links.length === 0) return null;
+  return (
+    <SidebarGroup label={INSTALLED_TOOLS_NAV_GROUP} open={open} onToggle={onToggle}>
+      {links.map((link) => (
+        <Tooltip key={link.url} content={`${link.name} (opens in a new tab)`}>
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${link.name} (opens in a new tab)`}
+            className="flex h-8 items-center gap-2.5 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{link.name}</span>
+          </a>
+        </Tooltip>
+      ))}
+    </SidebarGroup>
   );
 }

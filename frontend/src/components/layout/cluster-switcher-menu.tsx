@@ -34,7 +34,7 @@ const badgeDotClass: Record<string, string> = {
 };
 
 const GROUP_HEADING_CLASS =
-  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted-foreground";
+  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]: [&_[cmdk-group-heading]]:text-muted-foreground";
 
 /** One selectable row, shared by the Pinned/Recent/All shelves. */
 function ClusterRow({
@@ -104,13 +104,13 @@ function ClusterSwitcherTrigger({
 
   return (
     <BareButton
-      tooltip="Switch cluster (Ctrl/Cmd+J)"
+      tooltip="Switch cluster"
       ref={triggerRef}
       onClick={onToggle}
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-label={label}
-      className="flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-sm text-foreground hover:bg-accent sm:max-w-52 font-normal whitespace-normal"
+      className="flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-sm text-foreground hover:bg-accent sm:max-w-44 font-normal whitespace-normal"
     >
       <Server className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       {currentDotClass && (
@@ -167,19 +167,6 @@ export function ClusterSwitcherMenu({
   useEffect(() => {
     if (open) searchRef.current?.focus();
   }, [open]);
-
-  // Ctrl/Cmd+J opens the switcher. Cmd/Ctrl+K stays reserved for the global
-  // command palette (command-palette.tsx) so the two never collide.
-  useEffect(() => {
-    function onKeydown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
-        event.preventDefault();
-        setOpen((value) => !value);
-      }
-    }
-    document.addEventListener("keydown", onKeydown);
-    return () => document.removeEventListener("keydown", onKeydown);
-  }, []);
 
   const searchQuery = useClusterSearch(debouncedTerm, open);
   const searchResults = useMemo(

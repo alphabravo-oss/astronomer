@@ -11,8 +11,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * matches mappings regardless of source. Roles come from `useGlobalRoles`.
  */
 import { useState } from "react";
-import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Plus, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
@@ -171,13 +171,6 @@ function GroupMappingsPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <RouterLink
-          to="/dashboard/settings"
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Settings
-        </RouterLink>
         <PageHeader
           title="SSO group mappings"
           description="Bind an SSO group to a platform role, optionally scoped to one cluster or project."

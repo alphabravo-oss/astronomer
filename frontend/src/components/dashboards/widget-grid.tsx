@@ -127,7 +127,7 @@ export function WidgetGrid({
   return (
     <section className="space-y-2">
       {title ? (
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+        <h3 className="text-sm font-medium text-muted-foreground">
           {title}
         </h3>
       ) : null}
@@ -141,7 +141,7 @@ export function WidgetGrid({
               gridRow: `span ${Math.max(1, w.grid.h)}`,
             }}
           >
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1 truncate">
+            <div className="text-xs font-medium text-muted-foreground mb-1 truncate">
               {w.name}
             </div>
             <WidgetBody widget={w} />

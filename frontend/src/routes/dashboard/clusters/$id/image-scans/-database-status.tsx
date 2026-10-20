@@ -51,7 +51,7 @@ export function ImageDatabaseStatus({
       aria-label="Database freshness"
       aria-live="polite"
     >
-      <h3 className="text-xs font-medium uppercase">Database freshness</h3>
+      <h3 className="text-xs font-medium">Database freshness</h3>
       {!status ? (
         <p className="text-xs text-muted-foreground">
           {query.isLoading

@@ -1,85 +1,17 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-export function PageShell({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("space-y-(--gap-section)", className)}>{children}</div>
-  );
-}
-
-/**
- * Layout routes (e.g. Delivery) can publish a scope line here; every
- * `PageHeader` below them that does not set its own `eyebrow` shows it, so the
- * scope notice lives in the header's eyebrow slot instead of floating above it.
- */
-const PageEyebrowContext = createContext<ReactNode>(null);
-export const PageEyebrowProvider = PageEyebrowContext.Provider;
-
-/**
- * Fixed slots, top to bottom: `eyebrow` (scope line), `title` (+ inline
- * `status`), `description` (one sentence), `tabs` (route navigation: a `<nav>`
- * of links, never role=tablist). `actions` sit on the right of the title block.
- * No page-level icon next to the title: icons belong to nav, not headings.
- */
-export function PageHeader({
-  title,
-  description,
-  eyebrow,
-  status,
-  actions,
-  tabs,
-  className,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  eyebrow?: ReactNode;
-  status?: ReactNode;
-  actions?: ReactNode;
-  tabs?: ReactNode;
-  className?: string;
-}) {
-  const scopeEyebrow = useContext(PageEyebrowContext);
-  const eyebrowContent = eyebrow ?? scopeEyebrow;
-  return (
-    <div className={cn("space-y-3", className)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          {eyebrowContent ? (
-            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {eyebrowContent}
-            </div>
-          ) : null}
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h1 className="truncate text-page-title font-semibold tracking-tight text-foreground">
-              {title}
-            </h1>
-            {status}
-          </div>
-          {description ? (
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-        </div>
-        {actions ? (
-          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-            {actions}
-          </div>
-        ) : null}
-      </div>
-      {tabs ? <div className="border-b border-border">{tabs}</div> : null}
-    </div>
-  );
-}
+// PageShell / PageHeader / PageSection / PageEyebrowProvider come from the
+// shared kit so both products render the same page frame.
+export {
+  PageEyebrowProvider,
+  PageHeader,
+  PageSection,
+  PageShell,
+} from "@/ui/page-header";
 
 /**
  * Detail-page masthead: back link, eyebrow, title (+ inline status), actions,
@@ -146,14 +78,14 @@ export function ResourceMasthead({
         ) : null}
         <div className="min-w-0 flex-1">
           {eyebrow ? (
-            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="mb-1 text-meta font-medium text-muted-foreground">
               {eyebrow}
             </div>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <h1
               className={cn(
-                "truncate text-page-title font-semibold tracking-tight text-foreground",
+                "min-w-0 break-words text-page-title font-semibold tracking-[-0.02em] text-foreground",
                 mono && "font-mono",
               )}
             >
@@ -191,46 +123,5 @@ export function ResourceMasthead({
         ) : null}
       </div>
     </div>
-  );
-}
-
-export function PageSection({
-  children,
-  title,
-  description,
-  actions,
-  className,
-}: {
-  children: ReactNode;
-  title?: ReactNode;
-  description?: ReactNode;
-  actions?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn("space-y-3", className)}>
-      {title || description || actions ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            {title ? (
-              <h2 className="text-section-title font-semibold text-foreground">
-                {title}
-              </h2>
-            ) : null}
-            {description ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {description}
-              </p>
-            ) : null}
-          </div>
-          {actions ? (
-            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-              {actions}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {children}
-    </section>
   );
 }

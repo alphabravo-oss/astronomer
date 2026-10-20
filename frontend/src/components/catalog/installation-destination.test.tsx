@@ -8,7 +8,7 @@ it("keeps exact cluster, project, namespaces and multi-release ownership visible
       clusterName="Production West"
       projectId="project-456"
       projectName="Operations"
-      manager="Platform Tools"
+      manager="Tools"
       releases={[
         { namespace: "mesh-system", releaseName: "base", version: "1.2.3" },
         { namespace: "mesh-gateway", releaseName: "gateway", version: "1.2.3" },
@@ -26,7 +26,7 @@ it("keeps exact cluster, project, namespaces and multi-release ownership visible
     "mesh-system",
     "mesh-gateway",
     "1.2.3",
-    "Managed through Platform Tools",
+    "Managed through Tools",
     "entire cluster",
   ])
     expect(summary).toHaveTextContent(text);

@@ -35,10 +35,10 @@ export const CREATABLE_GENERIC_RESOURCES: Readonly<
     templateKey: "serviceaccount",
     label: "Create Service Account",
   },
-  "k8s-roles": { templateKey: "role", label: "Create Role" },
+  "k8s-roles": { templateKey: "role", label: "Create role" },
   "k8s-rolebindings": {
     templateKey: "rolebinding",
-    label: "Create Role Binding",
+    label: "Create role binding",
   },
 });
 

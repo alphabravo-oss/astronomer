@@ -125,7 +125,7 @@ function ClusterVeleroSnapshotsPage() {
           description={
             veleroStatus?.reason
               ? `Workload snapshots show up here after Velero is installed on this cluster. ${veleroStatus.reason}`
-              : "Workload snapshots show up here after Velero is installed on this cluster. Install it from Cluster Tools, then return to take and schedule snapshots."
+              : "Workload snapshots show up here after Velero is installed on this cluster. Install it from Tools, then return to take and schedule snapshots."
           }
           actionLabel="Install Velero"
           actionHref={`/dashboard/clusters/${clusterId}/apps?section=browse&install=velero`}

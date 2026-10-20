@@ -11,7 +11,6 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   ArrowUp,
-  Download,
   Filter,
   RotateCcw,
   Search,
@@ -21,9 +20,9 @@ import {
 import type { Column } from "@/components/ui/data-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ColumnPinningState } from "@/components/ui/data-table-layout";
-import { Tooltip } from "@/components/ui/tooltip";
 import type { DataTableFeatures } from "./data-table-features";
 import { cn } from "@/lib/utils";
+import { ExportMenu, ToolbarButton } from "@/ui/data-table";
 
 interface DataTableToolbarProps<T extends RowData> {
   table: RtTable<DataTableFeatures, T>;
@@ -92,7 +91,7 @@ export function DataTableToolbar<T extends RowData>({
                 value={searchInput}
                 onChange={(event) => onSearchInputChange(event.target.value)}
                 className="h-9 w-full rounded-md border border-border bg-background pl-9 pr-8 text-sm
-                  placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
               {searchInput && (
                 <button
@@ -124,35 +123,26 @@ export function DataTableToolbar<T extends RowData>({
         <div className="flex items-center gap-2 self-end sm:self-auto">
           {viewsMenu}
           {onExportCsv && (
-            <Tooltip
-              content={
-                exportPageOnly
-                  ? "Exports only the rows on this page"
-                  : "Exports the filtered rows and visible columns"
-              }
-            >
-              <button
-                type="button"
-                onClick={onExportCsv}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3
-                  text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <Download className="h-4 w-4" />
-                {exportPageOnly ? "Export page (CSV)" : "Export CSV"}
-              </button>
-            </Tooltip>
+            <ExportMenu
+              options={[
+                {
+                  label: exportPageOnly ? "This page" : "Filtered rows",
+                  description: exportPageOnly
+                    ? "Only the rows on this page, visible columns"
+                    : "The filtered rows and visible columns",
+                  onSelect: onExportCsv,
+                },
+              ]}
+            />
           )}
           <div className="relative">
-            <button
-              type="button"
+            <ToolbarButton
               aria-expanded={showColumnToggle}
               onClick={() => setShowColumnToggle((visible) => !visible)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3
-              text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <SlidersHorizontal className="h-4 w-4" />
               Columns
-            </button>
+            </ToolbarButton>
 
             {showColumnToggle && (
               <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">
@@ -322,25 +312,19 @@ function FacetedFilter<T extends RowData>({
 
   return (
     <div className="relative">
-      <button
-        type="button"
+      <ToolbarButton
         aria-expanded={open}
+        active={selected.length > 0}
         onClick={() => setOpen((visible) => !visible)}
-        className={cn(
-          "inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm transition-colors",
-          selected.length > 0
-            ? "border-primary/50 bg-accent text-foreground"
-            : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
       >
         <Filter className="h-3.5 w-3.5" />
         {label}
         {selected.length > 0 && (
-          <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-2xs text-primary-foreground">
+          <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-micro text-background">
             {selected.length}
           </span>
         )}
-      </button>
+      </ToolbarButton>
 
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 w-52 rounded-md border border-border bg-popover p-1 shadow-lg">

@@ -19,7 +19,7 @@ export function SIEMStatusDrawer({
     tone?: "error" | "warning",
   ) => (
     <div className="rounded-lg border border-border bg-card p-3">
-      <p className="text-2xs uppercase tracking-wide text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         {label}
       </p>
       <p

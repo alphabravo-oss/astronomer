@@ -103,7 +103,7 @@ function ClusterImageScansPage() {
           : ""}
       </p>
       <PageHeader
-        title="Image Scans"
+        title="Image scans"
         description="Aggregated CVE counts from the in-cluster Trivy operator. Astronomer ingests VulnerabilityReport CRDs continuously."
         actions={
           <>

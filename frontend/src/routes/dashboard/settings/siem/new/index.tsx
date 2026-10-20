@@ -322,7 +322,6 @@ function NewForwarderPage() {
           Back to SIEM forwarders
         </RouterLink>
         <PageHeader
-          eyebrow="Settings · SIEM · New"
           title="Add SIEM Forwarder"
         />
         <NewForwarderForm />

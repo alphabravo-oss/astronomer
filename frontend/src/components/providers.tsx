@@ -1,28 +1,12 @@
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { ThemeProvider, useTheme } from "@/lib/theme";
-import { Toaster } from "sonner";
 import { useState, type ReactNode } from "react";
+import { ThemeProvider } from "@/lib/theme";
+import { KitToaster } from "@/ui/toaster";
 import { IS_DEV } from "@/lib/env";
 import { shouldRetryQuery, shouldThrowQueryError } from "@/lib/query-retry";
 import { UserPreferencesProvider } from "@/lib/user-preferences";
-
-function ThemedToaster() {
-  const { theme } = useTheme();
-  return (
-    <Toaster
-      position="bottom-right"
-      theme={theme}
-      richColors
-      closeButton
-      toastOptions={{
-        className: "border border-border",
-        duration: 4000,
-      }}
-    />
-  );
-}
+import { AstronomerProductProvider } from "@/lib/product-config";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -45,16 +29,17 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Native provider (D12): class strategy, system tracking, default dark.
-          The load-bearing `astronomer-theme` storage key (never bare `theme` —
-          other co-hosted applications may also use that key) lives in @/lib/theme. */}
       <UserPreferencesProvider>
+        {/* Theme: shared kit provider, three modes, server-synced once signed
+            in (see lib/theme.tsx). Product config feeds the kit's shell. */}
         <ThemeProvider>
-          {children}
-          <ThemedToaster />
+          <AstronomerProductProvider>
+            {children}
+            <KitToaster />
+          </AstronomerProductProvider>
         </ThemeProvider>
       </UserPreferencesProvider>
-      {IS_DEV && (
+      {IS_DEV && import.meta.env.VITE_RQ_DEVTOOLS === "1" && (
         <ReactQueryDevtools
           initialIsOpen={false}
           buttonPosition="bottom-left"
