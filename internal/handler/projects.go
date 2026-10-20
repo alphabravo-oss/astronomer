@@ -9,11 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
@@ -87,7 +88,7 @@ type ProjectHandler struct {
 	taskOutbox tasks.TaskOutboxWriter
 	requester  K8sRequester
 	log        *slog.Logger
-	encryptor  *auth.Encryptor
+	encryptor  *crypto.Encryptor
 
 	reconcileOnce sync.Once
 	runSweep      func(context.Context, *asynq.Task) error
@@ -166,7 +167,7 @@ func (h *ProjectHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
 	h.service = projectdomain.NewService(h.queries, q)
 }
 
-func (h *ProjectHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *ProjectHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

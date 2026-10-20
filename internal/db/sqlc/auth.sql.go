@@ -149,22 +149,25 @@ func (q *Queries) CreateRefreshSession(ctx context.Context, arg CreateRefreshSes
 }
 
 const createSSOConfiguration = `-- name: CreateSSOConfiguration :one
-INSERT INTO sso_configurations (provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
+INSERT INTO sso_configurations (provider, is_enabled, display_name, config, client_id, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id)
+VALUES ($1, $2, $3, $4, $5, $6, $11, $12, $13, $7, $8, $9, $10)
+RETURNING id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce
 `
 
 type CreateSSOConfigurationParams struct {
-	Provider              string          `json:"provider"`
-	IsEnabled             bool            `json:"is_enabled"`
-	DisplayName           string          `json:"display_name"`
-	Config                json.RawMessage `json:"config"`
-	ClientID              string          `json:"client_id"`
-	ClientSecretEncrypted string          `json:"client_secret_encrypted"`
-	AllowedOrganizations  json.RawMessage `json:"allowed_organizations"`
-	AllowedDomains        json.RawMessage `json:"allowed_domains"`
-	AutoCreateUsers       bool            `json:"auto_create_users"`
-	DefaultGlobalRoleID   pgtype.UUID     `json:"default_global_role_id"`
+	Provider               string          `json:"provider"`
+	IsEnabled              bool            `json:"is_enabled"`
+	DisplayName            string          `json:"display_name"`
+	Config                 json.RawMessage `json:"config"`
+	ClientID               string          `json:"client_id"`
+	ClientSecretKeyID      string          `json:"client_secret_key_id"`
+	AllowedOrganizations   json.RawMessage `json:"allowed_organizations"`
+	AllowedDomains         json.RawMessage `json:"allowed_domains"`
+	AutoCreateUsers        bool            `json:"auto_create_users"`
+	DefaultGlobalRoleID    pgtype.UUID     `json:"default_global_role_id"`
+	ClientSecretAlgorithm  string          `json:"client_secret_algorithm"`
+	ClientSecretCiphertext []byte          `json:"client_secret_ciphertext"`
+	ClientSecretNonce      []byte          `json:"client_secret_nonce"`
 }
 
 func (q *Queries) CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfigurationParams) (SsoConfiguration, error) {
@@ -174,11 +177,14 @@ func (q *Queries) CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfi
 		arg.DisplayName,
 		arg.Config,
 		arg.ClientID,
-		arg.ClientSecretEncrypted,
+		arg.ClientSecretKeyID,
 		arg.AllowedOrganizations,
 		arg.AllowedDomains,
 		arg.AutoCreateUsers,
 		arg.DefaultGlobalRoleID,
+		arg.ClientSecretAlgorithm,
+		arg.ClientSecretCiphertext,
+		arg.ClientSecretNonce,
 	)
 	var i SsoConfiguration
 	err := row.Scan(
@@ -188,7 +194,6 @@ func (q *Queries) CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfi
 		&i.DisplayName,
 		&i.Config,
 		&i.ClientID,
-		&i.ClientSecretEncrypted,
 		&i.AllowedOrganizations,
 		&i.AllowedDomains,
 		&i.AutoCreateUsers,
@@ -196,6 +201,10 @@ func (q *Queries) CreateSSOConfiguration(ctx context.Context, arg CreateSSOConfi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MigratedToDexAt,
+		&i.ClientSecretKeyID,
+		&i.ClientSecretAlgorithm,
+		&i.ClientSecretCiphertext,
+		&i.ClientSecretNonce,
 	)
 	return i, err
 }
@@ -222,52 +231,61 @@ WITH dex_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(742193440558879931))
 ), enabled AS (
 INSERT INTO sso_configurations (
     provider, is_enabled, display_name, config, client_id,
-    client_secret_encrypted, allowed_organizations, allowed_domains,
+    client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce, allowed_organizations, allowed_domains,
     auto_create_users
 )
 SELECT
     'dex', true, $2, $3, $4,
-    $5, '[]'::jsonb, '[]'::jsonb, true
+    $5, $6, $7, $8, '[]'::jsonb, '[]'::jsonb, true
 FROM current_generation
 ON CONFLICT (provider) DO UPDATE SET
     is_enabled = true,
     display_name = EXCLUDED.display_name,
     config = EXCLUDED.config,
     client_id = EXCLUDED.client_id,
-    client_secret_encrypted = EXCLUDED.client_secret_encrypted
+    client_secret_key_id = EXCLUDED.client_secret_key_id,
+    client_secret_algorithm = EXCLUDED.client_secret_algorithm,
+    client_secret_ciphertext = EXCLUDED.client_secret_ciphertext,
+    client_secret_nonce = EXCLUDED.client_secret_nonce
 WHERE EXISTS (SELECT 1 FROM current_generation)
-RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
+RETURNING id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce
 ), cleared AS (
  UPDATE dex_settings SET saga_previous_sso_enabled=false,updated_at=now()
  WHERE id='00000000-0000-0000-0000-000000000001'::uuid
  AND runtime_generation=$1 AND EXISTS(SELECT 1 FROM enabled) RETURNING 1
 )
-SELECT enabled.id, enabled.provider, enabled.is_enabled, enabled.display_name, enabled.config, enabled.client_id, enabled.client_secret_encrypted, enabled.allowed_organizations, enabled.allowed_domains, enabled.auto_create_users, enabled.default_global_role_id, enabled.created_at, enabled.updated_at, enabled.migrated_to_dex_at FROM enabled WHERE (SELECT count(*) FROM cleared)>0
+SELECT enabled.id, enabled.provider, enabled.is_enabled, enabled.display_name, enabled.config, enabled.client_id, enabled.allowed_organizations, enabled.allowed_domains, enabled.auto_create_users, enabled.default_global_role_id, enabled.created_at, enabled.updated_at, enabled.migrated_to_dex_at, enabled.client_secret_key_id, enabled.client_secret_algorithm, enabled.client_secret_ciphertext, enabled.client_secret_nonce FROM enabled WHERE (SELECT count(*) FROM cleared)>0
 `
 
 type EnableDexSSOForGenerationParams struct {
-	RuntimeGeneration     int64           `json:"runtime_generation"`
-	DisplayName           string          `json:"display_name"`
-	Config                json.RawMessage `json:"config"`
-	ClientID              string          `json:"client_id"`
-	ClientSecretEncrypted string          `json:"client_secret_encrypted"`
+	RuntimeGeneration      int64           `json:"runtime_generation"`
+	DisplayName            string          `json:"display_name"`
+	Config                 json.RawMessage `json:"config"`
+	ClientID               string          `json:"client_id"`
+	ClientSecretKeyID      string          `json:"client_secret_key_id"`
+	ClientSecretAlgorithm  string          `json:"client_secret_algorithm"`
+	ClientSecretCiphertext []byte          `json:"client_secret_ciphertext"`
+	ClientSecretNonce      []byte          `json:"client_secret_nonce"`
 }
 
 type EnableDexSSOForGenerationRow struct {
-	ID                    uuid.UUID          `json:"id"`
-	Provider              string             `json:"provider"`
-	IsEnabled             bool               `json:"is_enabled"`
-	DisplayName           string             `json:"display_name"`
-	Config                json.RawMessage    `json:"config"`
-	ClientID              string             `json:"client_id"`
-	ClientSecretEncrypted string             `json:"client_secret_encrypted"`
-	AllowedOrganizations  json.RawMessage    `json:"allowed_organizations"`
-	AllowedDomains        json.RawMessage    `json:"allowed_domains"`
-	AutoCreateUsers       bool               `json:"auto_create_users"`
-	DefaultGlobalRoleID   pgtype.UUID        `json:"default_global_role_id"`
-	CreatedAt             time.Time          `json:"created_at"`
-	UpdatedAt             time.Time          `json:"updated_at"`
-	MigratedToDexAt       pgtype.Timestamptz `json:"migrated_to_dex_at"`
+	ID                     uuid.UUID          `json:"id"`
+	Provider               string             `json:"provider"`
+	IsEnabled              bool               `json:"is_enabled"`
+	DisplayName            string             `json:"display_name"`
+	Config                 json.RawMessage    `json:"config"`
+	ClientID               string             `json:"client_id"`
+	AllowedOrganizations   json.RawMessage    `json:"allowed_organizations"`
+	AllowedDomains         json.RawMessage    `json:"allowed_domains"`
+	AutoCreateUsers        bool               `json:"auto_create_users"`
+	DefaultGlobalRoleID    pgtype.UUID        `json:"default_global_role_id"`
+	CreatedAt              time.Time          `json:"created_at"`
+	UpdatedAt              time.Time          `json:"updated_at"`
+	MigratedToDexAt        pgtype.Timestamptz `json:"migrated_to_dex_at"`
+	ClientSecretKeyID      string             `json:"client_secret_key_id"`
+	ClientSecretAlgorithm  string             `json:"client_secret_algorithm"`
+	ClientSecretCiphertext []byte             `json:"client_secret_ciphertext"`
+	ClientSecretNonce      []byte             `json:"client_secret_nonce"`
 }
 
 // The generation predicate is evaluated in the same statement that enables
@@ -279,7 +297,10 @@ func (q *Queries) EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSS
 		arg.DisplayName,
 		arg.Config,
 		arg.ClientID,
-		arg.ClientSecretEncrypted,
+		arg.ClientSecretKeyID,
+		arg.ClientSecretAlgorithm,
+		arg.ClientSecretCiphertext,
+		arg.ClientSecretNonce,
 	)
 	var i EnableDexSSOForGenerationRow
 	err := row.Scan(
@@ -289,7 +310,6 @@ func (q *Queries) EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSS
 		&i.DisplayName,
 		&i.Config,
 		&i.ClientID,
-		&i.ClientSecretEncrypted,
 		&i.AllowedOrganizations,
 		&i.AllowedDomains,
 		&i.AutoCreateUsers,
@@ -297,6 +317,10 @@ func (q *Queries) EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSS
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MigratedToDexAt,
+		&i.ClientSecretKeyID,
+		&i.ClientSecretAlgorithm,
+		&i.ClientSecretCiphertext,
+		&i.ClientSecretNonce,
 	)
 	return i, err
 }
@@ -329,7 +353,7 @@ func (q *Queries) GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, 
 }
 
 const getEnabledSSOProviders = `-- name: GetEnabledSSOProviders :many
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE is_enabled = true ORDER BY provider ASC
+SELECT id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce FROM sso_configurations WHERE is_enabled = true ORDER BY provider ASC
 `
 
 func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguration, error) {
@@ -348,7 +372,6 @@ func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguratio
 			&i.DisplayName,
 			&i.Config,
 			&i.ClientID,
-			&i.ClientSecretEncrypted,
 			&i.AllowedOrganizations,
 			&i.AllowedDomains,
 			&i.AutoCreateUsers,
@@ -356,6 +379,10 @@ func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguratio
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.MigratedToDexAt,
+			&i.ClientSecretKeyID,
+			&i.ClientSecretAlgorithm,
+			&i.ClientSecretCiphertext,
+			&i.ClientSecretNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -369,7 +396,7 @@ func (q *Queries) GetEnabledSSOProviders(ctx context.Context) ([]SsoConfiguratio
 
 const getSSOConfigurationByID = `-- name: GetSSOConfigurationByID :one
 
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE id = $1
+SELECT id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce FROM sso_configurations WHERE id = $1
 `
 
 // SSO Configurations
@@ -383,7 +410,6 @@ func (q *Queries) GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (Ss
 		&i.DisplayName,
 		&i.Config,
 		&i.ClientID,
-		&i.ClientSecretEncrypted,
 		&i.AllowedOrganizations,
 		&i.AllowedDomains,
 		&i.AutoCreateUsers,
@@ -391,12 +417,16 @@ func (q *Queries) GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (Ss
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MigratedToDexAt,
+		&i.ClientSecretKeyID,
+		&i.ClientSecretAlgorithm,
+		&i.ClientSecretCiphertext,
+		&i.ClientSecretNonce,
 	)
 	return i, err
 }
 
 const getSSOConfigurationByIDForUpdate = `-- name: GetSSOConfigurationByIDForUpdate :one
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE id = $1 FOR UPDATE
+SELECT id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce FROM sso_configurations WHERE id = $1 FOR UPDATE
 `
 
 // Transaction-only read used by delete so the existence decision, delete,
@@ -411,7 +441,6 @@ func (q *Queries) GetSSOConfigurationByIDForUpdate(ctx context.Context, id uuid.
 		&i.DisplayName,
 		&i.Config,
 		&i.ClientID,
-		&i.ClientSecretEncrypted,
 		&i.AllowedOrganizations,
 		&i.AllowedDomains,
 		&i.AutoCreateUsers,
@@ -419,12 +448,16 @@ func (q *Queries) GetSSOConfigurationByIDForUpdate(ctx context.Context, id uuid.
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MigratedToDexAt,
+		&i.ClientSecretKeyID,
+		&i.ClientSecretAlgorithm,
+		&i.ClientSecretCiphertext,
+		&i.ClientSecretNonce,
 	)
 	return i, err
 }
 
 const getSSOConfigurationByProvider = `-- name: GetSSOConfigurationByProvider :one
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations WHERE provider = $1
+SELECT id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce FROM sso_configurations WHERE provider = $1
 `
 
 func (q *Queries) GetSSOConfigurationByProvider(ctx context.Context, provider string) (SsoConfiguration, error) {
@@ -437,7 +470,6 @@ func (q *Queries) GetSSOConfigurationByProvider(ctx context.Context, provider st
 		&i.DisplayName,
 		&i.Config,
 		&i.ClientID,
-		&i.ClientSecretEncrypted,
 		&i.AllowedOrganizations,
 		&i.AllowedDomains,
 		&i.AutoCreateUsers,
@@ -445,6 +477,10 @@ func (q *Queries) GetSSOConfigurationByProvider(ctx context.Context, provider st
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MigratedToDexAt,
+		&i.ClientSecretKeyID,
+		&i.ClientSecretAlgorithm,
+		&i.ClientSecretCiphertext,
+		&i.ClientSecretNonce,
 	)
 	return i, err
 }
@@ -543,7 +579,7 @@ func (q *Queries) IsRefreshSessionFamilyRevoked(ctx context.Context, familyHash 
 }
 
 const listSSOConfigurations = `-- name: ListSSOConfigurations :many
-SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListSSOConfigurationsParams struct {
@@ -567,7 +603,6 @@ func (q *Queries) ListSSOConfigurations(ctx context.Context, arg ListSSOConfigur
 			&i.DisplayName,
 			&i.Config,
 			&i.ClientID,
-			&i.ClientSecretEncrypted,
 			&i.AllowedOrganizations,
 			&i.AllowedDomains,
 			&i.AutoCreateUsers,
@@ -575,6 +610,10 @@ func (q *Queries) ListSSOConfigurations(ctx context.Context, arg ListSSOConfigur
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.MigratedToDexAt,
+			&i.ClientSecretKeyID,
+			&i.ClientSecretAlgorithm,
+			&i.ClientSecretCiphertext,
+			&i.ClientSecretNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -954,26 +993,32 @@ UPDATE sso_configurations SET
     display_name = $3,
     config = $4,
     client_id = $5,
-    client_secret_encrypted = $6,
+    client_secret_key_id = $6,
+    client_secret_algorithm = $11,
+    client_secret_ciphertext = $12,
+    client_secret_nonce = $13,
     allowed_organizations = $7,
     allowed_domains = $8,
     auto_create_users = $9,
     default_global_role_id = $10
 WHERE id = $1
-RETURNING id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at
+RETURNING id, provider, is_enabled, display_name, config, client_id, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at, client_secret_key_id, client_secret_algorithm, client_secret_ciphertext, client_secret_nonce
 `
 
 type UpdateSSOConfigurationParams struct {
-	ID                    uuid.UUID       `json:"id"`
-	IsEnabled             bool            `json:"is_enabled"`
-	DisplayName           string          `json:"display_name"`
-	Config                json.RawMessage `json:"config"`
-	ClientID              string          `json:"client_id"`
-	ClientSecretEncrypted string          `json:"client_secret_encrypted"`
-	AllowedOrganizations  json.RawMessage `json:"allowed_organizations"`
-	AllowedDomains        json.RawMessage `json:"allowed_domains"`
-	AutoCreateUsers       bool            `json:"auto_create_users"`
-	DefaultGlobalRoleID   pgtype.UUID     `json:"default_global_role_id"`
+	ID                     uuid.UUID       `json:"id"`
+	IsEnabled              bool            `json:"is_enabled"`
+	DisplayName            string          `json:"display_name"`
+	Config                 json.RawMessage `json:"config"`
+	ClientID               string          `json:"client_id"`
+	ClientSecretKeyID      string          `json:"client_secret_key_id"`
+	AllowedOrganizations   json.RawMessage `json:"allowed_organizations"`
+	AllowedDomains         json.RawMessage `json:"allowed_domains"`
+	AutoCreateUsers        bool            `json:"auto_create_users"`
+	DefaultGlobalRoleID    pgtype.UUID     `json:"default_global_role_id"`
+	ClientSecretAlgorithm  string          `json:"client_secret_algorithm"`
+	ClientSecretCiphertext []byte          `json:"client_secret_ciphertext"`
+	ClientSecretNonce      []byte          `json:"client_secret_nonce"`
 }
 
 func (q *Queries) UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfigurationParams) (SsoConfiguration, error) {
@@ -983,11 +1028,14 @@ func (q *Queries) UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfi
 		arg.DisplayName,
 		arg.Config,
 		arg.ClientID,
-		arg.ClientSecretEncrypted,
+		arg.ClientSecretKeyID,
 		arg.AllowedOrganizations,
 		arg.AllowedDomains,
 		arg.AutoCreateUsers,
 		arg.DefaultGlobalRoleID,
+		arg.ClientSecretAlgorithm,
+		arg.ClientSecretCiphertext,
+		arg.ClientSecretNonce,
 	)
 	var i SsoConfiguration
 	err := row.Scan(
@@ -997,7 +1045,6 @@ func (q *Queries) UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfi
 		&i.DisplayName,
 		&i.Config,
 		&i.ClientID,
-		&i.ClientSecretEncrypted,
 		&i.AllowedOrganizations,
 		&i.AllowedDomains,
 		&i.AutoCreateUsers,
@@ -1005,6 +1052,10 @@ func (q *Queries) UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MigratedToDexAt,
+		&i.ClientSecretKeyID,
+		&i.ClientSecretAlgorithm,
+		&i.ClientSecretCiphertext,
+		&i.ClientSecretNonce,
 	)
 	return i, err
 }

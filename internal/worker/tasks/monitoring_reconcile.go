@@ -14,6 +14,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type MonitoringReconcilePayload struct {
@@ -117,7 +118,7 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 	// "degraded" — we cannot write it without re-sealing a document we could
 	// not read. The per-cluster configs still converge to "degraded" below,
 	// which is where an operator looks, and the error log line names the key.
-	full, err := imonitoring.ResolveAuthConfig(backend.AuthConfigEncrypted, backend.AuthConfig, monitoringDecryptor(ctx))
+	full, err := imonitoring.ResolveAuthConfig(crypto.FromParts(backend.AuthConfigKeyID, backend.AuthConfigAlgorithm, backend.AuthConfigCiphertext, backend.AuthConfigNonce), backend.AuthConfig, monitoringDecryptor(ctx))
 	credentialUnavailable := err != nil
 	if credentialUnavailable {
 		runtimeLogger(ctx).ErrorContext(ctx, "monitoring backend credential could not be decrypted: skipping the status write to avoid persisting a document with the credential missing",
@@ -130,15 +131,15 @@ func reconcileMonitoringBackend(ctx context.Context, backend sqlc.MonitoringBack
 
 	if backend.QueryUrl != "" {
 		c, err := imonitoring.NewClient(imonitoring.BackendConfig{
-			QueryURL:            backend.QueryUrl,
-			TenantID:            backend.TenantID,
-			AuthType:            backend.AuthType,
-			AuthConfig:          backend.AuthConfig,
-			AuthConfigEncrypted: backend.AuthConfigEncrypted,
-			Decryptor:           monitoringDecryptor(ctx),
-			Logger:              runtimeLogger(ctx),
-			DefaultStepSeconds:  backend.DefaultStepSeconds,
-			TimeoutSeconds:      backend.TimeoutSeconds,
+			QueryURL:           backend.QueryUrl,
+			TenantID:           backend.TenantID,
+			AuthType:           backend.AuthType,
+			AuthConfig:         backend.AuthConfig,
+			AuthConfigSealed:   crypto.FromParts(backend.AuthConfigKeyID, backend.AuthConfigAlgorithm, backend.AuthConfigCiphertext, backend.AuthConfigNonce),
+			Decryptor:          monitoringDecryptor(ctx),
+			Logger:             runtimeLogger(ctx),
+			DefaultStepSeconds: backend.DefaultStepSeconds,
+			TimeoutSeconds:     backend.TimeoutSeconds,
 		})
 		if err != nil {
 			status = "degraded"

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +22,7 @@ import (
 
 // Webhook handles POST /api/v1/gitops/sources/{id}/webhook/. It accepts only
 // GitHub's native HMAC-SHA256 delivery format. Each source owns a distinct
-// Fernet-encrypted secret. Authenticated body digests are consumed once per
+// age-encrypted secret. Authenticated body digests are consumed once per
 // source before queuing a durable sync. GitHub does not sign its delivery ID
 // or a freshness timestamp, so receipts remain until the source is deleted.
 func (h *GitOpsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
@@ -102,11 +104,11 @@ func (h *GitOpsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GitOpsHandler) verifyGitHubWebhook(source sqlc.GitopsRegistrationSource, headers http.Header, body []byte) error {
-	if source.WebhookProvider != "github" || source.WebhookSecretEncrypted == "" ||
+	if source.WebhookProvider != "github" || source.WebhookSecretKeyID == "" ||
 		!strings.EqualFold(strings.TrimSpace(headers.Get("X-GitHub-Event")), "push") {
 		return errGitOpsWebhookInvalid
 	}
-	secret, err := h.encryptor.DecryptBytes(source.WebhookSecretEncrypted)
+	secret, err := h.encryptor.Decrypt(crypto.FromParts(source.WebhookSecretKeyID, source.WebhookSecretAlgorithm, source.WebhookSecretCiphertext, source.WebhookSecretNonce))
 	if err != nil {
 		return fmt.Errorf("decrypt GitOps webhook secret: %w", err)
 	}

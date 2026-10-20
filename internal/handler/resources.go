@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
@@ -34,7 +36,7 @@ type ResourceHandler struct {
 	requester K8sRequester
 	queries   ResourceQuerier
 	sso       SSOSettingsQuerier
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	ssoMgr    SSOProviderRegistrar
 	rbacCache rbacCacheInvalidator
 	// jwt flushes positive validation-cache entries after an administrative
@@ -222,8 +224,8 @@ type SSOSettingsQuerier interface {
 }
 
 type SSOProviderRegistrar interface {
-	RegisterProvider(name, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error
-	RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error
+	RegisterProvider(name, clientID string, clientSecret crypto.Sealed, redirectURL string, scopes []string) error
+	RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID string, clientSecret crypto.Sealed, redirectURL string, scopes []string) error
 	HasProvider(name string) bool
 	RemoveProvider(name string)
 }
@@ -311,7 +313,7 @@ func (h *ResourceHandler) SetSSOManager(mgr SSOProviderRegistrar) {
 	}
 }
 
-func (h *ResourceHandler) SetEncryptor(enc *auth.Encryptor) {
+func (h *ResourceHandler) SetEncryptor(enc *crypto.Encryptor) {
 	if h != nil {
 		h.encryptor = enc
 	}

@@ -188,28 +188,29 @@ func (q *Queries) CreateBackupSchedule(ctx context.Context, arg CreateBackupSche
 const createBackupStorageConfig = `-- name: CreateBackupStorageConfig :one
 INSERT INTO backup_storage_configs (
     name, storage_type, bucket, prefix, region, endpoint_url,
-    access_key, secret_key, is_default, created_by_id,
-    cluster_id, velero_namespace, bsl_name, encrypted_credentials
+    is_default, created_by_id,
+    cluster_id, velero_namespace, bsl_name, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, name, storage_type, bucket, prefix, region, endpoint_url, access_key, secret_key, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, encrypted_credentials
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING id, name, storage_type, bucket, prefix, region, endpoint_url, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type CreateBackupStorageConfigParams struct {
-	Name                 string      `json:"name"`
-	StorageType          string      `json:"storage_type"`
-	Bucket               string      `json:"bucket"`
-	Prefix               string      `json:"prefix"`
-	Region               string      `json:"region"`
-	EndpointUrl          string      `json:"endpoint_url"`
-	AccessKey            string      `json:"access_key"`
-	SecretKey            string      `json:"secret_key"`
-	IsDefault            bool        `json:"is_default"`
-	CreatedByID          pgtype.UUID `json:"created_by_id"`
-	ClusterID            pgtype.UUID `json:"cluster_id"`
-	VeleroNamespace      string      `json:"velero_namespace"`
-	BslName              string      `json:"bsl_name"`
-	EncryptedCredentials string      `json:"encrypted_credentials"`
+	Name                  string      `json:"name"`
+	StorageType           string      `json:"storage_type"`
+	Bucket                string      `json:"bucket"`
+	Prefix                string      `json:"prefix"`
+	Region                string      `json:"region"`
+	EndpointUrl           string      `json:"endpoint_url"`
+	IsDefault             bool        `json:"is_default"`
+	CreatedByID           pgtype.UUID `json:"created_by_id"`
+	ClusterID             pgtype.UUID `json:"cluster_id"`
+	VeleroNamespace       string      `json:"velero_namespace"`
+	BslName               string      `json:"bsl_name"`
+	CredentialsKeyID      string      `json:"credentials_key_id"`
+	CredentialsAlgorithm  string      `json:"credentials_algorithm"`
+	CredentialsCiphertext []byte      `json:"credentials_ciphertext"`
+	CredentialsNonce      []byte      `json:"credentials_nonce"`
 }
 
 func (q *Queries) CreateBackupStorageConfig(ctx context.Context, arg CreateBackupStorageConfigParams) (BackupStorageConfig, error) {
@@ -220,14 +221,15 @@ func (q *Queries) CreateBackupStorageConfig(ctx context.Context, arg CreateBacku
 		arg.Prefix,
 		arg.Region,
 		arg.EndpointUrl,
-		arg.AccessKey,
-		arg.SecretKey,
 		arg.IsDefault,
 		arg.CreatedByID,
 		arg.ClusterID,
 		arg.VeleroNamespace,
 		arg.BslName,
-		arg.EncryptedCredentials,
+		arg.CredentialsKeyID,
+		arg.CredentialsAlgorithm,
+		arg.CredentialsCiphertext,
+		arg.CredentialsNonce,
 	)
 	var i BackupStorageConfig
 	err := row.Scan(
@@ -238,8 +240,6 @@ func (q *Queries) CreateBackupStorageConfig(ctx context.Context, arg CreateBacku
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.AccessKey,
-		&i.SecretKey,
 		&i.IsDefault,
 		&i.CreatedByID,
 		&i.CreatedAt,
@@ -247,7 +247,10 @@ func (q *Queries) CreateBackupStorageConfig(ctx context.Context, arg CreateBacku
 		&i.ClusterID,
 		&i.VeleroNamespace,
 		&i.BslName,
-		&i.EncryptedCredentials,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
@@ -442,7 +445,7 @@ func (q *Queries) GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (Back
 
 const getBackupStorageConfigByID = `-- name: GetBackupStorageConfigByID :one
 
-SELECT id, name, storage_type, bucket, prefix, region, endpoint_url, access_key, secret_key, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, encrypted_credentials FROM backup_storage_configs WHERE id = $1
+SELECT id, name, storage_type, bucket, prefix, region, endpoint_url, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce FROM backup_storage_configs WHERE id = $1
 `
 
 // Backup Storage Configs
@@ -457,8 +460,6 @@ func (q *Queries) GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) 
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.AccessKey,
-		&i.SecretKey,
 		&i.IsDefault,
 		&i.CreatedByID,
 		&i.CreatedAt,
@@ -466,7 +467,10 @@ func (q *Queries) GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) 
 		&i.ClusterID,
 		&i.VeleroNamespace,
 		&i.BslName,
-		&i.EncryptedCredentials,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }
@@ -549,7 +553,7 @@ func (q *Queries) ListBackupSchedules(ctx context.Context, arg ListBackupSchedul
 }
 
 const listBackupStorageConfigs = `-- name: ListBackupStorageConfigs :many
-SELECT id, name, storage_type, bucket, prefix, region, endpoint_url, access_key, secret_key, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, encrypted_credentials FROM backup_storage_configs ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, storage_type, bucket, prefix, region, endpoint_url, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce FROM backup_storage_configs ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListBackupStorageConfigsParams struct {
@@ -574,8 +578,6 @@ func (q *Queries) ListBackupStorageConfigs(ctx context.Context, arg ListBackupSt
 			&i.Prefix,
 			&i.Region,
 			&i.EndpointUrl,
-			&i.AccessKey,
-			&i.SecretKey,
 			&i.IsDefault,
 			&i.CreatedByID,
 			&i.CreatedAt,
@@ -583,7 +585,10 @@ func (q *Queries) ListBackupStorageConfigs(ctx context.Context, arg ListBackupSt
 			&i.ClusterID,
 			&i.VeleroNamespace,
 			&i.BslName,
-			&i.EncryptedCredentials,
+			&i.CredentialsKeyID,
+			&i.CredentialsAlgorithm,
+			&i.CredentialsCiphertext,
+			&i.CredentialsNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -1000,32 +1005,34 @@ UPDATE backup_storage_configs SET
     prefix = $5,
     region = $6,
     endpoint_url = $7,
-    access_key = $8,
-    secret_key = $9,
-    is_default = $10,
-    cluster_id = $11,
-    velero_namespace = $12,
-    bsl_name = $13,
-    encrypted_credentials = $14
+    is_default = $8,
+    cluster_id = $9,
+    velero_namespace = $10,
+    bsl_name = $11,
+    credentials_key_id = $12,
+    credentials_algorithm = $13,
+    credentials_ciphertext = $14,
+    credentials_nonce = $15
 WHERE id = $1
-RETURNING id, name, storage_type, bucket, prefix, region, endpoint_url, access_key, secret_key, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, encrypted_credentials
+RETURNING id, name, storage_type, bucket, prefix, region, endpoint_url, is_default, created_by_id, created_at, updated_at, cluster_id, velero_namespace, bsl_name, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 `
 
 type UpdateBackupStorageConfigParams struct {
-	ID                   uuid.UUID   `json:"id"`
-	Name                 string      `json:"name"`
-	StorageType          string      `json:"storage_type"`
-	Bucket               string      `json:"bucket"`
-	Prefix               string      `json:"prefix"`
-	Region               string      `json:"region"`
-	EndpointUrl          string      `json:"endpoint_url"`
-	AccessKey            string      `json:"access_key"`
-	SecretKey            string      `json:"secret_key"`
-	IsDefault            bool        `json:"is_default"`
-	ClusterID            pgtype.UUID `json:"cluster_id"`
-	VeleroNamespace      string      `json:"velero_namespace"`
-	BslName              string      `json:"bsl_name"`
-	EncryptedCredentials string      `json:"encrypted_credentials"`
+	ID                    uuid.UUID   `json:"id"`
+	Name                  string      `json:"name"`
+	StorageType           string      `json:"storage_type"`
+	Bucket                string      `json:"bucket"`
+	Prefix                string      `json:"prefix"`
+	Region                string      `json:"region"`
+	EndpointUrl           string      `json:"endpoint_url"`
+	IsDefault             bool        `json:"is_default"`
+	ClusterID             pgtype.UUID `json:"cluster_id"`
+	VeleroNamespace       string      `json:"velero_namespace"`
+	BslName               string      `json:"bsl_name"`
+	CredentialsKeyID      string      `json:"credentials_key_id"`
+	CredentialsAlgorithm  string      `json:"credentials_algorithm"`
+	CredentialsCiphertext []byte      `json:"credentials_ciphertext"`
+	CredentialsNonce      []byte      `json:"credentials_nonce"`
 }
 
 func (q *Queries) UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error) {
@@ -1037,13 +1044,14 @@ func (q *Queries) UpdateBackupStorageConfig(ctx context.Context, arg UpdateBacku
 		arg.Prefix,
 		arg.Region,
 		arg.EndpointUrl,
-		arg.AccessKey,
-		arg.SecretKey,
 		arg.IsDefault,
 		arg.ClusterID,
 		arg.VeleroNamespace,
 		arg.BslName,
-		arg.EncryptedCredentials,
+		arg.CredentialsKeyID,
+		arg.CredentialsAlgorithm,
+		arg.CredentialsCiphertext,
+		arg.CredentialsNonce,
 	)
 	var i BackupStorageConfig
 	err := row.Scan(
@@ -1054,8 +1062,6 @@ func (q *Queries) UpdateBackupStorageConfig(ctx context.Context, arg UpdateBacku
 		&i.Prefix,
 		&i.Region,
 		&i.EndpointUrl,
-		&i.AccessKey,
-		&i.SecretKey,
 		&i.IsDefault,
 		&i.CreatedByID,
 		&i.CreatedAt,
@@ -1063,7 +1069,10 @@ func (q *Queries) UpdateBackupStorageConfig(ctx context.Context, arg UpdateBacku
 		&i.ClusterID,
 		&i.VeleroNamespace,
 		&i.BslName,
-		&i.EncryptedCredentials,
+		&i.CredentialsKeyID,
+		&i.CredentialsAlgorithm,
+		&i.CredentialsCiphertext,
+		&i.CredentialsNonce,
 	)
 	return i, err
 }

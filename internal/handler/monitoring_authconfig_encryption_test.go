@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
@@ -59,7 +60,7 @@ func (q *monitoringAuthConfigQuerier) UpsertDefaultMonitoringBackend(_ context.C
 	q.backend.TenantID = arg.TenantID
 	q.backend.AuthType = arg.AuthType
 	q.backend.AuthConfig = arg.AuthConfig
-	q.backend.AuthConfigEncrypted = arg.AuthConfigEncrypted
+	q.backend.AuthConfigKeyID, q.backend.AuthConfigAlgorithm, q.backend.AuthConfigCiphertext, q.backend.AuthConfigNonce = arg.AuthConfigKeyID, arg.AuthConfigAlgorithm, arg.AuthConfigCiphertext, arg.AuthConfigNonce
 	return q.backend, nil
 }
 
@@ -72,16 +73,16 @@ type alertingAuthConfigQuerier struct {
 
 func (q *alertingAuthConfigQuerier) UpsertDefaultMonitoringBackend(_ context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error) {
 	q.upserts = append(q.upserts, arg)
-	return sqlc.MonitoringBackend{AuthConfig: arg.AuthConfig, AuthConfigEncrypted: arg.AuthConfigEncrypted}, nil
+	return sqlc.MonitoringBackend{AuthConfig: arg.AuthConfig, AuthConfigKeyID: arg.AuthConfigKeyID, AuthConfigAlgorithm: arg.AuthConfigAlgorithm, AuthConfigCiphertext: arg.AuthConfigCiphertext, AuthConfigNonce: arg.AuthConfigNonce}, nil
 }
 
-func newMonitoringTestEncryptor(t *testing.T) *auth.Encryptor {
+func newMonitoringTestEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -90,43 +91,43 @@ func newMonitoringTestEncryptor(t *testing.T) *auth.Encryptor {
 
 // sealedMonitoringBackend builds the post-146 row shape: the credential lives
 // only in the envelope, the config bag stays in the JSONB.
-func sealedMonitoringBackend(t *testing.T, enc *auth.Encryptor, doc string) sqlc.MonitoringBackend {
+func sealedMonitoringBackend(t *testing.T, enc *crypto.Encryptor, doc string) sqlc.MonitoringBackend {
 	t.Helper()
 	ciphertext, public, err := imonitoring.SealAuthConfig(json.RawMessage(doc), enc)
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
 	}
-	if ciphertext == "" {
+	if ciphertext.IsZero() {
 		t.Fatalf("test fixture %s produced no envelope; it carries nothing secret", doc)
 	}
 	if strings.Contains(string(public), monitoringTestToken) {
 		t.Fatalf("test fixture left the credential in the plaintext column: %s", public)
 	}
 	return sqlc.MonitoringBackend{
-		ID:                  uuid.New(),
-		Name:                "default",
-		BackendType:         "thanos",
-		QueryUrl:            "https://thanos.example/",
-		AuthType:            "bearer",
-		AuthConfig:          public,
-		AuthConfigEncrypted: ciphertext,
-		DefaultStepSeconds:  300,
-		TimeoutSeconds:      30,
+		ID:              uuid.New(),
+		Name:            "default",
+		BackendType:     "thanos",
+		QueryUrl:        "https://thanos.example/",
+		AuthType:        "bearer",
+		AuthConfig:      public,
+		AuthConfigKeyID: ciphertext.KeyID, AuthConfigAlgorithm: ciphertext.Algorithm, AuthConfigCiphertext: ciphertext.Ciphertext, AuthConfigNonce: ciphertext.Nonce,
+		DefaultStepSeconds: 300,
+		TimeoutSeconds:     30,
 	}
 }
 
 // assertCredentialSurvived is the shared assertion, not a shared test: the
 // written row must still decrypt to the credential, and must not carry it in
 // the clear.
-func assertCredentialSurvived(t *testing.T, enc *auth.Encryptor, params sqlc.UpsertDefaultMonitoringBackendParams) map[string]any {
+func assertCredentialSurvived(t *testing.T, enc *crypto.Encryptor, params sqlc.UpsertDefaultMonitoringBackendParams) map[string]any {
 	t.Helper()
-	if params.AuthConfigEncrypted == "" {
+	if params.AuthConfigKeyID == "" {
 		t.Fatalf("write left auth_config_encrypted empty: the credential was dropped (auth_config=%s)", params.AuthConfig)
 	}
 	if strings.Contains(string(params.AuthConfig), monitoringTestToken) {
 		t.Fatalf("write put the credential back in the clear: %s", params.AuthConfig)
 	}
-	full, err := imonitoring.ResolveAuthConfig(params.AuthConfigEncrypted, params.AuthConfig, enc)
+	full, err := imonitoring.ResolveAuthConfig(crypto.FromParts(params.AuthConfigKeyID, params.AuthConfigAlgorithm, params.AuthConfigCiphertext, params.AuthConfigNonce), params.AuthConfig, enc)
 	if err != nil {
 		t.Fatalf("ResolveAuthConfig on the written row: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestUpdateBackendConfigReplacesCredentialButKeepsSharedStackMetadata(t *tes
 	if rr.Code != http.StatusOK {
 		t.Fatalf("UpdateBackendConfig status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	full, err := imonitoring.ResolveAuthConfig(q.upserts[0].AuthConfigEncrypted, q.upserts[0].AuthConfig, enc)
+	full, err := imonitoring.ResolveAuthConfig(crypto.FromParts(q.upserts[0].AuthConfigKeyID, q.upserts[0].AuthConfigAlgorithm, q.upserts[0].AuthConfigCiphertext, q.upserts[0].AuthConfigNonce), q.upserts[0].AuthConfig, enc)
 	if err != nil {
 		t.Fatalf("ResolveAuthConfig: %v", err)
 	}
@@ -201,7 +202,7 @@ func TestUpdateBackendConfigReplacesCredentialButKeepsSharedStackMetadata(t *tes
 //
 // This is the regression that turning UpdateBackendConfig into a
 // read-modify-write introduced, and it is the exact inverse of the change's
-// purpose: the token comes out of the Fernet envelope and goes back on the
+// purpose: the token comes out of the age envelope and goes back on the
 // wire, into browser devtools, proxies and any response logging, on an edit
 // that had nothing to do with the credential. The old write response echoed
 // only `req.AuthConfig`, so echoing it back genuinely leaked nothing; once the
@@ -525,7 +526,7 @@ func TestGetBackendConfigNeverReturnsCredentialOrCiphertext(t *testing.T) {
 	if strings.Contains(body, monitoringTestToken) {
 		t.Fatalf("read response leaked the credential: %s", body)
 	}
-	if strings.Contains(body, backend.AuthConfigEncrypted) {
+	if strings.Contains(body, ciphertextB64(backend.AuthConfigCiphertext)) {
 		t.Fatalf("read response shipped the ciphertext column: %s", body)
 	}
 	if strings.Contains(body, "authConfigEncrypted") || strings.Contains(body, "auth_config_encrypted") {

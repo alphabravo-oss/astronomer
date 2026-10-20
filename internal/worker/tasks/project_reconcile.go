@@ -35,10 +35,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // Task type names. Exported so worker.go (and any tests) can register them
@@ -141,7 +141,7 @@ type ProjectK8sResponse struct {
 type ProjectReconcileDeps struct {
 	Queries   ProjectReconcileQuerier
 	Requester ProjectK8sRequester
-	Encryptor *auth.Encryptor
+	Encryptor *crypto.Encryptor
 }
 
 // ProjectReconcilePayload is the JSON body of a "project:reconcile" task.
@@ -317,7 +317,7 @@ type cachedRegistryConfig struct {
 // instead of once per namespace row. All other querier methods pass through to
 // the embedded querier unchanged. The sweep loop is single-goroutine, so no
 // locking is required. GetClusterRegistryConfig returns the config by value, so
-// callers that mutate their copy (materializeProjectRegistryPassword) cannot
+// callers that mutate their copy (decryptRegistryPassword) cannot
 // corrupt the cached entry.
 type perTickRegistryCachingQuerier struct {
 	ProjectReconcileQuerier
@@ -589,13 +589,14 @@ func (runtime ProjectRuntime) reconcileProjectRegistryAccess(ctx context.Context
 		}
 		return err
 	}
-	if err := runtime.materializeProjectRegistryPassword(&cfg); err != nil {
+	password, err := decryptRegistryPassword(runtime.Deps.Encryptor, cfg)
+	if err != nil {
 		return err
 	}
-	if !hasUsableRegistryConfig(cfg) {
+	if !hasUsableRegistryConfig(cfg, password) {
 		return removeProjectRegistryAccess(ctx, requester, clusterID.String(), namespace)
 	}
-	if err := applyRegistrySecret(ctx, requester, clusterID.String(), namespace, cfg); err != nil {
+	if err := applyRegistrySecret(ctx, requester, clusterID.String(), namespace, cfg, password); err != nil {
 		return err
 	}
 	return ensureDefaultServiceAccountPullSecret(ctx, requester, clusterID.String(), namespace, managedRegistrySecretName)
@@ -608,35 +609,20 @@ func removeProjectRegistryAccess(ctx context.Context, requester ProjectK8sReques
 	return deleteIfExists(ctx, requester, clusterID, fmt.Sprintf("/api/v1/namespaces/%s/secrets/%s", namespace, managedRegistrySecretName))
 }
 
-func hasUsableRegistryConfig(cfg sqlc.ClusterRegistryConfig) bool {
+func hasUsableRegistryConfig(cfg sqlc.ClusterRegistryConfig, password string) bool {
 	return strings.TrimSpace(cfg.PrivateRegistryUrl) != "" &&
 		strings.TrimSpace(cfg.RegistryUsername) != "" &&
-		strings.TrimSpace(cfg.RegistryPassword) != ""
+		strings.TrimSpace(password) != ""
 }
 
-func (runtime ProjectRuntime) materializeProjectRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
-	if cfg == nil || strings.TrimSpace(cfg.RegistryPasswordEncrypted) == "" {
-		return nil
-	}
-	if runtime.Deps.Encryptor == nil {
-		return fmt.Errorf("encrypted registry password present but encryptor is not configured")
-	}
-	password, err := runtime.Deps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
-	if err != nil {
-		return err
-	}
-	cfg.RegistryPassword = password
-	return nil
-}
-
-func applyRegistrySecret(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, cfg sqlc.ClusterRegistryConfig) error {
+func applyRegistrySecret(ctx context.Context, requester ProjectK8sRequester, clusterID, namespace string, cfg sqlc.ClusterRegistryConfig, password string) error {
 	authKey := normalizeRegistryAuthKey(cfg.PrivateRegistryUrl)
 	dockerCfg := map[string]any{
 		"auths": map[string]any{
 			authKey: map[string]any{
 				"username": cfg.RegistryUsername,
-				"password": cfg.RegistryPassword,
-				"auth":     base64.StdEncoding.EncodeToString([]byte(cfg.RegistryUsername + ":" + cfg.RegistryPassword)),
+				"password": password,
+				"auth":     base64.StdEncoding.EncodeToString([]byte(cfg.RegistryUsername + ":" + password)),
 			},
 		},
 	}

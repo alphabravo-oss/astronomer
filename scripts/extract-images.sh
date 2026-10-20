@@ -63,7 +63,7 @@ extract_images() {
     helm template astronomer "$CHART_DIR" \
         --kube-version 1.35.0 \
         --set secrets.secretKey=extract-images-render-only \
-        --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= \
+        --set secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U \
         $@ \
         | grep -oE 'image(Name)?: "?[^"]+"?' \
         | sed -E 's/^image(Name)?: //; s/^"//; s/"$//'

@@ -59,7 +59,7 @@ SET active = true,
 WHERE charlie_connections.id = $2
   AND charlie_connections.onboarding_state = 'consumed'
   AND charlie_connections.active = false
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type ActivateCharlieConnectionParams struct {
@@ -91,7 +91,6 @@ func (q *Queries) ActivateCharlieConnection(ctx context.Context, arg ActivateCha
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -127,6 +126,10 @@ func (q *Queries) ActivateCharlieConnection(ctx context.Context, arg ActivateCha
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -225,7 +228,7 @@ SET onboarding_state = $1,
     updated_at = now()
 WHERE id = $5
   AND onboarding_state = $6
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type AdvanceCharlieOnboardingStateParams struct {
@@ -268,7 +271,6 @@ func (q *Queries) AdvanceCharlieOnboardingState(ctx context.Context, arg Advance
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -304,6 +306,10 @@ func (q *Queries) AdvanceCharlieOnboardingState(ctx context.Context, arg Advance
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -994,15 +1000,15 @@ func (q *Queries) CharlieTunnelReplicaDistribution(ctx context.Context) ([]Charl
 const claimCharlieActionReceipt = `-- name: ClaimCharlieActionReceipt :one
 INSERT INTO charlie_action_receipts (
     connection_id, session_id, charlie_action_id, turn_id, capability, effect,
-    argument_digest, arguments_encrypted, authorization_hash, fencing_epoch, product_idempotency_key,
+    argument_digest, arguments_key_id, arguments_algorithm, arguments_ciphertext, arguments_nonce, authorization_hash, fencing_epoch, product_idempotency_key,
     state, lease_owner, lease_expires_at, audit_correlation_id, resource_digest
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6,
-    $7, $8, $9,
-    $10, $11, 'claimed',
-    $12, $13, $14,
-    $15
+    $7, $8, $9, $10, $11, $12,
+    $13, $14, 'claimed',
+    $15, $16, $17,
+    $18
 )
 ON CONFLICT (charlie_action_id) DO UPDATE
 SET state = 'claimed',
@@ -1020,7 +1026,7 @@ WHERE ((charlie_action_receipts.state = 'claimed' AND charlie_action_receipts.le
   AND charlie_action_receipts.authorization_hash = EXCLUDED.authorization_hash
   AND charlie_action_receipts.fencing_epoch = EXCLUDED.fencing_epoch
   AND charlie_action_receipts.resource_digest = EXCLUDED.resource_digest
-RETURNING charlie_action_receipts.id, charlie_action_receipts.connection_id, charlie_action_receipts.session_id, charlie_action_receipts.charlie_action_id, charlie_action_receipts.turn_id, charlie_action_receipts.capability, charlie_action_receipts.effect, charlie_action_receipts.argument_digest, charlie_action_receipts.arguments_encrypted, charlie_action_receipts.authorization_hash, charlie_action_receipts.resource_digest, charlie_action_receipts.fencing_epoch, charlie_action_receipts.product_idempotency_key, charlie_action_receipts.state, charlie_action_receipts.attempt, charlie_action_receipts.lease_owner, charlie_action_receipts.lease_expires_at, charlie_action_receipts.result_digest, charlie_action_receipts.result_status, charlie_action_receipts.result_encrypted, charlie_action_receipts.audit_correlation_id, charlie_action_receipts.dispatched_at, charlie_action_receipts.verified_at, charlie_action_receipts.auto_budget_reserved, charlie_action_receipts.safety_policy_revision, charlie_action_receipts.created_at, charlie_action_receipts.updated_at
+RETURNING charlie_action_receipts.id, charlie_action_receipts.connection_id, charlie_action_receipts.session_id, charlie_action_receipts.charlie_action_id, charlie_action_receipts.turn_id, charlie_action_receipts.capability, charlie_action_receipts.effect, charlie_action_receipts.argument_digest, charlie_action_receipts.authorization_hash, charlie_action_receipts.resource_digest, charlie_action_receipts.fencing_epoch, charlie_action_receipts.product_idempotency_key, charlie_action_receipts.state, charlie_action_receipts.attempt, charlie_action_receipts.lease_owner, charlie_action_receipts.lease_expires_at, charlie_action_receipts.result_digest, charlie_action_receipts.result_status, charlie_action_receipts.audit_correlation_id, charlie_action_receipts.dispatched_at, charlie_action_receipts.verified_at, charlie_action_receipts.auto_budget_reserved, charlie_action_receipts.safety_policy_revision, charlie_action_receipts.created_at, charlie_action_receipts.updated_at, charlie_action_receipts.arguments_key_id, charlie_action_receipts.arguments_algorithm, charlie_action_receipts.arguments_ciphertext, charlie_action_receipts.arguments_nonce, charlie_action_receipts.result_key_id, charlie_action_receipts.result_algorithm, charlie_action_receipts.result_ciphertext, charlie_action_receipts.result_nonce
 `
 
 type ClaimCharlieActionReceiptParams struct {
@@ -1031,7 +1037,10 @@ type ClaimCharlieActionReceiptParams struct {
 	Capability            string    `json:"capability"`
 	Effect                string    `json:"effect"`
 	ArgumentDigest        string    `json:"argument_digest"`
-	ArgumentsEncrypted    string    `json:"arguments_encrypted"`
+	ArgumentsKeyID        string    `json:"arguments_key_id"`
+	ArgumentsAlgorithm    string    `json:"arguments_algorithm"`
+	ArgumentsCiphertext   []byte    `json:"arguments_ciphertext"`
+	ArgumentsNonce        []byte    `json:"arguments_nonce"`
 	AuthorizationHash     string    `json:"authorization_hash"`
 	FencingEpoch          int64     `json:"fencing_epoch"`
 	ProductIdempotencyKey string    `json:"product_idempotency_key"`
@@ -1050,7 +1059,10 @@ func (q *Queries) ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharli
 		arg.Capability,
 		arg.Effect,
 		arg.ArgumentDigest,
-		arg.ArgumentsEncrypted,
+		arg.ArgumentsKeyID,
+		arg.ArgumentsAlgorithm,
+		arg.ArgumentsCiphertext,
+		arg.ArgumentsNonce,
 		arg.AuthorizationHash,
 		arg.FencingEpoch,
 		arg.ProductIdempotencyKey,
@@ -1069,7 +1081,6 @@ func (q *Queries) ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharli
 		&i.Capability,
 		&i.Effect,
 		&i.ArgumentDigest,
-		&i.ArgumentsEncrypted,
 		&i.AuthorizationHash,
 		&i.ResourceDigest,
 		&i.FencingEpoch,
@@ -1080,7 +1091,6 @@ func (q *Queries) ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharli
 		&i.LeaseExpiresAt,
 		&i.ResultDigest,
 		&i.ResultStatus,
-		&i.ResultEncrypted,
 		&i.AuditCorrelationID,
 		&i.DispatchedAt,
 		&i.VerifiedAt,
@@ -1088,6 +1098,14 @@ func (q *Queries) ClaimCharlieActionReceipt(ctx context.Context, arg ClaimCharli
 		&i.SafetyPolicyRevision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArgumentsKeyID,
+		&i.ArgumentsAlgorithm,
+		&i.ArgumentsCiphertext,
+		&i.ArgumentsNonce,
+		&i.ResultKeyID,
+		&i.ResultAlgorithm,
+		&i.ResultCiphertext,
+		&i.ResultNonce,
 	)
 	return i, err
 }
@@ -1146,7 +1164,7 @@ SET state = CASE WHEN receipt.state = 'claimed' THEN 'claimed' ELSE 'verifying' 
     updated_at = now()
 FROM candidate
 WHERE receipt.id = candidate.id
-RETURNING receipt.id, receipt.connection_id, receipt.session_id, receipt.charlie_action_id, receipt.turn_id, receipt.capability, receipt.effect, receipt.argument_digest, receipt.arguments_encrypted, receipt.authorization_hash, receipt.resource_digest, receipt.fencing_epoch, receipt.product_idempotency_key, receipt.state, receipt.attempt, receipt.lease_owner, receipt.lease_expires_at, receipt.result_digest, receipt.result_status, receipt.result_encrypted, receipt.audit_correlation_id, receipt.dispatched_at, receipt.verified_at, receipt.auto_budget_reserved, receipt.safety_policy_revision, receipt.created_at, receipt.updated_at
+RETURNING receipt.id, receipt.connection_id, receipt.session_id, receipt.charlie_action_id, receipt.turn_id, receipt.capability, receipt.effect, receipt.argument_digest, receipt.authorization_hash, receipt.resource_digest, receipt.fencing_epoch, receipt.product_idempotency_key, receipt.state, receipt.attempt, receipt.lease_owner, receipt.lease_expires_at, receipt.result_digest, receipt.result_status, receipt.audit_correlation_id, receipt.dispatched_at, receipt.verified_at, receipt.auto_budget_reserved, receipt.safety_policy_revision, receipt.created_at, receipt.updated_at, receipt.arguments_key_id, receipt.arguments_algorithm, receipt.arguments_ciphertext, receipt.arguments_nonce, receipt.result_key_id, receipt.result_algorithm, receipt.result_ciphertext, receipt.result_nonce
 `
 
 type ClaimCharlieAmbiguousReceiptParams struct {
@@ -1166,7 +1184,6 @@ func (q *Queries) ClaimCharlieAmbiguousReceipt(ctx context.Context, arg ClaimCha
 		&i.Capability,
 		&i.Effect,
 		&i.ArgumentDigest,
-		&i.ArgumentsEncrypted,
 		&i.AuthorizationHash,
 		&i.ResourceDigest,
 		&i.FencingEpoch,
@@ -1177,7 +1194,6 @@ func (q *Queries) ClaimCharlieAmbiguousReceipt(ctx context.Context, arg ClaimCha
 		&i.LeaseExpiresAt,
 		&i.ResultDigest,
 		&i.ResultStatus,
-		&i.ResultEncrypted,
 		&i.AuditCorrelationID,
 		&i.DispatchedAt,
 		&i.VerifiedAt,
@@ -1185,6 +1201,14 @@ func (q *Queries) ClaimCharlieAmbiguousReceipt(ctx context.Context, arg ClaimCha
 		&i.SafetyPolicyRevision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArgumentsKeyID,
+		&i.ArgumentsAlgorithm,
+		&i.ArgumentsCiphertext,
+		&i.ArgumentsNonce,
+		&i.ResultKeyID,
+		&i.ResultAlgorithm,
+		&i.ResultCiphertext,
+		&i.ResultNonce,
 	)
 	return i, err
 }
@@ -1243,7 +1267,7 @@ WHERE id = $3
   AND kubernetes_visibility_rediscovery_state = 'required'
   AND verified_mode_revision = $4
   AND $2::bigint >= verified_mode_revision
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type ConfirmCharlieKubernetesVisibilityRediscoveryParams struct {
@@ -1282,7 +1306,6 @@ func (q *Queries) ConfirmCharlieKubernetesVisibilityRediscovery(ctx context.Cont
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -1318,6 +1341,10 @@ func (q *Queries) ConfirmCharlieKubernetesVisibilityRediscovery(ctx context.Cont
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -1640,7 +1667,7 @@ INSERT INTO charlie_connections (
     central_ca_fingerprint, signing_key_id, signing_key_fingerprint,
     onboarding_schema_version, central_api_version, agent_protocol_version,
     chart_reference, chart_version, chart_digest, image_reference, image_digest, logical_agent_id, replica_count,
-    bridge_service_name, mcp_service_name, local_trust_material_encrypted,
+    bridge_service_name, mcp_service_name, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce,
     agent_secret_name, onboarding_package_id, onboarding_package_digest,
     onboarding_package_expires_at, enrollment_credentials_expires_at,
     artifact_credential_expires_at, certificate_expires_at,
@@ -1655,14 +1682,14 @@ INSERT INTO charlie_connections (
     $15, $16, $17, $18,
     $19,
     $20, $21,
-    $22, $23,
-    $24, $25,
-    $26, $27,
-    $28, $29,
-    $30, $31,
-    'disabled', 'disabled', $32, $33, false,
-    $34, $35
-) RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+    $22, $23, $24, $25, $26,
+    $27, $28,
+    $29, $30,
+    $31, $32,
+    $33, $34,
+    'disabled', 'disabled', $35, $36, false,
+    $37, $38
+) RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type CreateCharlieConnectionParams struct {
@@ -1687,7 +1714,10 @@ type CreateCharlieConnectionParams struct {
 	ReplicaCount                   int32              `json:"replica_count"`
 	BridgeServiceName              string             `json:"bridge_service_name"`
 	McpServiceName                 string             `json:"mcp_service_name"`
-	LocalTrustMaterialEncrypted    string             `json:"local_trust_material_encrypted"`
+	LocalTrustMaterialKeyID        string             `json:"local_trust_material_key_id"`
+	LocalTrustMaterialAlgorithm    string             `json:"local_trust_material_algorithm"`
+	LocalTrustMaterialCiphertext   []byte             `json:"local_trust_material_ciphertext"`
+	LocalTrustMaterialNonce        []byte             `json:"local_trust_material_nonce"`
 	AgentSecretName                string             `json:"agent_secret_name"`
 	OnboardingPackageID            string             `json:"onboarding_package_id"`
 	OnboardingPackageDigest        string             `json:"onboarding_package_digest"`
@@ -1726,7 +1756,10 @@ func (q *Queries) CreateCharlieConnection(ctx context.Context, arg CreateCharlie
 		arg.ReplicaCount,
 		arg.BridgeServiceName,
 		arg.McpServiceName,
-		arg.LocalTrustMaterialEncrypted,
+		arg.LocalTrustMaterialKeyID,
+		arg.LocalTrustMaterialAlgorithm,
+		arg.LocalTrustMaterialCiphertext,
+		arg.LocalTrustMaterialNonce,
 		arg.AgentSecretName,
 		arg.OnboardingPackageID,
 		arg.OnboardingPackageDigest,
@@ -1763,7 +1796,6 @@ func (q *Queries) CreateCharlieConnection(ctx context.Context, arg CreateCharlie
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -1799,6 +1831,10 @@ func (q *Queries) CreateCharlieConnection(ctx context.Context, arg CreateCharlie
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -2199,7 +2235,7 @@ SET active = false,
     health_state = 'disconnected',
     updated_at = now()
 WHERE id = $1 AND active = true
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 func (q *Queries) DisconnectCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error) {
@@ -2226,7 +2262,6 @@ func (q *Queries) DisconnectCharlieConnection(ctx context.Context, id uuid.UUID)
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -2262,6 +2297,10 @@ func (q *Queries) DisconnectCharlieConnection(ctx context.Context, id uuid.UUID)
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -2400,7 +2439,7 @@ func (q *Queries) GetActiveCharlieActionApproval(ctx context.Context, arg GetAct
 }
 
 const getActiveCharlieConnection = `-- name: GetActiveCharlieConnection :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest FROM charlie_connections WHERE active = true LIMIT 1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce FROM charlie_connections WHERE active = true LIMIT 1
 `
 
 func (q *Queries) GetActiveCharlieConnection(ctx context.Context) (CharlieConnection, error) {
@@ -2427,7 +2466,6 @@ func (q *Queries) GetActiveCharlieConnection(ctx context.Context) (CharlieConnec
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -2463,6 +2501,10 @@ func (q *Queries) GetActiveCharlieConnection(ctx context.Context) (CharlieConnec
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -2607,7 +2649,7 @@ func (q *Queries) GetCharlieActionApprovalByApprovalID(ctx context.Context, appr
 }
 
 const getCharlieActionReceipt = `-- name: GetCharlieActionReceipt :one
-SELECT id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, arguments_encrypted, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, result_encrypted, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at FROM charlie_action_receipts WHERE charlie_action_id = $1
+SELECT id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at, arguments_key_id, arguments_algorithm, arguments_ciphertext, arguments_nonce, result_key_id, result_algorithm, result_ciphertext, result_nonce FROM charlie_action_receipts WHERE charlie_action_id = $1
 `
 
 func (q *Queries) GetCharlieActionReceipt(ctx context.Context, charlieActionID string) (CharlieActionReceipt, error) {
@@ -2622,7 +2664,6 @@ func (q *Queries) GetCharlieActionReceipt(ctx context.Context, charlieActionID s
 		&i.Capability,
 		&i.Effect,
 		&i.ArgumentDigest,
-		&i.ArgumentsEncrypted,
 		&i.AuthorizationHash,
 		&i.ResourceDigest,
 		&i.FencingEpoch,
@@ -2633,7 +2674,6 @@ func (q *Queries) GetCharlieActionReceipt(ctx context.Context, charlieActionID s
 		&i.LeaseExpiresAt,
 		&i.ResultDigest,
 		&i.ResultStatus,
-		&i.ResultEncrypted,
 		&i.AuditCorrelationID,
 		&i.DispatchedAt,
 		&i.VerifiedAt,
@@ -2641,6 +2681,14 @@ func (q *Queries) GetCharlieActionReceipt(ctx context.Context, charlieActionID s
 		&i.SafetyPolicyRevision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArgumentsKeyID,
+		&i.ArgumentsAlgorithm,
+		&i.ArgumentsCiphertext,
+		&i.ArgumentsNonce,
+		&i.ResultKeyID,
+		&i.ResultAlgorithm,
+		&i.ResultCiphertext,
+		&i.ResultNonce,
 	)
 	return i, err
 }
@@ -2650,11 +2698,11 @@ WITH current_receipt AS (
     SELECT current.id, current.created_at FROM charlie_action_receipts current
     WHERE current.charlie_action_id = $7
 ), prior_receipts AS (
-    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at FROM charlie_action_receipts r
+    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at, r.arguments_key_id, r.arguments_algorithm, r.arguments_ciphertext, r.arguments_nonce, r.result_key_id, r.result_algorithm, r.result_ciphertext, r.result_nonce FROM charlie_action_receipts r
     WHERE r.session_id = $8
       AND r.charlie_action_id <> $7
 ), deployment_receipts AS (
-    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at FROM charlie_action_receipts r
+    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at, r.arguments_key_id, r.arguments_algorithm, r.arguments_ciphertext, r.arguments_nonce, r.result_key_id, r.result_algorithm, r.result_ciphertext, r.result_nonce FROM charlie_action_receipts r
     JOIN charlie_sessions s ON s.id = r.session_id
     JOIN charlie_sessions current_session ON current_session.id = $8
     WHERE s.connection_id = current_session.connection_id
@@ -2840,7 +2888,7 @@ func (q *Queries) GetCharlieAutomationRole(ctx context.Context) (GlobalRole, err
 }
 
 const getCharlieConnection = `-- name: GetCharlieConnection :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest FROM charlie_connections WHERE id = $1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce FROM charlie_connections WHERE id = $1
 `
 
 func (q *Queries) GetCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error) {
@@ -2867,7 +2915,6 @@ func (q *Queries) GetCharlieConnection(ctx context.Context, id uuid.UUID) (Charl
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -2903,12 +2950,16 @@ func (q *Queries) GetCharlieConnection(ctx context.Context, id uuid.UUID) (Charl
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
 
 const getCharlieConnectionByDeploymentID = `-- name: GetCharlieConnectionByDeploymentID :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest FROM charlie_connections WHERE deployment_id = $1 AND active = true
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce FROM charlie_connections WHERE deployment_id = $1 AND active = true
 `
 
 func (q *Queries) GetCharlieConnectionByDeploymentID(ctx context.Context, deploymentID string) (CharlieConnection, error) {
@@ -2935,7 +2986,6 @@ func (q *Queries) GetCharlieConnectionByDeploymentID(ctx context.Context, deploy
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -2971,12 +3021,16 @@ func (q *Queries) GetCharlieConnectionByDeploymentID(ctx context.Context, deploy
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
 
 const getCharlieConnectionByPackageID = `-- name: GetCharlieConnectionByPackageID :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest FROM charlie_connections WHERE onboarding_package_id = $1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce FROM charlie_connections WHERE onboarding_package_id = $1
 `
 
 func (q *Queries) GetCharlieConnectionByPackageID(ctx context.Context, onboardingPackageID string) (CharlieConnection, error) {
@@ -3003,7 +3057,6 @@ func (q *Queries) GetCharlieConnectionByPackageID(ctx context.Context, onboardin
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -3039,6 +3092,10 @@ func (q *Queries) GetCharlieConnectionByPackageID(ctx context.Context, onboardin
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -3405,7 +3462,7 @@ func (q *Queries) GetCharlieTriggerRule(ctx context.Context, id uuid.UUID) (Char
 }
 
 const getLatestCharlieConnection = `-- name: GetLatestCharlieConnection :one
-SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest FROM charlie_connections ORDER BY created_at DESC, id DESC LIMIT 1
+SELECT id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce FROM charlie_connections ORDER BY created_at DESC, id DESC LIMIT 1
 `
 
 func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnection, error) {
@@ -3432,7 +3489,6 @@ func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnec
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -3468,6 +3524,10 @@ func (q *Queries) GetLatestCharlieConnection(ctx context.Context) (CharlieConnec
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -4485,7 +4545,7 @@ WITH locked_session AS MATERIALIZED (
       AND p.enabled = true
     FOR UPDATE
 ), current_receipt AS (
-    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at FROM charlie_action_receipts r, locked_session
+    SELECT r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at, r.arguments_key_id, r.arguments_algorithm, r.arguments_ciphertext, r.arguments_nonce, r.result_key_id, r.result_algorithm, r.result_ciphertext, r.result_nonce FROM charlie_action_receipts r, locked_session
     WHERE r.charlie_action_id = $4
       AND r.session_id = locked_session.id
       AND r.connection_id = $2
@@ -4526,7 +4586,7 @@ SET auto_budget_reserved = true,
     updated_at = now()
 FROM eligible
 WHERE r.id = eligible.id AND r.auto_budget_reserved = false
-RETURNING r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.arguments_encrypted, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.result_encrypted, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at
+RETURNING r.id, r.connection_id, r.session_id, r.charlie_action_id, r.turn_id, r.capability, r.effect, r.argument_digest, r.authorization_hash, r.resource_digest, r.fencing_epoch, r.product_idempotency_key, r.state, r.attempt, r.lease_owner, r.lease_expires_at, r.result_digest, r.result_status, r.audit_correlation_id, r.dispatched_at, r.verified_at, r.auto_budget_reserved, r.safety_policy_revision, r.created_at, r.updated_at, r.arguments_key_id, r.arguments_algorithm, r.arguments_ciphertext, r.arguments_nonce, r.result_key_id, r.result_algorithm, r.result_ciphertext, r.result_nonce
 `
 
 type ReserveCharlieAutoBudgetParams struct {
@@ -4555,7 +4615,6 @@ func (q *Queries) ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharl
 		&i.Capability,
 		&i.Effect,
 		&i.ArgumentDigest,
-		&i.ArgumentsEncrypted,
 		&i.AuthorizationHash,
 		&i.ResourceDigest,
 		&i.FencingEpoch,
@@ -4566,7 +4625,6 @@ func (q *Queries) ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharl
 		&i.LeaseExpiresAt,
 		&i.ResultDigest,
 		&i.ResultStatus,
-		&i.ResultEncrypted,
 		&i.AuditCorrelationID,
 		&i.DispatchedAt,
 		&i.VerifiedAt,
@@ -4574,6 +4632,14 @@ func (q *Queries) ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharl
 		&i.SafetyPolicyRevision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArgumentsKeyID,
+		&i.ArgumentsAlgorithm,
+		&i.ArgumentsCiphertext,
+		&i.ArgumentsNonce,
+		&i.ResultKeyID,
+		&i.ResultAlgorithm,
+		&i.ResultCiphertext,
+		&i.ResultNonce,
 	)
 	return i, err
 }
@@ -4904,26 +4970,32 @@ UPDATE charlie_action_receipts
 SET state = $1,
     result_digest = $2,
     result_status = $3,
-    result_encrypted = $4,
+    result_key_id = $4,
+    result_algorithm = $5,
+    result_ciphertext = $6,
+    result_nonce = $7,
     dispatched_at = CASE WHEN $1::varchar = 'dispatched' THEN now() ELSE dispatched_at END,
     verified_at = CASE WHEN $1::varchar IN ('succeeded', 'failed') THEN now() ELSE verified_at END,
     updated_at = now()
-WHERE id = $5
-  AND state = $6
-  AND lease_owner = $7
-  AND fencing_epoch = $8
-RETURNING id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, arguments_encrypted, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, result_encrypted, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at
+WHERE id = $8
+  AND state = $9
+  AND lease_owner = $10
+  AND fencing_epoch = $11
+RETURNING id, connection_id, session_id, charlie_action_id, turn_id, capability, effect, argument_digest, authorization_hash, resource_digest, fencing_epoch, product_idempotency_key, state, attempt, lease_owner, lease_expires_at, result_digest, result_status, audit_correlation_id, dispatched_at, verified_at, auto_budget_reserved, safety_policy_revision, created_at, updated_at, arguments_key_id, arguments_algorithm, arguments_ciphertext, arguments_nonce, result_key_id, result_algorithm, result_ciphertext, result_nonce
 `
 
 type TransitionCharlieActionReceiptParams struct {
-	NextState       string    `json:"next_state"`
-	ResultDigest    string    `json:"result_digest"`
-	ResultStatus    string    `json:"result_status"`
-	ResultEncrypted string    `json:"result_encrypted"`
-	ID              uuid.UUID `json:"id"`
-	ExpectedState   string    `json:"expected_state"`
-	LeaseOwner      string    `json:"lease_owner"`
-	FencingEpoch    int64     `json:"fencing_epoch"`
+	NextState        string    `json:"next_state"`
+	ResultDigest     string    `json:"result_digest"`
+	ResultStatus     string    `json:"result_status"`
+	ResultKeyID      string    `json:"result_key_id"`
+	ResultAlgorithm  string    `json:"result_algorithm"`
+	ResultCiphertext []byte    `json:"result_ciphertext"`
+	ResultNonce      []byte    `json:"result_nonce"`
+	ID               uuid.UUID `json:"id"`
+	ExpectedState    string    `json:"expected_state"`
+	LeaseOwner       string    `json:"lease_owner"`
+	FencingEpoch     int64     `json:"fencing_epoch"`
 }
 
 func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg TransitionCharlieActionReceiptParams) (CharlieActionReceipt, error) {
@@ -4931,7 +5003,10 @@ func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg Transi
 		arg.NextState,
 		arg.ResultDigest,
 		arg.ResultStatus,
-		arg.ResultEncrypted,
+		arg.ResultKeyID,
+		arg.ResultAlgorithm,
+		arg.ResultCiphertext,
+		arg.ResultNonce,
 		arg.ID,
 		arg.ExpectedState,
 		arg.LeaseOwner,
@@ -4947,7 +5022,6 @@ func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg Transi
 		&i.Capability,
 		&i.Effect,
 		&i.ArgumentDigest,
-		&i.ArgumentsEncrypted,
 		&i.AuthorizationHash,
 		&i.ResourceDigest,
 		&i.FencingEpoch,
@@ -4958,7 +5032,6 @@ func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg Transi
 		&i.LeaseExpiresAt,
 		&i.ResultDigest,
 		&i.ResultStatus,
-		&i.ResultEncrypted,
 		&i.AuditCorrelationID,
 		&i.DispatchedAt,
 		&i.VerifiedAt,
@@ -4966,6 +5039,14 @@ func (q *Queries) TransitionCharlieActionReceipt(ctx context.Context, arg Transi
 		&i.SafetyPolicyRevision,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArgumentsKeyID,
+		&i.ArgumentsAlgorithm,
+		&i.ArgumentsCiphertext,
+		&i.ArgumentsNonce,
+		&i.ResultKeyID,
+		&i.ResultAlgorithm,
+		&i.ResultCiphertext,
+		&i.ResultNonce,
 	)
 	return i, err
 }
@@ -5167,7 +5248,7 @@ SET leader_instance_id = $1,
     last_error_code = $5,
     updated_at = now()
 WHERE id = $6 AND active = true
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type UpdateCharlieAgentStatusParams struct {
@@ -5210,7 +5291,6 @@ func (q *Queries) UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharli
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -5246,6 +5326,10 @@ func (q *Queries) UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharli
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -5258,7 +5342,7 @@ SET chart_reference = $1,
     image_digest = $4,
     updated_at = now()
 WHERE id = $5
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type UpdateCharlieConnectionAppliedArtifactsParams struct {
@@ -5299,7 +5383,6 @@ func (q *Queries) UpdateCharlieConnectionAppliedArtifacts(ctx context.Context, a
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -5335,6 +5418,10 @@ func (q *Queries) UpdateCharlieConnectionAppliedArtifacts(ctx context.Context, a
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }
@@ -5355,7 +5442,7 @@ SET kubernetes_visibility_profile = $1,
 WHERE id = $3
   AND active = true
   AND verified_mode_revision = $4
-RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest, local_trust_material_key_id, local_trust_material_algorithm, local_trust_material_ciphertext, local_trust_material_nonce
 `
 
 type UpdateCharlieKubernetesVisibilityParams struct {
@@ -5394,7 +5481,6 @@ func (q *Queries) UpdateCharlieKubernetesVisibility(ctx context.Context, arg Upd
 		&i.ReplicaCount,
 		&i.BridgeServiceName,
 		&i.McpServiceName,
-		&i.LocalTrustMaterialEncrypted,
 		&i.AgentSecretName,
 		&i.OnboardingPackageID,
 		&i.OnboardingPackageDigest,
@@ -5430,6 +5516,10 @@ func (q *Queries) UpdateCharlieKubernetesVisibility(ctx context.Context, arg Upd
 		&i.KubernetesVisibilityPodLogs,
 		&i.KubernetesVisibilityRediscoveryState,
 		&i.KubernetesVisibilityCandidateDigest,
+		&i.LocalTrustMaterialKeyID,
+		&i.LocalTrustMaterialAlgorithm,
+		&i.LocalTrustMaterialCiphertext,
+		&i.LocalTrustMaterialNonce,
 	)
 	return i, err
 }

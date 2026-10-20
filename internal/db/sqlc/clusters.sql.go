@@ -225,35 +225,23 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 }
 
 const createClusterRegistrationToken = `-- name: CreateClusterRegistrationToken :one
-INSERT INTO cluster_registration_tokens (cluster_id, token, token_hash, expires_at)
-VALUES (
-    $1,
-    $2::text,
-    COALESCE(NULLIF($3::text, ''), encode(digest($2::text, 'sha256'), 'hex')),
-    $4
-)
-RETURNING id, cluster_id, token, expires_at, is_used, created_at, updated_at, token_hash
+INSERT INTO cluster_registration_tokens (cluster_id, token_hash, expires_at)
+VALUES ($1, $2, $3)
+RETURNING id, cluster_id, expires_at, is_used, created_at, updated_at, token_hash
 `
 
 type CreateClusterRegistrationTokenParams struct {
 	ClusterID uuid.UUID `json:"cluster_id"`
-	Token     string    `json:"token"`
 	TokenHash string    `json:"token_hash"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
 func (q *Queries) CreateClusterRegistrationToken(ctx context.Context, arg CreateClusterRegistrationTokenParams) (ClusterRegistrationToken, error) {
-	row := q.db.QueryRow(ctx, createClusterRegistrationToken,
-		arg.ClusterID,
-		arg.Token,
-		arg.TokenHash,
-		arg.ExpiresAt,
-	)
+	row := q.db.QueryRow(ctx, createClusterRegistrationToken, arg.ClusterID, arg.TokenHash, arg.ExpiresAt)
 	var i ClusterRegistrationToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
-		&i.Token,
 		&i.ExpiresAt,
 		&i.IsUsed,
 		&i.CreatedAt,
@@ -268,29 +256,30 @@ INSERT INTO cluster_registry_configs (
     cluster_id,
     private_registry_url,
     registry_username,
-    registry_password,
-    registry_password_encrypted,
+    registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce,
     insecure,
     ca_bundle,
     namespaces,
     inject_default_sa,
     secret_name
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted
+VALUES ($1, $2, $3, $4, $10, $11, $12, $5, $6, $7, $8, $9)
+RETURNING id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce
 `
 
 type CreateClusterRegistryConfigParams struct {
-	ClusterID                 uuid.UUID       `json:"cluster_id"`
-	PrivateRegistryUrl        string          `json:"private_registry_url"`
-	RegistryUsername          string          `json:"registry_username"`
-	RegistryPassword          string          `json:"registry_password"`
-	RegistryPasswordEncrypted string          `json:"registry_password_encrypted"`
-	Insecure                  bool            `json:"insecure"`
-	CaBundle                  string          `json:"ca_bundle"`
-	Namespaces                json.RawMessage `json:"namespaces"`
-	InjectDefaultSa           bool            `json:"inject_default_sa"`
-	SecretName                string          `json:"secret_name"`
+	ClusterID                  uuid.UUID       `json:"cluster_id"`
+	PrivateRegistryUrl         string          `json:"private_registry_url"`
+	RegistryUsername           string          `json:"registry_username"`
+	RegistryPasswordKeyID      string          `json:"registry_password_key_id"`
+	Insecure                   bool            `json:"insecure"`
+	CaBundle                   string          `json:"ca_bundle"`
+	Namespaces                 json.RawMessage `json:"namespaces"`
+	InjectDefaultSa            bool            `json:"inject_default_sa"`
+	SecretName                 string          `json:"secret_name"`
+	RegistryPasswordAlgorithm  string          `json:"registry_password_algorithm"`
+	RegistryPasswordCiphertext []byte          `json:"registry_password_ciphertext"`
+	RegistryPasswordNonce      []byte          `json:"registry_password_nonce"`
 }
 
 func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
@@ -298,13 +287,15 @@ func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClu
 		arg.ClusterID,
 		arg.PrivateRegistryUrl,
 		arg.RegistryUsername,
-		arg.RegistryPassword,
-		arg.RegistryPasswordEncrypted,
+		arg.RegistryPasswordKeyID,
 		arg.Insecure,
 		arg.CaBundle,
 		arg.Namespaces,
 		arg.InjectDefaultSa,
 		arg.SecretName,
+		arg.RegistryPasswordAlgorithm,
+		arg.RegistryPasswordCiphertext,
+		arg.RegistryPasswordNonce,
 	)
 	var i ClusterRegistryConfig
 	err := row.Scan(
@@ -312,7 +303,6 @@ func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClu
 		&i.ClusterID,
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
-		&i.RegistryPassword,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -322,7 +312,10 @@ func (q *Queries) CreateClusterRegistryConfig(ctx context.Context, arg CreateClu
 		&i.SecretName,
 		&i.LastAppliedAt,
 		&i.LastApplyError,
-		&i.RegistryPasswordEncrypted,
+		&i.RegistryPasswordKeyID,
+		&i.RegistryPasswordAlgorithm,
+		&i.RegistryPasswordCiphertext,
+		&i.RegistryPasswordNonce,
 	)
 	return i, err
 }
@@ -537,7 +530,7 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 }
 
 const getClusterAgentTokenByClusterID = `-- name: GetClusterAgentTokenByClusterID :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
+SELECT id, cluster_id, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at FROM cluster_agent_tokens WHERE cluster_id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (ClusterAgentToken, error) {
@@ -546,7 +539,6 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
-		&i.Token,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -561,9 +553,8 @@ func (q *Queries) GetClusterAgentTokenByClusterID(ctx context.Context, clusterID
 }
 
 const getClusterAgentTokenByToken = `-- name: GetClusterAgentTokenByToken :one
-SELECT id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at FROM cluster_agent_tokens
+SELECT id, cluster_id, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at FROM cluster_agent_tokens
 WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex')
-   OR (token_hash = '' AND token = $1::text)
    OR (previous_token_hash IS NOT NULL
        AND previous_token_hash = encode(digest($1::text, 'sha256'), 'hex')))
   AND revoked_at IS NULL
@@ -579,7 +570,6 @@ func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, dollar_1 stri
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
-		&i.Token,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -897,7 +887,7 @@ func (q *Queries) GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUI
 }
 
 const getClusterRegistryConfig = `-- name: GetClusterRegistryConfig :one
-SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs WHERE cluster_id = $1
+SELECT id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce FROM cluster_registry_configs WHERE cluster_id = $1
 `
 
 func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (ClusterRegistryConfig, error) {
@@ -908,7 +898,6 @@ func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.U
 		&i.ClusterID,
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
-		&i.RegistryPassword,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -918,13 +907,16 @@ func (q *Queries) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.U
 		&i.SecretName,
 		&i.LastAppliedAt,
 		&i.LastApplyError,
-		&i.RegistryPasswordEncrypted,
+		&i.RegistryPasswordKeyID,
+		&i.RegistryPasswordAlgorithm,
+		&i.RegistryPasswordCiphertext,
+		&i.RegistryPasswordNonce,
 	)
 	return i, err
 }
 
 const getClusterRegistryConfigByID = `-- name: GetClusterRegistryConfigByID :one
-SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs WHERE id = $1
+SELECT id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce FROM cluster_registry_configs WHERE id = $1
 `
 
 func (q *Queries) GetClusterRegistryConfigByID(ctx context.Context, id uuid.UUID) (ClusterRegistryConfig, error) {
@@ -935,7 +927,6 @@ func (q *Queries) GetClusterRegistryConfigByID(ctx context.Context, id uuid.UUID
 		&i.ClusterID,
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
-		&i.RegistryPassword,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -945,14 +936,17 @@ func (q *Queries) GetClusterRegistryConfigByID(ctx context.Context, id uuid.UUID
 		&i.SecretName,
 		&i.LastAppliedAt,
 		&i.LastApplyError,
-		&i.RegistryPasswordEncrypted,
+		&i.RegistryPasswordKeyID,
+		&i.RegistryPasswordAlgorithm,
+		&i.RegistryPasswordCiphertext,
+		&i.RegistryPasswordNonce,
 	)
 	return i, err
 }
 
 const getRegistrationTokenByToken = `-- name: GetRegistrationTokenByToken :one
-SELECT id, cluster_id, token, expires_at, is_used, created_at, updated_at, token_hash FROM cluster_registration_tokens
-WHERE (token_hash = encode(digest($1::text, 'sha256'), 'hex') OR (token_hash = '' AND token = $1::text))
+SELECT id, cluster_id, expires_at, is_used, created_at, updated_at, token_hash FROM cluster_registration_tokens
+WHERE token_hash = encode(digest($1::text, 'sha256'), 'hex')
   AND expires_at > now()
 ORDER BY created_at DESC
 LIMIT 1
@@ -965,15 +959,15 @@ LIMIT 1
 // the registration branch of validateAndMaybeRotateToken denies any token
 // created at/before that adoption. ORDER BY created_at DESC LIMIT 1 keeps this
 // :one deterministic when several un-expired tokens coexist (re-import mints a
-// new one before the old expires). The legacy `OR (token_hash=” AND token=$1)`
-// branch matches pre-093 plaintext rows; backfill removal is out of A3 scope.
+// new one before the old expires).
+// Only the SHA-256 hash is stored; the plaintext token column was dropped in
+// migration 00082.
 func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, dollar_1 string) (ClusterRegistrationToken, error) {
 	row := q.db.QueryRow(ctx, getRegistrationTokenByToken, dollar_1)
 	var i ClusterRegistrationToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
-		&i.Token,
 		&i.ExpiresAt,
 		&i.IsUsed,
 		&i.CreatedAt,
@@ -984,7 +978,7 @@ func (q *Queries) GetRegistrationTokenByToken(ctx context.Context, dollar_1 stri
 }
 
 const listAllClusterRegistryConfigs = `-- name: ListAllClusterRegistryConfigs :many
-SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs
+SELECT id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce FROM cluster_registry_configs
 ORDER BY cluster_id, created_at ASC
 `
 
@@ -1003,7 +997,6 @@ func (q *Queries) ListAllClusterRegistryConfigs(ctx context.Context) ([]ClusterR
 			&i.ClusterID,
 			&i.PrivateRegistryUrl,
 			&i.RegistryUsername,
-			&i.RegistryPassword,
 			&i.Insecure,
 			&i.CaBundle,
 			&i.CreatedAt,
@@ -1013,7 +1006,10 @@ func (q *Queries) ListAllClusterRegistryConfigs(ctx context.Context) ([]ClusterR
 			&i.SecretName,
 			&i.LastAppliedAt,
 			&i.LastApplyError,
-			&i.RegistryPasswordEncrypted,
+			&i.RegistryPasswordKeyID,
+			&i.RegistryPasswordAlgorithm,
+			&i.RegistryPasswordCiphertext,
+			&i.RegistryPasswordNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -1136,7 +1132,7 @@ func (q *Queries) ListClusterProbeTargets(ctx context.Context, arg ListClusterPr
 
 const listClusterRegistryConfigs = `-- name: ListClusterRegistryConfigs :many
 
-SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs
+SELECT id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce FROM cluster_registry_configs
 WHERE cluster_id = $1
 ORDER BY created_at ASC
 `
@@ -1159,7 +1155,6 @@ func (q *Queries) ListClusterRegistryConfigs(ctx context.Context, clusterID uuid
 			&i.ClusterID,
 			&i.PrivateRegistryUrl,
 			&i.RegistryUsername,
-			&i.RegistryPassword,
 			&i.Insecure,
 			&i.CaBundle,
 			&i.CreatedAt,
@@ -1169,7 +1164,10 @@ func (q *Queries) ListClusterRegistryConfigs(ctx context.Context, clusterID uuid
 			&i.SecretName,
 			&i.LastAppliedAt,
 			&i.LastApplyError,
-			&i.RegistryPasswordEncrypted,
+			&i.RegistryPasswordKeyID,
+			&i.RegistryPasswordAlgorithm,
+			&i.RegistryPasswordCiphertext,
+			&i.RegistryPasswordNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -2146,33 +2144,30 @@ func (q *Queries) RevokeClusterAgentToken(ctx context.Context, clusterID uuid.UU
 const rotateClusterAgentToken = `-- name: RotateClusterAgentToken :one
 UPDATE cluster_agent_tokens
 SET previous_token_hash = token_hash,
-    token = $1::text,
-    token_hash = COALESCE(NULLIF($2::text, ''), encode(digest($1::text, 'sha256'), 'hex')),
+    token_hash = $1,
     last_used_at = now(),
     last_rotated_at = now(),
     rotation_pending_at = NULL,
     revoked_at = NULL
-WHERE id = $3
-RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at
+WHERE id = $2
+RETURNING id, cluster_id, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at
 `
 
 type RotateClusterAgentTokenParams struct {
-	Token     string    `json:"token"`
 	TokenHash string    `json:"token_hash"`
 	ID        uuid.UUID `json:"id"`
 }
 
 // Performs the grace rotation atomically: the current token_hash moves to
 // previous_token_hash (so the old token keeps validating until the agent
-// adopts the new one), token/token_hash become the freshly-minted values,
+// adopts the new one), token_hash becomes the freshly-minted values,
 // last_rotated_at is stamped and rotation_pending_at is cleared.
 func (q *Queries) RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error) {
-	row := q.db.QueryRow(ctx, rotateClusterAgentToken, arg.Token, arg.TokenHash, arg.ID)
+	row := q.db.QueryRow(ctx, rotateClusterAgentToken, arg.TokenHash, arg.ID)
 	var i ClusterAgentToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
-		&i.Token,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2327,29 +2322,33 @@ const updateClusterRegistryConfig = `-- name: UpdateClusterRegistryConfig :one
 UPDATE cluster_registry_configs SET
     private_registry_url = $2,
     registry_username    = $3,
-    registry_password    = $4,
-    registry_password_encrypted = $5,
-    insecure             = $6,
-    ca_bundle            = $7,
-    namespaces           = $8,
-    inject_default_sa    = $9,
-    secret_name          = $10,
+    registry_password_key_id = $4,
+    registry_password_algorithm = $10,
+    registry_password_ciphertext = $11,
+    registry_password_nonce = $12,
+    insecure             = $5,
+    ca_bundle            = $6,
+    namespaces           = $7,
+    inject_default_sa    = $8,
+    secret_name          = $9,
     updated_at           = now()
 WHERE id = $1
-RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted
+RETURNING id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce
 `
 
 type UpdateClusterRegistryConfigParams struct {
-	ID                        uuid.UUID       `json:"id"`
-	PrivateRegistryUrl        string          `json:"private_registry_url"`
-	RegistryUsername          string          `json:"registry_username"`
-	RegistryPassword          string          `json:"registry_password"`
-	RegistryPasswordEncrypted string          `json:"registry_password_encrypted"`
-	Insecure                  bool            `json:"insecure"`
-	CaBundle                  string          `json:"ca_bundle"`
-	Namespaces                json.RawMessage `json:"namespaces"`
-	InjectDefaultSa           bool            `json:"inject_default_sa"`
-	SecretName                string          `json:"secret_name"`
+	ID                         uuid.UUID       `json:"id"`
+	PrivateRegistryUrl         string          `json:"private_registry_url"`
+	RegistryUsername           string          `json:"registry_username"`
+	RegistryPasswordKeyID      string          `json:"registry_password_key_id"`
+	Insecure                   bool            `json:"insecure"`
+	CaBundle                   string          `json:"ca_bundle"`
+	Namespaces                 json.RawMessage `json:"namespaces"`
+	InjectDefaultSa            bool            `json:"inject_default_sa"`
+	SecretName                 string          `json:"secret_name"`
+	RegistryPasswordAlgorithm  string          `json:"registry_password_algorithm"`
+	RegistryPasswordCiphertext []byte          `json:"registry_password_ciphertext"`
+	RegistryPasswordNonce      []byte          `json:"registry_password_nonce"`
 }
 
 func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
@@ -2357,13 +2356,15 @@ func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClu
 		arg.ID,
 		arg.PrivateRegistryUrl,
 		arg.RegistryUsername,
-		arg.RegistryPassword,
-		arg.RegistryPasswordEncrypted,
+		arg.RegistryPasswordKeyID,
 		arg.Insecure,
 		arg.CaBundle,
 		arg.Namespaces,
 		arg.InjectDefaultSa,
 		arg.SecretName,
+		arg.RegistryPasswordAlgorithm,
+		arg.RegistryPasswordCiphertext,
+		arg.RegistryPasswordNonce,
 	)
 	var i ClusterRegistryConfig
 	err := row.Scan(
@@ -2371,7 +2372,6 @@ func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClu
 		&i.ClusterID,
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
-		&i.RegistryPassword,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -2381,7 +2381,10 @@ func (q *Queries) UpdateClusterRegistryConfig(ctx context.Context, arg UpdateClu
 		&i.SecretName,
 		&i.LastAppliedAt,
 		&i.LastApplyError,
-		&i.RegistryPasswordEncrypted,
+		&i.RegistryPasswordKeyID,
+		&i.RegistryPasswordAlgorithm,
+		&i.RegistryPasswordCiphertext,
+		&i.RegistryPasswordNonce,
 	)
 	return i, err
 }
@@ -2451,35 +2454,27 @@ func (q *Queries) UpdateClusterStatusOnHeartbeat(ctx context.Context, arg Update
 }
 
 const upsertClusterAgentToken = `-- name: UpsertClusterAgentToken :one
-INSERT INTO cluster_agent_tokens (cluster_id, token, token_hash, last_used_at)
-VALUES (
-    $1,
-    $2::text,
-    COALESCE(NULLIF($3::text, ''), encode(digest($2::text, 'sha256'), 'hex')),
-    now()
-)
+INSERT INTO cluster_agent_tokens (cluster_id, token_hash, last_used_at)
+VALUES ($1, $2, now())
 ON CONFLICT (cluster_id) DO UPDATE SET
-    token = EXCLUDED.token,
     token_hash = EXCLUDED.token_hash,
     last_used_at = now(),
     revoked_at = NULL,
     adopted_at = NULL
-RETURNING id, cluster_id, token, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at
+RETURNING id, cluster_id, last_used_at, created_at, updated_at, token_hash, revoked_at, previous_token_hash, rotation_pending_at, last_rotated_at, adopted_at
 `
 
 type UpsertClusterAgentTokenParams struct {
 	ClusterID uuid.UUID `json:"cluster_id"`
-	Token     string    `json:"token"`
 	TokenHash string    `json:"token_hash"`
 }
 
 func (q *Queries) UpsertClusterAgentToken(ctx context.Context, arg UpsertClusterAgentTokenParams) (ClusterAgentToken, error) {
-	row := q.db.QueryRow(ctx, upsertClusterAgentToken, arg.ClusterID, arg.Token, arg.TokenHash)
+	row := q.db.QueryRow(ctx, upsertClusterAgentToken, arg.ClusterID, arg.TokenHash)
 	var i ClusterAgentToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
-		&i.Token,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2598,26 +2593,30 @@ func (q *Queries) UpsertClusterHealthStatus(ctx context.Context, arg UpsertClust
 }
 
 const upsertClusterRegistryConfig = `-- name: UpsertClusterRegistryConfig :one
-INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password, registry_password_encrypted, insecure, ca_bundle)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO cluster_registry_configs (cluster_id, private_registry_url, registry_username, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce, insecure, ca_bundle)
+VALUES ($1, $2, $3, $4, $7, $8, $9, $5, $6)
 ON CONFLICT (cluster_id) DO UPDATE SET
     private_registry_url = EXCLUDED.private_registry_url,
     registry_username = EXCLUDED.registry_username,
-    registry_password = EXCLUDED.registry_password,
-    registry_password_encrypted = EXCLUDED.registry_password_encrypted,
+    registry_password_key_id = EXCLUDED.registry_password_key_id,
+    registry_password_algorithm = EXCLUDED.registry_password_algorithm,
+    registry_password_ciphertext = EXCLUDED.registry_password_ciphertext,
+    registry_password_nonce = EXCLUDED.registry_password_nonce,
     insecure = EXCLUDED.insecure,
     ca_bundle = EXCLUDED.ca_bundle
-RETURNING id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted
+RETURNING id, cluster_id, private_registry_url, registry_username, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_key_id, registry_password_algorithm, registry_password_ciphertext, registry_password_nonce
 `
 
 type UpsertClusterRegistryConfigParams struct {
-	ClusterID                 uuid.UUID `json:"cluster_id"`
-	PrivateRegistryUrl        string    `json:"private_registry_url"`
-	RegistryUsername          string    `json:"registry_username"`
-	RegistryPassword          string    `json:"registry_password"`
-	RegistryPasswordEncrypted string    `json:"registry_password_encrypted"`
-	Insecure                  bool      `json:"insecure"`
-	CaBundle                  string    `json:"ca_bundle"`
+	ClusterID                  uuid.UUID `json:"cluster_id"`
+	PrivateRegistryUrl         string    `json:"private_registry_url"`
+	RegistryUsername           string    `json:"registry_username"`
+	RegistryPasswordKeyID      string    `json:"registry_password_key_id"`
+	Insecure                   bool      `json:"insecure"`
+	CaBundle                   string    `json:"ca_bundle"`
+	RegistryPasswordAlgorithm  string    `json:"registry_password_algorithm"`
+	RegistryPasswordCiphertext []byte    `json:"registry_password_ciphertext"`
+	RegistryPasswordNonce      []byte    `json:"registry_password_nonce"`
 }
 
 func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClusterRegistryConfigParams) (ClusterRegistryConfig, error) {
@@ -2625,10 +2624,12 @@ func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClu
 		arg.ClusterID,
 		arg.PrivateRegistryUrl,
 		arg.RegistryUsername,
-		arg.RegistryPassword,
-		arg.RegistryPasswordEncrypted,
+		arg.RegistryPasswordKeyID,
 		arg.Insecure,
 		arg.CaBundle,
+		arg.RegistryPasswordAlgorithm,
+		arg.RegistryPasswordCiphertext,
+		arg.RegistryPasswordNonce,
 	)
 	var i ClusterRegistryConfig
 	err := row.Scan(
@@ -2636,7 +2637,6 @@ func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClu
 		&i.ClusterID,
 		&i.PrivateRegistryUrl,
 		&i.RegistryUsername,
-		&i.RegistryPassword,
 		&i.Insecure,
 		&i.CaBundle,
 		&i.CreatedAt,
@@ -2646,7 +2646,10 @@ func (q *Queries) UpsertClusterRegistryConfig(ctx context.Context, arg UpsertClu
 		&i.SecretName,
 		&i.LastAppliedAt,
 		&i.LastApplyError,
-		&i.RegistryPasswordEncrypted,
+		&i.RegistryPasswordKeyID,
+		&i.RegistryPasswordAlgorithm,
+		&i.RegistryPasswordCiphertext,
+		&i.RegistryPasswordNonce,
 	)
 	return i, err
 }

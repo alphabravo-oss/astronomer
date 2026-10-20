@@ -13,11 +13,9 @@ SELECT * FROM management_backup_destinations WHERE id = $1 FOR UPDATE;
 
 -- name: CreateManagementBackupDestination :one
 INSERT INTO management_backup_destinations (
-    name, bucket, prefix, region, endpoint_url, encrypted_credentials,
+    name, bucket, prefix, region, endpoint_url, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce,
     schedule, enabled, keep_daily, keep_weekly, keep_monthly, created_by_id
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-)
+) VALUES ($1, $2, $3, $4, $5, $6, $13, $14, $15, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
 -- name: UpdateManagementBackupDestination :one
@@ -27,7 +25,10 @@ UPDATE management_backup_destinations SET
     prefix = $4,
     region = $5,
     endpoint_url = $6,
-    encrypted_credentials = $7,
+    credentials_key_id = $7,
+    credentials_algorithm = $13,
+    credentials_ciphertext = $14,
+    credentials_nonce = $15,
     schedule = $8,
     enabled = $9,
     keep_daily = $10,

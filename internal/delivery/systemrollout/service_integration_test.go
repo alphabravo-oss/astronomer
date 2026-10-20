@@ -156,6 +156,7 @@ func TestPostgresSystemRolloutStartIdempotencyAndEligibility(t *testing.T) {
 		}
 	}
 }
+
 //nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction(t *testing.T) {
 	t.Parallel()
@@ -239,6 +240,7 @@ func TestPostgresSystemRolloutConcurrentFenceHasOneWinner(t *testing.T) {
 	countRows(t, s, "delivery_system_events", 2)
 	countRows(t, s, "audit_outbox", 2)
 }
+
 //nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestPostgresSystemRolloutCohortPromotionAndRollback(t *testing.T) {
 	t.Parallel()

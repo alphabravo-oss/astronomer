@@ -22,13 +22,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -83,7 +84,7 @@ type AdminDrillHandler struct {
 	k8s                     kubernetes.Interface
 	namespace               string
 	releaseName             string
-	encryptor               *auth.Encryptor
+	encryptor               *crypto.Encryptor
 	httpClient              *http.Client
 	backupImage             string
 	serviceAccount          string
@@ -124,7 +125,7 @@ func NewAdminDrillHandler(queries AdminDrillQuerier) *AdminDrillHandler {
 	}
 }
 
-func (h *AdminDrillHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *AdminDrillHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

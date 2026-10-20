@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -114,18 +115,18 @@ func (tx *stagedResourceSettingsTx) GetSSOConfigurationByIDForUpdate(_ context.C
 func (tx *stagedResourceSettingsTx) CreateSSOConfiguration(_ context.Context, arg sqlc.CreateSSOConfigurationParams) (sqlc.SsoConfiguration, error) {
 	tx.events = append(tx.events, "create-provider:"+arg.Provider)
 	row := sqlc.SsoConfiguration{
-		ID:                    uuid.New(),
-		Provider:              arg.Provider,
-		IsEnabled:             arg.IsEnabled,
-		DisplayName:           arg.DisplayName,
-		Config:                arg.Config,
-		ClientID:              arg.ClientID,
-		ClientSecretEncrypted: arg.ClientSecretEncrypted,
-		AllowedOrganizations:  arg.AllowedOrganizations,
-		AllowedDomains:        arg.AllowedDomains,
-		AutoCreateUsers:       arg.AutoCreateUsers,
-		CreatedAt:             time.Now().UTC(),
-		UpdatedAt:             time.Now().UTC(),
+		ID:                uuid.New(),
+		Provider:          arg.Provider,
+		IsEnabled:         arg.IsEnabled,
+		DisplayName:       arg.DisplayName,
+		Config:            arg.Config,
+		ClientID:          arg.ClientID,
+		ClientSecretKeyID: arg.ClientSecretKeyID, ClientSecretAlgorithm: arg.ClientSecretAlgorithm, ClientSecretCiphertext: arg.ClientSecretCiphertext, ClientSecretNonce: arg.ClientSecretNonce,
+		AllowedOrganizations: arg.AllowedOrganizations,
+		AllowedDomains:       arg.AllowedDomains,
+		AutoCreateUsers:      arg.AutoCreateUsers,
+		CreatedAt:            time.Now().UTC(),
+		UpdatedAt:            time.Now().UTC(),
 	}
 	tx.providers[row.ID] = row
 	return row, nil
@@ -153,11 +154,11 @@ type stagedSSORegistrar struct {
 	partialOnFail bool
 }
 
-func (r *stagedSSORegistrar) RegisterProvider(name, _, _, _ string, _ []string) error {
+func (r *stagedSSORegistrar) RegisterProvider(name, _ string, _ crypto.Sealed, _ string, _ []string) error {
 	return r.register(name)
 }
 
-func (r *stagedSSORegistrar) RegisterOIDCProvider(_ context.Context, name, _, _, _, _ string, _ []string) error {
+func (r *stagedSSORegistrar) RegisterOIDCProvider(_ context.Context, name, _, _ string, _ crypto.Sealed, _ string, _ []string) error {
 	return r.register(name)
 }
 
@@ -189,11 +190,11 @@ func (r stagedSettingsReader) GetPlatformSetting(context.Context, string) (sqlc.
 
 func newTransactionalResourceHandler(t *testing.T, store *stagedResourceSettingsStore, registrar *stagedSSORegistrar) *ResourceHandler {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}

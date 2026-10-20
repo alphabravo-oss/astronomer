@@ -36,6 +36,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
@@ -228,14 +229,14 @@ func dsnEnforcesTLS(dsn string) bool {
 // server and the worker call (C-01).
 const (
 	devSecretKey     = "local-dev-secret-key-change-in-production"
-	devEncryptionKey = "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA="
+	devEncryptionKey = "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7"
 )
 
 func isProductionConfig(cfg *config.Config) bool {
 	return config.IsProduction(cfg)
 }
 
-func validateProductionSecurityConfig(cfg *config.Config, encryptor *auth.Encryptor) error {
+func validateProductionSecurityConfig(cfg *config.Config, encryptor *crypto.Encryptor) error {
 	return config.ValidateProductionSecurity(cfg, encryptor != nil)
 }
 
@@ -396,9 +397,9 @@ type Server struct {
 	// path, which only works on the pod that owns the WS terminations.
 	// Nil in lightweight test servers built via New().
 	tunnelWorker tunnelWorkerLifecycle
-	// Encryptor is the Fernet encryptor wired into handlers that surface
+	// Encryptor is the age keyring (pkg/crypto) wired into handlers that surface
 	// encrypted columns (delivery credentials, SSO client secrets, etc.).
-	Encryptor *auth.Encryptor
+	Encryptor *crypto.Encryptor
 	// SSO drives the OAuth login/callback flow. May be nil if no providers
 	// are configured at boot.
 	SSO *auth.SSOManager

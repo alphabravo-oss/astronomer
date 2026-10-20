@@ -15,6 +15,7 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0007](0007-rest-to-connect-rpc.md) | REST/OpenAPI to Connect-RPC migration strategy | proposed |
 | [0008](0008-charlie-integration-retained.md) | Charlie integration is retained | accepted |
 | [0009](0009-goose-embedded-migrations.md) | goose migrations embedded in the server, applied at boot | accepted |
+| [0010](0010-age-column-encryption.md) | age column encryption with a (key_id, algorithm, ciphertext, nonce) row shape | accepted |
 | [0011](0011-zerolog-logging-with-slog-bridge.md) | zerolog via pkg/logging, with a log/slog bridge | accepted |
 | [0012](0012-otel-meter-provider-prometheus-exporter.md) | pkg/telemetry: one Init for tracer and meter providers, one /metrics | accepted |
 | [0015](0015-image-signature-admission.md) | Image signature admission with per-vendor authorities | accepted |

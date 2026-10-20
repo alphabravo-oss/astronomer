@@ -4,17 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func completeDispatchRuntime(t *testing.T) DispatchRuntime {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}

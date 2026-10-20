@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -68,18 +70,18 @@ func (h *AdminDrillHandler) CreateDestination(w http.ResponseWriter, r *http.Req
 	err = h.runTx(r.Context(), func(q ManagementBackupMutationTx) error {
 		var createErr error
 		row, createErr = q.CreateManagementBackupDestination(r.Context(), sqlc.CreateManagementBackupDestinationParams{
-			Name:                 req.Name,
-			Bucket:               req.Bucket,
-			Prefix:               req.Prefix,
-			Region:               req.Region,
-			EndpointUrl:          req.EndpointURL,
-			EncryptedCredentials: encrypted,
-			Schedule:             req.Schedule,
-			Enabled:              derefBool(req.Enabled, true),
-			KeepDaily:            derefInt32(req.KeepDaily, 30),
-			KeepWeekly:           derefInt32(req.KeepWeekly, 12),
-			KeepMonthly:          derefInt32(req.KeepMonthly, 6),
-			CreatedByID:          createdBy,
+			Name:             req.Name,
+			Bucket:           req.Bucket,
+			Prefix:           req.Prefix,
+			Region:           req.Region,
+			EndpointUrl:      req.EndpointURL,
+			CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
+			Schedule:    req.Schedule,
+			Enabled:     derefBool(req.Enabled, true),
+			KeepDaily:   derefInt32(req.KeepDaily, 30),
+			KeepWeekly:  derefInt32(req.KeepWeekly, 12),
+			KeepMonthly: derefInt32(req.KeepMonthly, 6),
+			CreatedByID: createdBy,
 		})
 		if createErr != nil {
 			return createErr
@@ -127,7 +129,7 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 		if existing.ReconcileStatus == "applying" {
 			return errManagementBackupReconcileActive
 		}
-		encrypted := existing.EncryptedCredentials
+		encrypted := crypto.FromParts(existing.CredentialsKeyID, existing.CredentialsAlgorithm, existing.CredentialsCiphertext, existing.CredentialsNonce)
 		access, secret, decErr := h.decryptDestinationCredentials(existing)
 		if decErr != nil {
 			return decErr
@@ -145,15 +147,15 @@ func (h *AdminDrillHandler) UpdateDestination(w http.ResponseWriter, r *http.Req
 			}
 		}
 		row, loadErr = q.UpdateManagementBackupDestination(r.Context(), sqlc.UpdateManagementBackupDestinationParams{
-			ID:                   id,
-			Name:                 req.Name,
-			Bucket:               req.Bucket,
-			Prefix:               req.Prefix,
-			Region:               req.Region,
-			EndpointUrl:          req.EndpointURL,
-			EncryptedCredentials: encrypted,
-			Schedule:             req.Schedule,
-			Enabled:              derefBool(req.Enabled, existing.Enabled), KeepDaily: derefInt32(req.KeepDaily, existing.KeepDaily), KeepWeekly: derefInt32(req.KeepWeekly, existing.KeepWeekly), KeepMonthly: derefInt32(req.KeepMonthly, existing.KeepMonthly),
+			ID:               id,
+			Name:             req.Name,
+			Bucket:           req.Bucket,
+			Prefix:           req.Prefix,
+			Region:           req.Region,
+			EndpointUrl:      req.EndpointURL,
+			CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
+			Schedule: req.Schedule,
+			Enabled:  derefBool(req.Enabled, existing.Enabled), KeepDaily: derefInt32(req.KeepDaily, existing.KeepDaily), KeepWeekly: derefInt32(req.KeepWeekly, existing.KeepWeekly), KeepMonthly: derefInt32(req.KeepMonthly, existing.KeepMonthly),
 		})
 		if loadErr != nil {
 			return loadErr

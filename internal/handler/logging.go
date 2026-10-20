@@ -11,13 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -137,7 +138,7 @@ type LoggingHandler struct {
 	// helmConcurrency caps the parallel dispatch fan-out for
 	// executeOperation; zero falls back to the package default.
 	helmConcurrency int
-	encryptor       *auth.Encryptor
+	encryptor       *crypto.Encryptor
 	lokiIngest      lokiIngestReconciler
 	lokiAttach      lokiAttachGate
 	// querySlots bounds expensive remote log queries across all providers.
@@ -226,7 +227,7 @@ func (h *LoggingHandler) SetHelmRequester(r HelmRequester) {
 	h.helm = r
 }
 
-func (h *LoggingHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *LoggingHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,9 +29,9 @@ type dexOperationStore interface {
 }
 
 type dexRegisterPayload struct {
-	ClientID              string `json:"client_id"`
-	DisplayName           string `json:"display_name"`
-	ClientSecretEncrypted string `json:"client_secret_encrypted"`
+	ClientID     string        `json:"client_id"`
+	DisplayName  string        `json:"display_name"`
+	ClientSecret crypto.Sealed `json:"client_secret_sealed"`
 }
 
 // openapi:request-operation postAuthDexRegisterAsSso
@@ -58,7 +60,7 @@ func dexOperationFromReserve(row sqlc.ReserveDexOperationRow) sqlc.DexOperation 
 	return sqlc.DexOperation{
 		ID: row.ID, Action: row.Action, TargetID: row.TargetID, RuntimeGeneration: row.RuntimeGeneration,
 		IdempotencyScope: row.IdempotencyScope, IdempotencyKey: row.IdempotencyKey,
-		RequestDigest: row.RequestDigest, PayloadEncrypted: row.PayloadEncrypted,
+		RequestDigest: row.RequestDigest, PayloadKeyID: row.PayloadKeyID, PayloadAlgorithm: row.PayloadAlgorithm, PayloadCiphertext: row.PayloadCiphertext, PayloadNonce: row.PayloadNonce,
 		Status: row.Status, Phase: row.Phase, AttemptCount: row.AttemptCount, LockedUntil: row.LockedUntil,
 		ErrorCode: row.ErrorCode, CreatedBy: row.CreatedBy, CompletedAt: row.CompletedAt,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
@@ -105,7 +107,7 @@ func dexOperationConflict(err error) bool {
 	return errors.As(err, &databaseErr) && databaseErr.Code == "23505"
 }
 
-func (h *DexHandler) reserveAndQueueDexOperation(r *http.Request, action, digest, payload string, generation int64) (sqlc.DexOperation, error) {
+func (h *DexHandler) reserveAndQueueDexOperation(r *http.Request, action, digest string, payload crypto.Sealed, generation int64) (sqlc.DexOperation, error) {
 	if h.runTx == nil {
 		return sqlc.DexOperation{}, errors.New("durable Dex operation persistence is unavailable")
 	}
@@ -126,7 +128,7 @@ func (h *DexHandler) reserveAndQueueDexOperation(r *http.Request, action, digest
 		var reserveErr error
 		reserved, reserveErr := store.ReserveDexOperation(r.Context(), sqlc.ReserveDexOperationParams{
 			ID: id, Action: action, TargetID: dexSettingsSingletonID, IdempotencyScope: scope,
-			IdempotencyKey: key, RequestDigest: digest, PayloadEncrypted: payload, CreatedBy: actorID,
+			IdempotencyKey: key, RequestDigest: digest, PayloadKeyID: payload.KeyID, PayloadAlgorithm: payload.Algorithm, PayloadCiphertext: payload.Ciphertext, PayloadNonce: payload.Nonce, CreatedBy: actorID,
 		})
 		operation = dexOperationFromReserve(reserved)
 		if reserveErr != nil || !reserved.Created {
@@ -182,7 +184,7 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		Generation int64
 		Config     string
 	}{"apply", settings.RuntimeGeneration, string(config)})
-	operation, err := h.reserveAndQueueDexOperation(r, "apply", digest, "", settings.RuntimeGeneration)
+	operation, err := h.reserveAndQueueDexOperation(r, "apply", digest, crypto.Sealed{}, settings.RuntimeGeneration)
 	if err != nil {
 		if dexOperationConflict(err) {
 			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key identifies different Dex input")
@@ -241,18 +243,19 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	existing, existingErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
-	plainSecret, encryptedSecret := req.ClientSecret, ""
+	plainSecret := req.ClientSecret
+	var encryptedSecret crypto.Sealed
 	if req.ClientSecret != "" {
-		encryptedSecret, err = h.encryptor.Encrypt(req.ClientSecret)
+		encryptedSecret, err = h.encryptor.EncryptString(req.ClientSecret)
 	}
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt client secret")
 		return
 	}
 	if existingErr == nil && plainSecret == "" {
-		encryptedSecret = existing.ClientSecretEncrypted
-		if encryptedSecret != "" {
-			plainSecret, err = h.encryptor.Decrypt(encryptedSecret)
+		encryptedSecret = crypto.FromParts(existing.ClientSecretKeyID, existing.ClientSecretAlgorithm, existing.ClientSecretCiphertext, existing.ClientSecretNonce)
+		if !encryptedSecret.IsZero() {
+			plainSecret, err = h.encryptor.DecryptString(encryptedSecret)
 		}
 	}
 	if err != nil {
@@ -274,15 +277,14 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	candidate := settings
-	candidate.PublicClients = mustDexJSON(clients, []byte("[]"))
-	candidate.PublicClientsEncrypted = encryptedClients
+	candidate.PublicClientsKeyID, candidate.PublicClientsAlgorithm, candidate.PublicClientsCiphertext, candidate.PublicClientsNonce = encryptedClients.Parts()
 	config, err := h.renderDexConfig(candidate, clients, connectors)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.RenderError, "Dex runtime candidate is invalid")
 		return
 	}
-	payloadBytes, _ := json.Marshal(dexRegisterPayload{ClientID: req.ClientID, DisplayName: req.DisplayName, ClientSecretEncrypted: encryptedSecret})
-	payload, err := h.encryptor.Encrypt(string(payloadBytes))
+	payloadBytes, _ := json.Marshal(dexRegisterPayload{ClientID: req.ClientID, DisplayName: req.DisplayName, ClientSecret: encryptedSecret})
+	payload, err := h.encryptor.Encrypt(payloadBytes)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt Dex operation")
 		return
@@ -300,7 +302,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	id := uuid.NewSHA1(uuid.NameSpaceOID, []byte(scope+":"+key))
 	stage := sqlc.StageDexSettingsAndDisableSSOParams{ID: settings.ID, IssuerUrl: settings.IssuerUrl, ClusterID: settings.ClusterID,
 		Namespace: settings.Namespace, ReleaseName: settings.ReleaseName, ConfigmapName: settings.RuntimeSecretName, RuntimeSecretName: settings.RuntimeSecretName,
-		PublicClients: candidate.PublicClients, PublicClientsEncrypted: encryptedClients, Expiry: settings.Expiry, Extra: settings.Extra,
+		PublicClientsKeyID: encryptedClients.KeyID, PublicClientsAlgorithm: encryptedClients.Algorithm, PublicClientsCiphertext: encryptedClients.Ciphertext, PublicClientsNonce: encryptedClients.Nonce, Expiry: settings.Expiry, Extra: settings.Extra,
 		ChartReleaseName: settings.ChartReleaseName, DeploymentName: settings.DeploymentName, ServiceName: settings.ServiceName, RuntimePhase: settings.RuntimePhase}
 	var operation sqlc.DexOperation
 	err = h.runTx(r.Context(), func(q DexMutationTx) error {
@@ -308,7 +310,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return errors.New("durable Dex operation persistence is unavailable")
 		}
-		reserved, reserveErr := store.ReserveDexOperation(r.Context(), sqlc.ReserveDexOperationParams{ID: id, Action: action, TargetID: dexSettingsSingletonID, IdempotencyScope: scope, IdempotencyKey: key, RequestDigest: digest, PayloadEncrypted: payload, CreatedBy: actorID})
+		reserved, reserveErr := store.ReserveDexOperation(r.Context(), sqlc.ReserveDexOperationParams{ID: id, Action: action, TargetID: dexSettingsSingletonID, IdempotencyScope: scope, IdempotencyKey: key, RequestDigest: digest, PayloadKeyID: payload.KeyID, PayloadAlgorithm: payload.Algorithm, PayloadCiphertext: payload.Ciphertext, PayloadNonce: payload.Nonce, CreatedBy: actorID})
 		err = reserveErr
 		operation = dexOperationFromReserve(reserved)
 		if err != nil || !reserved.Created {
@@ -406,7 +408,7 @@ func (h *DexHandler) ExecuteDexOperation(ctx context.Context, operation sqlc.Dex
 	if h.encryptor == nil {
 		return errors.New("Dex operation decryptor is unavailable")
 	}
-	plain, err := h.encryptor.Decrypt(operation.PayloadEncrypted)
+	plain, err := h.encryptor.DecryptString(crypto.FromParts(operation.PayloadKeyID, operation.PayloadAlgorithm, operation.PayloadCiphertext, operation.PayloadNonce))
 	if err != nil {
 		return fmt.Errorf("decrypt Dex operation: %w", err)
 	}
@@ -415,6 +417,6 @@ func (h *DexHandler) ExecuteDexOperation(ctx context.Context, operation sqlc.Dex
 		return fmt.Errorf("decode Dex operation: %w", err)
 	}
 	config, _ := json.Marshal(map[string]any{"issuer_url": settings.IssuerUrl})
-	_, err = h.queries.EnableDexSSOForGeneration(ctx, sqlc.EnableDexSSOForGenerationParams{DisplayName: payload.DisplayName, Config: config, ClientID: payload.ClientID, ClientSecretEncrypted: payload.ClientSecretEncrypted, RuntimeGeneration: settings.RuntimeGeneration})
+	_, err = h.queries.EnableDexSSOForGeneration(ctx, sqlc.EnableDexSSOForGenerationParams{DisplayName: payload.DisplayName, Config: config, ClientID: payload.ClientID, ClientSecretKeyID: payload.ClientSecret.KeyID, ClientSecretAlgorithm: payload.ClientSecret.Algorithm, ClientSecretCiphertext: payload.ClientSecret.Ciphertext, ClientSecretNonce: payload.ClientSecret.Nonce, RuntimeGeneration: settings.RuntimeGeneration})
 	return err
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -110,7 +111,7 @@ func lockTOTPEnrollment(ctx context.Context, q TOTPMutationTx, userID uuid.UUID,
 	if err != nil {
 		return sqlc.User{}, err
 	}
-	if current.SecretEncrypted != expected.SecretEncrypted {
+	if current.SecretKeyID != expected.SecretKeyID || !bytes.Equal(current.SecretCiphertext, expected.SecretCiphertext) {
 		return sqlc.User{}, errTOTPEnrollmentChanged
 	}
 	return user, nil

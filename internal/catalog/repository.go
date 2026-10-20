@@ -140,7 +140,7 @@ func IsGitRepo(repo sqlc.HelmRepository) bool {
 // "bearer".
 //
 // It describes the DECRYPTED document. Since migration 145 the credential is
-// held as a Fernet envelope in auth_config_encrypted; construct this via
+// held as a sealed value in auth_config_*; construct this via
 // ResolveIndexAuthConfig (authconfig.go) rather than unmarshalling
 // repo.AuthConfig, which after sealing carries the non-secret projection only.
 type IndexAuthConfig struct {

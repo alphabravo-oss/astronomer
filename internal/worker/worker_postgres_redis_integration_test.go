@@ -65,6 +65,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 
 	"github.com/alphabravocompany/astronomer-go/internal/testdb"
@@ -327,7 +328,7 @@ type workerBusinessFixtures struct {
 	deferredWindowID          uuid.UUID
 	durableTimestamps         map[string]time.Time
 	credentialCiphertexts     map[string]string
-	credentialEncryptor       *auth.Encryptor
+	credentialEncryptor       *crypto.Encryptor
 	managementKubernetes      *fake.Clientset
 	managementNamespace       string
 	logs                      *bytes.Buffer
@@ -884,7 +885,7 @@ func (f *workerSMTPFixture) counts() (messages, unique int) {
 
 type workerDeliveryDecryptor struct{}
 
-func (workerDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
+func (workerDeliveryDecryptor) Decrypt(crypto.Sealed) ([]byte, error) {
 	return nil, errors.New("worker integration fixture has no encrypted delivery material")
 }
 
@@ -921,11 +922,11 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 	helmStatus := &workerHelmStatusFixture{unique: make(map[string]struct{})}
 	decommissionTunnel := &workerDecommissionTunnelFixture{sends: make(map[string]int), disconnects: make(map[string]int)}
 	queries := sqlc.New(pool)
-	encryptionKey, err := auth.GenerateKey()
+	encryptionKey, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptor, err := auth.NewEncryptor(encryptionKey)
+	encryptor, err := crypto.NewEncryptor(encryptionKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -992,9 +993,6 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 	}
 	maintenance := tasks.MaintenanceRuntime{
 		AgentTokens: tasks.AgentTokenRotateDeps{Queries: queries},
-		PlaintextCredentials: tasks.PlaintextCredentialMigrationDeps{
-			Queries: queries, Encryptor: encryptor,
-		},
 	}
 	gitOpsRuntime := tasks.GitOpsRuntime{Deps: tasks.GitOpsDeps{
 		Queries: queries, Enqueuer: client, TaskOutbox: queries, Decryptor: encryptor,
@@ -1093,7 +1091,6 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 		TypeAuditOutboxDispatch:                    dispatch.HandleAuditOutboxDispatch,
 		TypeAdminQueueOperation:                    dispatch.HandleAdminQueueOperation,
 		tasks.AgentTokenRotateSweepType:            maintenance.HandleAgentTokenRotateSweep,
-		TypePlaintextCredentialMigration:           maintenance.HandlePlaintextCredentialMigration,
 		tasks.GitOpsSyncType:                       gitOpsRuntime.HandleGitOpsSync,
 		tasks.MeshDetectType:                       meshRuntime.HandleMeshDetect,
 		tasks.CRDOwnershipDriftCheckType:           crdOwnershipRuntime.HandleCRDOwnershipDriftCheck,
@@ -1171,7 +1168,6 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 		tasks.ManagementBackupReconcileType,
 		tasks.ManagementBackupOperationType,
 		tasks.GitOpsSyncType,
-		TypePlaintextCredentialMigration,
 		TypeAdminQueueOperation,
 		tasks.PodDeleteType,
 		tasks.ResourceOperationType,
@@ -1214,8 +1210,8 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 		tasks.ClusterDecommissionAllType,
 		tasks.DispatchDeferredType,
 	}
-	if len(taskTypes) != 85 {
-		t.Fatalf("production business handler coverage=%d, want 85", len(taskTypes))
+	if len(taskTypes) != 84 {
+		t.Fatalf("production business handler coverage=%d, want 84", len(taskTypes))
 	}
 	t.Logf("production business handler coverage=%d/%d descriptors", len(taskTypes), len(TaskDescriptors()))
 
@@ -1557,7 +1553,7 @@ func workerBusinessTask(t *testing.T, taskType string, fixtures workerBusinessFi
 	}
 }
 
-func seedWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool, outbound *workerOutboundFixture, deliveryHTTP *workerDeliveryHTTPFixture, gitOps workerGitOpsFixture, encryptor *auth.Encryptor, managementOperationID uuid.UUID, managementKubernetes *fake.Clientset, managementNamespace string, tunnelK8s *workerTunnelK8sFixture) workerBusinessFixtures {
+func seedWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool, outbound *workerOutboundFixture, deliveryHTTP *workerDeliveryHTTPFixture, gitOps workerGitOpsFixture, encryptor *crypto.Encryptor, managementOperationID uuid.UUID, managementKubernetes *fake.Clientset, managementNamespace string, tunnelK8s *workerTunnelK8sFixture) workerBusinessFixtures {
 	t.Helper()
 	fixtures := workerBusinessFixtures{
 		clusterID:                 uuid.New(),
@@ -1650,15 +1646,15 @@ func seedWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpool
 	charlieTriggerRuleID := uuid.New()
 	charlieDirectFindingID := uuid.New()
 	charlieChannelID := uuid.New()
-	managementCredentials, err := encryptor.Encrypt(`{"access_key":"worker-access","secret_key":"worker-credential-secret-canary"}`)
+	managementCredentials, err := encryptor.EncryptString(`{"access_key":"worker-access","secret_key":"worker-credential-secret-canary"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodeParametersEncrypted, err := encryptor.Encrypt(`{}`)
+	nodeParametersSealed, err := encryptor.EncryptString(`{}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloudCredentialEncrypted, err := encryptor.Encrypt(`{"access_key_id":"worker-cloud-access","secret_access_key":"worker-cloud-secret"}`)
+	cloudCredentialSealed, err := encryptor.EncryptString(`{"access_key_id":"worker-cloud-access","secret_access_key":"worker-cloud-secret"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1669,11 +1665,23 @@ func seedWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpool
 	if err != nil {
 		t.Fatal(err)
 	}
-	deferredCiphertext, err := encryptor.Encrypt(string(deferredSpec))
+	deferredSealed, err := encryptor.Encrypt(deferredSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deferredEnvelope := mustWorkerJSON(t, handler.EncryptedDeferredOpSpec{SchemaVersion: 1, Ciphertext: deferredCiphertext})
+	// Credentials the worker only reads, sealed exactly as the handlers seal them.
+	sealCanary := func(plaintext string) crypto.Sealed {
+		t.Helper()
+		sealed, sealErr := encryptor.EncryptString(plaintext)
+		if sealErr != nil {
+			t.Fatal(sealErr)
+		}
+		return sealed
+	}
+	backupSealed := sealCanary(`{"access_key":"worker-access","secret_key":"worker-credential-secret-canary"}`)
+	registrySealed := sealCanary("worker-credential-secret-canary")
+	helmSealed := sealCanary(`{"username":"worker","password":"worker-credential-secret-canary"}`)
+	monitoringSealed := sealCanary(`{"token":"worker-credential-secret-canary"}`)
 	podDeletePayload := mustWorkerJSON(t, map[string]string{
 		"clusterId": fixtures.clusterID.String(), "kind": "Pod", "namespace": "default", "name": "worker-pod",
 	})
@@ -1761,18 +1769,18 @@ spec:
 		{`INSERT INTO maintenance_windows (id,name,mode,cron_open,duration_minutes,timezone,on_block,enabled) VALUES ($1,'Worker Deferred','blackout','0 0 * * *',60,'UTC','defer',true)`, []any{fixtures.deferredWindowID}},
 		{`INSERT INTO clusters (id,name,display_name,status,provider) VALUES ($1,$2,$2,'active','self_managed')`, []any{fixtures.clusterID, "worker-business-" + fixtures.clusterID.String()}},
 		{`INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count) VALUES ($1,now(),1)`, []any{fixtures.clusterID}},
-		{`INSERT INTO deferred_operations (id,window_id,operation_type,operation_spec,target_cluster_id,status,deferred_until,expires_at,requested_by) VALUES ($1,$2,$3,$4,$5,'pending',now()-interval '1 minute',now()+interval '1 hour',$6)`, []any{fixtures.deferredOperationID, fixtures.deferredWindowID, maintenance.OpClusterTemplateApply, deferredEnvelope, fixtures.clusterID, fixtures.kubectlUserID}},
+		{`INSERT INTO deferred_operations (id,window_id,operation_type,operation_spec,target_cluster_id,status,deferred_until,expires_at,requested_by,sealed_spec_key_id,sealed_spec_algorithm,sealed_spec_ciphertext,sealed_spec_nonce) VALUES ($1,$2,$3,'{}',$4,'pending',now()-interval '1 minute',now()+interval '1 hour',$5,$6,$7,$8,$9)`, []any{fixtures.deferredOperationID, fixtures.deferredWindowID, maintenance.OpClusterTemplateApply, fixtures.clusterID, fixtures.kubectlUserID, deferredSealed.KeyID, deferredSealed.Algorithm, deferredSealed.Ciphertext, deferredSealed.Nonce}},
 		{`INSERT INTO clusters (id,name,display_name,status,provider,distribution) VALUES ($1,$2,$2,'active','self_managed','k3s')`, []any{fixtures.controlPlaneSweepCluster, "worker-cp-sweep-" + fixtures.controlPlaneSweepCluster.String()}},
 		{`INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count) VALUES ($1,now(),1)`, []any{fixtures.controlPlaneSweepCluster}},
 		{`INSERT INTO clusters (id,name,display_name,status,provider) VALUES ($1,$2,$2,'active','self_managed'),($3,$4,$4,'active','self_managed')`, []any{fixtures.decommissionDirectCluster, "worker-decommission-direct-" + fixtures.decommissionDirectCluster.String(), fixtures.decommissionSweepCluster, "worker-decommission-sweep-" + fixtures.decommissionSweepCluster.String()}},
 		{`INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count) VALUES ($1,now(),1),($2,now(),1)`, []any{fixtures.decommissionDirectCluster, fixtures.decommissionSweepCluster}},
 		{`INSERT INTO cluster_decommissions (id,cluster_id,status,cluster_name,force) VALUES ($1,$2,'pending',$3,true),($4,$5,'pending',$6,true)`, []any{fixtures.decommissionDirectID, fixtures.decommissionDirectCluster, "worker-decommission-direct", fixtures.decommissionSweepID, fixtures.decommissionSweepCluster, "worker-decommission-sweep"}},
-		{`INSERT INTO cluster_agent_tokens (cluster_id,token) VALUES ($1,$2),($3,$4)`, []any{fixtures.decommissionDirectCluster, "worker-decommission-token-direct", fixtures.decommissionSweepCluster, "worker-decommission-token-sweep"}},
+		{`INSERT INTO cluster_agent_tokens (cluster_id,token_hash) VALUES ($1,$2),($3,$4)`, []any{fixtures.decommissionDirectCluster, "worker-decommission-token-hash-direct", fixtures.decommissionSweepCluster, "worker-decommission-token-hash-sweep"}},
 		{`INSERT INTO agent_connections (cluster_id,agent_id,session_id,status,last_ping) VALUES ($1,$2,$3,'connected',now())`, []any{fixtures.clusterID, "worker-agent-" + fixtures.clusterID.String(), "worker-session-" + fixtures.clusterID.String()}},
 		{`UPDATE clusters SET managed_by='crd',external_ref_api_version='astronomer.alphabravo.io/v1alpha1',external_ref_kind='Cluster',external_ref_namespace='worker-system',external_ref_name='missing-worker-cluster',distribution='k3s',group_id=$2 WHERE id=$1`, []any{fixtures.clusterID, fixtures.clusterGroupID}},
 		{`INSERT INTO workload_operations (id,target_type,target_key,operation_type,payload,status) VALUES ($1,'pod','worker-pod','delete_pod',$2,'pending'),($3,'cluster',$4,'vulnerability_rescan','{}','pending')`, []any{fixtures.podDeleteOperationID, podDeletePayload, fixtures.vulnerabilityOperationID, fixtures.clusterID.String()}},
 		{`INSERT INTO resource_operations (id,idempotency_scope,idempotency_key,request_digest,cluster_id,resource_type,namespace,resource_name,action,required_verb,api_path) VALUES ($1,'worker-integration',$2,$3,$4,'configmap','default','worker-resource','delete','delete','/api/v1/namespaces/default/configmaps/worker-resource')`, []any{fixtures.resourceOperationID, fixtures.resourceOperationID.String(), strings.Repeat("c", 64), fixtures.clusterID}},
-		{`INSERT INTO node_operations (id,idempotency_scope,idempotency_key,request_digest,cluster_id,node_name,action,parameters_encrypted) VALUES ($1,'worker-integration',$2,$3,$4,'worker-node','cordon',$5)`, []any{fixtures.nodeOperationID, fixtures.nodeOperationID.String(), strings.Repeat("d", 64), fixtures.clusterID, nodeParametersEncrypted}},
+		{`INSERT INTO node_operations (id,idempotency_scope,idempotency_key,request_digest,cluster_id,node_name,action,parameters_key_id,parameters_algorithm,parameters_ciphertext,parameters_nonce) VALUES ($1,'worker-integration',$2,$3,$4,'worker-node','cordon',$5,$6,$7,$8)`, []any{fixtures.nodeOperationID, fixtures.nodeOperationID.String(), strings.Repeat("d", 64), fixtures.clusterID, nodeParametersSealed.KeyID, nodeParametersSealed.Algorithm, nodeParametersSealed.Ciphertext, nodeParametersSealed.Nonce}},
 		{`INSERT INTO authored_constraints (cluster_id,name,kind,api_version,yaml,desired_state,sync_status,generation,observed_generation) VALUES ($1,$2,'K8sRequiredLabels','constraints.gatekeeper.sh/v1beta1',$3,'present','pending',1,0)`, []any{fixtures.clusterID, fixtures.gatekeeperConstraintName, constraintYAML}},
 		{`INSERT INTO authored_constraints (cluster_id,name,kind,api_version,yaml,desired_state,sync_status,generation,observed_generation) VALUES ($1,$2,'K8sRequiredLabels','constraints.gatekeeper.sh/v1beta1',$3,'present','pending',1,0)`, []any{fixtures.clusterID, fixtures.gatekeeperRecoveryName, recoveryConstraintYAML}},
 		{`INSERT INTO cluster_snapshots (id,cluster_id,velero_name,velero_namespace,source,spec,phase) VALUES ($1,$3,'worker-snapshot-apply','velero','manual','{}','New'),($2,$3,'worker-snapshot-poll','velero','manual','{}','InProgress')`, []any{fixtures.snapshotApplyID, fixtures.snapshotPollID, fixtures.clusterID}},
@@ -1783,13 +1791,13 @@ spec:
 		{`INSERT INTO control_plane_snapshots (id,cluster_id,name,status,location) VALUES ($1,$2,'worker-control-plane-apply','pending','local')`, []any{fixtures.controlPlaneApplyID, fixtures.clusterID}},
 		{`INSERT INTO platform_settings (key,value,description) VALUES ('feature.control_plane_snapshots','true','integration') ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, nil},
 		{`INSERT INTO kubectl_sessions (id,user_id,cluster_id,sa_namespace,sa_name,pod_namespace,pod_name,status,last_input_at,expires_at) VALUES ($1,$2,$3,'kube-system','astro-shell-worker','kube-system','astro-shell-worker','active',now()-interval '1 hour',now()+interval '1 hour')`, []any{fixtures.kubectlSessionID, fixtures.kubectlUserID, fixtures.clusterID}},
-		{`INSERT INTO backup_storage_configs (id,name,storage_type,bucket,prefix,region,access_key,secret_key,is_default) VALUES ($1,$2,'s3','worker-bucket','worker-prefix','us-east-1','worker-access','worker-credential-secret-canary',false)`, []any{fixtures.backupCredentialID, "worker-credential-" + fixtures.backupCredentialID.String()}},
+		{`INSERT INTO backup_storage_configs (id,name,storage_type,bucket,prefix,region,is_default,credentials_key_id,credentials_algorithm,credentials_ciphertext,credentials_nonce) VALUES ($1,$2,'s3','worker-bucket','worker-prefix','us-east-1',false,$3,$4,$5,$6)`, []any{fixtures.backupCredentialID, "worker-credential-" + fixtures.backupCredentialID.String(), backupSealed.KeyID, backupSealed.Algorithm, backupSealed.Ciphertext, backupSealed.Nonce}},
 		{`INSERT INTO backups (id,name,storage_id,backup_type,status,cluster_id,velero_backup_name) VALUES ($1,'worker-execution',$3,'full','pending',$4,'worker-execution'),($2,'worker-restore-source',$3,'full','completed',$4,'worker-restore-source')`, []any{fixtures.backupExecutionID, fixtures.restoreSourceBackupID, fixtures.backupCredentialID, fixtures.clusterID}},
 		{`INSERT INTO restore_operations (id,backup_id,status,cluster_id,velero_restore_name) VALUES ($1,$2,'pending',$3,'worker-restore')`, []any{fixtures.restoreOperationID, fixtures.restoreSourceBackupID, fixtures.clusterID}},
 		{`INSERT INTO apiserver_allowlists (cluster_id,cidrs,mode) VALUES ($1,'["10.44.0.0/16"]','monitor')`, []any{fixtures.clusterID}},
 		{`INSERT INTO security_scan_results (id,cluster_id,scan_type,status,cluster_scan_name,poll_generation,poll_deadline) VALUES ($1,$2,'cis','running','worker-cis-scan',1,now()+interval '10 minutes')`, []any{fixtures.securityIngestScanID, fixtures.clusterID}},
-		{`INSERT INTO cluster_registry_configs (id,cluster_id,private_registry_url,registry_username,registry_password,namespaces,inject_default_sa,secret_name) VALUES ($1,$2,'registry.example.test','worker-user','worker-credential-secret-canary',$3,false,'worker-cluster-registry')`, []any{fixtures.registryCredentialID, fixtures.clusterID, mustWorkerJSON(t, []string{fixtures.projectNamespace})}},
-		{`INSERT INTO cluster_registration_tokens (cluster_id,token,token_hash,expires_at) VALUES ($1,$2,$3,now()-interval '1 hour'),($1,$4,$5,now()+interval '1 hour')`, []any{fixtures.clusterID, "expired-" + fixtures.clusterID.String(), "expired-hash-" + fixtures.clusterID.String(), "fresh-" + fixtures.clusterID.String(), "fresh-hash-" + fixtures.clusterID.String()}},
+		{`INSERT INTO cluster_registry_configs (id,cluster_id,private_registry_url,registry_username,namespaces,inject_default_sa,secret_name,registry_password_key_id,registry_password_algorithm,registry_password_ciphertext,registry_password_nonce) VALUES ($1,$2,'registry.example.test','worker-user',$3,false,'worker-cluster-registry',$4,$5,$6,$7)`, []any{fixtures.registryCredentialID, fixtures.clusterID, mustWorkerJSON(t, []string{fixtures.projectNamespace}), registrySealed.KeyID, registrySealed.Algorithm, registrySealed.Ciphertext, registrySealed.Nonce}},
+		{`INSERT INTO cluster_registration_tokens (cluster_id,token_hash,expires_at) VALUES ($1,$2,now()-interval '1 hour'),($1,$3,now()+interval '1 hour')`, []any{fixtures.clusterID, "expired-hash-" + fixtures.clusterID.String(), "fresh-hash-" + fixtures.clusterID.String()}},
 		{`INSERT INTO apiserver_audit_events (cluster_id,audit_id,stage,verb,username,resource,namespace,status_code,event_time,raw) VALUES ($1,'old','ResponseComplete','get','integration','pods','default',200,now()-interval '31 days','{}'),($1,'fresh','ResponseComplete','get','integration','pods','default',200,now(),'{}')`, []any{fixtures.clusterID}},
 		{`INSERT INTO mirrored_ingress_classes (cluster_id,name,last_seen_at) VALUES ($1,'stale',now()-interval '2 hours'),($1,'fresh',now())`, []any{fixtures.clusterID}},
 		{`INSERT INTO agent_lifecycle_operations (id,cluster_id,operation_type,status,target_version,target_image,started_at) VALUES ($1,$2,'agent_upgrade','running','integration','integration',now()-interval '31 minutes')`, []any{fixtures.upgradeID, fixtures.clusterID}},
@@ -1797,22 +1805,22 @@ spec:
 		{`INSERT INTO audit_outbox (id,dedupe_key,action,resource_type,resource_id,resource_name,source,action_class,detail) VALUES ($1,$2,'worker.integration.completed','worker_integration',$3,'worker business integration','worker','system','{"bounded":true}')`, []any{fixtures.auditOutboxID, "worker-business:" + fixtures.auditOutboxID.String(), fixtures.auditOutboxID.String()}},
 		{`INSERT INTO projects (id,name,display_name,cluster_id,pod_security_profile,network_policy_mode) VALUES ($1,'worker-reconcile','Worker Reconcile',$2,'baseline','isolated')`, []any{fixtures.projectReconcileID, fixtures.clusterID}},
 		{`INSERT INTO project_namespaces (project_id,cluster_id,namespace) VALUES ($1,$2,$3)`, []any{fixtures.projectReconcileID, fixtures.clusterID, fixtures.projectNamespace}},
-		{`INSERT INTO cloud_credentials (id,project_id,name,provider,data_encrypted,target_refs) VALUES ($1,$2,'worker-cloud','aws',$3,'[]')`, []any{fixtures.cloudCredentialID, fixtures.projectReconcileID, cloudCredentialEncrypted}},
+		{`INSERT INTO cloud_credentials (id,project_id,name,provider,target_refs,data_key_id,data_algorithm,data_ciphertext,data_nonce) VALUES ($1,$2,'worker-cloud','aws','[]',$3,$4,$5,$6)`, []any{fixtures.cloudCredentialID, fixtures.projectReconcileID, cloudCredentialSealed.KeyID, cloudCredentialSealed.Algorithm, cloudCredentialSealed.Ciphertext, cloudCredentialSealed.Nonce}},
 		{`INSERT INTO cloud_credential_materializations (id,credential_id,cluster_id,namespace,secret_name,status) VALUES ($1,$3,$4,'worker-cloud-direct','worker-cloud-credential','pending'),($2,$3,$4,'worker-cloud-drift','worker-cloud-credential','pending')`, []any{fixtures.cloudDirectMaterialID, fixtures.cloudDriftMaterialID, fixtures.cloudCredentialID, fixtures.clusterID}},
 		{`INSERT INTO installed_charts (id,cluster_id,release_name,namespace,status,revision,tool_slug) VALUES ($1,$2,'worker-drift-release','worker-tools','installed',1,'worker-drift')`, []any{fixtures.toolDriftChartID, fixtures.clusterID}},
 		{`INSERT INTO cluster_templates (id,name,description,spec) VALUES ($1,'worker-template','integration',$2)`, []any{fixtures.clusterTemplateID, clusterTemplateSpec}},
 		{`INSERT INTO cluster_template_applications (cluster_id,template_id,status,spec_snapshot) VALUES ($1,$2,'pending',$3)`, []any{fixtures.clusterID, fixtures.clusterTemplateID, clusterTemplateSpec}},
 		{`INSERT INTO network_policy_templates (id,slug,name,description,kind,spec_template,enabled) VALUES ($1,'worker-isolation','Worker Isolation','integration','custom',$2,true)`, []any{fixtures.networkPolicyTemplateID, networkPolicySpec}},
 		{`INSERT INTO network_policy_applications (id,template_id,cluster_id,namespace,policy_name,status) VALUES ($1,$2,$3,$4,'astronomer-np-worker-isolation','pending')`, []any{fixtures.networkPolicyAppID, fixtures.networkPolicyTemplateID, fixtures.clusterID, fixtures.projectNamespace}},
-		{`INSERT INTO helm_repositories (id,name,url,repo_type,description,is_default,auth_type,auth_config,auth_config_encrypted,enabled) VALUES ($1,$2,$3,'helm','integration',false,'none','{}','',true)`, []any{fixtures.catalogRepoID, "worker-integration-" + fixtures.catalogRepoID.String(), outbound.server.URL + "/catalog"}},
-		{`INSERT INTO helm_repositories (id,name,url,repo_type,description,is_default,auth_type,auth_config,auth_config_encrypted,enabled) VALUES ($1,$2,'https://charts.example.test','helm','credential migration',false,'basic','{"username":"worker","password":"worker-credential-secret-canary"}','',false)`, []any{fixtures.helmCredentialID, "worker-credential-" + fixtures.helmCredentialID.String()}},
-		{`INSERT INTO monitoring_backends (id,name,backend_type,query_url,alertmanager_url,tenant_id,auth_type,auth_config,auth_config_encrypted,default_step_seconds,timeout_seconds,is_default) VALUES ($1,'default','prometheus',$2,'','','none','{}','',30,2,true) ON CONFLICT (name) DO UPDATE SET query_url=EXCLUDED.query_url,is_default=true`, []any{monitoringBackend, outbound.server.URL}},
-		{`INSERT INTO monitoring_backends (id,name,backend_type,query_url,alertmanager_url,tenant_id,auth_type,auth_config,auth_config_encrypted,default_step_seconds,timeout_seconds,is_default) VALUES ($1,$2,'prometheus','https://prometheus.example.test','','','bearer','{"token":"worker-credential-secret-canary"}','',30,2,false)`, []any{fixtures.monitoringCredentialID, "worker-credential-" + fixtures.monitoringCredentialID.String()}},
+		{`INSERT INTO helm_repositories (id,name,url,repo_type,description,is_default,auth_type,auth_config,enabled) VALUES ($1,$2,$3,'helm','integration',false,'none','{}',true)`, []any{fixtures.catalogRepoID, "worker-integration-" + fixtures.catalogRepoID.String(), outbound.server.URL + "/catalog"}},
+		{`INSERT INTO helm_repositories (id,name,url,repo_type,description,is_default,auth_type,auth_config,enabled,auth_config_key_id,auth_config_algorithm,auth_config_ciphertext,auth_config_nonce) VALUES ($1,$2,'https://charts.example.test','helm','sealed credential',false,'basic','{"username":"worker"}',false,$3,$4,$5,$6)`, []any{fixtures.helmCredentialID, "worker-credential-" + fixtures.helmCredentialID.String(), helmSealed.KeyID, helmSealed.Algorithm, helmSealed.Ciphertext, helmSealed.Nonce}},
+		{`INSERT INTO monitoring_backends (id,name,backend_type,query_url,alertmanager_url,tenant_id,auth_type,auth_config,default_step_seconds,timeout_seconds,is_default) VALUES ($1,'default','prometheus',$2,'','','none','{}',30,2,true) ON CONFLICT (name) DO UPDATE SET query_url=EXCLUDED.query_url,is_default=true`, []any{monitoringBackend, outbound.server.URL}},
+		{`INSERT INTO monitoring_backends (id,name,backend_type,query_url,alertmanager_url,tenant_id,auth_type,auth_config,default_step_seconds,timeout_seconds,is_default,auth_config_key_id,auth_config_algorithm,auth_config_ciphertext,auth_config_nonce) VALUES ($1,$2,'prometheus','https://prometheus.example.test','','','bearer','{}',30,2,false,$3,$4,$5,$6)`, []any{fixtures.monitoringCredentialID, "worker-credential-" + fixtures.monitoringCredentialID.String(), monitoringSealed.KeyID, monitoringSealed.Algorithm, monitoringSealed.Ciphertext, monitoringSealed.Nonce}},
 		{`INSERT INTO cluster_monitoring_configs (cluster_id,backend_id,cluster_label,cluster_label_value,status) VALUES ($1,$2,'cluster_id',$3,'pending')`, []any{fixtures.clusterID, monitoringBackend, fixtures.clusterID.String()}},
 		{`INSERT INTO platform_settings (key,value,description) VALUES ('telemetry.enabled','true','integration'),('telemetry.endpoint',to_jsonb($1::text),'integration') ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, []any{outbound.server.URL + "/telemetry"}},
 		{`INSERT INTO smtp_settings (id,enabled,host,port,from_address,from_name,auth_mechanism,encryption,require_tls,timeout_seconds) VALUES ($1,true,$2,$3,'sender@example.test','Worker Integration','none','none',false,5)`, []any{email.SingletonSettingsID, smtpHost, smtpPort}},
 		{`INSERT INTO email_messages (id,to_address,subject,template,body_text,body_html,status) VALUES ($1,'receiver@example.test','worker integration','alert_fired','bounded body','<p>bounded body</p>','queued')`, []any{fixtures.emailID}},
-		{`INSERT INTO webhook_subscriptions (id,name,url,secret_encrypted,event_filters,extra_headers,enabled,max_retries,timeout_seconds) VALUES ($1,'worker-ok',$2,'','[]','{"X-Integration-Secret":"worker-integration-secret-canary"}',true,3,2),($3,'worker-recover',$4,'','[]','{}',true,3,2)`, []any{webhookOKSub, outbound.server.URL + "/webhook-ok", webhookRetrySub, outbound.server.URL + "/webhook-recover"}},
+		{`INSERT INTO webhook_subscriptions (id,name,url,event_filters,extra_headers,enabled,max_retries,timeout_seconds) VALUES ($1,'worker-ok',$2,'[]','{"X-Integration-Secret":"worker-integration-secret-canary"}',true,3,2),($3,'worker-recover',$4,'[]','{}',true,3,2)`, []any{webhookOKSub, outbound.server.URL + "/webhook-ok", webhookRetrySub, outbound.server.URL + "/webhook-recover"}},
 		{`INSERT INTO webhook_deliveries (id,subscription_id,event_name,event_id,payload,status,next_attempt_at) VALUES ($1,$2,'worker.integration','event-ok','{"event_name":"worker.integration","event_id":"event-ok","detail":{"bounded":true}}','queued',now()),($3,$4,'worker.integration','event-recover','{"event_name":"worker.integration","event_id":"event-recover","detail":{"bounded":true}}','queued',now())`, []any{fixtures.webhookOKID, webhookOKSub, fixtures.webhookRetryID, webhookRetrySub}},
 		{`INSERT INTO siem_forwarders (id,name,transport,endpoint,event_filters,format,batch_size,timeout_seconds,enabled) VALUES ($1,'worker-ok','ndjson_https',$2,'[]','ndjson',10,2,true),($3,'worker-recover','ndjson_https',$4,'[]','ndjson',10,2,true)`, []any{siemOKForwarder, outbound.server.URL + "/siem-ok", siemRetryForwarder, outbound.server.URL + "/siem-recover"}},
 		{`INSERT INTO siem_forward_queue (id,forwarder_id,event_name,payload,severity,dedupe_key) VALUES (nextval('siem_forward_queue_id_seq'),$1,'worker.integration','{"event_id":"siem-ok","detail":{"bounded":true}}','info',$2),(nextval('siem_forward_queue_id_seq'),$3,'worker.integration','{"event_id":"siem-recover","detail":{"bounded":true}}','info',$4)`, []any{siemOKForwarder, fixtures.siemOKID.String(), siemRetryForwarder, fixtures.siemRetryID.String()}},
@@ -1834,7 +1842,7 @@ spec:
 		{`INSERT INTO charlie_findings (id,connection_id,charlie_finding_id,source,severity,status,effective_mode,dedupe_fingerprint,title,summary) VALUES ($1,$3,'worker-direct','system','high','open','read_only',$4,'worker direct','bounded'),($2,$3,'worker-planned','system','high','open','read_only',$5,'worker planned','bounded')`, []any{charlieDirectFindingID, fixtures.charliePlannedFindingID, charlieConnectionID, "worker-direct-" + charlieDirectFindingID.String(), "worker-planned-" + fixtures.charliePlannedFindingID.String()}},
 		{`INSERT INTO charlie_finding_resources (finding_id,resource_type,resource_id,required_verb) VALUES ($1,'installation','worker-direct','get'),($2,'installation','worker-planned','get')`, []any{charlieDirectFindingID, fixtures.charliePlannedFindingID}},
 		{`INSERT INTO charlie_alert_deliveries (id,connection_id,finding_id,notification_channel_id,policy_revision,delivery_kind,dedupe_bucket,severity,next_attempt_at,deep_link,subject,body) VALUES ($1,$2,$3,$4,1,'initial',1,'high',now(),$5,'worker Charlie delivery','bounded receiver proof')`, []any{fixtures.charlieDeliveryID, charlieConnectionID, charlieDirectFindingID, charlieChannelID, "/dashboard/charlie?tab=findings&finding=" + charlieDirectFindingID.String()}},
-		{`INSERT INTO management_backup_destinations (id,name,bucket,prefix,region,encrypted_credentials,schedule,enabled,keep_daily,keep_weekly,keep_monthly) VALUES ($1,$2,'worker-management-bucket','worker-management-prefix','us-east-1',$3,'0 3 * * *',true,7,4,2)`, []any{fixtures.managementBackupID, "worker-management-" + fixtures.managementBackupID.String(), managementCredentials}},
+		{`INSERT INTO management_backup_destinations (id,name,bucket,prefix,region,schedule,enabled,keep_daily,keep_weekly,keep_monthly,credentials_key_id,credentials_algorithm,credentials_ciphertext,credentials_nonce) VALUES ($1,$2,'worker-management-bucket','worker-management-prefix','us-east-1','0 3 * * *',true,7,4,2,$3,$4,$5,$6)`, []any{fixtures.managementBackupID, "worker-management-" + fixtures.managementBackupID.String(), managementCredentials.KeyID, managementCredentials.Algorithm, managementCredentials.Ciphertext, managementCredentials.Nonce}},
 		{`INSERT INTO workload_operations (id,target_type,target_key,operation_type,status) VALUES ($1,'management_backup_destination',$2,'management_backup_run','pending')`, []any{fixtures.managementOperationID, fixtures.managementBackupID.String()}},
 		{`INSERT INTO gitops_registration_sources (id,name,repo_url,branch,path_prefix,auth_mode,sync_mode,sync_interval_seconds,on_delete,enabled) VALUES ($1,$2,$3,'main','clusters','none','interval',60,'log',true)`, []any{fixtures.gitOpsSourceID, "worker-gitops-" + fixtures.gitOpsSourceID.String(), gitOps.repoURL}},
 		{`INSERT INTO admin_queue_operations (id,action,queue_name,task_id,requested_by) VALUES ($1,'discard','default',$2,$3)`, []any{fixtures.adminQueueOperationID, fixtures.adminArchivedTaskID, uuid.New()}},
@@ -2167,63 +2175,42 @@ func assertWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpo
 		t.Fatalf("GitOps source outcome synced/head/error=%t/%q/%q", gitSynced, gitHead, gitError)
 	}
 
-	rememberCiphertext := func(label, ciphertext string) {
-		t.Helper()
-		if ciphertext == "" || strings.Contains(ciphertext, "worker-credential-secret-canary") {
-			t.Fatalf("%s ciphertext is empty or leaked plaintext", label)
-		}
-		if pass == 1 {
-			fixtures.credentialCiphertexts[label] = ciphertext
-		} else if ciphertext != fixtures.credentialCiphertexts[label] {
-			t.Fatalf("%s ciphertext changed on idempotent second sweep", label)
-		}
-	}
-	var backupAccess, backupSecret, backupCiphertext string
-	if err := pool.QueryRow(ctx, `SELECT access_key,secret_key,encrypted_credentials FROM backup_storage_configs WHERE id=$1`, fixtures.backupCredentialID).
-		Scan(&backupAccess, &backupSecret, &backupCiphertext); err != nil {
-		t.Fatal(err)
-	}
-	if backupAccess != "" || backupSecret != "" {
-		t.Fatal("backup plaintext credentials survived migration")
-	}
-	rememberCiphertext("backup", backupCiphertext)
-	backupPlaintext, err := fixtures.credentialEncryptor.Decrypt(backupCiphertext)
-	if err != nil || !strings.Contains(backupPlaintext, "worker-credential-secret-canary") {
-		t.Fatalf("backup ciphertext is not decryptable to the seeded credential: %v", err)
-	}
-	var registryPassword, registryCiphertext string
-	if err := pool.QueryRow(ctx, `SELECT registry_password,registry_password_encrypted FROM cluster_registry_configs WHERE id=$1`, fixtures.registryCredentialID).
-		Scan(&registryPassword, &registryCiphertext); err != nil {
-		t.Fatal(err)
-	}
-	if registryPassword != "" {
-		t.Fatal("registry plaintext credential survived migration")
-	}
-	rememberCiphertext("registry", registryCiphertext)
-	registryPlaintext, err := fixtures.credentialEncryptor.Decrypt(registryCiphertext)
-	if err != nil || registryPlaintext != "worker-credential-secret-canary" {
-		t.Fatalf("registry ciphertext is not decryptable to the seeded credential: %v", err)
-	}
+	// Sealed credentials the worker only reads must survive both passes
+	// byte-for-byte, carry no plaintext, and still open under the keyring.
 	for _, credential := range []struct {
-		label string
-		id    uuid.UUID
-		table string
+		label, table, family, publicColumn string
+		id                                 uuid.UUID
 	}{
-		{label: "helm", id: fixtures.helmCredentialID, table: "helm_repositories"},
-		{label: "monitoring", id: fixtures.monitoringCredentialID, table: "monitoring_backends"},
+		{label: "backup", table: "backup_storage_configs", family: "credentials", id: fixtures.backupCredentialID},
+		{label: "registry", table: "cluster_registry_configs", family: "registry_password", id: fixtures.registryCredentialID},
+		{label: "helm", table: "helm_repositories", family: "auth_config", publicColumn: "auth_config", id: fixtures.helmCredentialID},
+		{label: "monitoring", table: "monitoring_backends", family: "auth_config", publicColumn: "auth_config", id: fixtures.monitoringCredentialID},
 	} {
-		var publicJSON, ciphertext string
-		query := `SELECT auth_config::text,auth_config_encrypted FROM ` + credential.table + ` WHERE id=$1`
-		if err := pool.QueryRow(ctx, query, credential.id).Scan(&publicJSON, &ciphertext); err != nil {
+		publicExpr := "''"
+		if credential.publicColumn != "" {
+			publicExpr = credential.publicColumn + "::text"
+		}
+		query := `SELECT ` + publicExpr + `,` + credential.family + `_key_id,` + credential.family + `_algorithm,` +
+			credential.family + `_ciphertext,` + credential.family + `_nonce FROM ` + credential.table + ` WHERE id=$1`
+		var publicJSON string
+		var sealed crypto.Sealed
+		if err := pool.QueryRow(ctx, query, credential.id).Scan(&publicJSON, &sealed.KeyID, &sealed.Algorithm, &sealed.Ciphertext, &sealed.Nonce); err != nil {
 			t.Fatal(err)
 		}
 		if strings.Contains(publicJSON, "worker-credential-secret-canary") {
-			t.Fatalf("%s public auth config retained plaintext secret", credential.label)
+			t.Fatalf("%s public column carries the plaintext secret", credential.label)
 		}
-		rememberCiphertext(credential.label, ciphertext)
-		plaintext, err := fixtures.credentialEncryptor.Decrypt(ciphertext)
+		if sealed.IsZero() || strings.Contains(string(sealed.Ciphertext), "worker-credential-secret-canary") {
+			t.Fatalf("%s sealed value is empty or leaked plaintext", credential.label)
+		}
+		if pass == 1 {
+			fixtures.credentialCiphertexts[credential.label] = string(sealed.Ciphertext)
+		} else if string(sealed.Ciphertext) != fixtures.credentialCiphertexts[credential.label] {
+			t.Fatalf("%s ciphertext changed on idempotent second pass", credential.label)
+		}
+		plaintext, err := fixtures.credentialEncryptor.DecryptString(sealed)
 		if err != nil || !strings.Contains(plaintext, "worker-credential-secret-canary") {
-			t.Fatalf("%s ciphertext is not decryptable to the seeded credential: %v", credential.label, err)
+			t.Fatalf("%s sealed value does not open to the seeded credential: %v", credential.label, err)
 		}
 	}
 

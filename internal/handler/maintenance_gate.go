@@ -31,6 +31,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -64,10 +66,10 @@ type MaintenanceGate struct {
 	runTx     maintenanceGateRunTxFunc
 }
 
-// DeferredSpecCipher keeps deferred mutation bodies encrypted at rest. The
-// production Fernet encryptor satisfies this interface.
+// DeferredSpecCipher keeps deferred mutation bodies encrypted at rest.
+// *crypto.Encryptor satisfies this interface.
 type DeferredSpecCipher interface {
-	Encrypt(string) (string, error)
+	Encrypt([]byte) (crypto.Sealed, error)
 }
 
 // NewMaintenanceGate builds a gate. evaluator may be nil to disable the
@@ -99,14 +101,6 @@ type DeferredOpSpec struct {
 	URLParams   map[string]string `json:"url_params,omitempty"`
 	QueryParams map[string]string `json:"query_params,omitempty"`
 	Body        json.RawMessage   `json:"body,omitempty"`
-}
-
-// EncryptedDeferredOpSpec is the only operation_spec shape written for new
-// deferred mutations. Keeping the envelope versioned allows online key
-// rotation and a bounded compatibility reader for pre-encryption rows.
-type EncryptedDeferredOpSpec struct {
-	SchemaVersion int    `json:"schema_version"`
-	Ciphertext    string `json:"ciphertext"`
 }
 
 const maxDeferredOperationBodyBytes = 1 << 20
@@ -176,7 +170,7 @@ func EnforceMaintenanceWindow(
 		respondMaintenanceRefuse(w, r, *win, now)
 		return true
 	}
-	ciphertext, err := gate.Cipher.Encrypt(string(plainSpec))
+	sealedSpec, err := gate.Cipher.Encrypt(plainSpec)
 	clear(plainSpec)
 	if err != nil {
 		respondMaintenanceRefuse(w, r, *win, now)
@@ -185,21 +179,17 @@ func EnforceMaintenanceWindow(
 		})
 		return true
 	}
-	specBytes, err := json.Marshal(EncryptedDeferredOpSpec{SchemaVersion: 1, Ciphertext: ciphertext})
-	if err != nil {
-		respondMaintenanceRefuse(w, r, *win, now)
-		return true
-	}
 	params := sqlc.CreateDeferredOperationParams{
 		WindowID:        win.ID,
 		OperationType:   opType,
-		OperationSpec:   specBytes,
+		OperationSpec:   json.RawMessage(`{}`),
 		TargetClusterID: clusterID,
 		TargetProjectID: projectID,
 		DeferredUntil:   pgtype.Timestamptz{Time: deferredUntil, Valid: !deferredUntil.IsZero()},
 		ExpiresAt:       pgtype.Timestamptz{Time: expiresAt, Valid: !deferredUntil.IsZero()},
 		RequestedBy:     currentUserUUID(r),
 	}
+	params.SealedSpecKeyID, params.SealedSpecAlgorithm, params.SealedSpecCiphertext, params.SealedSpecNonce = sealedSpec.Parts()
 	mutationContext := withOperationIdempotency(r, "deferred")
 	var row sqlc.DeferredOperation
 	if gate.runTx == nil {
@@ -252,16 +242,20 @@ func createDeferredOperation(ctx context.Context, q GatedOpQuerier, params sqlc.
 			CreateDeferredOperationIdempotent(context.Context, sqlc.CreateDeferredOperationIdempotentParams) (sqlc.DeferredOperation, error)
 		}); ok {
 			return creator.CreateDeferredOperationIdempotent(ctx, sqlc.CreateDeferredOperationIdempotentParams{
-				Scope:           idem.scope,
-				IdempotencyKey:  idem.key,
-				WindowID:        params.WindowID,
-				OperationType:   params.OperationType,
-				OperationSpec:   params.OperationSpec,
-				TargetClusterID: params.TargetClusterID,
-				TargetProjectID: params.TargetProjectID,
-				DeferredUntil:   params.DeferredUntil,
-				ExpiresAt:       params.ExpiresAt,
-				RequestedBy:     params.RequestedBy,
+				Scope:                idem.scope,
+				IdempotencyKey:       idem.key,
+				WindowID:             params.WindowID,
+				OperationType:        params.OperationType,
+				OperationSpec:        params.OperationSpec,
+				TargetClusterID:      params.TargetClusterID,
+				TargetProjectID:      params.TargetProjectID,
+				DeferredUntil:        params.DeferredUntil,
+				ExpiresAt:            params.ExpiresAt,
+				RequestedBy:          params.RequestedBy,
+				SealedSpecKeyID:      params.SealedSpecKeyID,
+				SealedSpecAlgorithm:  params.SealedSpecAlgorithm,
+				SealedSpecCiphertext: params.SealedSpecCiphertext,
+				SealedSpecNonce:      params.SealedSpecNonce,
 			})
 		}
 	}

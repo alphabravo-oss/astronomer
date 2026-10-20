@@ -15,6 +15,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/toolui"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func TestIsolatedToolRouterPreservesRBACAndCannotReachProductAPI(t *testing.T) {
@@ -24,7 +25,7 @@ func TestIsolatedToolRouterPreservesRBACAndCannotReachProductAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cipher, err := auth.NewEncryptor("mjc2rBj19lSbsCp4LzOVgAuWBxGJIGsQNc6oZi0iDTQ=")
+	cipher, err := crypto.NewEncryptor(mustTestAgeKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type deferredReplayQueryFake struct {
@@ -29,13 +30,13 @@ func (f deferredReplayQueryFake) GetInstalledChartByID(_ context.Context, id uui
 	return f.installed, nil
 }
 
-func deferredReplayFixture(t *testing.T, operationType string, spec handler.DeferredOpSpec, clusterID, projectID, userID uuid.UUID) (sqlc.DeferredOperation, *auth.Encryptor, *auth.JWTManager) {
+func deferredReplayFixture(t *testing.T, operationType string, spec handler.DeferredOpSpec, clusterID, projectID, userID uuid.UUID) (sqlc.DeferredOperation, *crypto.Encryptor, *auth.JWTManager) {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cipher, err := auth.NewEncryptor(key)
+	cipher, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,19 +44,16 @@ func deferredReplayFixture(t *testing.T, operationType string, spec handler.Defe
 	if err != nil {
 		t.Fatal(err)
 	}
-	sealed, err := cipher.Encrypt(string(plain))
-	if err != nil {
-		t.Fatal(err)
-	}
-	envelope, err := json.Marshal(handler.EncryptedDeferredOpSpec{SchemaVersion: 1, Ciphertext: sealed})
+	sealed, err := cipher.Encrypt(plain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	row := sqlc.DeferredOperation{
-		ID: uuid.New(), OperationType: operationType, OperationSpec: envelope,
+		ID: uuid.New(), OperationType: operationType, OperationSpec: json.RawMessage(`{}`),
 		RequestedBy: pgtype.UUID{Bytes: userID, Valid: true},
 		ExpiresAt:   pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 	}
+	row.SealedSpecKeyID, row.SealedSpecAlgorithm, row.SealedSpecCiphertext, row.SealedSpecNonce = sealed.Parts()
 	if clusterID != uuid.Nil {
 		row.TargetClusterID = pgtype.UUID{Bytes: clusterID, Valid: true}
 	}

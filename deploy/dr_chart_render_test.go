@@ -120,7 +120,7 @@ func TestF4_DrillDecryptCheckInertWithoutWrappingSecret(t *testing.T) {
 }
 
 // With the drill wrapping secret wired the decrypt-proof path renders: env
-// toggle, passphrase mount, unwrap, and the Fernet HMAC verifier invocation.
+// toggle, passphrase mount, unwrap, and the age CLI decrypt of a sampled sealed column.
 func TestF4_DrillDecryptCheckRendersWhenWired(t *testing.T) {
 	out := helmTemplate(t,
 		"managementBackup.s3.bucket=astronomer-backups",
@@ -134,8 +134,10 @@ func TestF4_DrillDecryptCheckRendersWhenWired(t *testing.T) {
 		"dr-crypto manifest-verify",
 		"dr-crypto decrypt",
 		"dr-crypto key-bundle-extract",
-		"base64 -d | python3 -",
-		"did NOT verify under the backed-up key",
+		"age --decrypt -i /tmp/keys/age-identities",
+		"encode(${DECRYPT_COLUMN}_ciphertext, 'base64')",
+		"did NOT decrypt under the backed-up key",
+		"value: \"credential\"",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("drill decrypt-check render missing %q:\n%s", want, out)

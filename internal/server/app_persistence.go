@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
@@ -62,28 +64,31 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	}
 	c.cursorCodec = cursorCodec
 
-	// Best-effort Fernet encryptor + SSO manager. Both are optional: if the
-	// encryption key is missing or invalid we still come up so dev/local
-	// stacks without secrets don't break — a warning is logged. Handlers
-	// that need decryption skip the work when the encryptor is nil.
+	// age keyring (pkg/crypto) + SSO manager. With NO key configured the
+	// server still comes up for dev/local stacks (production is refused by
+	// validateProductionSecurityConfig); handlers that need the keyring fail
+	// their secret-bearing requests. A key that IS configured but does not
+	// parse is a startup error: silently running without it would turn every
+	// credential read into an outage that looks like an upstream failure.
 	var (
-		encryptor  *auth.Encryptor
+		encryptor  *crypto.Encryptor
 		ssoManager *auth.SSOManager
 	)
-	if cfg.EncryptionKey != "" {
-		enc, encErr := auth.NewEncryptor(cfg.EncryptionKey)
-		if encErr != nil {
-			logger.Warn().Err(encErr).Msg("failed to initialise encryptor")
-		} else {
-			encryptor = enc
-			callbackBase := resolveCallbackBaseURL(ctx, cfg, queries)
-			ssoManager = auth.NewSSOManager(encryptor, jwtManager, callbackBase)
-			if loadErr := ssoManager.LoadFromDatabase(ctx, queries); loadErr != nil {
-				logger.Warn().Err(loadErr).Msg("failed to load sso providers")
-			}
+	enc, encErr := cfg.LoadEncryptor()
+	switch {
+	case errors.Is(encErr, crypto.ErrNoKey):
+		logger.Warn().Msg("ASTRONOMER_ENCRYPTION_KEY / ASTRONOMER_ENCRYPTION_KEY_FILE is not set; sealed columns cannot be read or written and SSO is disabled")
+	case encErr != nil:
+		database.Close()
+		return fmt.Errorf("load encryption keyring: %w", encErr)
+	default:
+		encryptor = enc
+		logger.Info().Str("current_key_id", enc.CurrentKeyID()).Int("keys", enc.KeyCount()).Msg("encryption keyring loaded")
+		callbackBase := resolveCallbackBaseURL(ctx, cfg, queries)
+		ssoManager = auth.NewSSOManager(encryptor, jwtManager, callbackBase)
+		if loadErr := ssoManager.LoadFromDatabase(ctx, queries); loadErr != nil {
+			logger.Warn().Err(loadErr).Msg("failed to load sso providers")
 		}
-	} else {
-		logger.Warn().Msg("ASTRONOMER_ENCRYPTION_KEY is not set; encrypted columns will be returned as ciphertext and SSO is disabled")
 	}
 	if err := validateProductionSecurityConfig(cfg, encryptor); err != nil {
 		database.Close()

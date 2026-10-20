@@ -10,11 +10,11 @@
 -- name: ListGitOpsSourcesPage :many
 -- List projection intentionally excludes both encrypted credential columns.
 SELECT id, name, repo_url, branch, path_prefix, auth_mode,
-       (auth_encrypted <> '') AS auth_configured,
+       (auth_key_id <> '') AS auth_configured,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
        created_by, created_at, updated_at, allow_mass_decommission,
-       webhook_provider, (webhook_secret_encrypted <> '') AS webhook_configured
+       webhook_provider, (webhook_secret_key_id <> '') AS webhook_configured
 FROM gitops_registration_sources
 ORDER BY name ASC, id ASC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
@@ -23,44 +23,28 @@ LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 SELECT count(*) FROM gitops_registration_sources;
 
 -- name: ListEnabledGitOpsSources :many
-SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-       sync_mode, sync_interval_seconds, on_delete,
-       last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission,
-       webhook_provider, webhook_secret_encrypted
+SELECT *
 FROM gitops_registration_sources
 WHERE enabled = true
 ORDER BY name ASC;
 
 -- name: GetGitOpsSource :one
-SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-       sync_mode, sync_interval_seconds, on_delete,
-       last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission,
-       webhook_provider, webhook_secret_encrypted
+SELECT *
 FROM gitops_registration_sources
 WHERE id = $1;
 
 -- name: GetGitOpsSourceByName :one
-SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-       sync_mode, sync_interval_seconds, on_delete,
-       last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission,
-       webhook_provider, webhook_secret_encrypted
+SELECT *
 FROM gitops_registration_sources
 WHERE name = $1;
 
 -- name: CreateGitOpsSource :one
 INSERT INTO gitops_registration_sources (
-    name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
+    name, repo_url, branch, path_prefix, auth_mode, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce,
     sync_mode, sync_interval_seconds, on_delete, enabled, created_by,
-    webhook_provider, webhook_secret_encrypted
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-          sync_mode, sync_interval_seconds, on_delete,
-          last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at, allow_mass_decommission,
-          webhook_provider, webhook_secret_encrypted;
+    webhook_provider, webhook_secret_key_id, webhook_secret_algorithm, webhook_secret_ciphertext, webhook_secret_nonce
+) VALUES ($1, $2, $3, $4, $5, $6, $14, $15, $16, $7, $8, $9, $10, $11, $12, $13, $17, $18, $19)
+RETURNING *;
 
 -- name: UpdateGitOpsSource :one
 UPDATE gitops_registration_sources
@@ -69,21 +53,23 @@ SET name                  = $2,
     branch                = $4,
     path_prefix           = $5,
     auth_mode             = $6,
-    auth_encrypted        = $7,
+    auth_key_id = $7,
+    auth_algorithm = $15,
+    auth_ciphertext = $16,
+    auth_nonce = $17,
     sync_mode             = $8,
     sync_interval_seconds = $9,
     on_delete             = $10,
     enabled               = $11,
     allow_mass_decommission = $12,
     webhook_provider       = $13,
-    webhook_secret_encrypted = $14,
+    webhook_secret_key_id = $14,
+    webhook_secret_algorithm = $18,
+    webhook_secret_ciphertext = $19,
+    webhook_secret_nonce = $20,
     updated_at            = now()
 WHERE id = $1
-RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-          sync_mode, sync_interval_seconds, on_delete,
-          last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at, allow_mass_decommission,
-          webhook_provider, webhook_secret_encrypted;
+RETURNING *;
 
 -- name: CreateGitOpsWebhookReceipt :one
 INSERT INTO gitops_webhook_receipts (source_id, content_digest)

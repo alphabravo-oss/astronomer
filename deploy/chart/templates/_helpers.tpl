@@ -523,13 +523,20 @@ rendered manifest.
     {{- else if eq $secretKey "local-dev-secret-key-change-in-production" }}
       {{- $errs = append $errs "  - secrets.secretKey is the chart's published development value — anyone with this repository can forge an admin JWT against it" }}
     {{- end }}
-    {{- if eq $encryptionKey "" }}
-      {{- $errs = append $errs "  - secrets.encryptionKey is empty — it is the Fernet key that wraps every stored credential" }}
-    {{- else if eq $encryptionKey "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" }}
-      {{- $errs = append $errs "  - secrets.encryptionKey is the chart's published development Fernet key — every stored kubeconfig, git PAT, registry password and SSO client secret would be readable by anyone with this repository" }}
+    {{- if eq (trim $encryptionKey) "" }}
+      {{- $errs = append $errs "  - secrets.encryptionKey is empty — it is the age keyring that seals every stored credential" }}
+    {{- else if contains "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7" $encryptionKey }}
+      {{- $errs = append $errs "  - secrets.encryptionKey contains the chart's published development age key — every stored registry password, git PAT and SSO client secret would be readable by anyone with this repository" }}
+    {{- else }}
+      {{- range $entry := regexSplit "[,\\n]" $encryptionKey -1 }}
+        {{- $e := trim $entry }}
+        {{- if and (ne $e "") (not (hasPrefix "#" $e)) (not (regexMatch "^([A-Za-z0-9][A-Za-z0-9._-]{0,63}:)?AGE-SECRET-KEY-1[0-9A-Z]{58}$" $e)) }}
+          {{- $errs = append $errs "  - secrets.encryptionKey has an entry that is not an age identity ([label:]AGE-SECRET-KEY-1...); Fernet keys are no longer accepted" }}
+        {{- end }}
+      {{- end }}
     {{- end }}
     {{- if gt (len $errs) 0 }}
-      {{- $msg := printf "\n\nAstronomer secret preflight failed:\n%s\n\nThe chart ships NO default key material. Generate both keys once, keep them for\nthe life of the install (losing them makes every encrypted column undecryptable\n— see docs/management-plane-dr-runbook.md), and pass them at install time:\n\n  openssl rand -base64 32 > ./jwt-key\n  python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" > ./fernet-key\n\n  helm install astronomer ./deploy/chart \\\n    --set-file secrets.secretKey=./jwt-key \\\n    --set-file secrets.encryptionKey=./fernet-key\n\nOr create the Secret out of band and set secrets.existingSecret to its name\n(see deploy/chart/README.md, \"Dev vs. Production Posture\")." (join "\n" $errs) }}
+      {{- $msg := printf "\n\nAstronomer secret preflight failed:\n%s\n\nThe chart ships NO default key material. Generate both keys once, keep them for\nthe life of the install (losing them makes every encrypted column undecryptable\n— see docs/management-plane-dr-runbook.md), and pass them at install time:\n\n  openssl rand -base64 32 > ./jwt-key\n  astro admin generate-encryption-key > ./encryption-key   # or: age-keygen | grep AGE-SECRET-KEY > ./encryption-key\n\n  helm install astronomer ./deploy/chart \\\n    --set-file secrets.secretKey=./jwt-key \\\n    --set-file secrets.encryptionKey=./encryption-key\n\nOr create the Secret out of band and set secrets.existingSecret to its name\n(see deploy/chart/README.md, \"Dev vs. Production Posture\")." (join "\n" $errs) }}
       {{- fail $msg }}
     {{- end }}
   {{- end }}
@@ -540,7 +547,7 @@ astronomer.requireProductionInputs is consumed by configmap.yaml to fail the
 render when env=production but mandatory production knobs are missing. Helm's
 `fail` builtin aborts the whole release with a single human-readable message
 rather than letting the user discover three minutes later that the server
-pod is CrashLooping because of an empty Fernet key.
+pod is CrashLooping because of an empty encryption key.
 Returns "" so callers can drop the result without it appearing in the
 rendered manifest.
 */}}

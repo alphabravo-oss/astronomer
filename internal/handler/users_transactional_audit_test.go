@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -226,9 +228,9 @@ func TestForceLogoutRollsBackRevocationAndSessionsWhenAuditFails(t *testing.T) {
 		auditErr: errors.New("audit unavailable"),
 		sessions: []sqlc.SsoSession{{
 			Jti: "session", UserID: target.ID, ProviderName: "oidc",
-			UpstreamIDTokenEncrypted: "not-used-before-commit",
-			EndSessionEndpoint:       "https://identity.example.com/logout",
-			ExpiresAt:                time.Now().Add(time.Hour),
+			UpstreamIDTokenKeyID: "test-key", UpstreamIDTokenAlgorithm: crypto.AlgorithmAgeX25519, UpstreamIDTokenCiphertext: []byte("not-used-before-commit"),
+			EndSessionEndpoint: "https://identity.example.com/logout",
+			ExpiresAt:          time.Now().Add(time.Hour),
 		}},
 	}
 	committedInvalidation := false

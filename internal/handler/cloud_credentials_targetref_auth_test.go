@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -47,7 +48,7 @@ func newNSAuthHandler(t *testing.T) (*CloudCredentialHandler, *fakeCloudCredQuer
 	// The victim cluster exists (imported by some other project) so the
 	// existence check passes — only the ownership check should stop it.
 	q.clusterOK[victimCluster] = true
-	enc, err := auth.NewEncryptor(testKey(t))
+	enc, err := crypto.NewEncryptor(testKey(t))
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}

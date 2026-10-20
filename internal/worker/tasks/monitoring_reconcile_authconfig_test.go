@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -8,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const monitoringReconcileToken = "s3cr3t-thanos-token"
@@ -23,42 +24,46 @@ type monitoringReconcileQuerier struct {
 func (q *monitoringReconcileQuerier) UpsertDefaultMonitoringBackend(_ context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error) {
 	q.upserts = append(q.upserts, arg)
 	return sqlc.MonitoringBackend{
-		ID:                  uuid.New(),
-		AuthConfig:          arg.AuthConfig,
-		AuthConfigEncrypted: arg.AuthConfigEncrypted,
+		ID:                   uuid.New(),
+		AuthConfig:           arg.AuthConfig,
+		AuthConfigKeyID:      arg.AuthConfigKeyID,
+		AuthConfigAlgorithm:  arg.AuthConfigAlgorithm,
+		AuthConfigCiphertext: arg.AuthConfigCiphertext,
+		AuthConfigNonce:      arg.AuthConfigNonce,
 	}, nil
 }
 
-func newReconcileTestEncryptor(t *testing.T) *auth.Encryptor {
+func newReconcileTestEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
 	return enc
 }
 
-func sealedReconcileBackend(t *testing.T, enc *auth.Encryptor, doc string) sqlc.MonitoringBackend {
+func sealedReconcileBackend(t *testing.T, enc *crypto.Encryptor, doc string) sqlc.MonitoringBackend {
 	t.Helper()
 	ciphertext, public, err := imonitoring.SealAuthConfig(json.RawMessage(doc), enc)
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
 	}
-	if ciphertext == "" {
+	if ciphertext.IsZero() {
 		t.Fatalf("fixture %s carries nothing sealable", doc)
 	}
-	return sqlc.MonitoringBackend{
-		ID:                  uuid.New(),
-		Name:                "default",
-		BackendType:         "thanos",
-		AuthType:            "bearer",
-		AuthConfig:          public,
-		AuthConfigEncrypted: ciphertext,
+	backend := sqlc.MonitoringBackend{
+		ID:          uuid.New(),
+		Name:        "default",
+		BackendType: "thanos",
+		AuthType:    "bearer",
+		AuthConfig:  public,
 	}
+	backend.AuthConfigKeyID, backend.AuthConfigAlgorithm, backend.AuthConfigCiphertext, backend.AuthConfigNonce = ciphertext.Parts()
+	return backend
 }
 
 // RMW SITE 5 — reconcileMonitoringBackend (the monitoring:reconcile tick).
@@ -87,13 +92,13 @@ func TestReconcileMonitoringBackendPreservesCredential(t *testing.T) {
 		t.Fatalf("expected the status stamp to write once, got %d writes", len(q.upserts))
 	}
 	params := q.upserts[0]
-	if params.AuthConfigEncrypted == "" {
+	if params.AuthConfigKeyID == "" {
 		t.Fatalf("the reconcile tick wrote an empty envelope: the credential is gone (auth_config=%s)", params.AuthConfig)
 	}
 	if strings.Contains(string(params.AuthConfig), monitoringReconcileToken) {
 		t.Fatalf("the reconcile tick put the credential back in the clear: %s", params.AuthConfig)
 	}
-	full, err := imonitoring.ResolveAuthConfig(params.AuthConfigEncrypted, params.AuthConfig, enc)
+	full, err := imonitoring.ResolveAuthConfig(crypto.FromParts(params.AuthConfigKeyID, params.AuthConfigAlgorithm, params.AuthConfigCiphertext, params.AuthConfigNonce), params.AuthConfig, enc)
 	if err != nil {
 		t.Fatalf("ResolveAuthConfig on the written row: %v", err)
 	}
@@ -145,7 +150,7 @@ func TestReconcileMonitoringBackendSkipsOnlyTheWriteWhenCredentialCannotBeDecryp
 	}
 	// The row handed to the cluster fan-out is the one read from the database,
 	// untouched — the fan-out only needs its ID.
-	if got.AuthConfigEncrypted != backend.AuthConfigEncrypted {
+	if !bytes.Equal(got.AuthConfigCiphertext, backend.AuthConfigCiphertext) || got.AuthConfigKeyID != backend.AuthConfigKeyID {
 		t.Fatalf("the backend row was mutated by a tick that could not read it")
 	}
 }
@@ -232,7 +237,7 @@ func TestReconcileMonitoringBackendSealsAPreMigrationRow(t *testing.T) {
 		t.Fatalf("reconcileMonitoringBackend: %v", err)
 	}
 	params := q.upserts[0]
-	if params.AuthConfigEncrypted == "" {
+	if params.AuthConfigKeyID == "" {
 		t.Fatal("the tick rewrote a legacy row without sealing it")
 	}
 	if strings.Contains(string(params.AuthConfig), monitoringReconcileToken) {

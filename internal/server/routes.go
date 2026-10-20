@@ -25,6 +25,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
@@ -1225,7 +1226,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		encKeys := 0
-		encKeyInventory := []iauth.EncryptionKeyInfo{}
+		encKeyInventory := []crypto.KeyInfo{}
 		if deps.CoreAuth.Encryptor != nil {
 			encKeys = deps.CoreAuth.Encryptor.KeyCount()
 			encKeyInventory = deps.CoreAuth.Encryptor.KeyInventory()

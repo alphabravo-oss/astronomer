@@ -6717,7 +6717,7 @@ components:
         Credential document for a chart repository. This is the ONLY place
         credentials are accepted; the top level of the request body is not.
 
-        At rest the secret-valued keys live in a Fernet envelope
+        At rest the secret-valued keys live in an age-sealed column
         (`helm_repositories.auth_config_encrypted`, migration 145) and only the
         non-secret keys stay queryable as JSONB. Responses replace every
         non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -36491,7 +36491,7 @@ paths:
       operationId: adminVaultConnectionsCreate
       summary: Create a Vault connection
       description: |
-        Creates a Vault connection. The `auth` map is method-specific (token / approle / kubernetes) and is Fernet-encrypted at rest. Superuser-gated. Requires the encryptor to be configured (503 otherwise).
+        Creates a Vault connection. The `auth` map is method-specific (token / approle / kubernetes) and is age-encrypted at rest. Superuser-gated. Requires the encryptor to be configured (503 otherwise).
       tags:
         - platform-admin-settings
       security:
@@ -37404,7 +37404,7 @@ paths:
       operationId: adminWebhooksCreate
       summary: Create a webhook subscription
       description: |
-        Creates a webhook subscription. The secret is required on create and is Fernet-encrypted at rest. Superuser-gated; additionally requires the api-token `admin` scope (requireScope).
+        Creates a webhook subscription. The secret is required on create and is age-encrypted at rest. Superuser-gated; additionally requires the api-token `admin` scope (requireScope).
       tags:
         - platform-admin-settings
       security:

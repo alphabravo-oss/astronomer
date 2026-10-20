@@ -10,12 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/dexconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/principal"
@@ -40,7 +41,7 @@ type principalRunTxFunc func(context.Context, func(PrincipalMutationTx) error) e
 type PrincipalHandler struct {
 	queries   PrincipalQueries
 	directory *principal.Directory
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	runTx     principalRunTxFunc
 }
 
@@ -48,9 +49,9 @@ func NewPrincipalHandler(queries PrincipalQueries, directory *principal.Director
 	return &PrincipalHandler{queries: queries, directory: directory}
 }
 
-func (h *PrincipalHandler) SetEncryptor(encryptor *auth.Encryptor) { h.encryptor = encryptor }
-func (h *PrincipalHandler) SetRunTx(runTx principalRunTxFunc)      { h.runTx = runTx }
-func (h *PrincipalHandler) TransactionalAuditWired() bool          { return h != nil && h.runTx != nil }
+func (h *PrincipalHandler) SetEncryptor(encryptor *crypto.Encryptor) { h.encryptor = encryptor }
+func (h *PrincipalHandler) SetRunTx(runTx principalRunTxFunc)        { h.runTx = runTx }
+func (h *PrincipalHandler) TransactionalAuditWired() bool            { return h != nil && h.runTx != nil }
 
 type principalSearchItem struct {
 	Kind          string `json:"kind"`
@@ -213,23 +214,15 @@ func (h *PrincipalHandler) directoryConnector(row sqlc.DexConnector) (principal.
 	if err := json.Unmarshal(row.Config, &config); err != nil {
 		return principal.Connector{}, err
 	}
-	spec, ok := dexconfig.Registry()[row.Type]
-	if !ok {
+	if _, ok := dexconfig.Registry()[row.Type]; !ok {
 		return principal.Connector{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: config}, nil
 	}
-	for _, key := range spec.Secret {
-		ciphertext, _ := config[key].(string)
-		if ciphertext == "" {
-			continue
-		}
-		if h.encryptor == nil {
-			return principal.Connector{}, errors.New("connector decryptor is unavailable")
-		}
-		plaintext, err := h.encryptor.Decrypt(ciphertext)
-		if err != nil {
-			return principal.Connector{}, err
-		}
-		config[key] = plaintext
+	secrets, err := openConnectorSecrets(h.encryptor, row)
+	if err != nil {
+		return principal.Connector{}, err
+	}
+	for key, value := range secrets {
+		config[key] = value
 	}
 	return principal.Connector{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: config}, nil
 }

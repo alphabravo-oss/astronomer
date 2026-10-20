@@ -37,6 +37,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,7 +46,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -90,7 +91,7 @@ type ProjectCatalogHandler struct {
 	// handler writes the same table as CatalogHandler, so it has to seal the
 	// same way or a project-owned private catalog would be the one row shape
 	// still storing its password in the clear.
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	runTx     projectCatalogRunTxFunc
 }
 
@@ -107,8 +108,8 @@ func (h *ProjectCatalogHandler) SetRunTx(runTx projectCatalogRunTxFunc) {
 
 func (h *ProjectCatalogHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-// SetEncryptor wires the Fernet encryptor used for catalog credentials at rest.
-func (h *ProjectCatalogHandler) SetEncryptor(encryptor *auth.Encryptor) {
+// SetEncryptor wires the age encryptor used for catalog credentials at rest.
+func (h *ProjectCatalogHandler) SetEncryptor(encryptor *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -331,16 +332,16 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.CreateProjectOwnedCatalogParams{
-		Name:                req.Name,
-		Url:                 req.URL,
-		RepoType:            req.RepoType,
-		Description:         req.Description,
-		IsDefault:           false,
-		AuthType:            req.AuthType,
-		AuthConfig:          publicCfg,
-		AuthConfigEncrypted: sealed,
-		Enabled:             enabled,
-		CreatedByID:         currentUserUUID(r),
+		Name:            req.Name,
+		Url:             req.URL,
+		RepoType:        req.RepoType,
+		Description:     req.Description,
+		IsDefault:       false,
+		AuthType:        req.AuthType,
+		AuthConfig:      publicCfg,
+		AuthConfigKeyID: sealed.KeyID, AuthConfigAlgorithm: sealed.Algorithm, AuthConfigCiphertext: sealed.Ciphertext, AuthConfigNonce: sealed.Nonce,
+		Enabled:     enabled,
+		CreatedByID: currentUserUUID(r),
 		OwnerProjectID: pgtype.UUID{
 			Bytes: projectID,
 			Valid: true,

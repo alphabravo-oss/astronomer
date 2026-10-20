@@ -271,7 +271,7 @@
           "additionalProperties": false,
           "properties": {
             "minimumUpgradeVersion": { "const": 1 },
-            "targetVersion": { "const": 81 }
+            "targetVersion": { "const": 82 }
           },
           "required": ["minimumUpgradeVersion", "targetVersion"]
         }
@@ -924,7 +924,7 @@
                 "required": ["secretKey", "encryptionKey"],
                 "properties": {
                   "secretKey": { "type": "string", "minLength": 1, "not": { "const": "local-dev-secret-key-change-in-production" } },
-                  "encryptionKey": { "type": "string", "minLength": 1, "not": { "const": "RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=" } }
+                  "encryptionKey": { "type": "string", "minLength": 1, "pattern": "AGE-SECRET-KEY-1", "not": { "pattern": "AGE-SECRET-KEY-1G68X62WMPA92CASLAK8WSN0V6HGTHNQ4Z50XGQXKDMS55SGJZG5SARN6N7" } }
                 }
               }
             ]
@@ -1010,7 +1010,7 @@
               "databaseSchema": {
                 "properties": {
                   "minimumUpgradeVersion": { "const": 1 },
-                  "targetVersion": { "const": 81 }
+                  "targetVersion": { "const": 82 }
                 },
                 "required": ["minimumUpgradeVersion", "targetVersion"]
               }

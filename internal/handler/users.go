@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -601,7 +603,7 @@ func (h *ResourceHandler) finalizeUserSessionRevocation(ctx context.Context, id 
 		if session.EndSessionEndpoint == "" {
 			continue
 		}
-		idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
+		idToken, err := h.encryptor.DecryptString(crypto.FromParts(session.UpstreamIDTokenKeyID, session.UpstreamIDTokenAlgorithm, session.UpstreamIDTokenCiphertext, session.UpstreamIDTokenNonce))
 		if err != nil {
 			failed++
 			metric.Record(ctx, "encrypt_error")

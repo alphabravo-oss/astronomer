@@ -81,9 +81,6 @@ func TestRotationTriggeredMintsNewTokenAndDeliversInAck(t *testing.T) {
 	if rotations[0].TokenHash != auth.HashOpaqueToken(ack.AgentToken) {
 		t.Fatal("rotated token_hash must match the ack token")
 	}
-	if rotations[0].Token != "" {
-		t.Fatal("durable token plaintext must not be persisted")
-	}
 
 	// Grace: the OLD token must STILL validate (previous_token_hash now holds
 	// the old hash). GetClusterAgentTokenByToken accepts either branch.

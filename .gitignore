@@ -33,7 +33,6 @@ coverage.out
 /test-artifacts/
 /stateful-evidence/
 /.artifacts/
-/keyrotate
 /node_modules/
 /tools/local-ci/node_modules/
 .claude/

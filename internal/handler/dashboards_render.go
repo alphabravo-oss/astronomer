@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -253,13 +255,13 @@ func (h *DashboardHandler) resolveDatasource(row sqlc.PrometheusDatasource) (das
 		URL:           row.Url,
 		TLSSkipVerify: row.TlsSkipVerify,
 	}
-	if row.AuthEncrypted == "" {
+	if row.AuthKeyID == "" {
 		return out, nil
 	}
 	if h.encryptor == nil {
 		return out, fmt.Errorf("datasource has stored auth but encryptor not configured")
 	}
-	plaintext, err := h.encryptor.Decrypt(row.AuthEncrypted)
+	plaintext, err := h.encryptor.DecryptString(crypto.FromParts(row.AuthKeyID, row.AuthAlgorithm, row.AuthCiphertext, row.AuthNonce))
 	if err != nil {
 		return out, fmt.Errorf("auth decrypt: %w", err)
 	}
@@ -274,14 +276,14 @@ func (h *DashboardHandler) resolveDatasource(row sqlc.PrometheusDatasource) (das
 }
 
 // sealAuth is the inverse of resolveDatasource — JSON-encode the
-// three auth fields and Fernet-encrypt the blob. Returns an empty
+// three auth fields and age-encrypt the blob. Returns an empty
 // string when none of the fields are set (encoded as "no auth").
-func (h *DashboardHandler) sealAuth(req DatasourceRequest) (string, error) {
+func (h *DashboardHandler) sealAuth(req DatasourceRequest) (crypto.Sealed, error) {
 	if req.BasicAuthUser == "" && req.BasicAuthPass == "" && req.BearerToken == "" {
-		return "", nil
+		return crypto.Sealed{}, nil
 	}
 	if h.encryptor == nil {
-		return "", fmt.Errorf("encryptor not configured; cannot store datasource auth")
+		return crypto.Sealed{}, fmt.Errorf("encryptor not configured; cannot store datasource auth")
 	}
 	blob := authBlob{
 		BasicAuthUser: req.BasicAuthUser,
@@ -290,9 +292,9 @@ func (h *DashboardHandler) sealAuth(req DatasourceRequest) (string, error) {
 	}
 	b, err := json.Marshal(blob)
 	if err != nil {
-		return "", err
+		return crypto.Sealed{}, err
 	}
-	return h.encryptor.Encrypt(string(b))
+	return h.encryptor.Encrypt(b)
 }
 
 // ── Validation ────────────────────────────────────────────────────────

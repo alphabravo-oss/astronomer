@@ -19,6 +19,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/testdb"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // productionRouterHarness is the real production composition (every phase of
@@ -42,7 +43,7 @@ func newProductionRouterHarness(t *testing.T) *productionRouterHarness {
 	cfg.DatabaseURL = testdb.DSN(t)
 	cfg.RedisURL = testdb.Redis(t)
 	cfg.SecretKey = "integration-router-secret-0123456789abcdef0123456789"
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}

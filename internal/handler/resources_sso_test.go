@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -85,16 +87,16 @@ func (f *fakeSSOSettingsQuerier) GetSSOConfigurationByID(_ context.Context, id u
 func (f *fakeSSOSettingsQuerier) CreateSSOConfiguration(_ context.Context, arg sqlc.CreateSSOConfigurationParams) (sqlc.SsoConfiguration, error) {
 	f.created = &arg
 	row := sqlc.SsoConfiguration{
-		ID:                    uuid.New(),
-		Provider:              arg.Provider,
-		IsEnabled:             arg.IsEnabled,
-		DisplayName:           arg.DisplayName,
-		Config:                arg.Config,
-		ClientID:              arg.ClientID,
-		ClientSecretEncrypted: arg.ClientSecretEncrypted,
-		AllowedOrganizations:  arg.AllowedOrganizations,
-		AllowedDomains:        arg.AllowedDomains,
-		AutoCreateUsers:       arg.AutoCreateUsers,
+		ID:                uuid.New(),
+		Provider:          arg.Provider,
+		IsEnabled:         arg.IsEnabled,
+		DisplayName:       arg.DisplayName,
+		Config:            arg.Config,
+		ClientID:          arg.ClientID,
+		ClientSecretKeyID: arg.ClientSecretKeyID, ClientSecretAlgorithm: arg.ClientSecretAlgorithm, ClientSecretCiphertext: arg.ClientSecretCiphertext, ClientSecretNonce: arg.ClientSecretNonce,
+		AllowedOrganizations: arg.AllowedOrganizations,
+		AllowedDomains:       arg.AllowedDomains,
+		AutoCreateUsers:      arg.AutoCreateUsers,
 	}
 	if f.byProvider == nil {
 		f.byProvider = map[string]sqlc.SsoConfiguration{}
@@ -115,11 +117,11 @@ func (f *fakeSSOSettingsQuerier) DeleteSSOConfiguration(_ context.Context, id uu
 
 func TestCreateSSOProviderRegistersGenericOIDCProvider(t *testing.T) {
 	issuer := newOIDCTestIssuer(t)
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -219,17 +221,17 @@ func TestListSSOProvidersReturnsEnabledRows(t *testing.T) {
 }
 
 func TestDeleteSSOProviderRemovesProviderFromManager(t *testing.T) {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
 	jwtManager := auth.MustNewJWTManager("test-secret", 60)
 	ssoMgr := auth.NewSSOManager(enc, jwtManager, "https://astro.example.com/api/v1")
-	secret, err := enc.Encrypt("secret")
+	secret, err := enc.EncryptString("secret")
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}

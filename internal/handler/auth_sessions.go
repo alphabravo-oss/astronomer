@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
@@ -307,7 +309,7 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, userID
 		(*auditDetail)["sso_logout"] = "no_endpoint"
 		return ""
 	}
-	idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
+	idToken, err := h.encryptor.DecryptString(crypto.FromParts(session.UpstreamIDTokenKeyID, session.UpstreamIDTokenAlgorithm, session.UpstreamIDTokenCiphertext, session.UpstreamIDTokenNonce))
 	if err != nil {
 		metric.Record(r.Context(), "encrypt_error")
 		(*auditDetail)["sso_logout"] = "decrypt_failed"

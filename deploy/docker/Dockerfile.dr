@@ -12,6 +12,7 @@ RUN apk add --no-cache \
       aws-cli \
       ca-certificates \
       postgresql17-client \
+      age \
       py3-cryptography \
       python3 \
     && pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17\.' \

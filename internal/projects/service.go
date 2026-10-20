@@ -18,12 +18,12 @@ import (
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -640,7 +640,7 @@ type K8sRequester interface {
 	Do(context.Context, string, string, string, []byte, map[string]string) (*protocol.K8sResponsePayload, error)
 }
 
-func NewReconcileRuntime(store ReconcileStore, requester K8sRequester, encryptor *auth.Encryptor) tasks.ProjectRuntime {
+func NewReconcileRuntime(store ReconcileStore, requester K8sRequester, encryptor *crypto.Encryptor) tasks.ProjectRuntime {
 	if store == nil || requester == nil || encryptor == nil {
 		return tasks.ProjectRuntime{}
 	}

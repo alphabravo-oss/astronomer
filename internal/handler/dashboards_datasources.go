@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -68,9 +70,9 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 		enabled = *req.Enabled
 	}
 	params := sqlc.CreatePrometheusDatasourceParams{
-		Name:          req.Name,
-		Url:           req.URL,
-		AuthEncrypted: encrypted,
+		Name:      req.Name,
+		Url:       req.URL,
+		AuthKeyID: encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
 		TlsSkipVerify: req.TLSSkipVerify,
 		Enabled:       enabled,
 	}
@@ -116,7 +118,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 	// cleartext secret is retained in state. Empty auth fields retain their PUT
 	// compatibility meaning of "preserve existing ciphertext".
 	replaceAuth := req.BasicAuthUser != "" || req.BasicAuthPass != "" || req.BearerToken != ""
-	var replacementCiphertext string
+	var replacementCiphertext crypto.Sealed
 	if replaceAuth {
 		enc, err := h.sealAuth(req)
 		if err != nil {
@@ -130,7 +132,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		if getErr != nil {
 			return sqlc.PrometheusDatasource{}, getErr
 		}
-		encrypted := existing.AuthEncrypted
+		encrypted := crypto.FromParts(existing.AuthKeyID, existing.AuthAlgorithm, existing.AuthCiphertext, existing.AuthNonce)
 		if replaceAuth {
 			encrypted = replacementCiphertext
 		}
@@ -139,7 +141,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 			enabled = *req.Enabled
 		}
 		return q.UpdatePrometheusDatasource(r.Context(), sqlc.UpdatePrometheusDatasourceParams{
-			ID: id, Name: req.Name, Url: req.URL, AuthEncrypted: encrypted,
+			ID: id, Name: req.Name, Url: req.URL, AuthKeyID: encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
 			TlsSkipVerify: req.TLSSkipVerify, Enabled: enabled,
 		})
 	}

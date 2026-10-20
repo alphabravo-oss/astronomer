@@ -138,7 +138,7 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 		return
 	}
 	defer zeroSensitiveBytes(plain)
-	encrypted, err := h.encryptor.Encrypt(string(plain))
+	encrypted, err := h.encryptor.Encrypt(plain)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Node operation encryption is unavailable")
 		return
@@ -152,7 +152,7 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 		operation, err = q.CreateNodeOperationIdempotent(r.Context(), sqlc.CreateNodeOperationIdempotentParams{
 			IdempotencyScope: scope, IdempotencyKey: key, RequestDigest: digest,
 			ClusterID: clusterID, NodeName: nodeName, Action: action,
-			ParametersEncrypted: encrypted, CreatedByID: caller,
+			ParametersKeyID: encrypted.KeyID, ParametersAlgorithm: encrypted.Algorithm, ParametersCiphertext: encrypted.Ciphertext, ParametersNonce: encrypted.Nonce, CreatedByID: caller,
 		})
 		if err != nil {
 			return err

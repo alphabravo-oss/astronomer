@@ -25,6 +25,7 @@ import (
 // This opt-in test owns an isolated PostgreSQL schema and exercises the actual
 // serializable transaction, deterministic rows, conflict rollback, and
 // concurrent retry behavior used by the built-in provisioner.
+//
 //nolint:tparallel // subtests run sequentially against one shared per-test database fixture
 func TestProvisionerPostgresMultiSourceAssets(t *testing.T) {
 	t.Parallel()
@@ -309,8 +310,8 @@ CREATE TABLE projects (
 CREATE TABLE delivery_sources (
  id uuid PRIMARY KEY, project_id uuid NOT NULL, name text NOT NULL, description text NOT NULL,
  source_type text NOT NULL, url text NOT NULL, auth_mode text NOT NULL DEFAULT 'none',
- credential_encrypted text NOT NULL DEFAULT '', credential_key_version integer NOT NULL DEFAULT 0,
- credential_epoch bigint NOT NULL DEFAULT 0, ca_bundle_encrypted text NOT NULL DEFAULT '',
+ credential_key_id text NOT NULL DEFAULT '', credential_algorithm text NOT NULL DEFAULT '', credential_ciphertext bytea, credential_nonce bytea, credential_key_version integer NOT NULL DEFAULT 0,
+ credential_epoch bigint NOT NULL DEFAULT 0, ca_bundle_key_id text NOT NULL DEFAULT '', ca_bundle_algorithm text NOT NULL DEFAULT '', ca_bundle_ciphertext bytea, ca_bundle_nonce bytea,
  proxy_ref text NOT NULL DEFAULT '', trust_policy jsonb NOT NULL DEFAULT '{}', status text NOT NULL,
  last_resolved_at timestamptz, last_error_code text NOT NULL DEFAULT '', UNIQUE(project_id,name)
 );

@@ -65,7 +65,7 @@ func (q *stackLifecycleQuerier) GetDefaultMonitoringBackend(context.Context) (sq
 
 func (q *stackLifecycleQuerier) UpsertDefaultMonitoringBackend(_ context.Context, arg sqlc.UpsertDefaultMonitoringBackendParams) (sqlc.MonitoringBackend, error) {
 	q.backend.AuthConfig = arg.AuthConfig
-	q.backend.AuthConfigEncrypted = arg.AuthConfigEncrypted
+	q.backend.AuthConfigKeyID, q.backend.AuthConfigAlgorithm, q.backend.AuthConfigCiphertext, q.backend.AuthConfigNonce = arg.AuthConfigKeyID, arg.AuthConfigAlgorithm, arg.AuthConfigCiphertext, arg.AuthConfigNonce
 	return q.backend, nil
 }
 
@@ -156,13 +156,13 @@ func (q *stackLifecycleQuerier) UpsertLokiIngestToken(_ context.Context, arg sql
 		q.ingestTokens = map[uuid.UUID]sqlc.LokiIngestToken{}
 	}
 	tok := sqlc.LokiIngestToken{
-		ID:             uuid.New(),
-		ClusterID:      arg.ClusterID,
-		TokenHash:      arg.TokenHash,
-		TokenEncrypted: arg.TokenEncrypted,
-		CreatedByID:    arg.CreatedByID,
-		CreatedAt:      time.Now(),
-		RotatedAt:      time.Now(),
+		ID:         uuid.New(),
+		ClusterID:  arg.ClusterID,
+		TokenHash:  arg.TokenHash,
+		TokenKeyID: arg.TokenKeyID, TokenAlgorithm: arg.TokenAlgorithm, TokenCiphertext: arg.TokenCiphertext, TokenNonce: arg.TokenNonce,
+		CreatedByID: arg.CreatedByID,
+		CreatedAt:   time.Now(),
+		RotatedAt:   time.Now(),
 	}
 	if existing, ok := q.ingestTokens[arg.ClusterID]; ok {
 		tok.ID = existing.ID

@@ -96,7 +96,6 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt credentials")
 		return
 	}
-	legacyAccessKey, legacySecretKey := legacyBackupCredentialColumns(req.AccessKey, req.SecretKey, encrypted)
 
 	veleroNS := strings.TrimSpace(req.VeleroNamespace)
 	if veleroNS == "" {
@@ -108,20 +107,18 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	params := sqlc.CreateBackupStorageConfigParams{
-		Name:                 req.Name,
-		StorageType:          req.StorageType,
-		Bucket:               req.Bucket,
-		Prefix:               req.Prefix,
-		Region:               req.Region,
-		EndpointUrl:          req.EndpointURL,
-		AccessKey:            legacyAccessKey,
-		SecretKey:            legacySecretKey,
-		IsDefault:            req.IsDefault,
-		CreatedByID:          currentUserUUID(r),
-		ClusterID:            clusterID,
-		VeleroNamespace:      veleroNS,
-		BslName:              bslName,
-		EncryptedCredentials: encrypted,
+		Name:             req.Name,
+		StorageType:      req.StorageType,
+		Bucket:           req.Bucket,
+		Prefix:           req.Prefix,
+		Region:           req.Region,
+		EndpointUrl:      req.EndpointURL,
+		IsDefault:        req.IsDefault,
+		CreatedByID:      currentUserUUID(r),
+		ClusterID:        clusterID,
+		VeleroNamespace:  veleroNS,
+		BslName:          bslName,
+		CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
 	}
 	config, err := executeMutation(r, h.runTx,
 		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {
@@ -241,7 +238,6 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt credentials")
 		return
 	}
-	legacyAccessKey, legacySecretKey := legacyBackupCredentialColumns(req.AccessKey, req.SecretKey, encrypted)
 
 	veleroNS := strings.TrimSpace(req.VeleroNamespace)
 	if veleroNS == "" {
@@ -253,20 +249,18 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	params := sqlc.UpdateBackupStorageConfigParams{
-		ID:                   id,
-		Name:                 req.Name,
-		StorageType:          req.StorageType,
-		Bucket:               req.Bucket,
-		Prefix:               req.Prefix,
-		Region:               req.Region,
-		EndpointUrl:          req.EndpointURL,
-		AccessKey:            legacyAccessKey,
-		SecretKey:            legacySecretKey,
-		IsDefault:            req.IsDefault,
-		ClusterID:            clusterID,
-		VeleroNamespace:      veleroNS,
-		BslName:              bslName,
-		EncryptedCredentials: encrypted,
+		ID:               id,
+		Name:             req.Name,
+		StorageType:      req.StorageType,
+		Bucket:           req.Bucket,
+		Prefix:           req.Prefix,
+		Region:           req.Region,
+		EndpointUrl:      req.EndpointURL,
+		IsDefault:        req.IsDefault,
+		ClusterID:        clusterID,
+		VeleroNamespace:  veleroNS,
+		BslName:          bslName,
+		CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
 	}
 	config, err := executeMutation(r, h.runTx,
 		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {

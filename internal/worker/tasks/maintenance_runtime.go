@@ -9,15 +9,12 @@ import (
 // MaintenanceRuntime owns standalone worker tasks that repair or migrate
 // durable control-plane state without requiring a member-cluster tunnel.
 type MaintenanceRuntime struct {
-	AgentTokens          AgentTokenRotateDeps
-	PlaintextCredentials PlaintextCredentialMigrationDeps
+	AgentTokens AgentTokenRotateDeps
 }
 
 func (runtime MaintenanceRuntime) Validate() error {
 	return validateRequiredRuntimeDependencies("maintenance", []requiredRuntimeDependency{
 		{name: "agent_tokens.queries", value: runtime.AgentTokens.Queries},
-		{name: "plaintext_credentials.queries", value: runtime.PlaintextCredentials.Queries},
-		{name: "plaintext_credentials.encryptor", value: runtime.PlaintextCredentials.Encryptor},
 	})
 }
 
@@ -26,8 +23,7 @@ func (runtime MaintenanceRuntime) HandlerBindings() (map[string]asynq.HandlerFun
 		return nil, fmt.Errorf("validate maintenance runtime: %w", err)
 	}
 	return map[string]asynq.HandlerFunc{
-		AgentTokenRotateSweepType:        runtime.HandleAgentTokenRotateSweep,
-		PlaintextCredentialMigrationType: runtime.HandlePlaintextCredentialMigration,
+		AgentTokenRotateSweepType: runtime.HandleAgentTokenRotateSweep,
 	}, nil
 }
 

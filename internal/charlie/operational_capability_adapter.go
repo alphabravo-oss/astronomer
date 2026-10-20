@@ -157,7 +157,7 @@ func (a *OperationalCapabilityAdapter) catalogRepositories(ctx context.Context, 
 			"endpoint": safeRepositoryEndpoint(row.Url), "enabled": row.Enabled,
 			"default": row.IsDefault, "scope": "global", "sync_status": status,
 			"authentication_type":       row.AuthType,
-			"authentication_configured": strings.TrimSpace(row.AuthConfigEncrypted) != "" || (len(row.AuthConfig) > 0 && string(row.AuthConfig) != "{}"),
+			"authentication_configured": row.AuthConfigKeyID != "" || (len(row.AuthConfig) > 0 && string(row.AuthConfig) != "{}"),
 		}
 		if row.OwnerProjectID.Valid {
 			item["scope"] = "project"

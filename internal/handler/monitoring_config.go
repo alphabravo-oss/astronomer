@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -218,7 +220,7 @@ func monitoringBackendResponse(backend sqlc.MonitoringBackend, authConfig map[st
 // see monitoring stop authenticating after an unrelated policy edit, with
 // nothing in the audit trail pointing at the cause.
 func resolveMonitoringBackendAuthConfig(backend sqlc.MonitoringBackend, dec imonitoring.Decryptor) (map[string]any, error) {
-	full, err := imonitoring.ResolveAuthConfig(backend.AuthConfigEncrypted, backend.AuthConfig, dec)
+	full, err := imonitoring.ResolveAuthConfig(crypto.FromParts(backend.AuthConfigKeyID, backend.AuthConfigAlgorithm, backend.AuthConfigCiphertext, backend.AuthConfigNonce), backend.AuthConfig, dec)
 	if err != nil {
 		return nil, err
 	}

@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -56,12 +58,12 @@ func (s *fakeTOTPStore) UpsertUserTOTPEnrollment(_ context.Context, arg sqlc.Ups
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e := sqlc.UserTotpEnrollment{
-		UserID:          arg.UserID,
-		SecretEncrypted: arg.SecretEncrypted,
-		Label:           arg.Label,
-		ConfirmedAt:     arg.ConfirmedAt,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
+		UserID:      arg.UserID,
+		SecretKeyID: arg.SecretKeyID, SecretAlgorithm: arg.SecretAlgorithm, SecretCiphertext: arg.SecretCiphertext, SecretNonce: arg.SecretNonce,
+		Label:       arg.Label,
+		ConfirmedAt: arg.ConfirmedAt,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 	s.enrollments[arg.UserID] = e
 	return e, nil
@@ -190,13 +192,13 @@ func setAuthUserFull(r *http.Request, u sqlc.User) *http.Request {
 	return r.WithContext(ctx)
 }
 
-func mustEncryptor(t *testing.T) *auth.Encryptor {
+func mustEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -280,17 +282,20 @@ func (s *fakeTOTPStore) HasEnrollment(uid uuid.UUID) bool {
 // decryptChallengeSecret extracts the plaintext secret from the
 // challenge blob the way the production confirm handler does — so the
 // test exercises the same encrypt/decrypt path as the real flow.
-func decryptChallengeSecret(t *testing.T, enc *auth.Encryptor, challenge string) string {
+func decryptChallengeSecret(t *testing.T, enc *crypto.Encryptor, challenge string) string {
 	t.Helper()
 	payload, err := decodeTOTPChallenge(challenge)
 	if err != nil {
 		t.Fatalf("decodeTOTPChallenge: %v", err)
 	}
-	var c struct{ S, L string }
+	var c struct {
+		S crypto.Sealed
+		L string
+	}
 	if err := json.Unmarshal(payload, &c); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
-	secret, err := enc.Decrypt(c.S)
+	secret, err := enc.DecryptString(c.S)
 	if err != nil {
 		t.Fatalf("decrypt secret: %v", err)
 	}
@@ -306,12 +311,12 @@ func TestDisableRequiresPasswordAndCode(t *testing.T) {
 	enc := mustEncryptor(t)
 	// Pre-seed an enrollment so Disable has something to find.
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
-	encSecret, _ := enc.Encrypt(secret)
+	encSecret, _ := enc.EncryptString(secret)
 	_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          user.ID,
-		SecretEncrypted: encSecret,
-		Label:           "alice@TestIssuer",
-		ConfirmedAt:     time.Now(),
+		UserID:      user.ID,
+		SecretKeyID: encSecret.KeyID, SecretAlgorithm: encSecret.Algorithm, SecretCiphertext: encSecret.Ciphertext, SecretNonce: encSecret.Nonce,
+		Label:       "alice@TestIssuer",
+		ConfirmedAt: time.Now(),
 	})
 
 	h := newTestTOTPHandler(store, newMockQuerier(user), enc, jwtMgr)
@@ -374,11 +379,11 @@ func TestLogin_TOTPRequiredAfterEnroll(t *testing.T) {
 	enc := mustEncryptor(t)
 	// Pre-seed enrollment.
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
-	encSecret, _ := enc.Encrypt(secret)
+	encSecret, _ := enc.EncryptString(secret)
 	_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          user.ID,
-		SecretEncrypted: encSecret,
-		ConfirmedAt:     time.Now(),
+		UserID:      user.ID,
+		SecretKeyID: encSecret.KeyID, SecretAlgorithm: encSecret.Algorithm, SecretCiphertext: encSecret.Ciphertext, SecretNonce: encSecret.Nonce,
+		ConfirmedAt: time.Now(),
 	})
 
 	mock := newMockQuerier(user)
@@ -414,11 +419,11 @@ func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
-	encSecret, _ := enc.Encrypt(secret)
+	encSecret, _ := enc.EncryptString(secret)
 	_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          user.ID,
-		SecretEncrypted: encSecret,
-		ConfirmedAt:     time.Now(),
+		UserID:      user.ID,
+		SecretKeyID: encSecret.KeyID, SecretAlgorithm: encSecret.Algorithm, SecretCiphertext: encSecret.Ciphertext, SecretNonce: encSecret.Nonce,
+		ConfirmedAt: time.Now(),
 	})
 
 	mock := newMockQuerier(user)
@@ -483,11 +488,11 @@ func TestLogin_TOTPChallengeWithRecoveryCode(t *testing.T) {
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
-	encSecret, _ := enc.Encrypt(secret)
+	encSecret, _ := enc.EncryptString(secret)
 	_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          user.ID,
-		SecretEncrypted: encSecret,
-		ConfirmedAt:     time.Now(),
+		UserID:      user.ID,
+		SecretKeyID: encSecret.KeyID, SecretAlgorithm: encSecret.Algorithm, SecretCiphertext: encSecret.Ciphertext, SecretNonce: encSecret.Nonce,
+		ConfirmedAt: time.Now(),
 	})
 	// Seed 1 recovery code.
 	codes, hashes, _ := auth.GenerateRecoveryCodes(1)
@@ -543,11 +548,11 @@ func TestLogin_TOTPLockoutAfterN(t *testing.T) {
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 	secret, _, _ := auth.GenerateSecret("alice", "TestIssuer")
-	encSecret, _ := enc.Encrypt(secret)
+	encSecret, _ := enc.EncryptString(secret)
 	_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          user.ID,
-		SecretEncrypted: encSecret,
-		ConfirmedAt:     time.Now(),
+		UserID:      user.ID,
+		SecretKeyID: encSecret.KeyID, SecretAlgorithm: encSecret.Algorithm, SecretCiphertext: encSecret.Ciphertext, SecretNonce: encSecret.Nonce,
+		ConfirmedAt: time.Now(),
 	})
 
 	mock := newMockQuerier(user)
@@ -798,11 +803,11 @@ func TestAdminForceDisable_RequiresSuperuser(t *testing.T) {
 
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
-	encSecret, _ := enc.Encrypt("dummy")
+	encSecret, _ := enc.EncryptString("dummy")
 	_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          target.ID,
-		SecretEncrypted: encSecret,
-		ConfirmedAt:     time.Now(),
+		UserID:      target.ID,
+		SecretKeyID: encSecret.KeyID, SecretAlgorithm: encSecret.Algorithm, SecretCiphertext: encSecret.Ciphertext, SecretNonce: encSecret.Nonce,
+		ConfirmedAt: time.Now(),
 	})
 
 	mock := newMockQuerier(target, nonAdmin)

@@ -135,7 +135,7 @@ class DRCryptoTest(unittest.TestCase):
         source = self.root / "key-source"
         source.mkdir()
         (source / "SECRET_KEY").write_text("jwt key")
-        (source / "ASTRONOMER_ENCRYPTION_KEY").write_text("fernet key")
+        (source / "ASTRONOMER_ENCRYPTION_KEY").write_text("age keyring")
         (source / "OIDC_SECRET").write_text("oauth key")
         return source
 
@@ -148,7 +148,7 @@ class DRCryptoTest(unittest.TestCase):
         self.assertEqual(first.read_bytes(), second.read_bytes())
         extracted = self.root / "extracted"
         DR.extract_key_bundle(first, extracted)
-        self.assertEqual((extracted / "ASTRONOMER_ENCRYPTION_KEY").read_text(), "fernet key")
+        self.assertEqual((extracted / "ASTRONOMER_ENCRYPTION_KEY").read_text(), "age keyring")
         self.assertEqual((extracted / "OIDC_SECRET").read_text(), "oauth key")
 
     def test_key_bundle_rejects_links_traversal_and_duplicate_members(self) -> None:

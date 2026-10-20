@@ -18,10 +18,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -76,7 +77,7 @@ type WebhookTapInvalidator interface {
 // clean 403.
 type WebhookHandler struct {
 	queries   WebhookQuerier
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	log       *slog.Logger
 	audit     AuthAuditWriter
 	tap       WebhookTapInvalidator
@@ -88,7 +89,7 @@ type WebhookHandler struct {
 }
 
 // NewWebhookHandler builds a usable handler.
-func NewWebhookHandler(queries WebhookQuerier, encryptor *auth.Encryptor, log *slog.Logger) *WebhookHandler {
+func NewWebhookHandler(queries WebhookQuerier, encryptor *crypto.Encryptor, log *slog.Logger) *WebhookHandler {
 	if log == nil {
 		log = slog.Default()
 	}

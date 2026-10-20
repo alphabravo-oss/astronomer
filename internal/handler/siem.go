@@ -24,12 +24,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
@@ -101,7 +102,7 @@ type SIEMTapInvalidator interface {
 // inside each handler so non-admins get a clean 403.
 type SIEMHandler struct {
 	queries   SIEMQuerier
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	log       *slog.Logger
 	audit     AuthAuditWriter
 	tap       SIEMTapInvalidator
@@ -120,7 +121,7 @@ func (h *SIEMHandler) SetEventBus(bus *events.Bus) {
 }
 
 // NewSIEMHandler builds a usable handler.
-func NewSIEMHandler(queries SIEMQuerier, encryptor *auth.Encryptor, log *slog.Logger) *SIEMHandler {
+func NewSIEMHandler(queries SIEMQuerier, encryptor *crypto.Encryptor, log *slog.Logger) *SIEMHandler {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -241,13 +242,13 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authEnc := ""
+	var authEnc crypto.Sealed
 	if req.Auth != nil && strings.TrimSpace(*req.Auth) != "" && *req.Auth != SIEMAuthSentinel {
 		if h.encryptor == nil {
 			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor is not configured; cannot store SIEM auth blob")
 			return
 		}
-		enc, err := h.encryptor.Encrypt(*req.Auth)
+		enc, err := h.encryptor.EncryptString(*req.Auth)
 		if err != nil {
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt SIEM auth blob")
 			return
@@ -257,10 +258,10 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 	filtersJSON, _ := json.Marshal(merged.EventFilters)
 
 	params := sqlc.CreateSIEMForwarderParams{
-		Name:            merged.Name,
-		Transport:       merged.Transport,
-		Endpoint:        merged.Endpoint,
-		AuthEncrypted:   authEnc,
+		Name:      merged.Name,
+		Transport: merged.Transport,
+		Endpoint:  merged.Endpoint,
+		AuthKeyID: authEnc.KeyID, AuthAlgorithm: authEnc.Algorithm, AuthCiphertext: authEnc.Ciphertext, AuthNonce: authEnc.Nonce,
 		EventFilters:    filtersJSON,
 		Format:          merged.Format,
 		TlsSkipVerify:   merged.TLSSkipVerify,
@@ -350,17 +351,17 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	// Auth handling: SIEMAuthSentinel means "keep existing". Any other
 	// non-empty value is re-encrypted.
-	encryptedAuth := existing.AuthEncrypted
+	encryptedAuth := crypto.FromParts(existing.AuthKeyID, existing.AuthAlgorithm, existing.AuthCiphertext, existing.AuthNonce)
 	if req.Auth != nil && *req.Auth != SIEMAuthSentinel {
 		if strings.TrimSpace(*req.Auth) == "" {
 			// Operator explicitly cleared the auth blob — accept that.
-			encryptedAuth = ""
+			encryptedAuth = crypto.Sealed{}
 		} else {
 			if h.encryptor == nil {
 				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor unavailable")
 				return
 			}
-			enc, encErr := h.encryptor.Encrypt(*req.Auth)
+			enc, encErr := h.encryptor.EncryptString(*req.Auth)
 			if encErr != nil {
 				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt SIEM auth blob")
 				return
@@ -371,11 +372,11 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 	filtersJSON, _ := json.Marshal(merged.EventFilters)
 
 	params := sqlc.UpdateSIEMForwarderParams{
-		ID:              id,
-		Name:            merged.Name,
-		Transport:       merged.Transport,
-		Endpoint:        merged.Endpoint,
-		AuthEncrypted:   encryptedAuth,
+		ID:        id,
+		Name:      merged.Name,
+		Transport: merged.Transport,
+		Endpoint:  merged.Endpoint,
+		AuthKeyID: encryptedAuth.KeyID, AuthAlgorithm: encryptedAuth.Algorithm, AuthCiphertext: encryptedAuth.Ciphertext, AuthNonce: encryptedAuth.Nonce,
 		EventFilters:    filtersJSON,
 		Format:          merged.Format,
 		TlsSkipVerify:   merged.TLSSkipVerify,
@@ -803,7 +804,7 @@ func toSIEMForwarderResponse(row sqlc.SiemForwarder) siemForwarderResponse {
 		Transport:        row.Transport,
 		Endpoint:         row.Endpoint,
 		Auth:             SIEMAuthSentinel,
-		AuthConfigured:   row.AuthEncrypted != "",
+		AuthConfigured:   row.AuthKeyID != "",
 		EventFilters:     filters,
 		Format:           row.Format,
 		TLSSkipVerify:    row.TlsSkipVerify,

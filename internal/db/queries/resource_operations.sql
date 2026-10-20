@@ -2,12 +2,12 @@
 INSERT INTO resource_operations (
     idempotency_scope, idempotency_key, request_digest, cluster_id,
     resource_type, namespace, resource_name, action, api_path,
-    required_verb, manifest_encrypted, force_apply, created_by_id
+    required_verb, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce, force_apply, created_by_id
 ) VALUES (
     sqlc.arg(idempotency_scope), sqlc.arg(idempotency_key), sqlc.arg(request_digest),
     sqlc.arg(cluster_id), sqlc.arg(resource_type), sqlc.arg(namespace),
     sqlc.arg(resource_name), sqlc.arg(action), sqlc.arg(api_path),
-    sqlc.arg(required_verb), sqlc.arg(manifest_encrypted), sqlc.arg(force_apply), sqlc.narg(created_by_id)
+    sqlc.arg(required_verb), sqlc.arg(manifest_key_id), sqlc.arg(manifest_algorithm), sqlc.arg(manifest_ciphertext), sqlc.arg(manifest_nonce), sqlc.arg(force_apply), sqlc.narg(created_by_id)
 )
 ON CONFLICT (idempotency_scope, idempotency_key)
 DO UPDATE SET updated_at = resource_operations.updated_at

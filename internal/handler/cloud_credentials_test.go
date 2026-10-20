@@ -12,11 +12,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -111,14 +112,14 @@ func (f *fakeCloudCredQuerier) CreateCloudCredential(_ context.Context, arg sqlc
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	c := sqlc.CloudCredential{
-		ID:            uuid.New(),
-		ProjectID:     arg.ProjectID,
-		Name:          arg.Name,
-		Provider:      arg.Provider,
-		Description:   arg.Description,
-		DataEncrypted: arg.DataEncrypted,
-		TargetRefs:    arg.TargetRefs,
-		CreatedBy:     arg.CreatedBy,
+		ID:          uuid.New(),
+		ProjectID:   arg.ProjectID,
+		Name:        arg.Name,
+		Provider:    arg.Provider,
+		Description: arg.Description,
+		DataKeyID:   arg.DataKeyID, DataAlgorithm: arg.DataAlgorithm, DataCiphertext: arg.DataCiphertext, DataNonce: arg.DataNonce,
+		TargetRefs: arg.TargetRefs,
+		CreatedBy:  arg.CreatedBy,
 	}
 	if len(c.TargetRefs) == 0 {
 		c.TargetRefs = json.RawMessage(`[]`)
@@ -135,7 +136,7 @@ func (f *fakeCloudCredQuerier) UpdateCloudCredential(_ context.Context, arg sqlc
 		return sqlc.CloudCredential{}, pgx.ErrNoRows
 	}
 	c.Description = arg.Description
-	c.DataEncrypted = arg.DataEncrypted
+	c.DataKeyID, c.DataAlgorithm, c.DataCiphertext, c.DataNonce = arg.DataKeyID, arg.DataAlgorithm, arg.DataCiphertext, arg.DataNonce
 	c.TargetRefs = arg.TargetRefs
 	f.credentials[c.ID] = c
 	return c, nil
@@ -283,13 +284,13 @@ func (t *fakeTester) TestAzure(_ context.Context, _ map[string]string) (CloudTes
 
 // --- Test scaffolding --------------------------------------------------
 
-// testKey returns a fresh Fernet key for tests. Inlined so we don't have
+// testKey returns a fresh age key for tests. Inlined so we don't have
 // to expose a "GenerateForTest" helper from auth.
 func testKey(t *testing.T) string {
 	t.Helper()
-	k, err := auth.GenerateKey()
+	k, err := crypto.GenerateKey()
 	if err != nil {
-		t.Fatalf("generate fernet key: %v", err)
+		t.Fatalf("generate age key: %v", err)
 	}
 	return k
 }
@@ -303,7 +304,7 @@ func newTestHandler(t *testing.T) (*CloudCredentialHandler, *fakeCloudCredQuerie
 	q.projectOK[pid] = true
 	q.clusterOK[cid] = true
 	q.namespaces = append(q.namespaces, sqlc.ProjectNamespace{ProjectID: pid, ClusterID: cid, Namespace: "default"})
-	enc, err := auth.NewEncryptor(testKey(t))
+	enc, err := crypto.NewEncryptor(testKey(t))
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
@@ -398,7 +399,7 @@ func TestCloudCreds_CRUD_AWS(t *testing.T) {
 	// (preserved) and secret_access_key = "new-shhh" (rotated). region is
 	// dropped because it's not in the patch and it's optional.
 	stored := q.credentials[created.ID]
-	plain, err := h.encryptor.Decrypt(stored.DataEncrypted)
+	plain, err := h.encryptor.DecryptString(crypto.FromParts(stored.DataKeyID, stored.DataAlgorithm, stored.DataCiphertext, stored.DataNonce))
 	if err != nil {
 		t.Fatalf("decrypt stored: %v", err)
 	}
@@ -448,7 +449,7 @@ func TestCloudCreds_CRUD_GCP(t *testing.T) {
 	}
 	// Decode back and check render shape — key.json should appear.
 	stored := q.credentials[created.ID]
-	plain, _ := h.encryptor.Decrypt(stored.DataEncrypted)
+	plain, _ := h.encryptor.DecryptString(crypto.FromParts(stored.DataKeyID, stored.DataAlgorithm, stored.DataCiphertext, stored.DataNonce))
 	parsed, _ := cloudcreds.DecodeBlob([]byte(plain))
 	rendered := cloudcreds.RenderSecretData("gcp", parsed)
 	if _, ok := rendered["key.json"]; !ok {

@@ -46,8 +46,8 @@ func builtinOCIRow(t *testing.T) sqlc.ListClusterDeliveryAssignmentsRow {
 	row.SourceType = string(model.SourceHelmOCI)
 	row.Url = "oci://10.20.30.40/builtins/charts"
 	row.AuthMode = string(model.AuthNone)
-	row.CredentialEncrypted = ""
-	row.CaBundleEncrypted = ""
+	row.CredentialKeyID, row.CredentialAlgorithm, row.CredentialCiphertext, row.CredentialNonce = "", "", nil, nil
+	row.CaBundleKeyID, row.CaBundleAlgorithm, row.CaBundleCiphertext, row.CaBundleNonce = "", "", nil, nil
 	row.CredentialEpoch = 0
 	row.ResolvedRevision = "1.0.0"
 	row.Renderer = string(model.RendererHelm)

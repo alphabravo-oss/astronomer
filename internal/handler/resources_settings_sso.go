@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -217,14 +219,14 @@ func csvStringToJSON(raw string) json.RawMessage {
 	return encoded
 }
 
-func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, providerType string, cfg auth.SSOProviderConfig, clientID, secretEncrypted string) error {
+func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, providerType string, cfg auth.SSOProviderConfig, clientID string, clientSecret crypto.Sealed) error {
 	if h == nil || h.ssoMgr == nil {
 		return fmt.Errorf("sso manager is not configured")
 	}
 	if providerType == "oidc" {
-		return h.ssoMgr.RegisterOIDCProvider(ctx, providerKey, cfg.IssuerURL, clientID, secretEncrypted, cfg.RedirectURL, cfg.Scopes)
+		return h.ssoMgr.RegisterOIDCProvider(ctx, providerKey, cfg.IssuerURL, clientID, clientSecret, cfg.RedirectURL, cfg.Scopes)
 	}
-	return h.ssoMgr.RegisterProvider(providerType, clientID, secretEncrypted, cfg.RedirectURL, cfg.Scopes)
+	return h.ssoMgr.RegisterProvider(providerType, clientID, clientSecret, cfg.RedirectURL, cfg.Scopes)
 }
 
 func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Request) {
@@ -335,7 +337,7 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode SSO config")
 		return
 	}
-	secretEncrypted, err := h.encryptor.Encrypt(req.Config.ClientSecret)
+	secretEncrypted, err := h.encryptor.EncryptString(req.Config.ClientSecret)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt SSO client secret")
 		return
@@ -352,16 +354,16 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 	}
 
 	params := sqlc.CreateSSOConfigurationParams{
-		Provider:              providerKey,
-		IsEnabled:             enabled,
-		DisplayName:           req.Name,
-		Config:                configJSON,
-		ClientID:              strings.TrimSpace(req.Config.ClientID),
-		ClientSecretEncrypted: secretEncrypted,
-		AllowedOrganizations:  allowedOrgs,
-		AllowedDomains:        json.RawMessage(`[]`),
-		AutoCreateUsers:       autoCreateUsers,
-		DefaultGlobalRoleID:   pgtype.UUID{},
+		Provider:          providerKey,
+		IsEnabled:         enabled,
+		DisplayName:       req.Name,
+		Config:            configJSON,
+		ClientID:          strings.TrimSpace(req.Config.ClientID),
+		ClientSecretKeyID: secretEncrypted.KeyID, ClientSecretAlgorithm: secretEncrypted.Algorithm, ClientSecretCiphertext: secretEncrypted.Ciphertext, ClientSecretNonce: secretEncrypted.Nonce,
+		AllowedOrganizations: allowedOrgs,
+		AllowedDomains:       json.RawMessage(`[]`),
+		AutoCreateUsers:      autoCreateUsers,
+		DefaultGlobalRoleID:  pgtype.UUID{},
 	}
 	created, err := h.createSSOProviderTx(r, params)
 	if err != nil {

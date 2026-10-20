@@ -128,16 +128,16 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to mint ingest token")
 			return
 		}
-		sealed, encErr := h.encryptor.Encrypt(minted)
+		sealed, encErr := h.encryptor.EncryptString(minted)
 		if encErr != nil {
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to encrypt ingest token")
 			return
 		}
 		params := sqlc.UpsertLokiIngestTokenParams{
-			ClusterID:      clusterID,
-			TokenHash:      lokiauth.HashBearer(minted),
-			TokenEncrypted: sealed,
-			CreatedByID:    currentUserUUID(r),
+			ClusterID:  clusterID,
+			TokenHash:  lokiauth.HashBearer(minted),
+			TokenKeyID: sealed.KeyID, TokenAlgorithm: sealed.Algorithm, TokenCiphertext: sealed.Ciphertext, TokenNonce: sealed.Nonce,
+			CreatedByID: currentUserUUID(r),
 		}
 		tokenParams = &params
 		plaintext = minted

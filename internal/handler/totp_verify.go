@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -82,7 +84,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.NotEnrolled, "TOTP is not enabled for this account")
 		return
 	}
-	secret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
+	secret, err := h.encryptor.DecryptString(crypto.FromParts(enrollment.SecretKeyID, enrollment.SecretAlgorithm, enrollment.SecretCiphertext, enrollment.SecretNonce))
 	if err != nil {
 		h.log.Warn("totp decrypt failed", "user_id", userID.String(), "error", err)
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Stored secret could not be read")

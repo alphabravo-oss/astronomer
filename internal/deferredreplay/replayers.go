@@ -19,11 +19,12 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // Cipher decrypts a durable deferred-operation envelope.
 type Cipher interface {
-	DecryptBytes(string) ([]byte, error)
+	Decrypt(crypto.Sealed) ([]byte, error)
 }
 
 // Queries is the database lookup needed to revalidate Helm uninstall targets.
@@ -58,7 +59,7 @@ func ReplayHTTPRequest(ctx context.Context, router http.Handler, jwtManager *aut
 	if !row.RequestedBy.Valid || row.RequestedBy.Bytes == uuid.Nil {
 		return fmt.Errorf("deferred operation has no active requesting principal")
 	}
-	spec, clearSpec, err := decodeOperationSpec(row.OperationSpec, cipher)
+	spec, clearSpec, err := decodeOperationSpec(row, cipher)
 	if clearSpec != nil {
 		defer clear(clearSpec)
 	}
@@ -107,36 +108,24 @@ func ReplayHTTPRequest(ctx context.Context, router http.Handler, jwtManager *aut
 	return nil
 }
 
-func decodeOperationSpec(raw json.RawMessage, cipher Cipher) (handler.DeferredOpSpec, []byte, error) {
-	if len(raw) == 0 || len(raw) > 2<<20 {
-		return handler.DeferredOpSpec{}, nil, fmt.Errorf("deferred operation envelope has an invalid size")
+func decodeOperationSpec(row sqlc.DeferredOperation, cipher Cipher) (handler.DeferredOpSpec, []byte, error) {
+	sealed := crypto.FromParts(row.SealedSpecKeyID, row.SealedSpecAlgorithm, row.SealedSpecCiphertext, row.SealedSpecNonce)
+	if sealed.IsZero() {
+		return handler.DeferredOpSpec{}, nil, fmt.Errorf("deferred operation has no sealed request")
 	}
-	var envelope handler.EncryptedDeferredOpSpec
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return handler.DeferredOpSpec{}, nil, fmt.Errorf("decode deferred operation envelope: %w", err)
+	if len(sealed.Ciphertext) > 2<<20 {
+		return handler.DeferredOpSpec{}, nil, fmt.Errorf("deferred operation request has an invalid size")
 	}
-	plain := []byte(raw)
-	if envelope.SchemaVersion != 0 || envelope.Ciphertext != "" {
-		if envelope.SchemaVersion != 1 || strings.TrimSpace(envelope.Ciphertext) == "" {
-			return handler.DeferredOpSpec{}, nil, fmt.Errorf("unsupported deferred operation envelope version %d", envelope.SchemaVersion)
-		}
-		var err error
-		plain, err = cipher.DecryptBytes(envelope.Ciphertext)
-		if err != nil {
-			return handler.DeferredOpSpec{}, nil, fmt.Errorf("decrypt deferred operation envelope: %w", err)
-		}
+	plain, err := cipher.Decrypt(sealed)
+	if err != nil {
+		return handler.DeferredOpSpec{}, nil, fmt.Errorf("decrypt deferred operation request: %w", err)
 	}
 	var spec handler.DeferredOpSpec
 	if err := json.Unmarshal(plain, &spec); err != nil {
-		if envelope.SchemaVersion == 1 {
-			clear(plain)
-		}
+		clear(plain)
 		return handler.DeferredOpSpec{}, nil, fmt.Errorf("decode deferred operation request: %w", err)
 	}
-	if envelope.SchemaVersion == 1 {
-		return spec, plain, nil
-	}
-	return spec, nil, nil
+	return spec, plain, nil
 }
 
 func validateReplay(ctx context.Context, queries Queries, row sqlc.DeferredOperation, spec handler.DeferredOpSpec) error {

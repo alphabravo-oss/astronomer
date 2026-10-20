@@ -1,33 +1,18 @@
 package tasks
 
 import (
-	"encoding/base64"
 	"errors"
-	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
-// decryptGitAuth retains the legacy-plaintext compatibility window while
-// rejecting recognized encrypted values when their key is unavailable.
-func (runtime GitOpsRuntime) decryptGitAuth(blob string) (string, error) {
-	if blob == "" {
-		return blob, nil
-	}
-	encrypted := strings.HasPrefix(blob, "astronomer:") || looksLikeFernetToken(blob)
+// decryptGitAuth opens the source's sealed auth family. There is no plaintext
+// or ciphertext fallback: a missing key or failed decrypt is an error, so the
+// stored ciphertext is never handed to go-git as a credential.
+func (runtime GitOpsRuntime) decryptGitAuth(src sqlc.GitopsRegistrationSource) (string, error) {
 	if runtime.Deps.Decryptor == nil {
-		if encrypted {
-			return "", errors.New("Git credential decryptor unavailable")
-		}
-		return blob, nil
+		return "", errors.New("Git credential decryptor unavailable")
 	}
-	if plaintext, err := runtime.Deps.Decryptor.Decrypt(blob); err == nil {
-		return plaintext, nil
-	} else if encrypted {
-		return "", err
-	}
-	return blob, nil
-}
-
-func looksLikeFernetToken(value string) bool {
-	decoded, err := base64.URLEncoding.DecodeString(value)
-	return err == nil && len(decoded) >= 57 && decoded[0] == 0x80
+	return runtime.Deps.Decryptor.DecryptString(crypto.FromParts(src.AuthKeyID, src.AuthAlgorithm, src.AuthCiphertext, src.AuthNonce))
 }

@@ -11,8 +11,9 @@ config:
 
 secrets:
   secretKey: "k3d-smoke-test-jwt-signing-key-32-chars"
-  # Real, valid Fernet key (32 bytes, urlsafe base64). Don't reuse outside of dev.
-  encryptionKey: "3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo="
+  # Published age identity for local k3d installs only (flagged as an insecure
+  # dev key at runtime). Never reuse outside of a laptop.
+  encryptionKey: "AGE-SECRET-KEY-1PP9QEMWWYX3L0L80VA7062GN8NMHTGEYCZW80TL7PJKGUH6PKWZQ6H6DAA"
 
 # Gateway API (replacing the deprecated ingress controller pattern).
 # className must match a GatewayClass on the cluster — for NGINX Gateway Fabric

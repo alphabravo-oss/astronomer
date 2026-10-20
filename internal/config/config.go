@@ -97,9 +97,17 @@ type Config struct {
 	// Requires HTTPS, wildcard DNS/TLS, and a suffix separate from ServerURL.
 	ToolUIDomain string `mapstructure:"tool_ui_domain"`
 
+	// EncryptionKey is the inline age keyring for column encryption
+	// (ASTRONOMER_ENCRYPTION_KEY): newline- or comma-separated
+	// "[label:]AGE-SECRET-KEY-1..." entries, current key first, previous keys
+	// after it until `astro admin rotate-keys` has rewritten every row.
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
+	// EncryptionKeyFile is the same keyring read from a file
+	// (ASTRONOMER_ENCRYPTION_KEY_FILE), e.g. a mounted Secret. Setting both is
+	// a startup error.
+	EncryptionKeyFile string `mapstructure:"astronomer_encryption_key_file"`
 	// InternalPSK authenticates body-bound, short-lived cross-pod tunnel RPC.
-	// It must be independent from both the JWT signing and Fernet keys.
+	// It must be independent from both the JWT signing and encryption keys.
 	InternalPSK string `mapstructure:"astronomer_internal_psk"`
 	// InternalPSKPrevious is accepted for verification only during an
 	// operator-controlled rotation window. New sibling requests are always signed

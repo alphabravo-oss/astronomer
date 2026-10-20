@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -380,7 +382,7 @@ func TestManagementBackupGetDestinationReturnsExactRedactedState(t *testing.T) {
 			Region: "us-east-1", EndpointUrl: "https://s3.example.test", Schedule: "0 3 * * *",
 			Enabled: true, KeepDaily: 30, KeepWeekly: 12, KeepMonthly: 6,
 			DesiredState: "deleted", ReconcileStatus: "pending", DesiredGeneration: 4,
-			EncryptedCredentials: "must-not-leak",
+			CredentialsKeyID: "test-key", CredentialsAlgorithm: crypto.AlgorithmAgeX25519, CredentialsCiphertext: []byte("must-not-leak"),
 		}},
 	}
 	h := NewAdminDrillHandler(q)

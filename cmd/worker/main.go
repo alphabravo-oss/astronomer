@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -22,7 +23,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -43,6 +43,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -52,7 +53,7 @@ import (
 // platform encryption key.
 type unavailableDeliveryDecryptor struct{}
 
-func (unavailableDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
+func (unavailableDeliveryDecryptor) Decrypt(crypto.Sealed) ([]byte, error) {
 	return nil, fmt.Errorf("platform encryption key is unavailable")
 }
 
@@ -63,7 +64,7 @@ func allowPrivateRCWebhooks(cfg *config.Config) bool {
 
 func webhookHTTPClient(cfg *config.Config) *http.Client {
 	// RC uses an owned disposable development cluster and an explicit opt-in so
-	// the webhook dispatcher can prove product-path Fernet decryption against a
+	// the webhook dispatcher can prove product-path age decryption against a
 	// host-side one-shot receiver. Production always retains the public-only
 	// SSRF guard, even if the environment variable is set accidentally.
 	if allowPrivateRCWebhooks(cfg) {
@@ -104,25 +105,32 @@ func main() {
 	log.Info().Str("event", "worker_starting").Str("version", version.Version).Str("commit", version.GitCommit).Str("built", version.BuildDate).Msg("starting astronomer worker binary")
 
 	// Apply the server production security contract before starting any task.
-	encryptorReady := false
 	// Retained (not just probed) because the catalog:sync sweep needs it to
-	// unwrap helm_repositories.auth_config_encrypted — migration 145. The
+	// open the sealed helm_repositories.auth_config_* family. The
 	// scheduled sweep and the interactive handler are separate readers of the
 	// same credential; a worker without this key syncs private chart
 	// repositories unauthenticated.
 	//
 	// monitoring:reconcile and alert:evaluate need it for the same reason
-	// against monitoring_backends.auth_config_encrypted (migration 146), and
+	// against the sealed monitoring_backends.auth_config_* family, and
 	// the reconcile tick additionally re-seals what it resolved — so this
 	// process needs both directions of the cipher, not just decrypt.
-	var platformEncryptor *auth.Encryptor
-	if cfg.EncryptionKey != "" {
-		if e, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
-			encryptorReady = true
-			platformEncryptor = e
-		}
+	platformEncryptor, encErr := cfg.LoadEncryptor()
+	switch {
+	case encErr == nil:
+		log.Info().Str("current_key_id", platformEncryptor.CurrentKeyID()).
+			Int("key_count", platformEncryptor.KeyCount()).
+			Str("key_ids", strings.Join(platformEncryptor.KeyIDs(), ",")).
+			Msg("encryption keyring loaded")
+	case errors.Is(encErr, crypto.ErrNoKey):
+		platformEncryptor = nil
+		log.Warn().Msg("no encryption key configured (ASTRONOMER_ENCRYPTION_KEY / ASTRONOMER_ENCRYPTION_KEY_FILE); sealed credentials are unavailable")
+	default:
+		// A key IS configured but does not load: never continue without it.
+		log.Error().Err(encErr).Msg("encryption keyring could not be loaded; refusing to start")
+		os.Exit(1)
 	}
-	if secErr := config.ValidateProductionSecurity(cfg, encryptorReady); secErr != nil {
+	if secErr := config.ValidateProductionSecurity(cfg, platformEncryptor != nil); secErr != nil {
 		// Only returns non-nil in production mode.
 		log.Error().Err(secErr).Msg("production security config invalid; refusing to start")
 		os.Exit(1)
@@ -345,9 +353,6 @@ func main() {
 	}
 	maintenanceRuntime := tasks.MaintenanceRuntime{
 		AgentTokens: tasks.AgentTokenRotateDeps{Queries: sqlc.New(database.Pool())},
-		PlaintextCredentials: tasks.PlaintextCredentialMigrationDeps{
-			Queries: sqlc.New(database.Pool()), Encryptor: platformEncryptor,
-		},
 	}
 	gitopsRuntime := tasks.GitOpsRuntime{Deps: tasks.GitOpsDeps{
 		Queries:    sqlc.New(database.Pool()),
@@ -357,7 +362,7 @@ func main() {
 		Log:        logging.Slog(log),
 	}}
 
-	// Email dispatch (migration 047). The SMTP password is Fernet-encrypted,
+	// Email dispatch (migration 047). The SMTP password is age-sealed,
 	// so production startup validation refuses queue consumption unless the
 	// encryptor, settings provider, and sender are all present.
 	var emailDispatchDeps tasks.EmailDeps

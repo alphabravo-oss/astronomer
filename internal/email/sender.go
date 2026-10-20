@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // SingletonSettingsID is the well-known UUID for the singleton smtp_settings
@@ -50,7 +50,7 @@ func (s Settings) Addr() string {
 	return net.JoinHostPort(s.Host, strconv.Itoa(port))
 }
 
-// SettingsProvider is the indirection between the persisted Fernet
+// SettingsProvider is the indirection between the persisted age-sealed
 // ciphertext row and a usable Settings struct. Implementations cache
 // behind their own locking — Sender calls Provide() before every send.
 type SettingsProvider interface {
@@ -111,7 +111,7 @@ type Dialer func(ctx context.Context, addr string, tlsConfig *tls.Config, useTLS
 type Sender struct {
 	cfg       SettingsProvider
 	branding  BrandingProvider
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	log       *slog.Logger
 	now       func() time.Time
 	dial      Dialer
@@ -119,7 +119,7 @@ type Sender struct {
 
 // NewSender wires the producer-side dependencies. dial defaults to the
 // real net/smtp dialer; tests override via WithDialer.
-func NewSender(cfg SettingsProvider, encryptor *auth.Encryptor, log *slog.Logger) *Sender {
+func NewSender(cfg SettingsProvider, encryptor *crypto.Encryptor, log *slog.Logger) *Sender {
 	if log == nil {
 		log = slog.Default()
 	}

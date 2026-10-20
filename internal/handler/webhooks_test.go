@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -18,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -132,10 +133,10 @@ func (f *fakeWebhookQuerier) CreateWebhookSubscription(_ context.Context, arg sq
 		return sqlc.WebhookSubscription{}, errors.New("duplicate name")
 	}
 	row := sqlc.WebhookSubscription{
-		ID:              uuid.New(),
-		Name:            arg.Name,
-		Url:             arg.Url,
-		SecretEncrypted: arg.SecretEncrypted,
+		ID:          uuid.New(),
+		Name:        arg.Name,
+		Url:         arg.Url,
+		SecretKeyID: arg.SecretKeyID, SecretAlgorithm: arg.SecretAlgorithm, SecretCiphertext: arg.SecretCiphertext, SecretNonce: arg.SecretNonce,
 		EventFilters:    arg.EventFilters,
 		PayloadTemplate: arg.PayloadTemplate,
 		ExtraHeaders:    arg.ExtraHeaders,
@@ -160,7 +161,7 @@ func (f *fakeWebhookQuerier) UpdateWebhookSubscription(_ context.Context, arg sq
 	delete(f.subsByName, row.Name)
 	row.Name = arg.Name
 	row.Url = arg.Url
-	row.SecretEncrypted = arg.SecretEncrypted
+	row.SecretKeyID, row.SecretAlgorithm, row.SecretCiphertext, row.SecretNonce = arg.SecretKeyID, arg.SecretAlgorithm, arg.SecretCiphertext, arg.SecretNonce
 	row.EventFilters = arg.EventFilters
 	row.PayloadTemplate = arg.PayloadTemplate
 	row.ExtraHeaders = arg.ExtraHeaders
@@ -269,11 +270,11 @@ func withChiParam(r *http.Request, k, v string) *http.Request {
 
 func newWebhookTestHandler(t *testing.T, q WebhookQuerier) *WebhookHandler {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}

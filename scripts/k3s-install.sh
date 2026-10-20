@@ -126,7 +126,7 @@ import_img "astronomer-go-agent:${IMG_AGENT}"
 # ── 5. Astronomer (fresh helm install; the server applies migrations at boot) ─
 log "helm install astronomer"
 # The chart ships no default key material (it used to default to a JWT signing
-# key and Fernet key published in this repository), so the authoritative values
+# key and encryption key published in this repository), so the authoritative values
 # file carrying secrets.secretKey / secrets.encryptionKey — or a pre-created
 # Secret referenced by secrets.existingSecret — is now mandatory, not optional.
 if [[ ! -f "$VALUES" ]]; then

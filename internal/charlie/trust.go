@@ -17,7 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const (
@@ -57,16 +57,16 @@ type AgentTrustMaterial struct {
 }
 
 type GeneratedLocalTrust struct {
-	Public              LocalPublicTrust
-	EncryptedLocalTrust string
-	Agent               AgentTrustMaterial      `json:"-"`
-	Astronomer          AstronomerTrustMaterial `json:"-"`
-	ExpiresAt           time.Time
+	Public           LocalPublicTrust
+	SealedLocalTrust crypto.Sealed
+	Agent            AgentTrustMaterial      `json:"-"`
+	Astronomer       AstronomerTrustMaterial `json:"-"`
+	ExpiresAt        time.Time
 }
 
 // AstronomerTrustMaterial is ephemeral output for direct materialization into
 // the server's private MCP listener Secret. The same key is also sealed inside
-// EncryptedLocalTrust; json:"-" prevents accidental API serialization.
+// SealedLocalTrust; json:"-" prevents accidental API serialization.
 type AstronomerTrustMaterial struct {
 	BridgeClientPrivateKey string `json:"-"`
 	MCPServerPrivateKey    string `json:"-"`
@@ -108,8 +108,8 @@ func ExpectedLocalIdentityURIs(installationID string) (LocalIdentityURIs, error)
 
 // GenerateLocalTrust creates four purpose-separated mTLS leaf identities. The
 // two agent-side keys are returned only for direct Secret materialization. The
-// Astronomer-owned reusable keys are sealed immediately with auth.Encryptor.
-func GenerateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig) (GeneratedLocalTrust, error) {
+// Astronomer-owned reusable keys are sealed immediately with pkg/crypto.Encryptor.
+func GenerateLocalTrust(encryptor *crypto.Encryptor, cfg LocalTrustConfig) (GeneratedLocalTrust, error) {
 	if encryptor == nil {
 		return GeneratedLocalTrust{}, fmt.Errorf("Astronomer encryption is required for Charlie local trust")
 	}
@@ -153,7 +153,7 @@ func GenerateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig) (Genera
 	if err != nil {
 		return GeneratedLocalTrust{}, fmt.Errorf("encode Charlie local trust: %w", err)
 	}
-	sealed, err := encryptor.Encrypt(string(persisted))
+	sealed, err := encryptor.Encrypt(persisted)
 	if err != nil {
 		return GeneratedLocalTrust{}, fmt.Errorf("encrypt Charlie local trust: %w", err)
 	}
@@ -164,7 +164,7 @@ func GenerateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig) (Genera
 			BridgeClientIdentityURI: identities.BridgeClient,
 			MCPServerCertificate:    mcpServerCert, MCPServerIdentityURI: identities.MCPServer,
 		},
-		EncryptedLocalTrust: sealed,
+		SealedLocalTrust: sealed,
 		Agent: AgentTrustMaterial{
 			CACertificatePEM: caCertPEM, BridgeServerCertificate: bridgeServerCert,
 			BridgeServerPrivateKey: bridgeServerKey, BridgeServerIdentityURI: identities.BridgeServer,
@@ -179,8 +179,8 @@ func GenerateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig) (Genera
 // RotateLocalTrust issues a fresh four-certificate set while retaining the
 // immediately previous local trust for exactly 24 hours. Both CA certificates
 // are published during overlap; previous private material stays encrypted.
-func RotateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig, previous GeneratedLocalTrust) (RotatedLocalTrust, error) {
-	if encryptor == nil || strings.TrimSpace(previous.EncryptedLocalTrust) == "" || strings.TrimSpace(previous.Public.CACertificatePEM) == "" {
+func RotateLocalTrust(encryptor *crypto.Encryptor, cfg LocalTrustConfig, previous GeneratedLocalTrust) (RotatedLocalTrust, error) {
+	if encryptor == nil || previous.SealedLocalTrust.IsZero() || strings.TrimSpace(previous.Public.CACertificatePEM) == "" {
 		return RotatedLocalTrust{}, fmt.Errorf("previous encrypted Charlie trust is required for rotation")
 	}
 	now := cfg.Now.UTC()
@@ -192,11 +192,11 @@ func RotateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig, previous 
 	if err != nil {
 		return RotatedLocalTrust{}, err
 	}
-	previousPersisted, err := decryptPersistedTrust(encryptor, previous.EncryptedLocalTrust)
+	previousPersisted, err := decryptPersistedTrust(encryptor, previous.SealedLocalTrust)
 	if err != nil {
 		return RotatedLocalTrust{}, fmt.Errorf("decrypt previous Charlie trust: %w", err)
 	}
-	currentPersisted, err := decryptPersistedTrust(encryptor, current.EncryptedLocalTrust)
+	currentPersisted, err := decryptPersistedTrust(encryptor, current.SealedLocalTrust)
 	if err != nil {
 		return RotatedLocalTrust{}, fmt.Errorf("decrypt current Charlie trust: %w", err)
 	}
@@ -209,7 +209,7 @@ func RotateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig, previous 
 	if err != nil {
 		return RotatedLocalTrust{}, fmt.Errorf("encode rotated Charlie trust: %w", err)
 	}
-	current.EncryptedLocalTrust, err = encryptor.Encrypt(string(encoded))
+	current.SealedLocalTrust, err = encryptor.Encrypt(encoded)
 	if err != nil {
 		return RotatedLocalTrust{}, fmt.Errorf("encrypt rotated Charlie trust: %w", err)
 	}
@@ -225,13 +225,13 @@ func RotateLocalTrust(encryptor *auth.Encryptor, cfg LocalTrustConfig, previous 
 
 // PruneExpiredPreviousTrust removes encrypted previous key material once the
 // overlap expires. It is idempotent before and after expiry.
-func PruneExpiredPreviousTrust(encryptor *auth.Encryptor, sealed string, now time.Time) (string, bool, error) {
+func PruneExpiredPreviousTrust(encryptor *crypto.Encryptor, sealed crypto.Sealed, now time.Time) (crypto.Sealed, bool, error) {
 	if encryptor == nil {
-		return "", false, fmt.Errorf("Astronomer encryption is required for Charlie trust pruning")
+		return crypto.Sealed{}, false, fmt.Errorf("Astronomer encryption is required for Charlie trust pruning")
 	}
 	persisted, err := decryptPersistedTrust(encryptor, sealed)
 	if err != nil {
-		return "", false, err
+		return crypto.Sealed{}, false, err
 	}
 	if persisted.Previous == nil || persisted.PreviousTrustExpiresAt == nil || now.UTC().Before(persisted.PreviousTrustExpiresAt.UTC()) {
 		return sealed, false, nil
@@ -240,19 +240,19 @@ func PruneExpiredPreviousTrust(encryptor *auth.Encryptor, sealed string, now tim
 	persisted.PreviousTrustExpiresAt = nil
 	raw, err := json.Marshal(persisted)
 	if err != nil {
-		return "", false, err
+		return crypto.Sealed{}, false, err
 	}
-	pruned, err := encryptor.Encrypt(string(raw))
+	pruned, err := encryptor.Encrypt(raw)
 	return pruned, err == nil, err
 }
 
-func decryptPersistedTrust(encryptor *auth.Encryptor, sealed string) (persistedLocalTrust, error) {
+func decryptPersistedTrust(encryptor *crypto.Encryptor, sealed crypto.Sealed) (persistedLocalTrust, error) {
 	plaintext, err := encryptor.Decrypt(sealed)
 	if err != nil {
 		return persistedLocalTrust{}, err
 	}
 	var persisted persistedLocalTrust
-	if err := json.Unmarshal([]byte(plaintext), &persisted); err != nil {
+	if err := json.Unmarshal(plaintext, &persisted); err != nil {
 		return persistedLocalTrust{}, err
 	}
 	return persisted, nil

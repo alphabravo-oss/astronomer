@@ -27,31 +27,34 @@ func (q *Queries) CountWebhookDeliveriesBySubscription(ctx context.Context, subs
 
 const createWebhookSubscription = `-- name: CreateWebhookSubscription :one
 INSERT INTO webhook_subscriptions (
-    name, url, secret_encrypted, event_filters, payload_template,
+    name, url, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce, event_filters, payload_template,
     extra_headers, enabled, max_retries, timeout_seconds, created_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, name, url, secret_encrypted, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at
+VALUES ($1, $2, $3, $11, $12, $13, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, name, url, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce
 `
 
 type CreateWebhookSubscriptionParams struct {
-	Name            string          `json:"name"`
-	Url             string          `json:"url"`
-	SecretEncrypted string          `json:"secret_encrypted"`
-	EventFilters    json.RawMessage `json:"event_filters"`
-	PayloadTemplate string          `json:"payload_template"`
-	ExtraHeaders    json.RawMessage `json:"extra_headers"`
-	Enabled         bool            `json:"enabled"`
-	MaxRetries      int32           `json:"max_retries"`
-	TimeoutSeconds  int32           `json:"timeout_seconds"`
-	CreatedBy       pgtype.UUID     `json:"created_by"`
+	Name             string          `json:"name"`
+	Url              string          `json:"url"`
+	SecretKeyID      string          `json:"secret_key_id"`
+	EventFilters     json.RawMessage `json:"event_filters"`
+	PayloadTemplate  string          `json:"payload_template"`
+	ExtraHeaders     json.RawMessage `json:"extra_headers"`
+	Enabled          bool            `json:"enabled"`
+	MaxRetries       int32           `json:"max_retries"`
+	TimeoutSeconds   int32           `json:"timeout_seconds"`
+	CreatedBy        pgtype.UUID     `json:"created_by"`
+	SecretAlgorithm  string          `json:"secret_algorithm"`
+	SecretCiphertext []byte          `json:"secret_ciphertext"`
+	SecretNonce      []byte          `json:"secret_nonce"`
 }
 
 func (q *Queries) CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error) {
 	row := q.db.QueryRow(ctx, createWebhookSubscription,
 		arg.Name,
 		arg.Url,
-		arg.SecretEncrypted,
+		arg.SecretKeyID,
 		arg.EventFilters,
 		arg.PayloadTemplate,
 		arg.ExtraHeaders,
@@ -59,13 +62,15 @@ func (q *Queries) CreateWebhookSubscription(ctx context.Context, arg CreateWebho
 		arg.MaxRetries,
 		arg.TimeoutSeconds,
 		arg.CreatedBy,
+		arg.SecretAlgorithm,
+		arg.SecretCiphertext,
+		arg.SecretNonce,
 	)
 	var i WebhookSubscription
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.SecretEncrypted,
 		&i.EventFilters,
 		&i.PayloadTemplate,
 		&i.ExtraHeaders,
@@ -75,6 +80,10 @@ func (q *Queries) CreateWebhookSubscription(ctx context.Context, arg CreateWebho
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SecretKeyID,
+		&i.SecretAlgorithm,
+		&i.SecretCiphertext,
+		&i.SecretNonce,
 	)
 	return i, err
 }
@@ -131,7 +140,7 @@ func (q *Queries) GetWebhookDelivery(ctx context.Context, id uuid.UUID) (Webhook
 }
 
 const getWebhookSubscription = `-- name: GetWebhookSubscription :one
-SELECT id, name, url, secret_encrypted, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at FROM webhook_subscriptions WHERE id = $1
+SELECT id, name, url, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce FROM webhook_subscriptions WHERE id = $1
 `
 
 func (q *Queries) GetWebhookSubscription(ctx context.Context, id uuid.UUID) (WebhookSubscription, error) {
@@ -141,7 +150,6 @@ func (q *Queries) GetWebhookSubscription(ctx context.Context, id uuid.UUID) (Web
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.SecretEncrypted,
 		&i.EventFilters,
 		&i.PayloadTemplate,
 		&i.ExtraHeaders,
@@ -151,12 +159,16 @@ func (q *Queries) GetWebhookSubscription(ctx context.Context, id uuid.UUID) (Web
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SecretKeyID,
+		&i.SecretAlgorithm,
+		&i.SecretCiphertext,
+		&i.SecretNonce,
 	)
 	return i, err
 }
 
 const getWebhookSubscriptionByName = `-- name: GetWebhookSubscriptionByName :one
-SELECT id, name, url, secret_encrypted, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at FROM webhook_subscriptions WHERE name = $1
+SELECT id, name, url, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce FROM webhook_subscriptions WHERE name = $1
 `
 
 func (q *Queries) GetWebhookSubscriptionByName(ctx context.Context, name string) (WebhookSubscription, error) {
@@ -166,7 +178,6 @@ func (q *Queries) GetWebhookSubscriptionByName(ctx context.Context, name string)
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.SecretEncrypted,
 		&i.EventFilters,
 		&i.PayloadTemplate,
 		&i.ExtraHeaders,
@@ -176,6 +187,10 @@ func (q *Queries) GetWebhookSubscriptionByName(ctx context.Context, name string)
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SecretKeyID,
+		&i.SecretAlgorithm,
+		&i.SecretCiphertext,
+		&i.SecretNonce,
 	)
 	return i, err
 }
@@ -234,7 +249,7 @@ func (q *Queries) InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDe
 }
 
 const listEnabledWebhookSubscriptions = `-- name: ListEnabledWebhookSubscriptions :many
-SELECT id, name, url, secret_encrypted, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at FROM webhook_subscriptions WHERE enabled = true ORDER BY created_at ASC
+SELECT id, name, url, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce FROM webhook_subscriptions WHERE enabled = true ORDER BY created_at ASC
 `
 
 // Used by the event-bus tap: every published event scans this list and
@@ -254,7 +269,6 @@ func (q *Queries) ListEnabledWebhookSubscriptions(ctx context.Context) ([]Webhoo
 			&i.ID,
 			&i.Name,
 			&i.Url,
-			&i.SecretEncrypted,
 			&i.EventFilters,
 			&i.PayloadTemplate,
 			&i.ExtraHeaders,
@@ -264,6 +278,10 @@ func (q *Queries) ListEnabledWebhookSubscriptions(ctx context.Context) ([]Webhoo
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SecretKeyID,
+			&i.SecretAlgorithm,
+			&i.SecretCiphertext,
+			&i.SecretNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -379,7 +397,7 @@ func (q *Queries) ListWebhookDeliveriesBySubscription(ctx context.Context, arg L
 
 const listWebhookSubscriptions = `-- name: ListWebhookSubscriptions :many
 
-SELECT id, name, url, secret_encrypted, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at FROM webhook_subscriptions ORDER BY created_at DESC
+SELECT id, name, url, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce FROM webhook_subscriptions ORDER BY created_at DESC
 `
 
 // Webhook subscription + delivery queries (migration 048). Backs:
@@ -392,7 +410,7 @@ SELECT id, name, url, secret_encrypted, event_filters, payload_template, extra_h
 //   - the daily retention sweep (default 30 days) that purges old
 //     delivery rows so the table doesn't grow unbounded
 //
-// secret_encrypted is the Fernet ciphertext of the HMAC signing secret;
+// secret_{key_id,algorithm,ciphertext,nonce} is the age ciphertext of the HMAC signing secret;
 // this layer stores and returns it verbatim. Decryption happens in the
 // sender right before signing.
 func (q *Queries) ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error) {
@@ -408,7 +426,6 @@ func (q *Queries) ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscr
 			&i.ID,
 			&i.Name,
 			&i.Url,
-			&i.SecretEncrypted,
 			&i.EventFilters,
 			&i.PayloadTemplate,
 			&i.ExtraHeaders,
@@ -418,6 +435,10 @@ func (q *Queries) ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscr
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SecretKeyID,
+			&i.SecretAlgorithm,
+			&i.SecretCiphertext,
+			&i.SecretNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -555,7 +576,10 @@ const updateWebhookSubscription = `-- name: UpdateWebhookSubscription :one
 UPDATE webhook_subscriptions
 SET name             = $2,
     url              = $3,
-    secret_encrypted = $4,
+    secret_key_id = $4,
+    secret_algorithm = $11,
+    secret_ciphertext = $12,
+    secret_nonce = $13,
     event_filters    = $5,
     payload_template = $6,
     extra_headers    = $7,
@@ -564,20 +588,23 @@ SET name             = $2,
     timeout_seconds  = $10,
     updated_at       = now()
 WHERE id = $1
-RETURNING id, name, url, secret_encrypted, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at
+RETURNING id, name, url, event_filters, payload_template, extra_headers, enabled, max_retries, timeout_seconds, created_by, created_at, updated_at, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce
 `
 
 type UpdateWebhookSubscriptionParams struct {
-	ID              uuid.UUID       `json:"id"`
-	Name            string          `json:"name"`
-	Url             string          `json:"url"`
-	SecretEncrypted string          `json:"secret_encrypted"`
-	EventFilters    json.RawMessage `json:"event_filters"`
-	PayloadTemplate string          `json:"payload_template"`
-	ExtraHeaders    json.RawMessage `json:"extra_headers"`
-	Enabled         bool            `json:"enabled"`
-	MaxRetries      int32           `json:"max_retries"`
-	TimeoutSeconds  int32           `json:"timeout_seconds"`
+	ID               uuid.UUID       `json:"id"`
+	Name             string          `json:"name"`
+	Url              string          `json:"url"`
+	SecretKeyID      string          `json:"secret_key_id"`
+	EventFilters     json.RawMessage `json:"event_filters"`
+	PayloadTemplate  string          `json:"payload_template"`
+	ExtraHeaders     json.RawMessage `json:"extra_headers"`
+	Enabled          bool            `json:"enabled"`
+	MaxRetries       int32           `json:"max_retries"`
+	TimeoutSeconds   int32           `json:"timeout_seconds"`
+	SecretAlgorithm  string          `json:"secret_algorithm"`
+	SecretCiphertext []byte          `json:"secret_ciphertext"`
+	SecretNonce      []byte          `json:"secret_nonce"`
 }
 
 // Full replacement update (PUT semantics). Caller computes the merged
@@ -589,20 +616,22 @@ func (q *Queries) UpdateWebhookSubscription(ctx context.Context, arg UpdateWebho
 		arg.ID,
 		arg.Name,
 		arg.Url,
-		arg.SecretEncrypted,
+		arg.SecretKeyID,
 		arg.EventFilters,
 		arg.PayloadTemplate,
 		arg.ExtraHeaders,
 		arg.Enabled,
 		arg.MaxRetries,
 		arg.TimeoutSeconds,
+		arg.SecretAlgorithm,
+		arg.SecretCiphertext,
+		arg.SecretNonce,
 	)
 	var i WebhookSubscription
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.SecretEncrypted,
 		&i.EventFilters,
 		&i.PayloadTemplate,
 		&i.ExtraHeaders,
@@ -612,6 +641,10 @@ func (q *Queries) UpdateWebhookSubscription(ctx context.Context, arg UpdateWebho
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SecretKeyID,
+		&i.SecretAlgorithm,
+		&i.SecretCiphertext,
+		&i.SecretNonce,
 	)
 	return i, err
 }

@@ -76,8 +76,6 @@ func ValidateStandaloneRuntime(features StandaloneRuntimeFeatures, coreRuntime C
 		{name: "delivery.source_resolver", value: deliveryRuntime.SourceResolver},
 		{name: "delivery.rollout_reconciler", value: deliveryRuntime.RolloutReconciler},
 		{name: "delivery.system_rollout_reconciler", value: deliveryRuntime.SystemRolloutReconciler},
-		{name: "plaintext_credentials.queries", value: maintenanceRuntime.PlaintextCredentials.Queries},
-		{name: "plaintext_credentials.encryptor", value: maintenanceRuntime.PlaintextCredentials.Encryptor},
 		{name: "agent_token_rotation.queries", value: maintenanceRuntime.AgentTokens.Queries},
 		{name: "gitops.queries", value: gitopsRuntime.Deps.Queries},
 		{name: "gitops.task_outbox", value: gitopsRuntime.Deps.TaskOutbox},

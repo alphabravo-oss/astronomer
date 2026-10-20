@@ -11,7 +11,7 @@ existing Kubernetes clusters and does not provision them.
 - Database and cache owners provide either HA external endpoints or operate the
   chart's CloudNativePG and Sentinel-backed Valkey profiles, including
   backup/PITR policy and tested credentials.
-- Security owns signing-key and Fernet-key custody, release verification,
+- Security owns signing-key and encryption-key custody, release verification,
   identity integration, and break-glass access.
 - The application owner supplies DNS, TLS, external identity, object storage,
   outbound proxy/CA policy, and initial RBAC mappings.
@@ -72,8 +72,8 @@ identity, or a manifest whose release version differs from the requested tag.
 
 ## Create secrets without exposing them
 
-Generate the JWT signing key and Fernet encryption key once in an approved
-secret system. Losing or replacing the Fernet key makes encrypted database
+Generate the JWT signing key and age encryption key (`astro admin generate-encryption-key`) once in an approved
+secret system. Losing or replacing the encryption key makes encrypted database
 columns unreadable. Never put these values, database DSNs, bootstrap
 passwords, registry credentials, or SSO secrets in a committed values file.
 

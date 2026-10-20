@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -51,7 +53,7 @@ type TOTPHandler struct {
 	queries    TOTPQuerier
 	users      UserQuerier
 	rehasher   PasswordRehasher // for password verify on disable
-	encryptor  *auth.Encryptor
+	encryptor  *crypto.Encryptor
 	jwt        *auth.JWTManager
 	runTx      totpRunTxFunc
 	log        *slog.Logger
@@ -69,7 +71,7 @@ func (h *TOTPHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 // NewTOTPHandler wires the TOTP handler. queries / users / encryptor /
 // jwt are required at construction. Mutations also require SetRunTx.
-func NewTOTPHandler(queries TOTPQuerier, users UserQuerier, encryptor *auth.Encryptor, jwt *auth.JWTManager) *TOTPHandler {
+func NewTOTPHandler(queries TOTPQuerier, users UserQuerier, encryptor *crypto.Encryptor, jwt *auth.JWTManager) *TOTPHandler {
 	return &TOTPHandler{
 		queries:   queries,
 		users:     users,
@@ -148,8 +150,8 @@ func (h *TOTPHandler) IsEnrolled(ctx context.Context, userID uuid.UUID) (bool, e
 // can't substitute their own secret; we never persist it until the
 // confirm step.
 type enrollChallengeClaims struct {
-	Secret string `json:"s"`
-	Label  string `json:"l"`
+	Secret crypto.Sealed `json:"s"`
+	Label  string        `json:"l"`
 }
 
 // EnrollStart handles POST /api/v1/auth/totp/enroll/start/.
@@ -199,13 +201,13 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	// Encrypt the secret BEFORE stuffing it in the challenge JWT — the
 	// JWT body is base64 (not encryption) so a leaked challenge token
 	// would otherwise expose the secret to anyone watching the wire.
-	// With Fernet wrapping, only this server (or its rotation peers)
+	// With age sealing, only this server (or its rotation peers)
 	// can read it back during the confirm step.
 	if h.encryptor == nil {
 		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "TOTP is not configured")
 		return
 	}
-	encryptedSecret, err := h.encryptor.Encrypt(secret)
+	encryptedSecret, err := h.encryptor.EncryptString(secret)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TOTPEncryptFailed, "Failed to wrap TOTP secret")
 		return
@@ -318,7 +320,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "TOTP is not configured")
 		return
 	}
-	secret, err := h.encryptor.Decrypt(c.Secret)
+	secret, err := h.encryptor.DecryptString(c.Secret)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidChallenge, "Challenge payload could not be decrypted")
 		return
@@ -377,7 +379,7 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if _, err := q.UpsertUserTOTPEnrollment(r.Context(), sqlc.UpsertUserTOTPEnrollmentParams{
-			UserID: userID, SecretEncrypted: c.Secret, Label: c.Label, ConfirmedAt: time.Now(),
+			UserID: userID, SecretKeyID: c.Secret.KeyID, SecretAlgorithm: c.Secret.Algorithm, SecretCiphertext: c.Secret.Ciphertext, SecretNonce: c.Secret.Nonce, Label: c.Label, ConfirmedAt: time.Now(),
 		}); err != nil {
 			return err
 		}
@@ -472,7 +474,7 @@ func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotEnrolled, "TOTP is not currently enabled for this account")
 		return
 	}
-	plaintextSecret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
+	plaintextSecret, err := h.encryptor.DecryptString(crypto.FromParts(enrollment.SecretKeyID, enrollment.SecretAlgorithm, enrollment.SecretCiphertext, enrollment.SecretNonce))
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Stored TOTP secret could not be read")
 		return
@@ -609,7 +611,7 @@ func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Req
 		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotEnrolled, "TOTP is not enabled for this account")
 		return
 	}
-	secret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
+	secret, err := h.encryptor.DecryptString(crypto.FromParts(enrollment.SecretKeyID, enrollment.SecretAlgorithm, enrollment.SecretCiphertext, enrollment.SecretNonce))
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Stored secret could not be read")
 		return
@@ -710,7 +712,7 @@ func (h *TOTPHandler) AdminForceDisable(w http.ResponseWriter, r *http.Request) 
 
 // encodeTOTPChallenge serialises the per-flow challenge body. We use a
 // URL-safe base64 of the raw JSON; the secret inside is already
-// encrypted (Fernet) so the encoding here is purely transport.
+// encrypted (age) so the encoding here is purely transport.
 func encodeTOTPChallenge(payload []byte) string {
 	return base64URLEncoding.EncodeToString(payload)
 }

@@ -29,10 +29,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -40,7 +43,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -85,7 +87,7 @@ type ClusterRegistriesHandler struct {
 	queries   ClusterRegistryQuerier
 	runTx     clusterRegistryRunTxFunc
 	requester K8sRequester
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	bus       *events.Bus
 }
 
@@ -125,10 +127,9 @@ func (h *ClusterRegistriesHandler) SetRequester(r K8sRequester) {
 	h.requester = r
 }
 
-// SetEncryptor wires Fernet encryption for registry passwords. When omitted,
-// handlers preserve the legacy plaintext column behavior for development
-// installs that do not configure ASTRONOMER_ENCRYPTION_KEY.
-func (h *ClusterRegistriesHandler) SetEncryptor(e *auth.Encryptor) {
+// SetEncryptor wires encryption for registry passwords. Without it a
+// password-bearing write fails; passwords are never stored in plaintext.
+func (h *ClusterRegistriesHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -195,7 +196,7 @@ func clusterRegistryConfigToResponse(row sqlc.ClusterRegistryConfig) ClusterRegi
 		CreatedAt:          row.CreatedAt,
 		UpdatedAt:          row.UpdatedAt,
 	}
-	if strings.TrimSpace(row.RegistryPassword) != "" || strings.TrimSpace(row.RegistryPasswordEncrypted) != "" {
+	if row.RegistryPasswordKeyID != "" {
 		out.RegistryPassword = RegistryPasswordSentinel
 	}
 	if row.LastAppliedAt.Valid {
@@ -334,7 +335,7 @@ func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Cannot use password sentinel on create")
 		return
 	}
-	registryPassword, registryPasswordEncrypted, err := h.encryptRegistryPassword(req.RegistryPassword)
+	registryPasswordEncrypted, err := h.encryptRegistryPassword(req.RegistryPassword)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt registry password")
 		return
@@ -346,16 +347,15 @@ func (h *ClusterRegistriesHandler) Create(w http.ResponseWriter, r *http.Request
 	}
 
 	params := sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:                 clusterID,
-		PrivateRegistryUrl:        strings.TrimSpace(req.PrivateRegistryUrl),
-		RegistryUsername:          req.RegistryUsername,
-		RegistryPassword:          registryPassword,
-		RegistryPasswordEncrypted: registryPasswordEncrypted,
-		Insecure:                  req.Insecure,
-		CaBundle:                  req.CaBundle,
-		Namespaces:                encodeNamespaces(req.Namespaces),
-		InjectDefaultSa:           inject,
-		SecretName:                strings.TrimSpace(req.SecretName),
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    strings.TrimSpace(req.PrivateRegistryUrl),
+		RegistryUsername:      req.RegistryUsername,
+		RegistryPasswordKeyID: registryPasswordEncrypted.KeyID, RegistryPasswordAlgorithm: registryPasswordEncrypted.Algorithm, RegistryPasswordCiphertext: registryPasswordEncrypted.Ciphertext, RegistryPasswordNonce: registryPasswordEncrypted.Nonce,
+		Insecure:        req.Insecure,
+		CaBundle:        req.CaBundle,
+		Namespaces:      encodeNamespaces(req.Namespaces),
+		InjectDefaultSa: inject,
+		SecretName:      strings.TrimSpace(req.SecretName),
 	}
 	row, err := executeMutation(r, h.runTx,
 		func(q ClusterRegistryMutationTx) (sqlc.ClusterRegistryConfig, error) {
@@ -422,12 +422,11 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 	// An explicit "" rotates to no-password (rare but supported for
 	// public-but-private-flagged registries during a transition).
 	password := req.RegistryPassword
-	passwordEncrypted := ""
+	var passwordEncrypted crypto.Sealed
 	if password == RegistryPasswordSentinel {
-		password = existing.RegistryPassword
-		passwordEncrypted = existing.RegistryPasswordEncrypted
+		passwordEncrypted = crypto.FromParts(existing.RegistryPasswordKeyID, existing.RegistryPasswordAlgorithm, existing.RegistryPasswordCiphertext, existing.RegistryPasswordNonce)
 	} else {
-		password, passwordEncrypted, err = h.encryptRegistryPassword(password)
+		passwordEncrypted, err = h.encryptRegistryPassword(password)
 		if err != nil {
 			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt registry password")
 			return
@@ -440,16 +439,15 @@ func (h *ClusterRegistriesHandler) Update(w http.ResponseWriter, r *http.Request
 	}
 
 	params := sqlc.UpdateClusterRegistryConfigParams{
-		ID:                        registryID,
-		PrivateRegistryUrl:        strings.TrimSpace(req.PrivateRegistryUrl),
-		RegistryUsername:          req.RegistryUsername,
-		RegistryPassword:          password,
-		RegistryPasswordEncrypted: passwordEncrypted,
-		Insecure:                  req.Insecure,
-		CaBundle:                  req.CaBundle,
-		Namespaces:                encodeNamespaces(req.Namespaces),
-		InjectDefaultSa:           inject,
-		SecretName:                strings.TrimSpace(req.SecretName),
+		ID:                    registryID,
+		PrivateRegistryUrl:    strings.TrimSpace(req.PrivateRegistryUrl),
+		RegistryUsername:      req.RegistryUsername,
+		RegistryPasswordKeyID: passwordEncrypted.KeyID, RegistryPasswordAlgorithm: passwordEncrypted.Algorithm, RegistryPasswordCiphertext: passwordEncrypted.Ciphertext, RegistryPasswordNonce: passwordEncrypted.Nonce,
+		Insecure:        req.Insecure,
+		CaBundle:        req.CaBundle,
+		Namespaces:      encodeNamespaces(req.Namespaces),
+		InjectDefaultSa: inject,
+		SecretName:      strings.TrimSpace(req.SecretName),
 	}
 	row, err := executeMutation(r, h.runTx,
 		func(q ClusterRegistryMutationTx) (sqlc.ClusterRegistryConfig, error) {
@@ -703,25 +701,37 @@ func (h *ClusterRegistriesHandler) WorkerRuntime(queries tasks.ClusterRegistryAp
 	}}
 }
 
-func (h *ClusterRegistriesHandler) encryptRegistryPassword(password string) (string, string, error) {
-	if h == nil || h.encryptor == nil || password == "" {
-		return password, "", nil
+func (h *ClusterRegistriesHandler) encryptRegistryPassword(password string) (crypto.Sealed, error) {
+	return sealRegistryPassword(h.encryptorOrNil(), password)
+}
+
+func (h *ClusterRegistriesHandler) encryptorOrNil() *crypto.Encryptor {
+	if h == nil {
+		return nil
 	}
-	encrypted, err := h.encryptor.Encrypt(password)
-	if err != nil {
-		return "", "", err
+	return h.encryptor
+}
+
+// sealRegistryPassword seals a registry password. No password is the zero
+// sealed value; a password without an encryptor is an error, never plaintext.
+func sealRegistryPassword(enc *crypto.Encryptor, password string) (crypto.Sealed, error) {
+	if password == "" {
+		return crypto.Sealed{}, nil
 	}
-	return "", encrypted, nil
+	if enc == nil {
+		return crypto.Sealed{}, errors.New("registry password encryption is not configured")
+	}
+	return enc.EncryptString(password)
 }
 
 func (h *ClusterRegistriesHandler) registryPassword(row sqlc.ClusterRegistryConfig) (string, error) {
-	if strings.TrimSpace(row.RegistryPasswordEncrypted) == "" {
-		return row.RegistryPassword, nil
+	if row.RegistryPasswordKeyID == "" {
+		return "", nil
 	}
 	if h == nil || h.encryptor == nil {
-		return row.RegistryPassword, nil
+		return "", errors.New("registry password is encrypted but no encryption key is configured")
 	}
-	return h.encryptor.Decrypt(row.RegistryPasswordEncrypted)
+	return h.encryptor.DecryptString(crypto.FromParts(row.RegistryPasswordKeyID, row.RegistryPasswordAlgorithm, row.RegistryPasswordCiphertext, row.RegistryPasswordNonce))
 }
 
 // clusterRegistryRequesterAdapter bridges handler.K8sRequester (which

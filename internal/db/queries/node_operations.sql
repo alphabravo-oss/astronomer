@@ -1,11 +1,11 @@
 -- name: CreateNodeOperationIdempotent :one
 INSERT INTO node_operations (
     idempotency_scope, idempotency_key, request_digest, cluster_id,
-    node_name, action, parameters_encrypted, created_by_id
+    node_name, action, parameters_key_id, parameters_algorithm, parameters_ciphertext, parameters_nonce, created_by_id
 ) VALUES (
     sqlc.arg(idempotency_scope), sqlc.arg(idempotency_key), sqlc.arg(request_digest),
     sqlc.arg(cluster_id), sqlc.arg(node_name), sqlc.arg(action),
-    sqlc.arg(parameters_encrypted), sqlc.narg(created_by_id)
+    sqlc.arg(parameters_key_id), sqlc.arg(parameters_algorithm), sqlc.arg(parameters_ciphertext), sqlc.arg(parameters_nonce), sqlc.narg(created_by_id)
 )
 ON CONFLICT (idempotency_scope, idempotency_key) DO UPDATE
 SET updated_at = node_operations.updated_at

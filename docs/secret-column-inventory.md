@@ -1,59 +1,98 @@
 # Secret Column Inventory
 
-Date: 2026-09-17
+Date: 2026-10-20 (age cutover, migration 00082, ADR-0010)
 
-The greenfield database starts with `001_initial.up.sql` and applies the
-canonical subsequent migrations. Every secret-looking text, JSON, UUID, or byte
-column in those migrations is classified by
-`internal/db/migrations/migration_secret_columns_test.go`; adding an
-unclassified column fails CI.
+Every secret column value is sealed with age through `pkg/crypto` into a
+**sealed family** of four columns — `<c>_key_id`, `<c>_algorithm`
+(`age-x25519-chacha20poly1305`), `<c>_ciphertext` (bytea) and `<c>_nonce`
+(bytea, NULL for age; reserved for AEAD algorithms with an external nonce) —
+with a CHECK that the value is either fully present or fully absent. The Go
+registry `internal/db/sealedcols.Columns` lists every family; an integration
+test fails if the live schema has an unregistered `*_ciphertext` column, and
+`astro admin rotate-keys` rewrites exactly the registered families. Reads pick
+the key by `<c>_key_id`; there is no trial decryption and no fallback to
+plaintext or to the ciphertext.
 
-## Encrypted or hashed material
+## Sealed families (`sealedcols.Columns`)
+
+| Table / family | Contents | Runtime rule |
+| --- | --- | --- |
+| `backup_storage_configs.credentials_*` | Complete object-store credential document | Write-only; never returned. |
+| `charlie_action_receipts.arguments_*` | Bounded postcondition-reconciliation input | Excluded from logs and support bundles; required (CHECK). |
+| `charlie_action_receipts.result_*` | Bounded idempotent replay result | Required once the receipt is terminal (CHECK). |
+| `charlie_connections.local_trust_material_*` | Astronomer-owned local CA/private key and bridge/MCP TLS material | Never returned. |
+| `cloud_credentials.data_*` | Cloud provider credential document | Write-only. |
+| `cluster_registry_configs.registry_password_*` | Cluster private-registry password | Write-only; no plaintext path without a key. |
+| `deferred_operations.sealed_spec_*` | Maintenance-gate deferred request (may carry credentials) | Decrypted only by the replayer. |
+| `delivery_sources.ca_bundle_*` | Private CA bundle | Never exposed through read APIs or agent status. |
+| `delivery_sources.credential_*` | Delivery-source credential map | Write-only; `auth_mode='none'` requires it absent (CHECK). |
+| `delivery_system_releases.registry_credential_*` | System-release registry credential | Never exposed through release/status/audit APIs. |
+| `dex_connectors.secrets_*` | JSON object of the connector's secret fields (`clientSecret`, `bindPW`) | `config` holds only non-secret fields. |
+| `dex_operations.payload_*` | Durable Dex SSO-finalization input | Never returned or logged. |
+| `dex_settings.public_clients_*` | Canonical JSON array of Dex static clients (secrets included) | The only copy; the plaintext `public_clients` column was dropped. |
+| `gitops_registration_sources.auth_*` | Git credential (PAT / SSH key) | Write-only. |
+| `gitops_registration_sources.webhook_secret_*` | Per-source webhook HMAC secret | Write-only; never logged. |
+| `helm_repositories.auth_config_*` | Complete repository credential document | `auth_config` JSONB keeps only the non-secret projection (`internal/credential`). |
+| `loki_ingest_tokens.token_*` | Hosted Loki ingest bearer | Re-renders the member Secret; `token_hash` is the lookup. |
+| `management_backup_destinations.credentials_*` | Management-plane dump object-store credential | Write-only. |
+| `monitoring_backends.auth_config_*` | Credential portion of the monitoring config bag | `auth_config` JSONB keeps the allow-listed non-secret keys. |
+| `node_operations.parameters_*` | Node operation parameters | Required (CHECK). |
+| `prometheus_datasources.auth_*` | Datasource auth blob | Write-only. |
+| `resource_operations.manifest_*` | Apply manifest | Required for `apply` (CHECK). |
+| `siem_forwarders.auth_*` | SIEM auth blob | Write-only. |
+| `smtp_settings.password_*` | SMTP password | Write-only. |
+| `sso_configurations.client_secret_*` | OAuth/OIDC client secret | Write-only. |
+| `sso_sessions.upstream_id_token_*` | Upstream ID token for logout | Upstream session lifecycle only. |
+| `user_totp_enrollments.secret_*` | TOTP seed | Never returned. |
+| `vault_connections.auth_*` | Vault auth blob | Write-only. |
+| `webhook_subscriptions.secret_*` | Webhook HMAC signing secret | Never returned. |
+
+## Hashed material
 
 | Table / column | Classification | Runtime rule |
 | --- | --- | --- |
 | `users.password` | Password hash | Never plaintext. |
-| `sso_configurations.client_secret_encrypted` | Versioned authenticated ciphertext | Write-only secret. |
-| `smtp_settings.password_encrypted` | Versioned authenticated ciphertext | Write-only secret. |
-| `user_totp_enrollments.secret_encrypted` | Versioned authenticated ciphertext | Never returned. |
-| `webhook_subscriptions.secret_encrypted` | Versioned authenticated ciphertext | Never returned. |
-| `sso_sessions.upstream_id_token_encrypted` | Versioned authenticated ciphertext | Used only for upstream session lifecycle. |
-| `backup_storage_configs.encrypted_credentials` | Versioned authenticated ciphertext | Complete object-store credential envelope. |
-| `management_backup_destinations.encrypted_credentials` | Versioned authenticated ciphertext | Complete management-plane dump object-store credential envelope. |
-| `cluster_registry_configs.registry_password_encrypted` | Versioned authenticated ciphertext | Complete cluster registry password. |
-| `delivery_system_releases.registry_credential_encrypted` | Versioned authenticated ciphertext | Complete system-release registry credential. |
-| `delivery_sources.credential_encrypted` | Versioned authenticated ciphertext | Complete write-only delivery-source credential map. |
-| `gitops_registration_sources.webhook_secret_encrypted` | Versioned authenticated ciphertext | Per-source GitHub webhook HMAC secret; write-only and never logged. |
-| `dex_operations.payload_encrypted` | Versioned authenticated ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
 | `api_tokens.token_hash` | Password-style token hash | Plaintext is returned once. |
-| `cluster_registration_tokens.token_hash` | Token hash | Registration authentication uses only the hash. |
-| `cluster_agent_tokens.token_hash` | Token hash | Active agent authentication uses only the hash. |
+| `cluster_registration_tokens.token_hash` | Token hash (CHECK non-empty) | Registration authentication uses only the hash. |
+| `cluster_agent_tokens.token_hash` | Token hash (CHECK non-empty) | Active agent authentication uses only the hash. |
 | `cluster_agent_tokens.previous_token_hash` | Token hash | Rotation grace window only. |
 | `password_reset_tokens.token_hash` | Token hash | Plaintext is returned once. |
 | `password_reset_tokens.password_hash_at_issue` | Password-hash snapshot | Invalidates reset tokens after a password change. |
 | `scim_tokens.token_hash` | Token hash | Plaintext is returned once. |
-| `refresh_session_families.family_hash` | SHA-256 lookup hash | Hash of the random JWT session-family ID; raw family IDs are never stored. |
-| `refresh_session_tokens.jti_hash` | SHA-256 lookup hash | One-time refresh-token lookup; raw JTIs are never stored. |
+| `refresh_session_families.family_hash` | SHA-256 lookup hash | Raw family IDs are never stored. |
+| `refresh_session_tokens.jti_hash` | SHA-256 lookup hash | Raw JTIs are never stored. |
 | `refresh_session_tokens.replaced_by_jti_hash` | SHA-256 lookup hash | Rotation lineage without retaining a bearer identifier. |
-| `charlie_connections.local_trust_material_encrypted` | Versioned authenticated ciphertext | Astronomer-owned local CA/private-key and bridge/MCP TLS material only. |
-| `charlie_action_receipts.arguments_encrypted` | Versioned authenticated ciphertext | Bounded postcondition-reconciliation input; excluded from logs and support bundles. |
-| `charlie_action_receipts.result_encrypted` | Versioned authenticated ciphertext | Bounded idempotent replay result; excluded from logs and support bundles. |
 | `charlie_delegations.authorization_hash` | SHA-256 lookup hash | Hash of an opaque, short-lived authorization reference. |
-| `charlie_connections.agent_secret_hmac` | Keyed digest | Reconciles deterministic Kubernetes Secret content without retaining the secret. |
-| `loki_ingest_tokens.token_hash` | Token hash | SHA-256 of the hosted Loki ingest bearer. Projected into the management-cluster hash Secret; never plaintext. |
-| `loki_ingest_tokens.token_encrypted` | Versioned authenticated ciphertext | Re-renders the member Kubernetes Secret `astronomer-loki-ingest-token`. Fluent Bit OUTPUT uses `bearer_token_file`. List APIs never return it. |
+| `charlie_connections.agent_secret_hmac` | Keyed digest | Reconciles deterministic Secret content without retaining the secret. |
+| `loki_ingest_tokens.token_hash` | Token hash | Projected into the management-cluster hash Secret. |
 
-Every new encrypted write uses
-`astronomer:v1:fernet:<key-id>:<ciphertext>`. The envelope authenticates the
-payload through Fernet and identifies the exact read key without trial
-decryption. Raw Fernet tokens remain a measured, read-only compatibility path
-during migration (`astronomer_ciphertext_decryptions_total{format="legacy"}`);
-`keyrotate` rewrites them to the primary-key envelope. A successful live sweep
-does not prove that retained backups or delayed ciphertext no longer need the
-old key; retirement requires the separate retention review in the rotation
-runbook.
+Hashes are not encryption and are not rotated by `rotate-keys`.
 
-`logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member copy lives in Secret `astronomer-loki-ingest-token` (mounted via fluent-bit Helm `extraVolumes` / `extraVolumeMounts`); the ConfigMap references `bearer_token_file` only. Plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
+## Removed in migration 00082
+
+`*_encrypted` / `encrypted_credentials` (Fernet envelope strings, discarded —
+re-enter dev secrets), `dex_settings.public_clients` (plaintext copy of Dex
+static clients) and `public_clients_cutover_at`, and the blank-only plaintext
+columns `backup_storage_configs.access_key`, `backup_storage_configs.secret_key`,
+`cluster_registry_configs.registry_password`, `cluster_registration_tokens.token`,
+`cluster_agent_tokens.token`. Fernet strings inside `dex_connectors.config` and
+the Fernet envelope inside `deferred_operations.operation_spec` moved to the
+`secrets_*` / `sealed_spec_*` families.
+
+## Not yet sealed (follow-up)
+
+These columns can hold operator-supplied secrets in plaintext today. Sealing
+them needs a secret/non-secret split of free-form, operator-authored documents
+(the `internal/credential` pattern) and is out of the age cutover's scope:
+
+| Table / column | What can be secret |
+| --- | --- |
+| `logging_outputs.configuration` | Output passwords/tokens/API keys other than `bearer_token` (stripped on write). |
+| `notification_channels.configuration` | Slack/Teams/webhook URLs with embedded tokens, PagerDuty routing keys. |
+| `webhook_subscriptions.extra_headers` | Operator-set `Authorization`/API-key headers. |
+| `email_messages.body_text`, `body_html` | Rendered password-reset links (single-use, short-lived token) until the retention sweep. |
+
+System (`is_system`) Loki rows in `logging_outputs.configuration` store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member copy of the ingest bearer lives in Secret `astronomer-loki-ingest-token` (mounted via fluent-bit Helm `extraVolumes` / `extraVolumeMounts`); the ConfigMap references `bearer_token_file` only. Plaintext is loaded at apply time from the `loki_ingest_tokens.token_*` family and is never stored in JSONB or returned by list/get.
 
 ## References and non-secret metadata
 
@@ -80,12 +119,3 @@ one character from a bounded SIEM/webhook glob pattern while
 `astronomer_event_glob_match` evaluates `*` and `?`. It never contains or
 persists authentication material.
 
-## Deprecated blank-only compatibility fields
-
-`backup_storage_configs.access_key`, `backup_storage_configs.secret_key`,
-`cluster_registry_configs.registry_password`, `cluster_registration_tokens.token`,
-and `cluster_agent_tokens.token` remain structurally present for subsystems not
-being redesigned in this delivery cutover. Production writers store empty
-strings and use their encrypted or hashed counterparts. The credential
-migration worker fails closed if it encounters non-empty historical values.
-They are not used by the Flux delivery implementation.

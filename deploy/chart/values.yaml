@@ -566,7 +566,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 81
+    targetVersion: 82
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -848,20 +848,26 @@ secrets:
   internalPSKPreviousKey: ASTRONOMER_INTERNAL_PSK_PREVIOUS
   postgresPasswordKey: POSTGRES_PASSWORD
   # REQUIRED (no default). The chart used to ship a working JWT signing key and
-  # Fernet key here, which meant every default install was forgeable by anyone
+  # encryption key here, which meant every default install was forgeable by anyone
   # holding this repository. Both are now empty and the render fails until you
   # supply your own or point at secrets.existingSecret — including in
   # development, because dev installs hold real cluster credentials too.
   # Generate with: openssl rand -base64 32
   secretKey: ""
-  # Fernet key (32 random bytes, url-safe base64). REQUIRED to be a real
-  # Fernet key — Astronomer wraps SSO/agent secrets with it. Keep it for the
-  # life of the install; losing it makes every encrypted column undecryptable
-  # (rotation reencrypts all wrapped values). Generate
-  # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  # age keyring (ASTRONOMER_ENCRYPTION_KEY). REQUIRED. One or more entries,
+  # newline- or comma-separated, each "AGE-SECRET-KEY-1..." or
+  # "label:AGE-SECRET-KEY-1..." (the label becomes the key_id stamped on every
+  # sealed row; unlabelled keys get a fingerprint id). The FIRST entry is the
+  # current key used for every write; later entries are previous keys kept only
+  # so rows sealed under them still decrypt until `astro admin rotate-keys` has
+  # rewritten them. Keep every key for the life of the rows that use it; losing
+  # it makes those columns undecryptable. Fernet keys are rejected. Generate
+  # with: astro admin generate-encryption-key (or age-keygen).
+  # See docs/decisions/0010-age-column-encryption.md and
+  # docs/secret-rotation-runbook.md.
   encryptionKey: ""
   # Dedicated HMAC key for short-lived, body-bound requests between server
-  # replicas. Keep this separate from both JWT and Fernet keys. Generate with:
+  # replicas. Keep this separate from both the JWT and encryption keys. Generate with:
   # openssl rand -base64 48
   internalPSK: ""
   # Verification-only predecessor accepted during a rolling key rotation. Set
@@ -1239,10 +1245,10 @@ managementBackup:
       name: ""
       key: "passphrase"
   # ---------------------------------------------------------------------------
-  # F4 (HIGH · DR): back up the Fernet/JWT encryption-key Secret WITH the DB.
+  # F4 (HIGH · DR): back up the age/JWT encryption-key Secret WITH the DB.
   # ---------------------------------------------------------------------------
   # pg_dump alone is not a recoverable backup: every encrypted column (agent
-  # tokens, SSO client secrets, and wrapped delivery/integration credentials) is Fernet-
+  # tokens, SSO client secrets, and wrapped delivery/integration credentials) is age-
   # wrapped with secrets.encryptionKey, which lives in a Kubernetes Secret, NOT
   # in Postgres. Restore onto a NEW cluster without that key and every such row
   # is permanently undecryptable. This captures the key Secret alongside the
@@ -1363,13 +1369,15 @@ managementRestoreDrill:
   # data. Without this the drill can stay green while real DR is broken (the key
   # was never backed up, or drifted from the ciphertext). The drill downloads
   # the latest wrapped key bundle (written by managementBackup.encryptionKeyBackup),
-  # unwraps it with the SAME wrapping passphrase, and Fernet-verifies one known
+  # unwraps it with the SAME wrapping passphrase, and age-decrypts one known
   # encrypted column in the restored DB — failing the drill if it can't.
   decryptCheck:
     enabled: true
-    # A known Fernet-encrypted delivery credential to sample when one exists.
+    # A known sealed column family (table + family base name) to sample when
+    # a row exists; the drill decrypts <column>_ciphertext with the backed-up
+    # keyring using the age CLI.
     table: "delivery_sources"
-    column: "credential_encrypted"
+    column: "credential"
     # Must match managementBackup.encryptionKeyBackup.keyPrefix.
     keyPrefix: "keys"
   # Image bundling postgresql-client + aws-cli — reuse the same image

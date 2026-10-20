@@ -57,14 +57,14 @@ func TestA3RegistrationReplayDeniedAfterAdoption(t *testing.T) {
 }
 
 // join-window-retry-ok: durable exists but NOT yet adopted (adopted_at NULL) ->
-// reg token still bootstraps (re-delivers the same durable), no error.
+// reg token still bootstraps (mints and delivers a fresh hash-only durable), no error.
 func TestA3JoinWindowRetryBeforeAdoptionAllowed(t *testing.T) {
 	clusterID := uuid.New()
 	v := &recordingValidator{
 		tokenClusterID:    clusterID.String(),
 		regTokenCreatedAt: time.Now().Add(-2 * time.Minute),
 		byClusterIDForce: &sqlc.ClusterAgentToken{
-			ID: uuid.New(), ClusterID: clusterID, Token: "durable-plain",
+			ID: uuid.New(), ClusterID: clusterID,
 			TokenHash: auth.HashOpaqueToken("durable-plain"), // adopted_at zero/NULL
 		},
 	}
@@ -78,8 +78,8 @@ func TestA3JoinWindowRetryBeforeAdoptionAllowed(t *testing.T) {
 	if kind != "registration" {
 		t.Fatalf("expected registration kind, got %q", kind)
 	}
-	if durable != "durable-plain" {
-		t.Fatalf("expected the existing durable re-delivered, got %q", durable)
+	if durable == "" || auth.HashOpaqueToken(durable) == auth.HashOpaqueToken("durable-plain") {
+		t.Fatalf("expected a freshly minted durable, got %q", durable)
 	}
 }
 
@@ -92,7 +92,7 @@ func TestA3CrashBeforePersistRedelivers(t *testing.T) {
 		tokenClusterID:    clusterID.String(),
 		regTokenCreatedAt: time.Now().Add(-90 * time.Second),
 		byClusterIDForce: &sqlc.ClusterAgentToken{
-			ID: uuid.New(), ClusterID: clusterID, Token: "durable-x",
+			ID: uuid.New(), ClusterID: clusterID,
 			TokenHash: auth.HashOpaqueToken("durable-x"),
 		},
 	}
@@ -219,7 +219,7 @@ func TestA3DefaultHappyPathJoin(t *testing.T) {
 	}
 
 	// The agent now presents the durable; adoption must be stamped exactly once.
-	v.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: clusterID, Token: durable, TokenHash: auth.HashOpaqueToken(durable)}
+	v.clusterAgentToken = sqlc.ClusterAgentToken{ID: uuid.New(), ClusterID: clusterID, TokenHash: auth.HashOpaqueToken(durable)}
 	v.tokenErr = pgx.ErrNoRows // reg-token lookup now misses; durable path taken
 	if _, _, err := h.validateAndMaybeRotateToken(context.Background(), clusterID,
 		protocol.ConnectPayload{ClusterID: clusterID.String(), Token: durable}); err != nil {

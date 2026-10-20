@@ -23,13 +23,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
@@ -86,7 +87,7 @@ func (f *fakeVaultQuerier) ListVaultConnectionsPage(_ context.Context, arg sqlc.
 	for _, c := range all[start:end] {
 		out = append(out, sqlc.ListVaultConnectionsPageRow{
 			ID: c.ID, Name: c.Name, Description: c.Description, Addr: c.Addr,
-			AuthMethod: c.AuthMethod, AuthConfigured: c.AuthEncrypted != "", Namespace: c.Namespace,
+			AuthMethod: c.AuthMethod, AuthConfigured: c.AuthKeyID != "", Namespace: c.Namespace,
 			TlsSkipVerify: c.TlsSkipVerify, CaCertPem: c.CaCertPem, DefaultMount: c.DefaultMount,
 			Enabled: c.Enabled, CachedTokenExpiresAt: c.CachedTokenExpiresAt,
 			LastHealthAt: c.LastHealthAt, LastHealthOk: c.LastHealthOk, LastError: c.LastError,
@@ -118,12 +119,12 @@ func (f *fakeVaultQuerier) CreateVaultConnection(_ context.Context, arg sqlc.Cre
 	}
 	id := uuid.New()
 	row := sqlc.VaultConnection{
-		ID:            id,
-		Name:          arg.Name,
-		Description:   arg.Description,
-		Addr:          arg.Addr,
-		AuthMethod:    arg.AuthMethod,
-		AuthEncrypted: arg.AuthEncrypted,
+		ID:          id,
+		Name:        arg.Name,
+		Description: arg.Description,
+		Addr:        arg.Addr,
+		AuthMethod:  arg.AuthMethod,
+		AuthKeyID:   arg.AuthKeyID, AuthAlgorithm: arg.AuthAlgorithm, AuthCiphertext: arg.AuthCiphertext, AuthNonce: arg.AuthNonce,
 		Namespace:     arg.Namespace,
 		TlsSkipVerify: arg.TlsSkipVerify,
 		CaCertPem:     arg.CaCertPem,
@@ -145,7 +146,7 @@ func (f *fakeVaultQuerier) UpdateVaultConnection(_ context.Context, arg sqlc.Upd
 	row.Description = arg.Description
 	row.Addr = arg.Addr
 	row.AuthMethod = arg.AuthMethod
-	row.AuthEncrypted = arg.AuthEncrypted
+	row.AuthKeyID, row.AuthAlgorithm, row.AuthCiphertext, row.AuthNonce = arg.AuthKeyID, arg.AuthAlgorithm, arg.AuthCiphertext, arg.AuthNonce
 	row.Namespace = arg.Namespace
 	row.TlsSkipVerify = arg.TlsSkipVerify
 	row.CaCertPem = arg.CaCertPem
@@ -247,12 +248,14 @@ func makeVaultRequest(t *testing.T, method, path string, callerID uuid.UUID, bod
 	return req
 }
 
-// newVaultTestEncryptor returns a working Fernet encryptor for tests.
-func newVaultTestEncryptor(t *testing.T) *auth.Encryptor {
+// newVaultTestEncryptor returns a working age encryptor for tests.
+func newVaultTestEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	// Fernet uses 32-byte base64-encoded keys; use a known fixed key
-	// so tests are deterministic.
-	enc, err := auth.NewEncryptor("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=")
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -318,7 +321,7 @@ func TestVaultHandler_ListIsBoundedAndCredentialFree(t *testing.T) {
 		id := uuid.New()
 		fq.conns[id] = sqlc.VaultConnection{
 			ID: id, Name: name, Addr: "https://vault.example.test", AuthMethod: "token",
-			AuthEncrypted: "must-never-reach-list-response", Enabled: true,
+			AuthKeyID: "test-key", AuthAlgorithm: crypto.AlgorithmAgeX25519, AuthCiphertext: []byte("must-never-reach-list-response"), Enabled: true,
 			CreatedAt: now, UpdatedAt: now,
 		}
 	}
@@ -432,7 +435,7 @@ func TestVaultHandler_CreateGetUpdate(t *testing.T) {
 	// Verify stored blob still decrypts to the original token (via the
 	// fake querier's stored row).
 	stored := fq.conns[created.ID]
-	plain, err := h.encryptor.Decrypt(stored.AuthEncrypted)
+	plain, err := h.encryptor.DecryptString(crypto.FromParts(stored.AuthKeyID, stored.AuthAlgorithm, stored.AuthCiphertext, stored.AuthNonce))
 	if err != nil {
 		t.Fatalf("decrypt stored: %v", err)
 	}
@@ -486,19 +489,19 @@ func TestVaultHandler_TestEndpointAuditsProbeResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeAuthBlob: %v", err)
 	}
-	encrypted, err := enc.Encrypt(authBlob)
+	encrypted, err := enc.EncryptString(authBlob)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
 	connID := uuid.New()
 	fq.conns[connID] = sqlc.VaultConnection{
-		ID:            connID,
-		Name:          "prod",
-		Addr:          "https://vault.example.com",
-		AuthMethod:    "token",
-		AuthEncrypted: encrypted,
-		DefaultMount:  "secret",
-		Enabled:       true,
+		ID:         connID,
+		Name:       "prod",
+		Addr:       "https://vault.example.com",
+		AuthMethod: "token",
+		AuthKeyID:  encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
+		DefaultMount: "secret",
+		Enabled:      true,
 	}
 
 	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)

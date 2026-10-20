@@ -7,18 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// SetEncryptor wires the Fernet encryptor used for chart-repository
+// SetEncryptor wires the age encryptor used for chart-repository
 // credentials at rest (migration 145).
-func (h *CatalogHandler) SetEncryptor(encryptor *auth.Encryptor) {
+func (h *CatalogHandler) SetEncryptor(encryptor *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -27,7 +28,7 @@ func (h *CatalogHandler) SetEncryptor(encryptor *auth.Encryptor) {
 
 // decryptor returns h.encryptor as a catalog.Decryptor, or a genuinely nil
 // interface when none is wired. Returning h.encryptor directly would hand back
-// a non-nil interface holding a nil *auth.Encryptor, and the nil check in
+// a non-nil interface holding a nil *crypto.Encryptor, and the nil check in
 // catalog.ResolveAuthConfig would pass straight into a nil-receiver Decrypt.
 func (h *CatalogHandler) decryptor() catalog.Decryptor {
 	if h == nil || h.encryptor == nil {
@@ -175,9 +176,9 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 // wholesale, so this function is the ONLY thing standing between the stored
 // credential and the wire. Since migration 145 that means two jobs:
 //
-//   - auth_config_encrypted is blanked unconditionally. It is ciphertext, it
+//   - auth_config_* sealed is blanked unconditionally. It is ciphertext, it
 //     is of no use to any client, and shipping it hands every catalog reader
-//     an offline target for whoever later obtains the Fernet key.
+//     an offline target for whoever later obtains the encryption key.
 //   - the sentinel is reconstructed from the DECRYPTED document, so the
 //     response shape is unchanged from before 145: a client can still tell
 //     that a password is configured, and can still echo the sentinel back on
@@ -186,7 +187,7 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 //     secret.
 func (h *CatalogHandler) redactHelmRepository(repo sqlc.HelmRepository) sqlc.HelmRepository {
 	out := repo
-	out.AuthConfigEncrypted = ""
+	out.AuthConfigKeyID, out.AuthConfigAlgorithm, out.AuthConfigCiphertext, out.AuthConfigNonce = "", "", nil, nil
 	resolved, err := catalog.ResolveAuthConfig(repo, h.decryptor())
 	if err != nil {
 		h.log.Error("chart repository credential could not be decrypted for redaction",

@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // SettingsQuerier is the database surface a SQLSettingsProvider needs.
@@ -23,12 +23,12 @@ type SettingsQuerier interface {
 }
 
 // SQLSettingsProvider loads SMTP settings from the smtp_settings row
-// and decrypts the password through auth.Encryptor. A tiny TTL cache
+// and decrypts the password through pkg/crypto.Encryptor. A tiny TTL cache
 // (5 s) sits in front so the dispatcher worker doesn't hammer the
 // table 50× per tick on a busy queue.
 type SQLSettingsProvider struct {
 	q         SettingsQuerier
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	ttl       time.Duration
 
 	mu     sync.Mutex
@@ -39,7 +39,7 @@ type SQLSettingsProvider struct {
 // NewSQLSettingsProvider wires the production provider. ttl <= 0
 // disables caching (handy in tests that mutate the row between
 // reads).
-func NewSQLSettingsProvider(q SettingsQuerier, encryptor *auth.Encryptor, ttl time.Duration) *SQLSettingsProvider {
+func NewSQLSettingsProvider(q SettingsQuerier, encryptor *crypto.Encryptor, ttl time.Duration) *SQLSettingsProvider {
 	return &SQLSettingsProvider{q: q, encryptor: encryptor, ttl: ttl}
 }
 
@@ -56,7 +56,7 @@ func (p *SQLSettingsProvider) Invalidate() {
 // Provide returns the current Settings. The error path:
 //   - no smtp_settings row yet → returns (empty, nil) so the dispatch
 //     worker logs "smtp disabled" cleanly and skips the send.
-//   - fernet decrypt fail → returns a non-nil error; the dispatcher
+//   - decrypt failure → returns a non-nil error; the dispatcher
 //     marks the row failed (it'd otherwise loop forever).
 func (p *SQLSettingsProvider) Provide(ctx context.Context) (Settings, error) {
 	p.mu.Lock()
@@ -90,8 +90,11 @@ func (p *SQLSettingsProvider) Provide(ctx context.Context) (Settings, error) {
 		RequireTLS:    row.RequireTls,
 		Timeout:       time.Duration(row.TimeoutSeconds) * time.Second,
 	}
-	if row.PasswordEncrypted != "" && p.encryptor != nil {
-		plain, err := p.encryptor.Decrypt(row.PasswordEncrypted)
+	if row.PasswordKeyID != "" {
+		if p.encryptor == nil {
+			return Settings{}, errors.New("decrypt smtp password: no encryption key configured")
+		}
+		plain, err := p.encryptor.DecryptString(crypto.FromParts(row.PasswordKeyID, row.PasswordAlgorithm, row.PasswordCiphertext, row.PasswordNonce))
 		if err != nil {
 			return Settings{}, fmt.Errorf("decrypt smtp password: %w", err)
 		}

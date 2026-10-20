@@ -9,7 +9,7 @@ tmp_dir = "tmp/agent"
   entrypoint = ["env", "ENV=development", "tmp/agent/agent"]
   include_ext = ["go", "sql", "yaml"]
   include_dir = ["cmd/agent", "internal", "pkg", "deploy/flux", "deploy/bundles", "deploy/agent", "deploy/dashboards"]
-  exclude_dir = ["tmp", "bin", "frontend", "node_modules", "docs", "scripts", "deploy/chart", "deploy/docker", "deploy/telemetry", "test-results", "internal/db/sqlc", "pkg/astroclient", "cmd/server", "cmd/worker", "cmd/astro", "cmd/keyrotate", "cmd/dexconfigcheck", ".git", ".github"]
+  exclude_dir = ["tmp", "bin", "frontend", "node_modules", "docs", "scripts", "deploy/chart", "deploy/docker", "deploy/telemetry", "test-results", "internal/db/sqlc", "pkg/astroclient", "cmd/server", "cmd/worker", "cmd/astro", "cmd/dexconfigcheck", ".git", ".github"]
   exclude_regex = ["_test\\.go$"]
   delay = 1000
   stop_on_error = true

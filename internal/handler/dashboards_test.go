@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -182,7 +184,7 @@ func (f *fakeDashboardQuerier) ListPrometheusDatasourcesPage(_ context.Context, 
 	out := make([]sqlc.ListPrometheusDatasourcesPageRow, 0, end-start)
 	for _, d := range all[start:end] {
 		out = append(out, sqlc.ListPrometheusDatasourcesPageRow{
-			ID: d.ID, Name: d.Name, Url: d.Url, HasAuth: d.AuthEncrypted != "",
+			ID: d.ID, Name: d.Name, Url: d.Url, HasAuth: d.AuthKeyID != "",
 			TlsSkipVerify: d.TlsSkipVerify, Enabled: d.Enabled,
 			CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
 		})
@@ -233,10 +235,10 @@ func (f *fakeDashboardQuerier) CreatePrometheusDatasource(_ context.Context, arg
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	d := sqlc.PrometheusDatasource{
-		ID:            uuid.New(),
-		Name:          arg.Name,
-		Url:           arg.Url,
-		AuthEncrypted: arg.AuthEncrypted,
+		ID:        uuid.New(),
+		Name:      arg.Name,
+		Url:       arg.Url,
+		AuthKeyID: arg.AuthKeyID, AuthAlgorithm: arg.AuthAlgorithm, AuthCiphertext: arg.AuthCiphertext, AuthNonce: arg.AuthNonce,
 		TlsSkipVerify: arg.TlsSkipVerify,
 		Enabled:       arg.Enabled,
 		CreatedAt:     time.Now(),
@@ -255,7 +257,7 @@ func (f *fakeDashboardQuerier) UpdatePrometheusDatasource(_ context.Context, arg
 	}
 	d.Name = arg.Name
 	d.Url = arg.Url
-	d.AuthEncrypted = arg.AuthEncrypted
+	d.AuthKeyID, d.AuthAlgorithm, d.AuthCiphertext, d.AuthNonce = arg.AuthKeyID, arg.AuthAlgorithm, arg.AuthCiphertext, arg.AuthNonce
 	d.TlsSkipVerify = arg.TlsSkipVerify
 	d.Enabled = arg.Enabled
 	d.UpdatedAt = time.Now()
@@ -449,8 +451,8 @@ func TestDatasourceURLValidationAndAuditRedaction(t *testing.T) {
 		}
 	}
 	row := sqlc.PrometheusDatasource{
-		Url:           "https://prometheus.example.com:9090/tenant/secret?token=top-secret",
-		AuthEncrypted: "ciphertext", TlsSkipVerify: true, Enabled: true,
+		Url:       "https://prometheus.example.com:9090/tenant/secret?token=top-secret",
+		AuthKeyID: "test-key", AuthAlgorithm: crypto.AlgorithmAgeX25519, AuthCiphertext: []byte("ciphertext"), TlsSkipVerify: true, Enabled: true,
 	}
 	detail := datasourceAuditDetail(row)
 	if got := detail["endpoint_origin"]; got != "https://prometheus.example.com:9090" {
@@ -772,7 +774,7 @@ func TestDatasource_CRUD_And_Test(t *testing.T) {
 	}
 	// Empty auth fields on PUT preserve the sealed credential, while the
 	// ordinary mutable fields (including name) are updated.
-	originalCiphertext := q.datasources[ds.ID].AuthEncrypted
+	originalCiphertext := crypto.FromParts(q.datasources[ds.ID].AuthKeyID, q.datasources[ds.ID].AuthAlgorithm, q.datasources[ds.ID].AuthCiphertext, q.datasources[ds.ID].AuthNonce)
 	uw := httptest.NewRecorder()
 	updateBody := []byte(`{"name":"primary","url":"` + srv.URL + `","tls_skip_verify":true,"enabled":false}`)
 	h.AdminUpdateDatasource(uw, withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/prometheus-datasources/"+ds.ID.String()+"/", cid, updateBody), "id", ds.ID.String()))
@@ -783,7 +785,7 @@ func TestDatasource_CRUD_And_Test(t *testing.T) {
 	if updated.Name != "primary" || updated.Enabled || !updated.TlsSkipVerify {
 		t.Fatalf("datasource update did not persist mutable fields: %+v", updated)
 	}
-	if updated.AuthEncrypted == "" || updated.AuthEncrypted != originalCiphertext {
+	if updated.AuthKeyID == "" || !bytes.Equal(updated.AuthCiphertext, originalCiphertext.Ciphertext) {
 		t.Fatalf("empty-auth PUT did not preserve ciphertext")
 	}
 	// Delete

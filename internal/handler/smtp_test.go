@@ -12,10 +12,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -42,18 +43,18 @@ func (f *smtpFakeQuerier) GetSMTPSettings(_ context.Context, _ uuid.UUID) (sqlc.
 func (f *smtpFakeQuerier) UpsertSMTPSettings(_ context.Context, arg sqlc.UpsertSMTPSettingsParams) (sqlc.SmtpSettings, error) {
 	atomic.AddInt32(&f.upserts, 1)
 	row := sqlc.SmtpSettings{
-		ID:                arg.ID,
-		Enabled:           arg.Enabled,
-		Host:              arg.Host,
-		Port:              arg.Port,
-		Username:          arg.Username,
-		PasswordEncrypted: arg.PasswordEncrypted,
-		FromAddress:       arg.FromAddress,
-		FromName:          arg.FromName,
-		AuthMechanism:     arg.AuthMechanism,
-		Encryption:        arg.Encryption,
-		RequireTls:        arg.RequireTls,
-		TimeoutSeconds:    arg.TimeoutSeconds,
+		ID:            arg.ID,
+		Enabled:       arg.Enabled,
+		Host:          arg.Host,
+		Port:          arg.Port,
+		Username:      arg.Username,
+		PasswordKeyID: arg.PasswordKeyID, PasswordAlgorithm: arg.PasswordAlgorithm, PasswordCiphertext: arg.PasswordCiphertext, PasswordNonce: arg.PasswordNonce,
+		FromAddress:    arg.FromAddress,
+		FromName:       arg.FromName,
+		AuthMechanism:  arg.AuthMechanism,
+		Encryption:     arg.Encryption,
+		RequireTls:     arg.RequireTls,
+		TimeoutSeconds: arg.TimeoutSeconds,
 	}
 	f.row = &row
 	return row, nil
@@ -102,13 +103,13 @@ func buildSuperuserCtx(t *testing.T, q *smtpFakeQuerier) (context.Context, uuid.
 	return ctx, id
 }
 
-func newEncryptor(t *testing.T) *auth.Encryptor {
+func newEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	k, err := auth.GenerateKey()
+	k, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(k)
+	enc, err := crypto.NewEncryptor(k)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestSMTPHandler_GetSetTest(t *testing.T) {
 
 	// Second PUT keeps the password (sentinel) — verify the stored
 	// ciphertext is unchanged.
-	prevCipher := q.row.PasswordEncrypted
+	prevCipher := crypto.FromParts(q.row.PasswordKeyID, q.row.PasswordAlgorithm, q.row.PasswordCiphertext, q.row.PasswordNonce)
 	put["password"] = PasswordSentinelEncrypted
 	put["enabled"] = false
 	body, _ = json.Marshal(put)
@@ -195,8 +196,8 @@ func TestSMTPHandler_GetSetTest(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("Update keep: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if q.row.PasswordEncrypted != prevCipher {
-		t.Errorf("password ciphertext rewritten when sentinel was sent: prev=%q new=%q", prevCipher, q.row.PasswordEncrypted)
+	if !bytes.Equal(q.row.PasswordCiphertext, prevCipher.Ciphertext) {
+		t.Errorf("password ciphertext rewritten when sentinel was sent")
 	}
 
 	// Test the test-send. Inject a captureSender to avoid real SMTP.

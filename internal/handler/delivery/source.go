@@ -24,6 +24,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const maxCredentialValueBytes = 256 << 10
@@ -31,7 +32,7 @@ const maxCredentialValueBytes = 256 << 10
 // CredentialEncryptor is deliberately write-only. The HTTP surface can seal
 // source material, but it cannot decrypt or inspect existing credentials.
 type CredentialEncryptor interface {
-	Encrypt(plaintext string) (string, error)
+	Encrypt(plaintext []byte) (crypto.Sealed, error)
 }
 
 // SourceQueries is the complete persistence surface used by SourceHandler.
@@ -77,7 +78,7 @@ func (h *SourceHandler) SetRunTx(runTx sourceRunTxFunc) {
 func (h *SourceHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // NewSourceHandler creates a source handler. credentialKeyVersion identifies
-// the primary Fernet key generation written beside new ciphertext. It must be
+// the primary encryption key generation written beside new ciphertext. It must be
 // positive before a request containing secret material can succeed.
 func NewSourceHandler(queries SourceQueries, encryptor CredentialEncryptor, credentialKeyVersion int32) *SourceHandler {
 	return &SourceHandler{queries: queries, encryptor: encryptor, credentialKeyVersion: credentialKeyVersion}
@@ -308,7 +309,7 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	credentialEncrypted, caEncrypted, keyVersion, epoch, err := h.sealSourceMaterial(credentialData, request.CABundle)
+	credentialSealed, caSealed, keyVersion, epoch, err := h.sealSourceMaterial(credentialData, request.CABundle)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CredentialEncryptionUnavailable, "source credential encryption failed")
 		return
@@ -327,10 +328,12 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	params := sqlc.CreateDeliverySourceParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		SourceType: string(request.Type), Url: request.URL, AuthMode: string(request.AuthMode),
-		CredentialEncrypted: credentialEncrypted, CredentialKeyVersion: keyVersion, CredentialEpoch: epoch,
-		CaBundleEncrypted: caEncrypted, ProxyRef: request.ProxyRef, TrustPolicy: trust,
+		CredentialKeyVersion: keyVersion, CredentialEpoch: epoch,
+		ProxyRef: request.ProxyRef, TrustPolicy: trust,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
+	params.CredentialKeyID, params.CredentialAlgorithm, params.CredentialCiphertext, params.CredentialNonce = credentialSealed.Parts()
+	params.CaBundleKeyID, params.CaBundleAlgorithm, params.CaBundleCiphertext, params.CaBundleNonce = caSealed.Parts()
 	created, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.CreateDeliverySourceRow, error) {
 			return q.CreateDeliverySource(r.Context(), params)
@@ -456,7 +459,7 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "trust policy is invalid")
 		return
 	}
-	var caEncrypted string
+	var caSealed crypto.Sealed
 	replaceCA := request.CABundle != nil
 	if replaceCA {
 		if *request.CABundle != "" {
@@ -470,13 +473,14 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CredentialEncryptionUnavailable, "source credential encryption failed")
 			return
 		}
-		caEncrypted = sealed
+		caSealed = sealed
 	}
 	params := sqlc.UpdateDeliverySourceParams{
 		Description: description, Url: sourceURL, ProxyRef: proxyRef, TrustPolicy: trustJSON,
-		ReplaceCaBundle: replaceCA, CaBundleEncrypted: caEncrypted,
-		UpdatedBy: reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
+		ReplaceCaBundle: replaceCA,
+		UpdatedBy:       reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
 	}
+	params.CaBundleKeyID, params.CaBundleAlgorithm, params.CaBundleCiphertext, params.CaBundleNonce = caSealed.Parts()
 	updated, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.UpdateDeliverySourceRow, error) {
 			return q.UpdateDeliverySource(r.Context(), params)
@@ -714,15 +718,16 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
-	ciphertext, _, keyVersion, _, err := h.sealSourceMaterial(values, "")
+	sealed, _, keyVersion, _, err := h.sealSourceMaterial(values, "")
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CredentialEncryptionUnavailable, "source credential encryption failed")
 		return
 	}
 	params := sqlc.RotateDeliverySourceCredentialParams{
-		AuthMode: string(request.AuthMode), CredentialEncrypted: ciphertext, CredentialKeyVersion: keyVersion,
+		AuthMode: string(request.AuthMode), CredentialKeyVersion: keyVersion,
 		UpdatedBy: reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
 	}
+	params.CredentialKeyID, params.CredentialAlgorithm, params.CredentialCiphertext, params.CredentialNonce = sealed.Parts()
 	rotated, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.RotateDeliverySourceCredentialRow, error) {
 			return q.RotateDeliverySourceCredential(r.Context(), params)
@@ -748,12 +753,12 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 	respondData(w, http.StatusOK, response)
 }
 
-func (h *SourceHandler) sealSourceMaterial(credential map[string]string, caBundle string) (credentialEncrypted, caEncrypted string, keyVersion int32, epoch int64, err error) {
+func (h *SourceHandler) sealSourceMaterial(credential map[string]string, caBundle string) (credentialSealed, caSealed crypto.Sealed, keyVersion int32, epoch int64, err error) {
 	if len(credential) == 0 && caBundle == "" {
-		return "", "", 0, 0, nil
+		return crypto.Sealed{}, crypto.Sealed{}, 0, 0, nil
 	}
 	if h.encryptor == nil || h.credentialKeyVersion < 1 {
-		return "", "", 0, 0, errors.New("credential encryptor is unavailable")
+		return crypto.Sealed{}, crypto.Sealed{}, 0, 0, errors.New("credential encryptor is unavailable")
 	}
 	if len(credential) != 0 {
 		keys := make([]string, 0, len(credential))
@@ -767,21 +772,21 @@ func (h *SourceHandler) sealSourceMaterial(credential map[string]string, caBundl
 		}
 		plaintext, marshalErr := json.Marshal(ordered)
 		if marshalErr != nil {
-			return "", "", 0, 0, marshalErr
+			return crypto.Sealed{}, crypto.Sealed{}, 0, 0, marshalErr
 		}
-		credentialEncrypted, err = h.encryptor.Encrypt(string(plaintext))
+		credentialSealed, err = h.encryptor.Encrypt(plaintext)
 		clear(plaintext)
-		if err != nil || credentialEncrypted == "" {
-			return "", "", 0, 0, errors.New("encrypt credential")
+		if err != nil || credentialSealed.IsZero() {
+			return crypto.Sealed{}, crypto.Sealed{}, 0, 0, errors.New("encrypt credential")
 		}
 	}
 	if caBundle != "" {
-		caEncrypted, err = h.encryptor.Encrypt(caBundle)
-		if err != nil || caEncrypted == "" {
-			return "", "", 0, 0, errors.New("encrypt CA bundle")
+		caSealed, err = h.encryptor.Encrypt([]byte(caBundle))
+		if err != nil || caSealed.IsZero() {
+			return crypto.Sealed{}, crypto.Sealed{}, 0, 0, errors.New("encrypt CA bundle")
 		}
 	}
-	return credentialEncrypted, caEncrypted, h.credentialKeyVersion, 1, nil
+	return credentialSealed, caSealed, h.credentialKeyVersion, 1, nil
 }
 
 func sourceScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {

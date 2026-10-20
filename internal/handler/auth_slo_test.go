@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -21,18 +23,18 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// newTestEncryptor builds a per-test Fernet encryptor by generating
-// a fresh key. The Fernet library is strict about the encoded key
+// newTestEncryptor builds a per-test age encryptor by generating
+// a fresh key. The age library is strict about the encoded key
 // shape (44 chars, base64-url-safe of a 32-byte secret), so we let
 // auth.GenerateKey produce one rather than hand-rolling a constant
 // that would drift if the library ever tightened validation.
-func newTestEncryptor(t *testing.T) *auth.Encryptor {
+func newTestEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	k, err := auth.GenerateKey()
+	k, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	e, err := auth.NewEncryptor(k)
+	e, err := crypto.NewEncryptor(k)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -59,13 +61,13 @@ func (s *recordingSSOSessionStore) InsertSSOSession(_ context.Context, arg sqlc.
 	defer s.mu.Unlock()
 	s.inserts = append(s.inserts, arg)
 	s.rows[arg.Jti] = sqlc.SsoSession{
-		Jti:                      arg.Jti,
-		UserID:                   arg.UserID,
-		ProviderName:             arg.ProviderName,
-		UpstreamIDTokenEncrypted: arg.UpstreamIDTokenEncrypted,
-		EndSessionEndpoint:       arg.EndSessionEndpoint,
-		ExpiresAt:                arg.ExpiresAt,
-		CreatedAt:                time.Now(),
+		Jti:                  arg.Jti,
+		UserID:               arg.UserID,
+		ProviderName:         arg.ProviderName,
+		UpstreamIDTokenKeyID: arg.UpstreamIDTokenKeyID, UpstreamIDTokenAlgorithm: arg.UpstreamIDTokenAlgorithm, UpstreamIDTokenCiphertext: arg.UpstreamIDTokenCiphertext, UpstreamIDTokenNonce: arg.UpstreamIDTokenNonce,
+		EndSessionEndpoint: arg.EndSessionEndpoint,
+		ExpiresAt:          arg.ExpiresAt,
+		CreatedAt:          time.Now(),
 	}
 	return nil
 }
@@ -243,18 +245,18 @@ func TestLogout_ReturnsRedirectURLWhenSSOSession(t *testing.T) {
 
 	// Seed the sso_sessions row the JWT corresponds to.
 	idToken := "id-token-header.payload.sig"
-	cipher, err := enc.Encrypt(idToken)
+	cipher, err := enc.EncryptString(idToken)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 	store.rows[claims.ID] = sqlc.SsoSession{
-		Jti:                      claims.ID,
-		UserID:                   user.ID,
-		ProviderName:             "dex",
-		UpstreamIDTokenEncrypted: cipher,
-		EndSessionEndpoint:       "https://dex.example.com/dex/auth/logout",
-		ExpiresAt:                claims.ExpiresAt.Time,
-		CreatedAt:                time.Now(),
+		Jti:                  claims.ID,
+		UserID:               user.ID,
+		ProviderName:         "dex",
+		UpstreamIDTokenKeyID: cipher.KeyID, UpstreamIDTokenAlgorithm: cipher.Algorithm, UpstreamIDTokenCiphertext: cipher.Ciphertext, UpstreamIDTokenNonce: cipher.Nonce,
+		EndSessionEndpoint: "https://dex.example.com/dex/auth/logout",
+		ExpiresAt:          claims.ExpiresAt.Time,
+		CreatedAt:          time.Now(),
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
@@ -349,14 +351,14 @@ func TestLogout_DeletesSSOSessionRow(t *testing.T) {
 
 	token, _ := jwtMgr.GenerateAccessToken(user.ID)
 	claims, _ := jwtMgr.ValidateToken(token)
-	cipher, _ := enc.Encrypt("upstream-id-token")
+	cipher, _ := enc.EncryptString("upstream-id-token")
 	store.rows[claims.ID] = sqlc.SsoSession{
-		Jti:                      claims.ID,
-		UserID:                   user.ID,
-		ProviderName:             "dex",
-		UpstreamIDTokenEncrypted: cipher,
-		EndSessionEndpoint:       "https://dex.example.com/end",
-		ExpiresAt:                claims.ExpiresAt.Time,
+		Jti:                  claims.ID,
+		UserID:               user.ID,
+		ProviderName:         "dex",
+		UpstreamIDTokenKeyID: cipher.KeyID, UpstreamIDTokenAlgorithm: cipher.Algorithm, UpstreamIDTokenCiphertext: cipher.Ciphertext, UpstreamIDTokenNonce: cipher.Nonce,
+		EndSessionEndpoint: "https://dex.example.com/end",
+		ExpiresAt:          claims.ExpiresAt.Time,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
@@ -393,14 +395,14 @@ func TestLogout_NoEndpointFallsBackToLocal(t *testing.T) {
 
 	token, _ := jwtMgr.GenerateAccessToken(user.ID)
 	claims, _ := jwtMgr.ValidateToken(token)
-	cipher, _ := enc.Encrypt("upstream-id-token")
+	cipher, _ := enc.EncryptString("upstream-id-token")
 	store.rows[claims.ID] = sqlc.SsoSession{
-		Jti:                      claims.ID,
-		UserID:                   user.ID,
-		ProviderName:             "github",
-		UpstreamIDTokenEncrypted: cipher,
-		EndSessionEndpoint:       "", // IdP doesn't support RP-initiated logout
-		ExpiresAt:                claims.ExpiresAt.Time,
+		Jti:                  claims.ID,
+		UserID:               user.ID,
+		ProviderName:         "github",
+		UpstreamIDTokenKeyID: cipher.KeyID, UpstreamIDTokenAlgorithm: cipher.Algorithm, UpstreamIDTokenCiphertext: cipher.Ciphertext, UpstreamIDTokenNonce: cipher.Nonce,
+		EndSessionEndpoint: "", // IdP doesn't support RP-initiated logout
+		ExpiresAt:          claims.ExpiresAt.Time,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
@@ -447,16 +449,16 @@ func TestForceLogout_DeletesAllUserSSOSessions(t *testing.T) {
 
 	// Seed two sessions for the target user across two devices/providers.
 	for i, prov := range []string{"dex", "okta"} {
-		cipher, _ := enc.Encrypt("id-token-" + prov)
+		cipher, _ := enc.EncryptString("id-token-" + prov)
 		jti := uuid.New().String()
 		store.rows[jti] = sqlc.SsoSession{
-			Jti:                      jti,
-			UserID:                   target.ID,
-			ProviderName:             prov,
-			UpstreamIDTokenEncrypted: cipher,
-			EndSessionEndpoint:       "https://" + prov + ".example.com/end",
-			ExpiresAt:                time.Now().Add(time.Hour),
-			CreatedAt:                time.Now().Add(time.Duration(-i) * time.Minute),
+			Jti:                  jti,
+			UserID:               target.ID,
+			ProviderName:         prov,
+			UpstreamIDTokenKeyID: cipher.KeyID, UpstreamIDTokenAlgorithm: cipher.Algorithm, UpstreamIDTokenCiphertext: cipher.Ciphertext, UpstreamIDTokenNonce: cipher.Nonce,
+			EndSessionEndpoint: "https://" + prov + ".example.com/end",
+			ExpiresAt:          time.Now().Add(time.Hour),
+			CreatedAt:          time.Now().Add(time.Duration(-i) * time.Minute),
 		}
 	}
 	// Also a session for a different user — must NOT be touched.
@@ -527,7 +529,7 @@ func TestLogoutDoneEndpoint(t *testing.T) {
 
 // TestCallback_PersistsSSOSession covers the Callback's
 // sso_sessions insertion: a successful OIDC callback should write a
-// row with the access JWT's JTI + Fernet-encrypted upstream id_token.
+// row with the access JWT's JTI + age-encrypted upstream id_token.
 // We invoke persistSSOSession directly because the full Callback
 // machinery (CSRF state, manager registration, etc.) is exercised by
 // sso_test.go; here we want a tight assertion on the storage shape.
@@ -574,10 +576,10 @@ func TestCallback_PersistsSSOSession(t *testing.T) {
 		t.Errorf("EndSessionEndpoint mismatch: %q", got.EndSessionEndpoint)
 	}
 	// id_token is encrypted at rest — plaintext must NOT round-trip.
-	if got.UpstreamIDTokenEncrypted == "raw-id-token" {
+	if string(got.UpstreamIDTokenCiphertext) == "raw-id-token" {
 		t.Errorf("id_token stored in plaintext")
 	}
-	plain, err := enc.Decrypt(got.UpstreamIDTokenEncrypted)
+	plain, err := enc.DecryptString(crypto.FromParts(got.UpstreamIDTokenKeyID, got.UpstreamIDTokenAlgorithm, got.UpstreamIDTokenCiphertext, got.UpstreamIDTokenNonce))
 	if err != nil {
 		t.Fatalf("decrypt round-trip: %v", err)
 	}

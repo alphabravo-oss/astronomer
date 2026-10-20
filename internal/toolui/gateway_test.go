@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func testGateway(t *testing.T, proxy func(http.ResponseWriter, *http.Request, Target)) (*Gateway, string, string) {
@@ -27,7 +28,11 @@ func testGateway(t *testing.T, proxy func(http.ResponseWriter, *http.Request, Ta
 	if err != nil {
 		t.Fatal(err)
 	}
-	cipher, err := auth.NewEncryptor("mjc2rBj19lSbsCp4LzOVgAuWBxGJIGsQNc6oZi0iDTQ=")
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +190,7 @@ func TestToolSessionScopeAndExpiry(t *testing.T) {
 		{Purpose: sessionPurpose, Target: Target{Kind: "cluster-grafana"}, Host: host, Credential: access, Expires: time.Now().Add(time.Hour)},
 	} {
 		b, _ := json.Marshal(s)
-		sealed, _ := g.cipher.Encrypt(string(b))
+		sealed, _ := g.sealToken(b)
 		if _, err := g.decode(context.Background(), sealed, host); err == nil {
 			t.Fatal("invalid session accepted")
 		}

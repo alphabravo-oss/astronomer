@@ -215,10 +215,9 @@ GitOps registration-source CRUD and manual/webhook sync requests use the same
 boundary. A sync request commits a source-ID-only `gitops:sync` task-outbox row
 with its audit intent and returns `202` plus the durable task ID; clone, fetch,
 and reconciliation run in the worker after commit. Credentialed writes fail
-closed without Fernet, repository URLs cannot embed credentials/query values,
+closed without an encryption key, repository URLs cannot embed credentials/query values,
 and audit detail omits the repository location. The worker fails loudly when a
-Fernet-shaped value cannot be decrypted while retaining the bounded legacy
-plaintext compatibility path for pre-encryption rows.
+sealed value cannot be decrypted; there is no plaintext or ciphertext fallback.
 Platform-setting single updates, atomic batch updates, and resets also commit
 with their audit intent. The local feature/settings cache is invalidated only
 after commit. Charlie's runtime lifecycle remains an external saga: runtime is

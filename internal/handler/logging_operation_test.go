@@ -542,13 +542,13 @@ func (q *loggingFakeQuerier) GetLokiIngestTokenByCluster(_ context.Context, clus
 
 func (q *loggingFakeQuerier) UpsertLokiIngestToken(_ context.Context, arg sqlc.UpsertLokiIngestTokenParams) (sqlc.LokiIngestToken, error) {
 	tok := sqlc.LokiIngestToken{
-		ID:             uuid.New(),
-		ClusterID:      arg.ClusterID,
-		TokenHash:      arg.TokenHash,
-		TokenEncrypted: arg.TokenEncrypted,
-		CreatedByID:    arg.CreatedByID,
-		CreatedAt:      time.Now(),
-		RotatedAt:      time.Now(),
+		ID:         uuid.New(),
+		ClusterID:  arg.ClusterID,
+		TokenHash:  arg.TokenHash,
+		TokenKeyID: arg.TokenKeyID, TokenAlgorithm: arg.TokenAlgorithm, TokenCiphertext: arg.TokenCiphertext, TokenNonce: arg.TokenNonce,
+		CreatedByID: arg.CreatedByID,
+		CreatedAt:   time.Now(),
+		RotatedAt:   time.Now(),
 	}
 	if existing, ok := q.lokiTokens[arg.ClusterID]; ok {
 		tok.ID = existing.ID
