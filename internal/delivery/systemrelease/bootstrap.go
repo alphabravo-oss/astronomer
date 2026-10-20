@@ -16,6 +16,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	buildversion "github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 var kubernetesMinorPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
@@ -106,10 +107,7 @@ func build(config Config) (immutableSpec, string, error) {
 	if !strings.HasPrefix(version, "v") {
 		version = "v" + version
 	}
-	agentVersion := strings.TrimSpace(config.AgentVersion)
-	if !strings.HasPrefix(agentVersion, "v") {
-		agentVersion = "v" + agentVersion
-	}
+	agentVersion := buildversion.Normalize(config.AgentVersion)
 	verification := protocol.DeliverySystemVerification{Provider: "cosign"}
 	if staticKey {
 		verification.PublicKeys = make([][]byte, len(publicKeys))
