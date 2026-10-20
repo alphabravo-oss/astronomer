@@ -6,7 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -44,8 +43,7 @@ func registerLongLivedRoutes(
 		// namespace outside their allow-set; a cluster-wide/superuser caller passes
 		// the plain check and watches everything unfiltered.
 		r.With(
-			requireStreamTicketOrAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries, deps.StreamingInternal.StreamTicketStore, iauth.StreamKindLogs, "cluster_id"),
-			requireListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbRead, deps.ClusterResources.NamespaceScopedRBAC),
+			requireStreamTicketOrAuth(deps, iauth.StreamKindLogs, "cluster_id"),
 		).Get("/api/v1/clusters/{cluster_id}/pods/watch/", deps.ClusterResources.Workloads.WatchPods)
 	}
 	if deps.StreamingInternal.Proxy != nil {
@@ -56,9 +54,8 @@ func registerLongLivedRoutes(
 		r.With(
 			canonicalK8sProxyPath,
 			rateLimit(appmiddleware.ClassK8sProxy),
-			requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries),
+			requireAuth(deps),
 			requireK8sProxyScope(),
-			requireK8sProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, deps.ClusterResources.NativeAuthz, deps.ClusterResources.NamespaceScopedRBAC),
 			auditK8sProxySecretReads(deps.CoreAuth.AuditWriter),
 			auditK8sProxyMutations(deps.CoreAuth.AuditWriter),
 		).

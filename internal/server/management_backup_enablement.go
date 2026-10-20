@@ -5,10 +5,10 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type managementBackupReadiness interface {
@@ -22,7 +22,7 @@ func validateManagementBackupStartup(enabled bool, executor managementBackupRead
 	return nil
 }
 
-func newManagementBackupHandler(cfg *config.Config, queries handler.AdminDrillQuerier, database *db.DB, encryptor *auth.Encryptor, localK8s kubernetes.Interface, namespace string) *handler.AdminDrillHandler {
+func newManagementBackupHandler(cfg *config.Config, queries handler.AdminDrillQuerier, database *db.DB, encryptor *crypto.Encryptor, localK8s kubernetes.Interface, namespace string) *handler.AdminDrillHandler {
 	h := handler.NewAdminDrillHandler(queries)
 	h.SetManagementBackupEnabled(cfg.ManagementBackupEnabled)
 	h.SetRunTx(sqlcMutationTxRunner[handler.ManagementBackupMutationTx](database))

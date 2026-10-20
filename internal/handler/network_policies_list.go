@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -19,7 +19,7 @@ func (h *NetworkPolicyHandler) ListTemplates(w http.ResponseWriter, r *http.Requ
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list network policy templates")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list network policy templates")
 		return
 	}
 	total, _ := h.queries.CountNetworkPolicyTemplates(r.Context())

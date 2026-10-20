@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -16,17 +18,17 @@ import (
 
 func testSSOHandler(t *testing.T) *SSOHandler {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}
 	jwt := auth.MustNewJWTManager("super-secret-state-key", 60)
 	mgr := auth.NewSSOManager(enc, jwt, "https://app.example.com")
-	encrypted, err := enc.Encrypt("client-secret")
+	encrypted, err := enc.EncryptString("client-secret")
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}

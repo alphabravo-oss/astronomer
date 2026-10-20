@@ -182,7 +182,7 @@ func NewIngester(q Querier, tx TxBeginner, metrics MetricRecorder, audit AuditHo
 // IngestUnstructured is the convenience entry point the CRD-mirror
 // watcher calls. It re-marshals the raw object into TrivyVulnerability
 // Report and delegates to Ingest. Keeping this method here lets
-// internal/crd hand us a `map[string]any` without taking a dependency
+// internal/operator/mirror hand us a `map[string]any` without taking a dependency
 // on internal/scanner's typed shape.
 func (i *Ingester) IngestUnstructured(ctx context.Context, clusterID uuid.UUID, raw any) error {
 	if raw == nil {

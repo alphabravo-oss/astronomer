@@ -12,6 +12,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type ssoWiringInvalidator struct{}
@@ -30,11 +31,11 @@ func TestSSOCallbackProductionTransactionWiring(t *testing.T) {
 }
 
 func TestSSOCallbackStartupRequiresSecurityDependencies(t *testing.T) {
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}

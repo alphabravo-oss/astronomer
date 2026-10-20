@@ -272,6 +272,19 @@ func TestIngestAdvancesSignedSystemReleaseFromAuthenticatedInventory(t *testing.
 	}
 }
 
+func TestIngestNormalizesUnprefixedAgentVersion(t *testing.T) {
+	tx := &systemFakeTransaction{fakeTransaction: &fakeTransaction{current: sqlc.ClusterDeployment{DesiredGeneration: 99}}}
+	payload := validStatus()
+	payload.ControllerInventory.AgentVersion = "1.0.0" // stamped without the v
+	payload.StatusDigest = payload.SemanticDigest()
+	if err := NewIngester(&fakeRunner{tx: tx}).Ingest(context.Background(), clusterID, connectionID, "session", payload); err != nil {
+		t.Fatal(err)
+	}
+	if tx.observeArg == nil || tx.observeArg.ObservedAgentVersion != "v1.0.0" {
+		t.Fatalf("observed agent version = %#v, want v1.0.0 to match the release agent_version", tx.observeArg)
+	}
+}
+
 func TestIngestIgnoresStaleGenerationButAcknowledgesSnapshot(t *testing.T) {
 	tx := &fakeTransaction{current: sqlc.ClusterDeployment{
 		ID: deploymentID, ClusterID: clusterID, DesiredGeneration: 8,

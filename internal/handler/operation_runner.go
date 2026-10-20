@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
 )
 
@@ -123,7 +123,7 @@ func requireRetryableOperation(w http.ResponseWriter, r *http.Request, status st
 	if isRetryableOperationStatus(status) {
 		return true
 	}
-	RespondRequestError(w, r, http.StatusConflict, apierror.InvalidState, operationRetryInvalidStateMessage)
+	apiutil.WriteError(w, r, http.StatusConflict, apiutil.InvalidState, operationRetryInvalidStateMessage)
 	return false
 }
 

@@ -6,9 +6,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -36,7 +36,7 @@ func (h *SecurityHandler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 
 	policy, err := h.queries.GetPolicyByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security policy not found for cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security policy not found for cluster")
 		return
 	}
 
@@ -54,12 +54,12 @@ func (h *SecurityHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list security policies")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list security policies")
 		return
 	}
 	total, err := h.queries.CountClusterSecurityPolicies(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count security policies")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count security policies")
 		return
 	}
 	paging.Write(w, policies, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(policies)))
@@ -82,7 +82,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	var policy sqlc.ClusterSecurityPolicy
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	err := h.runTx(r.Context(), func(q SecurityMutationTx) error {
@@ -96,7 +96,7 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create security policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create security policy")
 		return
 	}
 	h.publishSecurityPolicyChanged(req.ClusterID, policy.ID)
@@ -108,16 +108,16 @@ func (h *SecurityHandler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid policy ID")
 		return
 	}
 	policy, err := h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security policy not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security policy not found")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
@@ -129,12 +129,12 @@ func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.ApplyError, "Failed to apply security policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.ApplyError, "Failed to apply security policy")
 		return
 	}
 	policy, err = h.queries.GetClusterSecurityPolicyByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to reload security policy")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to reload security policy")
 		return
 	}
 	h.publishSecurityPolicyChanged(policy.ClusterID, id)
@@ -145,7 +145,7 @@ func (h *SecurityHandler) ApplyPolicy(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid policy ID")
 		return
 	}
 	clusterID := ""
@@ -155,7 +155,7 @@ func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 		clusterUUID = existing.ClusterID
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "security transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "security transaction runner is not configured")
 		return
 	}
 	err = h.runTx(r.Context(), func(q SecurityMutationTx) error {
@@ -165,7 +165,7 @@ func (h *SecurityHandler) DeletePolicy(w http.ResponseWriter, r *http.Request) {
 		return recordSecurityAuditOutbox(r, q, "security.policy.delete", "cluster_security_policy", id.String(), "", http.StatusNoContent, map[string]any{"cluster_id": clusterID})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete security policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete security policy")
 		return
 	}
 	h.publishSecurityPolicyChanged(clusterUUID, id)

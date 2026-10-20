@@ -8,14 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -27,11 +29,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
 			"reason": "missing_cookie",
 		})
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 	if !auth.ValidateCSRF(r) {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.CSRFRequired, "CSRF token is required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.CSRFRequired, "CSRF token is required")
 		return
 	}
 
@@ -40,14 +42,14 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
 			"reason": "invalid_token",
 		})
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 	if claims.TokenType != auth.RefreshToken {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.refresh_failed", "user", claims.UserID.String(), "", map[string]any{
 			"reason": "wrong_token_type",
 		})
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 
@@ -56,7 +58,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.refresh_failed", "user", claims.UserID.String(), "", map[string]any{
 			"reason": "user_not_active",
 		})
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 
@@ -66,12 +68,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	mintCtx := h.applySessionTimeoutFromSettings(r.Context())
 	if claims.ExpiresAt == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 	pair, err := h.jwt.PrepareRotationContext(mintCtx, claims.SessionFamilyID, claims.ExpiresAt.Time)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 	rotatedAt := time.Now().UTC()
@@ -94,7 +96,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 				resourceName: user.Username, status: httpStatus, detail: detail}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 			"The browser session could not be rotated")
 		return
 	}
@@ -104,12 +106,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			h.jwt.InvalidateUser(r.Context(), user.ID)
 		}
 		clearBrowserSessionCookies(w, r)
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidToken, "Invalid refresh token")
 		return
 	}
 	accessToken, refreshToken, err := h.jwt.SignPreparedTokenPair(user.ID, pair)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TokenError, "Failed to generate session")
 		return
 	}
 
@@ -196,7 +198,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 						}
 					})
 				if mutationErr != nil {
-					respondTransactionalMutationError(w, r, mutationErr, http.StatusServiceUnavailable, apierror.RevokeError,
+					respondTransactionalMutationError(w, r, mutationErr, http.StatusServiceUnavailable, apiutil.RevokeError,
 						"Logout could not revoke the active session; retry")
 					return
 				}
@@ -231,7 +233,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if auditErr := h.recordCredentialAuditAs(r, actorID, "auth.logout", "user", resourceID, resourceName, auditDetail); auditErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 				"Mandatory audit storage is unavailable; logout was not completed")
 			return
 		}
@@ -307,7 +309,7 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, userID
 		(*auditDetail)["sso_logout"] = "no_endpoint"
 		return ""
 	}
-	idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
+	idToken, err := h.encryptor.DecryptString(crypto.FromParts(session.UpstreamIDTokenKeyID, session.UpstreamIDTokenAlgorithm, session.UpstreamIDTokenCiphertext, session.UpstreamIDTokenNonce))
 	if err != nil {
 		metric.Record(r.Context(), "encrypt_error")
 		(*auditDetail)["sso_logout"] = "decrypt_failed"

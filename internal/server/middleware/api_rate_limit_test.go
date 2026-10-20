@@ -260,11 +260,11 @@ func TestAPIRateLimit_PerClusterCeiling_ManyUsersOnOneCluster(t *testing.T) {
 	mw := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if d := limiter.allowClusterCeiling(class, apiRateLimitClusterID(r)); !d.allowed {
-				writeRateLimited(w, d)
+				writeRateLimited(w, r, d)
 				return
 			}
 			if d := limiter.allow(class, apiRateLimitKey(r)); !d.allowed {
-				writeRateLimited(w, d)
+				writeRateLimited(w, r, d)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -394,11 +394,11 @@ func TestAPIRateLimit_PerUserLimitStillEnforced(t *testing.T) {
 	mw := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if d := limiter.allowClusterCeiling(class, apiRateLimitClusterID(r)); !d.allowed {
-				writeRateLimited(w, d)
+				writeRateLimited(w, r, d)
 				return
 			}
 			if d := limiter.allow(class, apiRateLimitKey(r)); !d.allowed {
-				writeRateLimited(w, d)
+				writeRateLimited(w, r, d)
 				return
 			}
 			next.ServeHTTP(w, r)

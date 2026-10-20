@@ -19,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	yaml "gopkg.in/yaml.v3"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	sigsyaml "sigs.k8s.io/yaml"
@@ -398,7 +400,7 @@ func compareChartCompatibility(raw []byte, manifest releasecontract.Manifest) (C
 	if len(version) != 3 || c.ReleaseLine != version[0]+"."+version[1]+".x" {
 		return empty, errors.New("target chart release line differs")
 	}
-	return ChartSchemaBounds{Minimum: uint32(p.Minimum), Target: uint32(p.Target), Reversible: uint32(p.Reversible), SupportedMajors: append([]uint32(nil), p.Majors...)}, nil
+	return ChartSchemaBounds{Minimum: safeconv.Uint32(p.Minimum), Target: safeconv.Uint32(p.Target), Reversible: safeconv.Uint32(p.Reversible), SupportedMajors: append([]uint32(nil), p.Majors...)}, nil
 }
 
 func sameChartStringSet(left, right []string) bool {

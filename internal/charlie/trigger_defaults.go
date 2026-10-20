@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -33,8 +35,8 @@ func EnsureDefaultTriggerRules(ctx context.Context, q defaultTriggerQuerier, con
 			ConnectionID: connectionID, Name: rule.Name, RuleType: rule.Name,
 			Category: rule.Category, Enabled: rule.EnabledByDefault,
 			MinimumSeverity: rule.MinimumSeverity, Selectors: json.RawMessage(`{}`),
-			Thresholds: encodedThresholds, WindowSeconds: int32(rule.Window / time.Second),
-			CooldownSeconds: int32(rule.Cooldown / time.Second), ServiceIdentityID: serviceIdentityID,
+			Thresholds: encodedThresholds, WindowSeconds: safeconv.Int32(rule.Window / time.Second),
+			CooldownSeconds: safeconv.Int32(rule.Cooldown / time.Second), ServiceIdentityID: serviceIdentityID,
 			ModeCeiling: string(rule.ModeCeiling), CreatedByID: pgtype.UUID{Bytes: actorID, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("create Charlie default trigger %s: %w", rule.Name, err)

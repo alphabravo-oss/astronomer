@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
@@ -42,7 +42,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	// emits it for every project binding when namespace-scoped RBAC is on.
 	all, clusterIDs, projectIDs, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceProjects, rbac.VerbList, rbac.NarrowedClustersExcluded)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 			QueryOffset:  offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list projects")
 			return
 		}
 		if search == "" {
@@ -64,13 +64,13 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 			total, err = h.queries.CountProjectsFiltered(r.Context(), search)
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count projects")
 			return
 		}
 	} else {
 		scoped, ok := h.queries.(projectScopeQuerier)
 		if !ok {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Scoped project listing is not available")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Scoped project listing is not available")
 			return
 		}
 		projects, err = scoped.ListProjectsForScopes(r.Context(), sqlc.ListProjectsForScopesParams{
@@ -81,7 +81,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 			QueryOffset:  offset,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list projects")
 			return
 		}
 		// Same predicate as the page — see CountClustersForScopes.
@@ -91,14 +91,14 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 			FilterSearch: search,
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count projects")
 			return
 		}
 	}
 
 	items, err := h.projectNavigationResponses(r.Context(), projects)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to read project namespace scopes")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to read project namespace scopes")
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 
@@ -120,7 +120,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid cluster_id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid cluster_id")
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    req.ResourceQuotaPodCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 
@@ -168,10 +168,10 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 				h.logger().Warn("failed to roll back over-quota project", "project_id", project.ID.String(), "error", derr)
 			}
 			if qe, ok := quota.IsQuotaExceeded(qerr); ok {
-				WriteQuotaExceeded(w, qe)
+				WriteQuotaExceeded(w, r, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate project cluster quota")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate project cluster quota")
 			return
 		}
 	}
@@ -196,18 +196,18 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	items, err := h.projectNavigationResponses(r.Context(), []sqlc.Project{project})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to read project namespace scopes")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to read project namespace scopes")
 		return
 	}
 	RespondJSON(w, http.StatusOK, items[0])
@@ -218,13 +218,13 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 
 	var req UpdateProjectRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.normalizeLegacyQuotaFields()
@@ -248,7 +248,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// reset them to "" on every PUT.
 	existing, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 
@@ -273,7 +273,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    req.ResourceQuotaPodCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	req.Namespaces = plan.Params.Namespaces
@@ -290,10 +290,10 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to check project ownership")
 		return
 	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, blocked)
 		return
 	}
 	project, _, err := h.service.Update(r.Context(), existing, projectdomain.UpdateInput{
@@ -305,7 +305,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ResourceQuotaPodCount:    req.ResourceQuotaPodCount,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	h.recordProjectAudit(r, "project.update", project, map[string]any{"namespaces": decodeJSONArray(req.Namespaces)})

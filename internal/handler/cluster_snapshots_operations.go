@@ -11,7 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Request) {
@@ -20,11 +20,11 @@ func (h *ClusterSnapshotsHandler) VeleroStatus(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnwired, "Tunnel requester not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TunnelUnwired, "Tunnel requester not configured")
 		return
 	}
 

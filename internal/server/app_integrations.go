@@ -2,10 +2,10 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -18,9 +18,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	jwtManager := c.jwtManager
@@ -64,7 +65,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	}
 
 	// SMTP email (migration 047). Wired only when the encryptor is
-	// available — the password column is Fernet-encrypted and a
+	// available — the password column is age-sealed and a
 	// missing key would mean we couldn't round-trip a saved password.
 	// The Enqueuer is best-effort across the codebase: every hook
 	// site calls EnqueueAndLog so a missing SMTP relay never breaks a
@@ -76,13 +77,13 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	if encryptor != nil {
 		settingsProvider := email.NewSQLSettingsProvider(queries, encryptor, 5*time.Second)
 		brandingProvider := email.NewPlatformConfigBrandingProvider(queries, "")
-		smtpHandler = handler.NewSMTPHandler(queries, encryptor, logger)
+		smtpHandler = handler.NewSMTPHandler(queries, encryptor, logging.Slog(logger))
 		smtpHandler.SetRunTx(sqlcMutationTxRunner[handler.SMTPMutationTx](database))
 		smtpHandler.SetSettingsProvider(settingsProvider)
 		smtpHandler.SetBrandingProvider(brandingProvider)
 		smtpHandler.SetAuditWriter(queries)
 		smtpHandler.SetBaselineOverrideChecker(handler.NewBaselineOverrideChecker(rbacEngine, rbacQuerier))
-		emailEnqueuer = email.NewEnqueuer(queries, brandingProvider, logger)
+		emailEnqueuer = email.NewEnqueuer(queries, brandingProvider, logging.Slog(logger))
 		// Bridge to the notification_templates override layer
 		// (migration 059). Without this the Enqueuer renders only the
 		// embedded defaults; with it the operator's per-key override
@@ -105,7 +106,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 
 	// Outbound webhook subscriptions (migration 048). Wired only when
 	// the encryptor is available — the HMAC signing secret is
-	// Fernet-encrypted at rest. The Tap subscribes to the same in-memory
+	// age-sealed at rest. The Tap subscribes to the same in-memory
 	// bus the SSE stream consumes; the dispatcher task drains pending
 	// deliveries every 15s. Tap.Start runs further below alongside the
 	// other reconciler goroutines once reconcileCtx is defined.
@@ -114,11 +115,11 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 		webhookTap     *webhook.Tap
 	)
 	if encryptor != nil {
-		webhookHandler = handler.NewWebhookHandler(queries, encryptor, logger)
+		webhookHandler = handler.NewWebhookHandler(queries, encryptor, logging.Slog(logger))
 		webhookHandler.SetRunTx(sqlcMutationTxRunner[handler.WebhookMutationTx](database))
 		webhookHandler.SetAuditWriter(queries)
 		webhookHandler.SetBaselineOverrideChecker(handler.NewBaselineOverrideChecker(rbacEngine, rbacQuerier))
-		webhookTap = webhook.NewTap(queries, bus, logger)
+		webhookTap = webhook.NewTap(queries, bus, logging.Slog(logger))
 		webhookHandler.SetTap(webhookTap)
 		// Bridge audit.Record → bus so audit.* events fan out into
 		// webhook deliveries without every audit call site having to
@@ -127,7 +128,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	}
 
 	// External SIEM forwarders (migration 055). Same gate as webhooks
-	// (the auth blob is Fernet-encrypted) and parallel wiring: the bus
+	// (the auth blob is age-sealed) and parallel wiring: the bus
 	// tap subscribes to the same events.Bus the SSE stream consumes,
 	// and the dispatcher task drains the per-forwarder queue every 2s.
 	// We start the tap further below once reconcileCtx is defined.
@@ -136,11 +137,11 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 		siemTap     *siem.BusTap
 	)
 	if encryptor != nil {
-		siemHandler = handler.NewSIEMHandler(queries, encryptor, logger)
+		siemHandler = handler.NewSIEMHandler(queries, encryptor, logging.Slog(logger))
 		siemHandler.SetRunTx(sqlcMutationTxRunner[handler.SIEMMutationTx](database))
 		siemHandler.SetAuditWriter(queries)
 		siemHandler.SetEventBus(bus)
-		siemTap = siem.NewBusTap(queries, bus, webhook.MatchFilters, logger)
+		siemTap = siem.NewBusTap(queries, bus, webhook.MatchFilters, logging.Slog(logger))
 		siemHandler.SetTap(siemTap)
 	}
 
@@ -167,7 +168,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	// one replica there.
 	streamTickets := auth.NewStreamTicketStore(time.Minute)
 	if backend, terr := auth.NewRedisStreamTicketBackendFromURL(cfg.RedisURL); terr != nil {
-		logger.Warn("stream tickets: redis backend unavailable, using per-pod in-memory store (multi-replica browser exec/logs/shell auth will fail ~50%)", "error", terr)
+		logger.Warn().Err(terr).Msg("stream tickets: redis backend unavailable, using per-pod in-memory store (multi-replica browser exec/logs/shell auth will fail ~50%)")
 	} else {
 		streamTickets = auth.NewStreamTicketStoreWithBackend(time.Minute, backend)
 	}
@@ -175,12 +176,10 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	if cfg.RedisURL != "" {
 		if opt, rerr := redisconn.Parse(cfg.RedisURL); rerr == nil {
 			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
-				bus.AttachRedis(client, events.DefaultRedisChannel, logger,
+				bus.AttachRedis(client, events.DefaultRedisChannel, logging.Slog(logger),
 					events.WithRedisRelayQueueCapacity(cfg.EventRelayQueueCapacity))
 				c.eventRelayClient = client
-				logger.Info("events bus redis fan-out enabled",
-					"channel", events.DefaultRedisChannel,
-					"queue_capacity", bus.RelayStatus().Capacity)
+				logger.Info().Str("channel", events.DefaultRedisChannel).Int("queue_capacity", bus.RelayStatus().Capacity).Msg("events bus redis fan-out enabled")
 			}
 		}
 	}

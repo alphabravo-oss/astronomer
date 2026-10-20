@@ -46,7 +46,7 @@ func storedRow(arg sqlc.CreateHelmRepositoryParams) sqlc.HelmRepository {
 	return sqlc.HelmRepository{
 		Name: arg.Name, Url: arg.Url, RepoType: arg.RepoType,
 		AuthType: arg.AuthType, AuthConfig: arg.AuthConfig,
-		AuthConfigEncrypted: arg.AuthConfigEncrypted, Enabled: arg.Enabled,
+		AuthConfigKeyID: arg.AuthConfigKeyID, AuthConfigAlgorithm: arg.AuthConfigAlgorithm, AuthConfigCiphertext: arg.AuthConfigCiphertext, AuthConfigNonce: arg.AuthConfigNonce, Enabled: arg.Enabled,
 	}
 }
 
@@ -69,7 +69,7 @@ func TestCreateRepoFromUIBodyStoresCredentialAndSyncPathSendsIt(t *testing.T) {
 	}
 
 	// The credential survived the round trip in encrypted form...
-	if q.created.AuthConfigEncrypted == "" {
+	if q.created.AuthConfigKeyID == "" {
 		t.Fatal("nothing was sealed: the credential the operator typed was dropped")
 	}
 	if strings.Contains(string(q.created.AuthConfig), "s3cret") {
@@ -94,7 +94,7 @@ func TestCreateRepoFromUIBodyStoresCredentialAndSyncPathSendsIt(t *testing.T) {
 	}
 
 	// The echo must not carry it back out.
-	if got := rec.Body.String(); strings.Contains(got, "s3cret") || strings.Contains(got, q.created.AuthConfigEncrypted) {
+	if got := rec.Body.String(); strings.Contains(got, "s3cret") || strings.Contains(got, ciphertextB64(q.created.AuthConfigCiphertext)) {
 		t.Fatalf("create response carries the credential or its ciphertext: %s", got)
 	}
 }
@@ -221,7 +221,7 @@ func TestUpdateRepoWithoutAuthConfigKeepsStoredCredential(t *testing.T) {
 	if q.updated.Name != "private-renamed" {
 		t.Fatalf("the rename did not take: %q", q.updated.Name)
 	}
-	if q.updated.AuthConfigEncrypted == "" {
+	if q.updated.AuthConfigKeyID == "" {
 		t.Fatal("the rename cleared the credential envelope")
 	}
 	// Everything else the body did not mention survived too.
@@ -234,7 +234,7 @@ func TestUpdateRepoWithoutAuthConfigKeepsStoredCredential(t *testing.T) {
 	idxReq := httptest.NewRequest(http.MethodGet, "https://charts.example.com/index.yaml", nil)
 	catalog.ApplyIndexAuth(idxReq, sqlc.HelmRepository{
 		Name: q.updated.Name, Url: q.updated.Url, AuthType: q.updated.AuthType,
-		AuthConfig: q.updated.AuthConfig, AuthConfigEncrypted: q.updated.AuthConfigEncrypted,
+		AuthConfig: q.updated.AuthConfig, AuthConfigKeyID: q.updated.AuthConfigKeyID, AuthConfigAlgorithm: q.updated.AuthConfigAlgorithm, AuthConfigCiphertext: q.updated.AuthConfigCiphertext, AuthConfigNonce: q.updated.AuthConfigNonce,
 	}, enc, slog.Default())
 	user, pass, ok := idxReq.BasicAuth()
 	if !ok || user != "deploy" || pass != "s3cret" {
@@ -265,7 +265,7 @@ func TestUpdateRepoWithNewCredentialReplacesStored(t *testing.T) {
 	idxReq := httptest.NewRequest(http.MethodGet, "https://charts.example.com/index.yaml", nil)
 	catalog.ApplyIndexAuth(idxReq, sqlc.HelmRepository{
 		Name: "private", Url: existing.Url, AuthType: q.updated.AuthType,
-		AuthConfig: q.updated.AuthConfig, AuthConfigEncrypted: q.updated.AuthConfigEncrypted,
+		AuthConfig: q.updated.AuthConfig, AuthConfigKeyID: q.updated.AuthConfigKeyID, AuthConfigAlgorithm: q.updated.AuthConfigAlgorithm, AuthConfigCiphertext: q.updated.AuthConfigCiphertext, AuthConfigNonce: q.updated.AuthConfigNonce,
 	}, enc, slog.Default())
 	_, pass, _ := idxReq.BasicAuth()
 	if pass != "new-secret" {
@@ -293,7 +293,7 @@ func TestUpdateRepoWithEmptyAuthConfigClearsCredential(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update: status %d body %s", rec.Code, rec.Body.String())
 	}
-	if q.updated.AuthConfigEncrypted != "" {
+	if q.updated.AuthConfigKeyID != "" {
 		t.Fatal("explicit auth_config:{} left an envelope behind")
 	}
 	if string(q.updated.AuthConfig) != "{}" {
@@ -350,7 +350,7 @@ func TestRepoWriteResponsesNeverEchoCredential(t *testing.T) {
 
 	for name, rec := range map[string]*httptest.ResponseRecorder{"create": createRec, "update": updateRec} {
 		body := rec.Body.String()
-		for _, forbidden := range []string{"s3cret", "rotated", existing.AuthConfigEncrypted, q.updated.AuthConfigEncrypted} {
+		for _, forbidden := range []string{"s3cret", "rotated", ciphertextB64(existing.AuthConfigCiphertext), ciphertextB64(q.updated.AuthConfigCiphertext)} {
 			if forbidden != "" && strings.Contains(body, forbidden) {
 				t.Fatalf("%s response leaked %q: %s", name, forbidden, body)
 			}

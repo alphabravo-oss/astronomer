@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 func TestLoginRateLimiterAllowAndReset(t *testing.T) {
@@ -77,12 +79,12 @@ func TestLoginRateLimitMiddlewareReturnsJSON429(t *testing.T) {
 		t.Fatalf("expected next handler to be called once, got %d", nextCalls)
 	}
 
-	var body map[string]string
+	var body apiutil.Body
 	if err := json.NewDecoder(secondRec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode 429 body: %v", err)
 	}
-	if body["code"] != "rate_limited" {
-		t.Fatalf("expected code=rate_limited, got %q", body["code"])
+	if body.Error.Code != apiutil.RateLimited {
+		t.Fatalf("expected code=rate_limited, got %q", body.Error.Code)
 	}
 }
 

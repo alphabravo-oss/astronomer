@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
-
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type CharlieOnboardingConsumer interface {
@@ -59,18 +59,18 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 	}
 	user, authenticated := reqctx.AuthenticatedUser(r.Context())
 	if !authenticated {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication is required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required")
 		return
 	}
 	actorID, err := uuid.Parse(user.ID)
 	if err != nil || h.consumer == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie onboarding is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie onboarding is unavailable")
 		return
 	}
 	status, err := h.consumer.Consume(r.Context(), validated, actorID)
 	if err != nil {
-		charlie.LogOperationalFailure(r.Context(), h.log, charlie.OnboardingFailureCode(err), reqctx.CorrelationID(r.Context()))
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie onboarding could not be consumed safely")
+		charlie.LogOperationalFailure(r.Context(), *logging.Default(), charlie.OnboardingFailureCode(err), reqctx.CorrelationID(r.Context()))
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Charlie onboarding could not be consumed safely")
 		return
 	}
 	RespondJSON(w, http.StatusOK, status)
@@ -79,7 +79,7 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *http.Request) (charlie.ValidatedOnboarding, bool) {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		RespondRequestError(w, r, http.StatusUnsupportedMediaType, apierror.InvalidRequest, "Content-Type must be application/json")
+		apiutil.WriteError(w, r, http.StatusUnsupportedMediaType, apiutil.InvalidRequest, "Content-Type must be application/json")
 		return charlie.ValidatedOnboarding{}, false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, charlie.MaxOnboardingPackageBytes*2)
@@ -87,10 +87,10 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 	if err := decodeStrictJSONBody(r, &request); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Onboarding request exceeds the maximum size")
+			apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "Onboarding request exceeds the maximum size")
 			return charlie.ValidatedOnboarding{}, false
 		}
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid onboarding request")
 		return charlie.ValidatedOnboarding{}, false
 	}
 	now := time.Now().UTC()
@@ -107,7 +107,7 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 	if strings.TrimSpace(request.ConnectToken) != "" || strings.TrimSpace(request.Endpoint) != "" {
 		decoded, parsed, err := charlie.ParseConnectToken(request.Endpoint, request.ConnectToken)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie connect token verification failed")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Charlie connect token verification failed")
 			return charlie.ValidatedOnboarding{}, false
 		}
 		pkg = decoded
@@ -115,12 +115,12 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 		parsed.ExpectedMCPURL = confirmation.ExpectedMCPURL
 		confirmation = parsed
 	} else if len(request.Package) == 0 || strings.TrimSpace(request.SigningPublicKey) == "" || strings.TrimSpace(request.ConfirmedSigningFingerprint) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid onboarding request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid onboarding request")
 		return charlie.ValidatedOnboarding{}, false
 	}
 	validated, err := charlie.ValidateOnboardingPackage(pkg, confirmation)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Onboarding package verification failed")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Onboarding package verification failed")
 		return charlie.ValidatedOnboarding{}, false
 	}
 	return validated, true

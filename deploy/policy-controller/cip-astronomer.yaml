@@ -1,0 +1,176 @@
+# ClusterImagePolicies for namespaces labelled policy.sigstore.dev/include=true
+# (the Astronomer release namespace). policy-controller runs with
+# no-match-policy: deny (values.yaml), so every image the astronomer chart can
+# render must match one policy below. A pod passes when, for every policy whose
+# glob matches its image, at least one authority verifies.
+#
+# Coverage of the chart's images (deploy/policy_controller_test.go enforces it):
+#   ghcr.io/alphabravo-oss/astronomer-*      first-party, keyless (release workflow)
+#   ghcr.io/cloudnative-pg/cloudnative-pg    CNPG operator (bootstrap init container), keyless
+#   ghcr.io/cloudnative-pg/postgresql        CNPG PostgreSQL, keyless
+#   ghcr.io/dexidp/dex                       Dex, keyless
+#   index.docker.io/fluent/fluent-bit        management logging, keyless
+#   quay.io/jetstack/cert-manager-acmesolver HTTP-01 solver pods, cert-manager key
+#   unsigned upstreams, digest-pinned        see astronomer-unsigned-digest-pinned
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: astronomer-release-keyless
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/alphabravo-oss/astronomer-**"
+  authorities:
+    - name: github-actions-release-workflow
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/alphabravo-oss/astronomer/\.github/workflows/release\.yaml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'
+      ctlog:
+        url: https://rekor.sigstore.dev
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: astronomer-deny-local-unsigned
+spec:
+  mode: enforce
+  images:
+    - glob: "localhost/**"
+    - glob: "localhost:*/**"
+    - glob: "127.0.0.1/**"
+    - glob: "127.0.0.1:*/**"
+  authorities:
+    - name: never
+      static:
+        action: fail
+        message: "unsigned local builds (localhost/*) are not allowed in the astronomer namespace; deploy the cosign-signed ghcr.io/alphabravo-oss release digests"
+---
+# CloudNativePG operator image: the instance pods run it as the bootstrap init
+# container. Install the operator with OPERATOR_IMAGE_NAME=<tag>@<digest>;
+# a bare tag makes policy-controller's tag->digest mutation differ from the
+# operator's expected image and every reconcile restarts the instances.
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: vendor-cloudnative-pg-operator
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/cloudnative-pg/cloudnative-pg**"
+  authorities:
+    - name: cloudnative-pg-release
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/cloudnative-pg/cloudnative-pg/\.github/workflows/release-publish\.yml@refs/tags/v[0-9.]+$'
+      ctlog:
+        url: https://rekor.sigstore.dev
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: vendor-cloudnative-pg-postgresql
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/cloudnative-pg/postgresql**"
+  authorities:
+    - name: cloudnative-pg-postgres-containers
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/cloudnative-pg/postgres-containers/\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml@refs/.+$'
+      ctlog:
+        url: https://rekor.sigstore.dev
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: vendor-dex
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/dexidp/dex**"
+  authorities:
+    - name: dex-release
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/dexidp/dex/\.github/workflows/[a-z-]+\.ya?ml@refs/tags/v[0-9.]+$'
+      ctlog:
+        url: https://rekor.sigstore.dev
+---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: vendor-fluent-bit
+spec:
+  mode: enforce
+  images:
+    - glob: "index.docker.io/fluent/fluent-bit**"
+  authorities:
+    - name: fluent-bit-release
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: '^https://github\.com/fluent/fluent-bit/\.github/workflows/[a-z-]+\.ya?ml@refs/heads/master$'
+      ctlog:
+        url: https://rekor.sigstore.dev
+---
+# cert-manager signs with a long-lived key (not keyless) and does not upload to
+# Rekor; signatures use sha512. Key: https://cert-manager.io/public-keys/cert-manager-pubkey-2021-09-20.pem
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: vendor-cert-manager
+spec:
+  mode: enforce
+  images:
+    - glob: "quay.io/jetstack/cert-manager-**"
+  authorities:
+    - name: cert-manager-2021-09-20
+      key:
+        hashAlgorithm: sha512
+        data: |
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAsZZKaaIRjOpzbiWYIDKO
+          yry9XGBqAfve1iOGmt5VO1jpjNoEseT6zewozHfWTM7osxayy2WjN8G+QV39MlT3
+          Vxo91/31g+Zcq8KcvxG+iB8GRaD9pNgLmghorv+eYDiPYMO/+fhsLImyG5WEoPct
+          MeCBD7umZ/A2t96U9DQxVDqQbTHlsNludno1p1wsgRnfUM3QHexNljDvJg5FcDMo
+          dCpVLpRNvbw0lbJVfybJ4siJ5o/MmXzy0QCJpw+yMIqvqMc8qgKJ1yooJtuTVF4t
+          4/luP+EG/oVIiSWCFeRMqYdbJ3R+CJi+4LN7vFNYQM1Q/NwOB52RteaR7wnqmcBz
+          qSYK32MM8xdPCQ5tioWwnPTRbPZuzsZsRmJsKBO9JUrBYdDntZX1xY5g4QNSufxi
+          QgJgJSU7E4VGMvagEzB1JzvOr6A/qNFCO1Z6JsA3jw3cJLV1rSHfxqfSXBACTLDf
+          6bOPWRILRKydTJA6uLKNKmo1/nFm3jvd5tHKOjy4VAQLJ/Vx9wBsAAiLa+06veun
+          Oz3AJ9sNh3wLp21RL11u9TuOKRBipE/TYsBYp8jpIyWPXDSV+JcD/TZqoT8y0Z6S
+          0damfUmspuK9DTQFL2crpeaqJSG9RA+OuPZLxGD1IMURTsPJB7kXhPtmceeirBnw
+          sVcRHHDitVt8oO/x4Wus1c0CAwEAAQ==
+          -----END PUBLIC KEY-----
+---
+# Residual unsigned upstreams. These publish no cosign signature (verified
+# 2026-10-20 with cosign 3.1.3: "no signatures found"), so no authority can
+# check them. The astronomer chart pins each by digest (image.requireDigest);
+# this policy only names the exact repositories. Mirror them into a registry you
+# sign (scripts/mirror-release.py) to replace this pass with a key authority.
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: astronomer-unsigned-digest-pinned
+spec:
+  mode: enforce
+  images:
+    - glob: "index.docker.io/library/busybox**"
+    - glob: "index.docker.io/library/postgres**"
+    - glob: "index.docker.io/valkey/valkey**"
+    - glob: "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar**"
+  authorities:
+    - name: unsigned-upstream-digest-pinned
+      static:
+        action: pass

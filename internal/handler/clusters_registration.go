@@ -21,9 +21,9 @@ import (
 	"github.com/google/uuid"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -121,13 +121,18 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 	if h == nil {
 		return
 	}
-	if repository == "" {
-		repository = "ghcr.io/alphabravo-oss/astronomer-go-agent"
-	}
 	if tag == "" {
 		tag = "latest"
 	}
 	h.agentImage = targetAgentImage(repository, tag)
+}
+
+// SetImageRegistry sets REGISTRY_LOCAL for rendered install manifests: the
+// embedded Flux controller images are re-hosted onto the cluster-local registry.
+func (h *ClusterHandler) SetImageRegistry(local string) {
+	if h != nil {
+		h.imageRegistry = strings.TrimSpace(local)
+	}
 }
 
 // SetAgentTelemetry carries non-secret trace routing into newly rendered agent
@@ -202,14 +207,14 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 
 	// Verify cluster exists.
 	if _, err := h.queries.GetClusterByID(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
 	// Generate a random registration token.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate registration token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenError, "Failed to generate registration token")
 		return
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
@@ -231,12 +236,10 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create registration token")
 		return
 	}
-	token.Token = tokenStr
-
-	RespondJSON(w, http.StatusCreated, token)
+	RespondJSON(w, http.StatusCreated, registrationTokenResponse{ClusterRegistrationToken: token, Token: tokenStr})
 }
 
 // RotateAgentToken handles POST /api/v1/clusters/{id}/agent-token/rotate/.
@@ -255,11 +258,11 @@ func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "cluster mutation transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "cluster mutation transaction runner is not configured")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "agent_token_rotation"))
@@ -267,7 +270,7 @@ func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request
 		ClusterID string `json:"cluster_id"`
 	}{ClusterID: id.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode token rotation request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode token rotation request")
 		return
 	}
 	receipt := AgentTokenRotationReceipt{ClusterID: id.String(), RotationPending: true, Message: "rotation will complete on the agent's next connect"}
@@ -300,14 +303,14 @@ func (h *ClusterHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request
 	}, func(AgentTokenRotationReceipt) mutationAuditEvent { return mutationAuditEvent{} })
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different token rotation")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different token rotation")
 			return
 		}
 		if errors.Is(err, errAgentTokenRotationIneligible) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "No agent token eligible for rotation: none is active or a rotation is already in flight")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "No agent token eligible for rotation: none is active or a rotation is already in flight")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to request agent token rotation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to request agent token rotation")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/clusters/"+id.String()+"/", receipt)
@@ -331,7 +334,7 @@ func (h *ClusterHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -350,10 +353,10 @@ func (h *ClusterHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request
 		})
 	if err != nil {
 		if errors.Is(err, errAgentTokenNotActive) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster has no active agent token to revoke")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster has no active agent token to revoke")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to revoke agent token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to revoke agent token")
 		return
 	}
 	// Sever the live tunnel NOW so a compromised/rogue agent loses access
@@ -381,12 +384,12 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
 	if scope != "" && scope != "full" && scope != "agent" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Manifest scope must be full or agent")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Manifest scope must be full or agent")
 		return
 	}
 
@@ -398,7 +401,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	// can keep regenerating from the wizard.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate registration token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenError, "Failed to generate registration token")
 		return
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
@@ -407,7 +410,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().Add(h.registrationTokenTTL),
 	}
-	token, err := executeMutation(r, h.runTx,
+	_, err = executeMutation(r, h.runTx,
 		func(q ClusterMutationTx) (sqlc.ClusterRegistrationToken, error) {
 			return q.CreateClusterRegistrationToken(r.Context(), params)
 		},
@@ -422,14 +425,12 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create registration token")
 		return
 	}
-	token.Token = tokenStr
-
 	manifest, err := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r), scope == "agent")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render agent configuration")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render agent configuration")
 		return
 	}
 
@@ -460,7 +461,7 @@ func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Reque
 	rawToken := chi.URLParam(r, "token")
 	tokenStr := strings.TrimSuffix(rawToken, ".yaml")
 	if tokenStr == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Missing registration token")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidToken, "Missing registration token")
 		return
 	}
 	token, err := h.queries.GetRegistrationTokenByToken(r.Context(), tokenStr)
@@ -468,18 +469,18 @@ func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Reque
 		// GetRegistrationTokenByToken already filters expired rows
 		// (WHERE expires_at > now()), so any error here is "no such
 		// token". 404 keeps the response opaque.
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registration token not found or expired")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Registration token not found or expired")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), token.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
 	manifest, err := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render agent configuration")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render agent configuration")
 		return
 	}
 
@@ -507,24 +508,24 @@ func (h *ClusterHandler) GetSignedManifest(w http.ResponseWriter, r *http.Reques
 	}
 	expiry, err := strconv.ParseInt(r.URL.Query().Get("expires"), 10, 64)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Invalid or missing expiry")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidToken, "Invalid or missing expiry")
 		return
 	}
 	if err := h.verifyManifestSignature(id, expiry, r.URL.Query().Get("sig")); err != nil {
 		// Opaque 404 — don't distinguish expired from tampered.
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Manifest link invalid or expired")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Manifest link invalid or expired")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
 	// Mint a fresh, short-lived registration token for this download.
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate registration token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenError, "Failed to generate registration token")
 		return
 	}
 	tokenStr := base64.URLEncoding.EncodeToString(b)
@@ -540,13 +541,13 @@ func (h *ClusterHandler) GetSignedManifest(w http.ResponseWriter, r *http.Reques
 		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: tokenExpiry,
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create registration token")
 		return
 	}
 
 	manifest, err := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render agent configuration")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to render agent configuration")
 		return
 	}
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
@@ -567,7 +568,7 @@ func (h *ClusterHandler) GetSignedManifest(w http.ResponseWriter, r *http.Reques
 func (h *ClusterHandler) GetCABundle(w http.ResponseWriter, r *http.Request) {
 	pem := registrationCABundle(r.Context(), h.queries)
 	if pem == "" {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No CA bundle configured for cluster registration")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "No CA bundle configured for cluster registration")
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -602,9 +603,12 @@ type registrationCAQuerier interface {
 
 func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string, agentOnly ...bool) (string, error) {
 	annotations := clusterAnnotations(cluster.Annotations)
-	agentImage := "ghcr.io/alphabravo-oss/astronomer-go-agent:latest"
-	if h != nil && h.agentImage != "" {
+	agentImage := ""
+	if h != nil {
 		agentImage = h.agentImage
+	}
+	if agentImage == "" {
+		return "", errors.New("agent image is not configured (AGENT_IMAGE_REPOSITORY)")
 	}
 	// Server-CA pin: populate the CA bundle + checksum from the operator-provided
 	// registration.ca_bundle. Empty when no private CA is configured, in which
@@ -638,6 +642,7 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		OTELInsecure:         h.agentOTELInsecure,
 		OTELSamplerRatio:     h.agentOTELSampler,
 		Environment:          h.agentEnvironment,
+		ImageRegistry:        h.imageRegistry,
 	}
 	if len(agentOnly) > 0 && agentOnly[0] {
 		return agenttemplate.RenderAgentYAML(data), nil
@@ -698,4 +703,11 @@ func agentServerURLFor(ctx context.Context, q interface {
 		}
 	}
 	return agentServerURL(r)
+}
+
+// registrationTokenResponse returns the freshly-minted plaintext token exactly
+// once alongside the stored row; only its hash is persisted.
+type registrationTokenResponse struct {
+	sqlc.ClusterRegistrationToken
+	Token string `json:"token"`
 }

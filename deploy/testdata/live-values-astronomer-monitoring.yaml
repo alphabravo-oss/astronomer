@@ -1,0 +1,272 @@
+# `helm get values astronomer-monitoring -n astronomer-monitoring` of the live
+# astronomer-dev release (kube-prometheus-stack 61.3.2, rev 11, 2026-10-20):
+# Astronomer's generated monitoring-stack values plus the runtime-hardening
+# overlay. Contains no secret material (the Grafana proxy key is a lookup
+# template). Used by monitoring_values_test.go.
+additionalPrometheusRulesMap:
+  astronomer-cluster-metadata:
+    groups:
+    - name: astronomer.cluster.metadata
+      rules:
+      - expr: vector(1)
+        labels:
+          cluster_id: 900db10f-b2cd-41e4-9603-0fa4d3fc8657
+          cluster_name: local
+          environment: production
+          provider: other
+        record: astronomer_cluster_info
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    secrets:
+    - alertmanager-slack
+  config:
+    global:
+      resolve_timeout: 5m
+    inhibit_rules:
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = critical
+      target_matchers:
+      - severity =~ warning|info
+    - equal:
+      - namespace
+      - alertname
+      source_matchers:
+      - severity = warning
+      target_matchers:
+      - severity = info
+    - equal:
+      - namespace
+      source_matchers:
+      - alertname = InfoInhibitor
+      target_matchers:
+      - severity = info
+    - target_matchers:
+      - alertname = InfoInhibitor
+    receivers:
+    - name: "null"
+    - name: alert-log
+      webhook_configs:
+      - max_alerts: 0
+        send_resolved: true
+        url: http://alert-log.astronomer-monitoring.svc:8080/alert
+    - name: slack
+      slack_configs:
+      - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/url
+        channel: '#alerts'
+        send_resolved: true
+        text: '{{ range .Alerts }}• {{ .Labels.namespace }}/{{ or .Labels.pod .Labels.instance
+          .Labels.job }}: {{ or .Annotations.summary .Annotations.message .Annotations.description
+          }}{{ "\n" }}{{ end }}'
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing
+          | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity
+          }})'
+    route:
+      group_by:
+      - alertname
+      - namespace
+      group_interval: 5m
+      group_wait: 30s
+      receiver: alert-log
+      repeat_interval: 4h
+      routes:
+      - matchers:
+        - alertname = "Watchdog"
+        receiver: "null"
+      - continue: true
+        matchers:
+        - severity = "critical"
+        receiver: slack
+      - matchers:
+        - severity = "critical"
+        receiver: alert-log
+    templates:
+    - /etc/alertmanager/config/*.tmpl
+  enabled: true
+defaultRules:
+  rules:
+    kubeControllerManager: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+grafana:
+  enabled: true
+  extraContainers: |
+    - args:
+      - grafana-proxy
+      env:
+      - name: LISTEN_ADDR
+        value: :8080
+      - name: GRAFANA_UPSTREAM
+        value: http://127.0.0.1:3000
+      - name: ASTRONOMER_URL
+        value: https://astronomer.dev.alphabravo.io
+      - name: GRAFANA_PUBLIC_PATH
+        value: /api/v1/clusters/900db10f-b2cd-41e4-9603-0fa4d3fc8657/observability/grafana/
+      - name: GRAFANA_PROXY_KEY
+        valueFrom:
+          secretKeyRef:
+            key: key
+            name: astronomer-monitoring-grafana-proxy-key
+      image: ghcr.io/alphabravo-oss/astronomer-go-server@sha256:7c42ad5c844eb48031c5e0176a0eae5a0345204fc27e4b75ea5d75b71cab1e23
+      name: astronomer-grafana-proxy
+      ports:
+      - containerPort: 8080
+        name: auth-proxy
+      resources:
+        limits:
+          cpu: 200m
+          memory: 128Mi
+        requests:
+          cpu: 25m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+  extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      annotations:
+        helm.sh/resource-policy: keep
+      name: astronomer-monitoring-grafana-proxy-key
+      namespace: astronomer-monitoring
+    stringData:
+      key: '{{ $s := lookup "v1" "Secret" .Release.Namespace "astronomer-monitoring-grafana-proxy-key"
+        }}{{ if and $s $s.data }}{{ index $s.data "key" | b64dec }}{{ else }}{{ randAlphaNum
+        32 }}{{ end }}'
+    type: Opaque
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app.kubernetes.io/instance: astronomer-monitoring
+        app.kubernetes.io/name: grafana
+      name: astronomer-monitoring-grafana-proxy
+      namespace: astronomer-monitoring
+    spec:
+      ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+      selector:
+        app.kubernetes.io/instance: astronomer-monitoring
+        app.kubernetes.io/name: grafana
+      type: ClusterIP
+  grafana.ini:
+    auth:
+      disable_login_form: true
+      disable_signout_menu: true
+    auth.anonymous:
+      enabled: false
+    auth.basic:
+      enabled: false
+    auth.proxy:
+      auto_sign_up: true
+      enable_login_token: false
+      enabled: true
+      header_name: X-WEBAUTH-USER
+      header_property: email
+      headers: Email:X-WEBAUTH-USER Name:X-WEBAUTH-USER Role:X-WEBAUTH-ROLE
+      sync_ttl: 0
+      whitelist: 127.0.0.1
+    live:
+      max_connections: 0
+    security:
+      allow_embedding: true
+      csrf_trusted_origins: t-caf6a57e9c2e4e2cee43ac2d2601b2398cd52b55.tools.astronomer.dev.alphabravo.io
+    server:
+      root_url: https://t-caf6a57e9c2e4e2cee43ac2d2601b2398cd52b55.tools.astronomer.dev.alphabravo.io/api/v1/clusters/900db10f-b2cd-41e4-9603-0fa4d3fc8657/observability/grafana/
+      serve_from_sub_path: false
+    users:
+      allow_sign_up: false
+      auto_assign_org: true
+      auto_assign_org_role: Viewer
+  sidecar:
+    dashboards:
+      skipReload: true
+    datasources:
+      initDatasources: true
+      skipReload: true
+kube-state-metrics:
+  image:
+    sha: sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b
+    tag: v2.20.0
+  metricLabelsAllowlist:
+  - namespaces=[app.kubernetes.io/name,environment,team,owner,cost-center]
+  - nodes=[kubernetes.io/arch,kubernetes.io/os,node.kubernetes.io/instance-type,topology.kubernetes.io/region,topology.kubernetes.io/zone]
+  - pods=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]
+  - deployments=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]
+  - statefulsets=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]
+  - daemonsets=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]
+  - jobs=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]
+  - cronjobs=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
+nodeExporter:
+  enabled: false
+prometheus:
+  additionalServiceMonitors:
+  - endpoints:
+    - honorLabels: true
+      path: /metrics
+      port: http
+    name: astronomer-baseline-kube-state-metrics
+    namespaceSelector:
+      matchNames:
+      - astronomer-monitoring
+    selector:
+      matchLabels:
+        app.kubernetes.io/instance: kube-state-metrics
+        app.kubernetes.io/name: kube-state-metrics
+  - endpoints:
+    - honorLabels: true
+      path: /metrics
+      port: metrics
+    name: astronomer-baseline-prometheus-node-exporter
+    namespaceSelector:
+      matchNames:
+      - astronomer-monitoring
+    selector:
+      matchLabels:
+        app.kubernetes.io/instance: prometheus-node-exporter
+        app.kubernetes.io/name: prometheus-node-exporter
+  prometheusSpec:
+    enableAdminAPI: false
+    externalLabels:
+      cluster_id: 900db10f-b2cd-41e4-9603-0fa4d3fc8657
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+    retention: 15d
+    retentionSize: 15GB
+    scrapeInterval: 30s
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+prometheus-node-exporter:
+  image:
+    digest: sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    tag: v1.12.1

@@ -5,10 +5,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
@@ -132,6 +133,7 @@ type ClusterHandler struct {
 	grafanaFolders       grafanaFolderReconciler
 	agentImage           string
 	systemArtifactURL    string
+	imageRegistry        string
 	systemArtifactDigest string
 	systemOIDCIssuer     string
 	systemOIDCIdentity   string
@@ -151,7 +153,7 @@ type ClusterHandler struct {
 	// Create writes the initial cluster_registration_steps rows so the
 	// wizard page-3 timeline has something to render. nil-safe.
 	registration *registration.Service
-	encryptor    *auth.Encryptor
+	encryptor    *crypto.Encryptor
 	// manifestSigningSecret keys the HMAC over (cluster_id, expiry) that
 	// gates the short-TTL signed manifest-download URL. When empty the
 	// signed-URL endpoint refuses every request (503) — there is no
@@ -192,9 +194,11 @@ type AgentDisconnector interface {
 // NewClusterHandler creates a new cluster handler.
 func NewClusterHandler(queries ClusterQuerier) *ClusterHandler {
 	return &ClusterHandler{
-		queries:              queries,
-		metrics:              clustermetrics.NewProvider(),
-		agentImage:           "ghcr.io/alphabravo-oss/astronomer-go-agent:latest",
+		queries: queries,
+		metrics: clustermetrics.NewProvider(),
+		// Bare local name (config default AGENT_IMAGE_REPOSITORY); never a public
+		// registry. Production wiring replaces it via SetAgentImage.
+		agentImage:           "astronomer-go-agent:latest",
 		registrationTokenTTL: time.Hour,
 	}
 }
@@ -210,7 +214,7 @@ func (h *ClusterHandler) TransactionalAuditWired() bool {
 	return h != nil && h.runTx != nil
 }
 
-func (h *ClusterHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *ClusterHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

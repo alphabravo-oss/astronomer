@@ -18,8 +18,10 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/egress"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -29,10 +31,14 @@ import (
 const upgradeReportInterval = time.Minute
 
 func main() {
-	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	slog.SetDefault(logger)
+	zl, err := logging.New(logging.ConfigFromEnv("agent"))
+	if err != nil {
+		logging.Default().Error().Err(err).Msg("invalid logging configuration")
+		os.Exit(1)
+	}
+	logging.SetDefault(zl)
+	// internal/agent still takes *slog.Logger; the bridge keeps one encoder.
+	logger := logging.Slog(zl)
 
 	rootCmd := &cobra.Command{
 		Use:     "astronomer-agent",
@@ -76,19 +82,29 @@ func runConnect(logger *slog.Logger) error {
 		logger.Error("failed to load config", "error", err)
 		return err
 	}
+	// Greppable startup line naming every out-of-cluster endpoint this agent
+	// contacts: the management server tunnel and its trace collector. Delivery
+	// sources (Helm/OCI/Git) arrive at runtime from signed assignments.
+	var endpoints egress.Set
+	endpoints.Add(cfg.ServerURL)
+	endpoints.Add(cfg.OTELExporterEndpoint)
+	endpoints.Dynamic("delivery_sources:signed_assignments")
+	endpoints.Dynamic("flux_distribution:system_release")
+	endpoints.Log(context.Background(), logger, "agent")
 	instanceID := cfg.AgentID
 	if instanceID == "" {
 		instanceID = cfg.ClusterID
 	}
-	otelShutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{
+	otelShutdown, metricsHandler, err := telemetry.Init(context.Background(), telemetry.Config{
 		Endpoint: cfg.OTELExporterEndpoint, Protocol: cfg.OTELExporterProtocol, Insecure: cfg.OTELExporterInsecure,
-		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		Headers:     telemetry.ParseOTLPHeaders(cfg.OTELExporterHeaders),
 		ServiceName: "astronomer-agent", ServiceVersion: version.Version,
 		Environment: cfg.Environment, ServiceNamespace: "astronomer", ServiceInstanceID: instanceID,
-		SamplerRatio: cfg.OTELSamplerRatio,
+		SampleRate: cfg.OTELSamplerRatio,
+		Logger:     *logging.Default(),
 	})
 	if err != nil {
-		return fmt.Errorf("initialize agent tracing: %w", err)
+		return fmt.Errorf("initialize agent telemetry: %w", err)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -189,6 +205,7 @@ func runConnect(logger *slog.Logger) error {
 		health.SetAgentBuildSHA(version.GitCommit)
 		health.SetPrivilegeProfile(cfg.PrivilegeProfile)
 		health.SetClusterID(cfg.ClusterID)
+		health.SetMetricsHandler(metricsHandler)
 		if mc, err := metricsv.NewForConfig(restConfig); err == nil {
 			health.SetMetricsClient(mc)
 		} else {

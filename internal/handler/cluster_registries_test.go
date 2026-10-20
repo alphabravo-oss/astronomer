@@ -13,12 +13,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -99,17 +100,16 @@ func (f *fakeRegistryQuerier) CreateClusterRegistryConfig(_ context.Context, arg
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	row := sqlc.ClusterRegistryConfig{
-		ID:                        uuid.New(),
-		ClusterID:                 arg.ClusterID,
-		PrivateRegistryUrl:        arg.PrivateRegistryUrl,
-		RegistryUsername:          arg.RegistryUsername,
-		RegistryPassword:          arg.RegistryPassword,
-		RegistryPasswordEncrypted: arg.RegistryPasswordEncrypted,
-		Insecure:                  arg.Insecure,
-		CaBundle:                  arg.CaBundle,
-		Namespaces:                arg.Namespaces,
-		InjectDefaultSa:           arg.InjectDefaultSa,
-		SecretName:                arg.SecretName,
+		ID:                    uuid.New(),
+		ClusterID:             arg.ClusterID,
+		PrivateRegistryUrl:    arg.PrivateRegistryUrl,
+		RegistryUsername:      arg.RegistryUsername,
+		RegistryPasswordKeyID: arg.RegistryPasswordKeyID, RegistryPasswordAlgorithm: arg.RegistryPasswordAlgorithm, RegistryPasswordCiphertext: arg.RegistryPasswordCiphertext, RegistryPasswordNonce: arg.RegistryPasswordNonce,
+		Insecure:        arg.Insecure,
+		CaBundle:        arg.CaBundle,
+		Namespaces:      arg.Namespaces,
+		InjectDefaultSa: arg.InjectDefaultSa,
+		SecretName:      arg.SecretName,
 	}
 	if len(row.Namespaces) == 0 {
 		row.Namespaces = json.RawMessage(`[]`)
@@ -127,8 +127,7 @@ func (f *fakeRegistryQuerier) UpdateClusterRegistryConfig(_ context.Context, arg
 	}
 	row.PrivateRegistryUrl = arg.PrivateRegistryUrl
 	row.RegistryUsername = arg.RegistryUsername
-	row.RegistryPassword = arg.RegistryPassword
-	row.RegistryPasswordEncrypted = arg.RegistryPasswordEncrypted
+	row.RegistryPasswordKeyID, row.RegistryPasswordAlgorithm, row.RegistryPasswordCiphertext, row.RegistryPasswordNonce = arg.RegistryPasswordKeyID, arg.RegistryPasswordAlgorithm, arg.RegistryPasswordCiphertext, arg.RegistryPasswordNonce
 	row.Insecure = arg.Insecure
 	row.CaBundle = arg.CaBundle
 	row.Namespaces = arg.Namespaces
@@ -351,6 +350,7 @@ func TestRegistry_CRUD(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	setClusterRegistryTestRunTx(h, q)
 
 	// CREATE
@@ -440,7 +440,7 @@ func TestRegistry_CRUD(t *testing.T) {
 		t.Fatalf("Update status=%d body=%s", upRR.Code, upRR.Body.String())
 	}
 	q.mu.Lock()
-	stored := q.rows[created.ID].RegistryPassword
+	stored := registryTestPlain(q.rows[created.ID])
 	storedNS := q.rows[created.ID].Namespaces
 	q.mu.Unlock()
 	if stored != "s3cr3t" {
@@ -494,15 +494,16 @@ func TestRegistry_DeleteCommitsGenericTaskOutbox(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "https://registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
-		Namespaces:         json.RawMessage(`["prod"]`),
-		InjectDefaultSa:    true,
-		SecretName:         "astronomer-registry-x",
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "https://registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
+		Namespaces:      json.RawMessage(`["prod"]`),
+		InjectDefaultSa: true,
+		SecretName:      "astronomer-registry-x",
 	})
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	setClusterRegistryTestRunTx(h, q)
 
 	req := requestWithChiParams(t, http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/registries/"+row.ID.String()+"/", nil, map[string]string{
@@ -534,6 +535,7 @@ func TestRegistry_TaskOutboxReplayKeepsOneIntent(t *testing.T) {
 	clusterID, registryID := uuid.New(), uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	req := requestWithChiParams(t, http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/registries/", nil, map[string]string{
 		"cluster_id": clusterID.String(),
 	})
@@ -581,6 +583,7 @@ func TestRegistry_MutationsFailClosedWhenOutboxUnavailable(t *testing.T) {
 				}
 				failure.configure(q)
 				h := NewClusterRegistriesHandler(q)
+				h.SetEncryptor(registryTestEnc)
 				setClusterRegistryTestRunTx(h, q)
 				body, _ := json.Marshal(ClusterRegistryRequest{PrivateRegistryUrl: "https://changed.example.com"})
 				params := map[string]string{"cluster_id": clusterID.String()}
@@ -631,12 +634,13 @@ func TestRegistry_CreateEncryptsPasswordWhenEncryptorConfigured(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	setClusterRegistryTestRunTx(h, q)
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -661,13 +665,10 @@ func TestRegistry_CreateEncryptsPasswordWhenEncryptorConfigured(t *testing.T) {
 	q.mu.Lock()
 	row := q.rows[created.ID]
 	q.mu.Unlock()
-	if row.RegistryPassword != "" {
-		t.Fatalf("expected plaintext registry password column to be blank, got %q", row.RegistryPassword)
-	}
-	if row.RegistryPasswordEncrypted == "" {
+	if row.RegistryPasswordKeyID == "" {
 		t.Fatal("expected encrypted registry password to be stored")
 	}
-	plain, err := enc.Decrypt(row.RegistryPasswordEncrypted)
+	plain, err := enc.DecryptString(crypto.FromParts(row.RegistryPasswordKeyID, row.RegistryPasswordAlgorithm, row.RegistryPasswordCiphertext, row.RegistryPasswordNonce))
 	if err != nil {
 		t.Fatalf("Decrypt: %v", err)
 	}
@@ -680,6 +681,7 @@ func TestRegistry_CreateRejectsSentinelPassword(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 
 	body, _ := json.Marshal(ClusterRegistryRequest{
 		PrivateRegistryUrl: "https://registry.example.com",
@@ -703,6 +705,7 @@ func TestRegistry_GetCrossClusterIsolation(t *testing.T) {
 		PrivateRegistryUrl: "https://registry.example.com",
 	})
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	// Pretend the operator is browsing the OTHER cluster but knows the row id.
 	q.cluster = sqlc.Cluster{ID: otherID, Name: "other"}
 	q.clusterOK = true
@@ -749,12 +752,12 @@ func TestApply_CreatesDockerconfigSecret(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "https://registry.example.com/library",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
-		Namespaces:         json.RawMessage(`["app1"]`),
-		InjectDefaultSa:    true,
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "https://registry.example.com/library",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
+		Namespaces:      json.RawMessage(`["app1"]`),
+		InjectDefaultSa: true,
 	})
 
 	requester := &fakeProjectK8sRequester{
@@ -769,6 +772,7 @@ func TestApply_CreatesDockerconfigSecret(t *testing.T) {
 	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
+		Encryptor: registryTestEnc,
 	}}
 
 	task, err := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
@@ -821,12 +825,12 @@ func TestApply_PatchesDefaultServiceAccount(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
-		Namespaces:         json.RawMessage(`["ns1"]`),
-		InjectDefaultSa:    true,
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
+		Namespaces:      json.RawMessage(`["ns1"]`),
+		InjectDefaultSa: true,
 	})
 
 	requester := &fakeProjectK8sRequester{
@@ -840,6 +844,7 @@ func TestApply_PatchesDefaultServiceAccount(t *testing.T) {
 	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
+		Encryptor: registryTestEnc,
 	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
@@ -874,18 +879,19 @@ func TestApply_OmitsSAPatchWhenDisabled(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
-		Namespaces:         json.RawMessage(`["ns1"]`),
-		InjectDefaultSa:    false,
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
+		Namespaces:      json.RawMessage(`["ns1"]`),
+		InjectDefaultSa: false,
 	})
 
 	requester := &fakeProjectK8sRequester{}
 	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
+		Encryptor: registryTestEnc,
 	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
@@ -910,12 +916,12 @@ func TestApply_HandlesNamespaceList(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
-		Namespaces:         json.RawMessage(`["a","b","c"]`),
-		InjectDefaultSa:    false,
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
+		Namespaces:      json.RawMessage(`["a","b","c"]`),
+		InjectDefaultSa: false,
 	})
 
 	requester := &fakeProjectK8sRequester{
@@ -926,6 +932,7 @@ func TestApply_HandlesNamespaceList(t *testing.T) {
 	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
+		Encryptor: registryTestEnc,
 	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
@@ -960,13 +967,13 @@ func TestDelete_RemovesSecret(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
-		Namespaces:         json.RawMessage(`["app1"]`),
-		InjectDefaultSa:    true,
-		SecretName:         "astronomer-registry-x",
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
+		Namespaces:      json.RawMessage(`["app1"]`),
+		InjectDefaultSa: true,
+		SecretName:      "astronomer-registry-x",
 	})
 
 	requester := &fakeProjectK8sRequester{
@@ -980,6 +987,7 @@ func TestDelete_RemovesSecret(t *testing.T) {
 	runtime := tasks.ClusterRegistryRuntime{Deps: tasks.ClusterRegistryApplyDeps{
 		Queries:   q,
 		Requester: requester,
+		Encryptor: registryTestEnc,
 	}}
 
 	task, _ := tasks.NewClusterApplyRegistrySecretTask(tasks.ClusterApplyRegistrySecretPayload{
@@ -1026,12 +1034,13 @@ func TestRegistry_TestEndpointReachesUpstream(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "https://registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "s3cr3t",
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "https://registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("s3cr3t").KeyID, RegistryPasswordAlgorithm: registryTestSeal("s3cr3t").Algorithm, RegistryPasswordCiphertext: registryTestSeal("s3cr3t").Ciphertext,
 	})
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	requester := &fakeTestRequester{status: http.StatusOK}
 	h.SetRequester(requester)
 
@@ -1070,12 +1079,13 @@ func TestRegistry_TestEndpointReportsAuthFailure(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	row, _ := q.CreateClusterRegistryConfig(context.Background(), sqlc.CreateClusterRegistryConfigParams{
-		ClusterID:          clusterID,
-		PrivateRegistryUrl: "https://registry.example.com",
-		RegistryUsername:   "alice",
-		RegistryPassword:   "wrong",
+		ClusterID:             clusterID,
+		PrivateRegistryUrl:    "https://registry.example.com",
+		RegistryUsername:      "alice",
+		RegistryPasswordKeyID: registryTestSeal("wrong").KeyID, RegistryPasswordAlgorithm: registryTestSeal("wrong").Algorithm, RegistryPasswordCiphertext: registryTestSeal("wrong").Ciphertext,
 	})
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	h.SetRequester(&fakeTestRequester{status: http.StatusUnauthorized})
 
 	req := requestWithChiParams(t, http.MethodPost, "/", nil, map[string]string{
@@ -1118,3 +1128,36 @@ func dumpCalls(t *testing.T, calls []fakeCall) {
 
 var _ = fmt.Stringer(nil)
 var _ = dumpCalls
+
+// registryTestEnc seals registry passwords in fixtures; handlers under test
+// are wired with it because a password is never stored without encryption.
+var registryTestEnc = func() *crypto.Encryptor {
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		panic(err)
+	}
+	enc, err := crypto.NewEncryptor(key)
+	if err != nil {
+		panic(err)
+	}
+	return enc
+}()
+
+func registryTestSeal(password string) crypto.Sealed {
+	sealed, err := registryTestEnc.EncryptString(password)
+	if err != nil {
+		panic(err)
+	}
+	return sealed
+}
+
+func registryTestPlain(row sqlc.ClusterRegistryConfig) string {
+	if row.RegistryPasswordKeyID == "" {
+		return ""
+	}
+	plain, err := registryTestEnc.DecryptString(crypto.FromParts(row.RegistryPasswordKeyID, row.RegistryPasswordAlgorithm, row.RegistryPasswordCiphertext, row.RegistryPasswordNonce))
+	if err != nil {
+		panic(err)
+	}
+	return plain
+}

@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -34,7 +34,7 @@ func (h *MonitoringHandler) ListEndpoints(w http.ResponseWriter, r *http.Request
 	}
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil && err != pgx.ErrNoRows {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load monitoring endpoints")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to load monitoring endpoints")
 		return
 	}
 	items := []map[string]any{}
@@ -48,17 +48,17 @@ func (h *MonitoringHandler) ListEndpoints(w http.ResponseWriter, r *http.Request
 // GetEndpoint handles GET /api/v1/monitoring/endpoints/{id}/.
 func (h *MonitoringHandler) GetEndpoint(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring store not configured")
 		return
 	}
 	idStr := chi.URLParam(r, "id")
 	backend, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring endpoint not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Monitoring endpoint not found")
 		return
 	}
 	if backend.ID.String() != idStr {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring endpoint not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Monitoring endpoint not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, monitoringBackendResponse(backend, h.readAuthConfig(backend)))
@@ -81,25 +81,25 @@ func (h *MonitoringHandler) UpdateEndpoint(w http.ResponseWriter, r *http.Reques
 // those dependencies first; the API reports that state as a conflict.
 func (h *MonitoringHandler) DeleteEndpoint(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid monitoring endpoint ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid monitoring endpoint ID")
 		return
 	}
 	existing, err := h.queries.GetDefaultMonitoringBackend(r.Context())
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && existing.ID != id) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Monitoring endpoint not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Monitoring endpoint not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MonitoringError, "Failed to load monitoring endpoint")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to load monitoring endpoint")
 		return
 	}
 	if _, ok := h.queries.(monitoringBackendDeleter); !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring backend deletion is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring backend deletion is not configured")
 		return
 	}
 
@@ -122,16 +122,16 @@ func (h *MonitoringHandler) DeleteEndpoint(w http.ResponseWriter, r *http.Reques
 			}
 		})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"Uninstall active cluster and managed shared monitoring stacks before deleting the endpoint")
 		return
 	}
 	if errors.Is(err, errMonitoringBackendDeleteUnsupported) {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring backend deletion is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.MonitoringError, "monitoring backend deletion is not configured")
 		return
 	}
 	if err != nil {
-		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to delete monitoring endpoint")
+		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apiutil.MonitoringError, "Failed to delete monitoring endpoint")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

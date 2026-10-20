@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -30,7 +32,7 @@ func (q *smtpIntegerEffectQueries) UpsertAuditOutbox(ctx context.Context, arg sq
 
 func smtpIntegerUpdateFixture(t *testing.T) (*SMTPHandler, *smtpIntegerEffectQueries, context.Context, *int) {
 	t.Helper()
-	base := &smtpFakeQuerier{row: &sqlc.SmtpSettings{Enabled: true, Host: "smtp.example.test", Port: 587, PasswordEncrypted: "retained-ciphertext", FromAddress: "sender@example.test", AuthMechanism: "plain", Encryption: "starttls", RequireTls: true, TimeoutSeconds: 30}}
+	base := &smtpFakeQuerier{row: &sqlc.SmtpSettings{Enabled: true, Host: "smtp.example.test", Port: 587, PasswordKeyID: "test-key", PasswordAlgorithm: crypto.AlgorithmAgeX25519, PasswordCiphertext: []byte("retained-ciphertext"), FromAddress: "sender@example.test", AuthMechanism: "plain", Encryption: "starttls", RequireTls: true, TimeoutSeconds: 30}}
 	ctx, _ := buildSuperuserCtx(t, base)
 	queries := &smtpIntegerEffectQueries{smtpFakeQuerier: base}
 	// An overflow request with a fresh password must be rejected before the
@@ -68,7 +70,7 @@ func TestSMTPUpdateRejectsIntegerOverflowBeforeEncryptionAndMutation(t *testing.
 				if rec.Code != http.StatusBadRequest {
 					t.Fatalf("overflow status=%d body=%s", rec.Code, rec.Body.String())
 				}
-				if *txCalls != 0 || q.upserts != 0 || q.auditCalls != 0 || q.baselineCalls != 0 || q.row != original || q.row.PasswordEncrypted != "retained-ciphertext" || q.row.Port != 587 || q.row.TimeoutSeconds != 30 || strings.Contains(rec.Body.String(), "fresh-secret") {
+				if *txCalls != 0 || q.upserts != 0 || q.auditCalls != 0 || q.baselineCalls != 0 || q.row != original || string(q.row.PasswordCiphertext) != "retained-ciphertext" || q.row.Port != 587 || q.row.TimeoutSeconds != 30 || strings.Contains(rec.Body.String(), "fresh-secret") {
 					t.Fatal("rejected overflow reached effects or changed retained settings")
 				}
 			})
@@ -94,7 +96,7 @@ func TestSMTPUpdatePreservesRepresentableStagingAndEnabledLimits(t *testing.T) {
 			body := fmt.Sprintf(`{"enabled":%t,"port":%d,"timeout_seconds":%d,"password":%q}`, tc.enabled, tc.port, tc.timeout, PasswordSentinelEncrypted)
 			rec := httptest.NewRecorder()
 			h.Update(rec, httptest.NewRequest(http.MethodPut, "/api/v1/admin/smtp/", strings.NewReader(body)).WithContext(ctx))
-			if rec.Code != http.StatusOK || *txCalls != 1 || q.upserts != 1 || q.auditCalls != 1 || q.row.Enabled != tc.enabled || q.row.Port != tc.port || q.row.TimeoutSeconds != tc.timeout || q.row.PasswordEncrypted != "retained-ciphertext" {
+			if rec.Code != http.StatusOK || *txCalls != 1 || q.upserts != 1 || q.auditCalls != 1 || q.row.Enabled != tc.enabled || q.row.Port != tc.port || q.row.TimeoutSeconds != tc.timeout || string(q.row.PasswordCiphertext) != "retained-ciphertext" {
 				t.Fatalf("representable settings changed: status=%d row=%+v tx=%d audit=%d", rec.Code, q.row, *txCalls, q.auditCalls)
 			}
 		})
@@ -103,7 +105,7 @@ func TestSMTPUpdatePreservesRepresentableStagingAndEnabledLimits(t *testing.T) {
 		h, q, ctx, txCalls := smtpIntegerUpdateFixture(t)
 		rec := httptest.NewRecorder()
 		h.Update(rec, httptest.NewRequest(http.MethodPut, "/api/v1/admin/smtp/", strings.NewReader(`{"from_name":"changed"}`)).WithContext(ctx))
-		if rec.Code != http.StatusOK || *txCalls != 1 || q.row.Port != 587 || q.row.TimeoutSeconds != 30 || q.row.FromName != "changed" || q.row.PasswordEncrypted != "retained-ciphertext" {
+		if rec.Code != http.StatusOK || *txCalls != 1 || q.row.Port != 587 || q.row.TimeoutSeconds != 30 || q.row.FromName != "changed" || string(q.row.PasswordCiphertext) != "retained-ciphertext" {
 			t.Fatal("omitted numeric fields changed retained settings", rec.Code)
 		}
 	})

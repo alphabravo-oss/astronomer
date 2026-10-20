@@ -6,13 +6,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type CharlieAdminBackend interface {
@@ -127,7 +129,7 @@ func (h *CharlieAdminHandler) Disconnect(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if request.Confirmation != charlieDisconnectConfirmation {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact Charlie disconnect confirmation is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Exact Charlie disconnect confirmation is required")
 		return
 	}
 	if !h.requireAuthorityAudit(w, r, "admin.charlie.disconnect", "charlie_connection", "current", nil) {
@@ -160,7 +162,7 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !request.EmergencyDisable && h.features != nil && !h.features.BoolValue(r.Context(), "feature.charlie", false) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.ValidationError, "Charlie must be enabled before changing mode or disclosure")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.ValidationError, "Charlie must be enabled before changing mode or disclosure")
 		return
 	}
 	// Disclosure-only request (no mode change).
@@ -178,7 +180,7 @@ func (h *CharlieAdminHandler) Mode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Revision == nil || request.Mode == "" || (request.EmergencyDisable && request.Mode != charlie.ModeDisabled) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Charlie mode request is invalid")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Charlie mode request is invalid")
 		return
 	}
 	// Combined mode raise + optional exact disclosure ack. Operators (and
@@ -304,7 +306,7 @@ func (h *CharlieAdminHandler) AlertDeliveryProofs(w http.ResponseWriter, r *http
 	}
 	findingID, err := uuid.Parse(strings.TrimSpace(r.URL.Query().Get("finding_id")))
 	if err != nil || findingID == uuid.Nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Valid Charlie finding ID is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Valid Charlie finding ID is required")
 		return
 	}
 	view, err := h.backend.AlertDeliveryProofs(r.Context(), findingID)
@@ -332,7 +334,7 @@ func (h *CharlieAdminHandler) DiscoveryQualification(w http.ResponseWriter, r *h
 		return
 	}
 	if request.Scenario != charlie.DiscoveryQualificationMixed && request.Scenario != charlie.DiscoveryQualificationMalformed {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Unknown Charlie discovery qualification scenario")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Unknown Charlie discovery qualification scenario")
 		return
 	}
 	view, err := h.backend.DiscoveryQualification(r.Context(), request.Scenario)
@@ -426,7 +428,7 @@ func (h *CharlieAdminHandler) UpdateTrigger(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "rule_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie trigger rule ID")
 		return
 	}
 	var request charlie.AdminTriggerRule
@@ -456,7 +458,7 @@ func (h *CharlieAdminHandler) DeleteTrigger(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "rule_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie trigger rule ID")
 		return
 	}
 	var request charlieAdminActionRequest
@@ -464,7 +466,7 @@ func (h *CharlieAdminHandler) DeleteTrigger(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if request.Confirmation != "DELETE TRIGGER" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Exact trigger deletion confirmation is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Exact trigger deletion confirmation is required")
 		return
 	}
 	if !h.requireAuthorityAudit(w, r, "admin.charlie.trigger.delete", "charlie_trigger_rule", id.String(), nil) {
@@ -494,7 +496,7 @@ func (h *CharlieAdminHandler) ListTriggerEvents(w http.ResponseWriter, r *http.R
 	if state == "" {
 		state = "dead"
 	}
-	items, err := h.backend.ListTriggerEvents(r.Context(), state, int32(offset), int32(limit))
+	items, err := h.backend.ListTriggerEvents(r.Context(), state, safeconv.Int32(offset), safeconv.Int32(limit))
 	if err != nil {
 		h.respondError(w, r, err)
 		return
@@ -529,7 +531,7 @@ func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.R
 	}
 	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger event ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie trigger event ID")
 		return
 	}
 	var request charlieTriggerRetryRequest
@@ -538,13 +540,13 @@ func (h *CharlieAdminHandler) RetryTriggerEvent(w http.ResponseWriter, r *http.R
 	}
 	if request.RequestID != "" {
 		if _, err := uuid.Parse(request.RequestID); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger retry request")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie trigger retry request")
 			return
 		}
 	}
 	actorID := mustUserID(actor)
 	if actorID == uuid.Nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger retry request")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie trigger retry request")
 		return
 	}
 	backend, ok := h.backend.(charlieDurableTriggerBackend)
@@ -573,7 +575,7 @@ func (h *CharlieAdminHandler) GetTriggerEvent(w http.ResponseWriter, r *http.Req
 	}
 	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
 	if err != nil || eventID == uuid.Nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid Charlie trigger event ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid Charlie trigger event ID")
 		return
 	}
 	backend, ok := h.backend.(charlieDurableTriggerBackend)
@@ -621,7 +623,7 @@ func (h *CharlieAdminHandler) UpdateAccess(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if request.AutomationServiceIdentityEnabled == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Automation service identity state is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Automation service identity state is required")
 		return
 	}
 	fields := map[string]any{"enabled": *request.AutomationServiceIdentityEnabled}
@@ -678,11 +680,11 @@ func (h *CharlieAdminHandler) actor(w http.ResponseWriter, r *http.Request) (*re
 func (h *CharlieAdminHandler) respondError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, charlie.ErrAdminNotConfigured):
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Charlie is not configured")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Charlie is not configured")
 	case errors.Is(err, charlie.ErrAdminConflict):
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, charlieConflictMessage(err))
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, charlieConflictMessage(err))
 	default:
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie administration is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie administration is unavailable")
 	}
 }
 
@@ -700,7 +702,7 @@ func charlieConflictMessage(err error) string {
 
 func (h *CharlieAdminHandler) requireAuthorityAudit(w http.ResponseWriter, r *http.Request, action, resourceType, resourceID string, fields map[string]any) bool {
 	if err := requireCharlieAdminAudit(r, h.audit, action, resourceType, resourceID, fields); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Charlie authority-change audit is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Charlie authority-change audit is unavailable")
 		return false
 	}
 	return true

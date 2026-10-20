@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +11,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
@@ -20,7 +25,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -37,10 +41,12 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
+	registrystartup "github.com/alphabravocompany/astronomer-go/internal/registry/startup"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -50,7 +56,7 @@ import (
 // platform encryption key.
 type unavailableDeliveryDecryptor struct{}
 
-func (unavailableDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
+func (unavailableDeliveryDecryptor) Decrypt(crypto.Sealed) ([]byte, error) {
 	return nil, fmt.Errorf("platform encryption key is unavailable")
 }
 
@@ -61,7 +67,7 @@ func allowPrivateRCWebhooks(cfg *config.Config) bool {
 
 func webhookHTTPClient(cfg *config.Config) *http.Client {
 	// RC uses an owned disposable development cluster and an explicit opt-in so
-	// the webhook dispatcher can prove product-path Fernet decryption against a
+	// the webhook dispatcher can prove product-path age decryption against a
 	// host-side one-shot receiver. Production always retains the public-only
 	// SSRF guard, even if the environment variable is set accidentally.
 	if allowPrivateRCWebhooks(cfg) {
@@ -88,66 +94,77 @@ func alertNotificationTxRunner(database *db.DB) tasks.AlertNotificationRunTx {
 }
 
 func main() {
-	log := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-	observability.WithEvent(log, "worker_starting").Info("starting astronomer worker binary",
-		"version", version.Version,
-		"commit", version.GitCommit,
-		"built", version.BuildDate,
-	)
-
 	cfg, err := config.Load()
 	if err != nil {
-		log.Error("failed to load config", "error", err)
+		logging.Default().Error().Err(err).Msg("failed to load config")
 		os.Exit(1)
 	}
+	log, err := logging.New(logging.Config{Level: cfg.LogLevel, Format: cfg.LogFormat, Component: "worker"})
+	if err != nil {
+		logging.Default().Error().Err(err).Msg("invalid logging configuration")
+		os.Exit(1)
+	}
+	logging.SetDefault(log)
+	log.Info().Str("event", "worker_starting").Str("version", version.Version).Str("commit", version.GitCommit).Str("built", version.BuildDate).Msg("starting astronomer worker binary")
 
 	// Apply the server production security contract before starting any task.
-	encryptorReady := false
 	// Retained (not just probed) because the catalog:sync sweep needs it to
-	// unwrap helm_repositories.auth_config_encrypted — migration 145. The
+	// open the sealed helm_repositories.auth_config_* family. The
 	// scheduled sweep and the interactive handler are separate readers of the
 	// same credential; a worker without this key syncs private chart
 	// repositories unauthenticated.
 	//
 	// monitoring:reconcile and alert:evaluate need it for the same reason
-	// against monitoring_backends.auth_config_encrypted (migration 146), and
+	// against the sealed monitoring_backends.auth_config_* family, and
 	// the reconcile tick additionally re-seals what it resolved — so this
 	// process needs both directions of the cipher, not just decrypt.
-	var platformEncryptor *auth.Encryptor
-	if cfg.EncryptionKey != "" {
-		if e, encErr := auth.NewEncryptor(cfg.EncryptionKey); encErr == nil {
-			encryptorReady = true
-			platformEncryptor = e
-		}
+	platformEncryptor, encErr := cfg.LoadEncryptor()
+	switch {
+	case encErr == nil:
+		log.Info().Str("current_key_id", platformEncryptor.CurrentKeyID()).
+			Int("key_count", platformEncryptor.KeyCount()).
+			Str("key_ids", strings.Join(platformEncryptor.KeyIDs(), ",")).
+			Msg("encryption keyring loaded")
+	case errors.Is(encErr, crypto.ErrNoKey):
+		platformEncryptor = nil
+		log.Warn().Msg("no encryption key configured (ASTRONOMER_ENCRYPTION_KEY / ASTRONOMER_ENCRYPTION_KEY_FILE); sealed credentials are unavailable")
+	default:
+		// A key IS configured but does not load: never continue without it.
+		log.Error().Err(encErr).Msg("encryption keyring could not be loaded; refusing to start")
+		os.Exit(1)
 	}
-	if secErr := config.ValidateProductionSecurity(cfg, encryptorReady); secErr != nil {
+	if secErr := config.ValidateProductionSecurity(cfg, platformEncryptor != nil); secErr != nil {
 		// Only returns non-nil in production mode.
-		log.Error("production security config invalid; refusing to start", "error", secErr)
+		log.Error().Err(secErr).Msg("production security config invalid; refusing to start")
 		os.Exit(1)
 	}
 	// dev-keys-default-and-silent: the published chart sentinels are just as
 	// forgeable in development, so report them on every boot in every env. The
 	// worker decrypts the same credential columns the server does.
-	observability.ReportInsecureDevKeys(log, config.DevSentinelsInUse(cfg))
+	observability.ReportInsecureDevKeys(logging.Slog(log), config.DevSentinelsInUse(cfg))
 
-	// Distributed tracing — same InitTracing/Shutdown contract as
-	// the server. The worker's asynq handlers extract traceparent from
-	// incoming task payloads (planned follow-up in this same sprint),
-	// so when both processes point at the same OTLP endpoint a single
-	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
-	tracingCfg := workerTracingConfig(cfg)
-	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
+	if _, err := registrystartup.Resolve(context.Background(), cfg, logging.Slog(log), "worker"); err != nil {
+		log.Error().Err(err).Msg("invalid registry policy")
+		os.Exit(1)
+	}
+
+	// Telemetry — same telemetry.Init contract as the server. The worker's
+	// asynq handlers extract traceparent from task payloads, so when both
+	// processes point at the same OTLP endpoint one trace spans HTTP → asynq
+	// → worker DB queries → tunnel calls. The returned handler serves the
+	// shared client_golang + OTel registry on WORKER_METRICS_ADDR.
+	telemetryCfg := workerTelemetryConfig(cfg)
+	telemetryCfg.Logger = log
+	otelShutdown, metricsHandler, err := telemetry.Init(context.Background(), telemetryCfg)
 	if err != nil {
-		log.Error("failed to init otel tracing", "error", err)
+		log.Error().Err(err).Msg("failed to init telemetry")
 		os.Exit(1)
 	}
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := otelShutdown(ctx); err != nil {
-			log.Warn("otel shutdown error", "error", err)
+			log.Warn().Err(err).Msg("otel shutdown error")
 		}
 	}()
 
@@ -159,30 +176,36 @@ func main() {
 		HealthCheckPeriod: time.Duration(cfg.DBHealthCheckPeriodSec) * time.Second,
 	})
 	if err != nil {
-		log.Error("failed to connect database", "error", err)
+		log.Error().Err(err).Msg("failed to connect database")
 		os.Exit(1)
 	}
 	defer database.Close()
-	taskLeader, leaderErr := leader.NewDedicated(context.Background(), database.Pool(), log)
+	taskLeader, leaderErr := leader.NewDedicated(context.Background(), database.Pool(), logging.Slog(log))
 	if leaderErr != nil {
-		log.Error("failed to initialize leader-election pool", "error", leaderErr)
+		log.Error().Err(leaderErr).Msg("failed to initialize leader-election pool")
 		os.Exit(1)
 	}
 	defer taskLeader.Close()
-	// C-01: fail fast on a corrupt schema_migrations row set (dirty=true or
-	// multi-row drift), same guard the server runs in NewApp. A worker that
-	// keeps sweeping against an indeterminate schema hides the .247-class
-	// incident instead of CrashLooping on it.
+	// Only the server applies migrations; a worker that comes up first waits
+	// for the schema instead of crash-looping against missing tables, then
+	// runs the same schema guard the server runs in NewApp.
+	schemaWaitCtx, cancelSchemaWait := context.WithTimeout(context.Background(), 10*time.Minute)
+	if waitErr := database.WaitForSchema(schemaWaitCtx, logging.Slog(log)); waitErr != nil {
+		cancelSchemaWait()
+		log.Error().Err(waitErr).Msg("database schema not ready; refusing to start")
+		os.Exit(1)
+	}
+	cancelSchemaWait()
 	if shErr := database.SchemaHealth(context.Background()); shErr != nil {
-		log.Error("schema health check failed; refusing to start", "error", shErr)
+		log.Error().Err(shErr).Msg("schema health check failed; refusing to start")
 		os.Exit(1)
 	}
 	if _, err := observability.EnsureInstanceID(context.Background(), sqlc.New(database.Pool())); err != nil {
-		log.Error("failed to ensure observability instance id", "error", err)
+		log.Error().Err(err).Msg("failed to ensure observability instance id")
 		os.Exit(1)
 	}
-	log = observability.Logger(log)
-	slog.SetDefault(log)
+	log = log.With().Str("instance_id", observability.InstanceID()).Logger()
+	logging.SetDefault(log)
 
 	// Async batched audit writer — shared design with cmd/server. The
 	// worker only records audit rows from the cluster-decommission
@@ -190,7 +213,7 @@ func main() {
 	// round-trip on the task path. Bounded by the same Shutdown
 	// deadline as the worker process below.
 	auditQueries := sqlc.New(database.Pool())
-	auditWriter := audit.NewWriter(auditQueries, log)
+	auditWriter := audit.NewWriter(auditQueries, logging.Slog(log))
 	auditWriter.Start(context.Background())
 	audit.SetWriter(auditWriter)
 	defer audit.SetWriter(nil)
@@ -201,7 +224,7 @@ func main() {
 	// so it must be able to enqueue.
 	runtimeRedisOpt, redisOptErr := redisconn.Parse(cfg.RedisURL)
 	if redisOptErr != nil {
-		log.Error("failed to parse redis uri for runtime enqueuer", "error", redisOptErr)
+		log.Error().Err(redisOptErr).Msg("failed to parse redis uri for runtime enqueuer")
 		os.Exit(1)
 	}
 	runtimeEnqueuer := asynq.NewClient(runtimeRedisOpt)
@@ -214,7 +237,7 @@ func main() {
 	// has no local subscribers.
 	eventBus := events.NewBus()
 	if client, ok := runtimeRedisOpt.MakeRedisClient().(*redis.Client); ok && client != nil {
-		eventBus.AttachRedis(client, events.DefaultRedisChannel, log)
+		eventBus.AttachRedis(client, events.DefaultRedisChannel, logging.Slog(log))
 	}
 	backupQueries := sqlc.New(database.Pool())
 	backupExecutor := handler.NewAdminDrillHandler(backupQueries)
@@ -227,8 +250,9 @@ func main() {
 	}
 	coreRuntime := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
 		Queries:                       sqlc.New(database.Pool()),
-		Log:                           log,
+		Log:                           logging.Slog(log),
 		AgentImageRepo:                cfg.AgentImageRepository,
+		ImageRegistry:                 cfg.RegistryLocal,
 		AgentImageTag:                 cfg.AgentImageTag,
 		SystemArtifactURL:             cfg.DeliveryFluxDistributionRepository,
 		SystemArtifactDigest:          cfg.DeliveryFluxDistributionDigest,
@@ -249,7 +273,7 @@ func main() {
 		AlertNotificationRunTx:        alertNotificationTxRunner(database),
 	}}
 	if err := tasks.ConfigureCatalogNetwork(&coreRuntime.Deps, cfg); err != nil {
-		log.Error("catalog network policy is invalid", "error", err)
+		log.Error().Err(err).Msg("catalog network policy is invalid")
 		os.Exit(1)
 	}
 	allowlistQueries := sqlc.New(database.Pool())
@@ -257,12 +281,12 @@ func main() {
 	if platformEncryptor != nil {
 		materializer, materializerErr := allowlistproviders.NewSQLCredentialMaterializer(allowlistQueries, platformEncryptor)
 		if materializerErr != nil {
-			log.Error("failed to configure API-server allow-list credential materializer", "error", materializerErr)
+			log.Error().Err(materializerErr).Msg("failed to configure API-server allow-list credential materializer")
 			os.Exit(1)
 		}
 		allowlistMaterializer = materializer
 	} else {
-		log.Warn("API-server allow-list cloud writes will fail closed: encryption key is unavailable")
+		log.Warn().Msg("API-server allow-list cloud writes will fail closed: encryption key is unavailable")
 	}
 	allowlistRegistry := allowlistproviders.NewRegistry()
 	allowlistRegistry.Register(allowlistproviders.NewEKSProvider(allowlistMaterializer))
@@ -280,14 +304,14 @@ func main() {
 	deliveryQueries := sqlc.New(database.Pool())
 	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliverySourceTrustDirectory)
 	if deliveryVerifierErr != nil {
-		log.Error("failed to configure delivery source signature verifier", "error", deliveryVerifierErr)
+		log.Error().Err(deliveryVerifierErr).Msg("failed to configure delivery source signature verifier")
 		os.Exit(1)
 	}
 	deliverySourcePolicies, deliverySourcePoliciesErr := deliveryresolver.NewStaticPolicyProvider(
 		cfg.DeliverySourceAllowedPrivateHosts, cfg.DeliverySourceEgressCIDRs, cfg.DeliverySourceProxyURL,
 	)
 	if deliverySourcePoliciesErr != nil {
-		log.Error("failed to configure delivery source network policy", "error", deliverySourcePoliciesErr)
+		log.Error().Err(deliverySourcePoliciesErr).Msg("failed to configure delivery source network policy")
 		os.Exit(1)
 	}
 	deliverySourceService := deliveryresolver.New(deliveryVerifier)
@@ -296,14 +320,14 @@ func main() {
 	if platformEncryptor != nil {
 		deliveryDecryptor = platformEncryptor
 	} else {
-		log.Warn("delivery resolver has no encryption key; credentialed sources will be rejected")
+		log.Warn().Msg("delivery resolver has no encryption key; credentialed sources will be rejected")
 	}
 	deliverySourceWorker, deliverySourceWorkerErr := deliveryresolver.NewPostgresWorker(
 		database.Pool(), deliverySourceService, deliveryDecryptor,
 		deliverySourcePolicies, "",
 	)
 	if deliverySourceWorkerErr != nil {
-		log.Error("failed to configure delivery source resolver", "error", deliverySourceWorkerErr)
+		log.Error().Err(deliverySourceWorkerErr).Msg("failed to configure delivery source resolver")
 		os.Exit(1)
 	}
 	deliverySourceWorker.SetLimits(deliveryresolver.Limits{
@@ -313,7 +337,7 @@ func main() {
 	if cfg.DeliverySourceCAFile != "" {
 		caBundle, caErr := os.ReadFile(cfg.DeliverySourceCAFile)
 		if caErr != nil || len(caBundle) == 0 || len(caBundle) > 1<<20 {
-			log.Error("failed to load bounded delivery source CA bundle", "error", caErr)
+			log.Error().Err(caErr).Msg("failed to load bounded delivery source CA bundle")
 			os.Exit(1)
 		}
 		deliverySourceWorker.SetBaseCABundle(caBundle)
@@ -323,12 +347,12 @@ func main() {
 		database.Pool(), maintenance.NewEvaluator(deliveryQueries), "",
 	)
 	if deliveryReconcilerErr != nil {
-		log.Error("failed to configure delivery rollout reconciler", "error", deliveryReconcilerErr)
+		log.Error().Err(deliveryReconcilerErr).Msg("failed to configure delivery rollout reconciler")
 		os.Exit(1)
 	}
 	deliverySystemReconciler, deliverySystemReconcilerErr := systemrollout.New(database.Pool())
 	if deliverySystemReconcilerErr != nil {
-		log.Error("failed to configure delivery system rollout reconciler", "error", deliverySystemReconcilerErr)
+		log.Error().Err(deliverySystemReconcilerErr).Msg("failed to configure delivery system rollout reconciler")
 		os.Exit(1)
 	}
 	deliveryRuntime := tasks.DeliveryRuntime{
@@ -338,30 +362,27 @@ func main() {
 	}
 	maintenanceRuntime := tasks.MaintenanceRuntime{
 		AgentTokens: tasks.AgentTokenRotateDeps{Queries: sqlc.New(database.Pool())},
-		PlaintextCredentials: tasks.PlaintextCredentialMigrationDeps{
-			Queries: sqlc.New(database.Pool()), Encryptor: platformEncryptor,
-		},
 	}
 	gitopsRuntime := tasks.GitOpsRuntime{Deps: tasks.GitOpsDeps{
 		Queries:    sqlc.New(database.Pool()),
 		Enqueuer:   runtimeEnqueuer,
 		TaskOutbox: sqlc.New(database.Pool()),
 		Decryptor:  platformEncryptor,
-		Log:        log,
+		Log:        logging.Slog(log),
 	}}
 
-	// Email dispatch (migration 047). The SMTP password is Fernet-encrypted,
+	// Email dispatch (migration 047). The SMTP password is age-sealed,
 	// so production startup validation refuses queue consumption unless the
 	// encryptor, settings provider, and sender are all present.
 	var emailDispatchDeps tasks.EmailDeps
 	if platformEncryptor != nil {
 		q := sqlc.New(database.Pool())
 		provider := email.NewSQLSettingsProvider(q, platformEncryptor, 5*time.Second)
-		sender := email.NewSender(provider, platformEncryptor, log)
+		sender := email.NewSender(provider, platformEncryptor, logging.Slog(log))
 		branding := email.NewPlatformConfigBrandingProvider(q, "")
 		sender.SetBrandingProvider(branding)
 		emailDispatchDeps = tasks.EmailDeps{Queries: q, Sender: sender, Provider: provider}
-		notificationEmails := email.NewEnqueuer(q, branding, log)
+		notificationEmails := email.NewEnqueuer(q, branding, logging.Slog(log))
 		notificationEmails.SetOverrideLookup(func(ctx context.Context, key string) (email.Overrides, bool) {
 			resolved, resolveErr := notify.Resolve(ctx, q, key)
 			if resolveErr != nil || !resolved.HasOverride {
@@ -371,7 +392,7 @@ func main() {
 		})
 		coreRuntime.Deps.NotificationEmail = notificationEmails
 	} else {
-		log.Warn("email dispatch disabled: ASTRONOMER_ENCRYPTION_KEY is not set")
+		log.Warn().Msg("email dispatch disabled: ASTRONOMER_ENCRYPTION_KEY is not set")
 	}
 
 	// Webhook and SIEM dispatch are worker-owned outbound jobs. Their bus taps
@@ -409,12 +430,12 @@ func main() {
 	// air-gapped / split-network deployments.
 	queueTerminalPublisher, publisherErr := charlie.NewQueueTerminalFailurePublisher(sqlc.New(database.Pool()))
 	if publisherErr != nil {
-		log.Error("failed to configure Charlie queue terminal failure publisher")
+		log.Error().Msg("failed to configure Charlie queue terminal failure publisher")
 		os.Exit(1)
 	}
 	charlieAlertPlanner, plannerErr := charlie.NewFindingAlertPlanner(database.Pool())
 	if plannerErr != nil {
-		log.Error("failed to configure Charlie alert reconciliation")
+		log.Error().Msg("failed to configure Charlie alert reconciliation")
 		os.Exit(1)
 	}
 	alertRuntime := tasks.CharlieAlertRuntime{
@@ -428,13 +449,13 @@ func main() {
 		Delivery: deliveryRuntime, Dispatch: dispatchRuntime, Alerts: alertRuntime,
 		Maintenance: maintenanceRuntime, Allowlists: allowlistRuntime, GitOps: gitopsRuntime,
 	}
-	w, werr := worker.NewWorker(cfg.RedisURL, cfg.WorkerConcurrency, log, standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
+	w, werr := worker.NewWorker(cfg.RedisURL, cfg.WorkerConcurrency, logging.Slog(log), standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, logging.Slog(log)))
 	if werr != nil {
-		log.Error("failed to start worker", "error", werr)
+		log.Error().Err(werr).Msg("failed to start worker")
 		os.Exit(1)
 	}
 	if err := worker.ValidateTaskRegistry(); err != nil {
-		log.Error("invalid task ownership registry", "error", err)
+		log.Error().Err(err).Msg("invalid task ownership registry")
 		os.Exit(1)
 	}
 	if config.IsProduction(cfg) {
@@ -446,31 +467,31 @@ func main() {
 			worker.CapabilityEncryption:   platformEncryptor != nil,
 		}
 		if err := worker.ValidateTaskCapabilities(worker.TaskOwnerWorker, capabilities); err != nil {
-			log.Error("worker task dependencies incomplete; refusing to consume queues", "error", err)
+			log.Error().Err(err).Msg("worker task dependencies incomplete; refusing to consume queues")
 			os.Exit(1)
 		}
 		if err := tasks.ValidateStandaloneRuntime(standaloneRuntime.Features, coreRuntime, deliveryRuntime, dispatchRuntime, alertRuntime, maintenanceRuntime, allowlistRuntime, gitopsRuntime); err != nil {
-			log.Error("worker runtime composition incomplete; refusing to consume queues", "error", err)
+			log.Error().Err(err).Msg("worker runtime composition incomplete; refusing to consume queues")
 			os.Exit(1)
 		}
 	}
 	w.RegisterHandlers()
 
-	s, serr := worker.NewScheduler(cfg.RedisURL, log, worker.SchedulerFeatures{CRDOwnership: cfg.CRDEnabled})
+	s, serr := worker.NewScheduler(cfg.RedisURL, logging.Slog(log), worker.SchedulerFeatures{CRDOwnership: cfg.CRDEnabled})
 	if serr != nil {
-		log.Error("failed to start scheduler", "error", serr)
+		log.Error().Err(serr).Msg("failed to start scheduler")
 		os.Exit(1)
 	}
 	if err := s.RegisterPeriodicTasks(); err != nil {
-		log.Error("failed to register periodic tasks", "error", err)
+		log.Error().Err(err).Msg("failed to register periodic tasks")
 		os.Exit(1)
 	}
 
 	// Set up signal-driven shutdown.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	db.StartMetricsReporter(ctx, database.Pool(), log)
-	worker.StartQueueMetricsReporter(ctx, queueInspector, log)
+	db.StartMetricsReporter(ctx, database.Pool(), logging.Slog(log))
+	worker.StartQueueMetricsReporter(ctx, queueInspector, logging.Slog(log))
 	stopGenerationReporter := startMetricGenerationReporter(ctx, database.Pool().BeginTx)
 	defer stopGenerationReporter()
 
@@ -492,7 +513,7 @@ func main() {
 		// reachability via the asynq client is the meaningful liveness signal
 		// for a queue consumer — if it can't reach Redis it can't process or
 		// enqueue anything.
-		if err := worker.StartMetricsServer(ctx, cfg.WorkerMetricsAddr, runtimeEnqueuer, log); err != nil {
+		if err := worker.StartMetricsServer(ctx, cfg.WorkerMetricsAddr, runtimeEnqueuer, metricsHandler, logging.Slog(log)); err != nil {
 			errCh <- fmt.Errorf("metrics server: %w", err)
 		}
 	}()
@@ -504,14 +525,14 @@ func main() {
 	if u, perr := url.Parse(cfg.RedisURL); perr == nil && u.Host != "" {
 		redisEndpoint = u.Scheme + "://" + u.Host
 	}
-	observability.WithEvent(log, "worker_started").Info("astronomer-worker started", "redis_endpoint", redisEndpoint)
+	log.Info().Str("event", "worker_started").Str("redis_endpoint", redisEndpoint).Msg("astronomer-worker started")
 
 	// Wait for shutdown signal or fatal error.
 	select {
 	case <-ctx.Done():
-		observability.WithEvent(log, "worker_stopping").Info("received shutdown signal")
+		log.Info().Str("event", "worker_stopping").Msg("received shutdown signal")
 	case err := <-errCh:
-		observability.WithEvent(log, "worker_runtime_error").Error("fatal error", "error", err)
+		log.Error().Str("event", "worker_runtime_error").Err(err).Msg("fatal error")
 	}
 
 	stopGenerationReporter()
@@ -522,14 +543,11 @@ func main() {
 	// signal-context (ctx) was already cancelled at this point.
 	auditShutdownCtx, auditCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	if err := auditWriter.Shutdown(auditShutdownCtx); err != nil {
-		observability.WithEvent(log, "worker_audit_shutdown_error").Warn("audit writer shutdown error",
-			"dropped_total", auditWriter.DropCount(),
-			"error", err,
-		)
+		log.Warn().Str("event", "worker_audit_shutdown_error").Uint64("dropped_total", auditWriter.DropCount()).Err(err).Msg("audit writer shutdown error")
 	}
 	auditCancel()
 
-	observability.WithEvent(log, "worker_stopped").Info("astronomer-worker stopped")
+	log.Info().Str("event", "worker_stopped").Msg("astronomer-worker stopped")
 }
 
 // workerDBMaxConns keeps the standalone worker's SQL capacity above its job
@@ -547,5 +565,5 @@ func workerDBMaxConns(configured int32, concurrency int) int32 {
 	if concurrency <= int(minimum-headroom) {
 		return minimum
 	}
-	return int32(concurrency) + headroom
+	return safeconv.Int32(concurrency) + headroom
 }

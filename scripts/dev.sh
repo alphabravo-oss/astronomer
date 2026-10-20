@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Astronomer local dev stack: Postgres + Redis + telemetry (docker compose),
 # API server + worker (+ optional agent) under Air, dashboard under Vite.
-# Guide ch.04 "scripts/dev.sh entrypoint". Subcommands: up down status logs migrate migrate-down
+# Guide ch.04 "scripts/dev.sh entrypoint". Subcommands: up down status logs migrate
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,14 +14,13 @@ export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 usage() {
   cat <<USAGE
-usage: scripts/dev.sh <up|down|status|logs [name]|migrate|migrate-down>
+usage: scripts/dev.sh <up|down|status|logs [name]|migrate>
 
   up            start Postgres, Redis, telemetry, Air server/worker and Vite (nohup, PID file)
   down          stop everything started by up (compose containers keep their volumes)
   status        show container and process state plus the URLs to open
   logs [name]   tail tmp/logs/*.log (or one of: server worker agent web compose)
-  migrate       apply pending migrations against DATABASE_URL
-  migrate-down  roll back one migration
+  migrate       apply pending embedded migrations against DATABASE_URL (the server also does this at boot)
 Env: .env.dev (tracked defaults) then .env.dev.local (gitignored overrides).
 USAGE
 }
@@ -83,7 +82,7 @@ ensure_k3s() { # opt-in: DEV_USE_K3S=1 makes the local k3s kubeconfig readable a
   fi
 }
 
-migrate_db() { go run ./cmd/migrator -database "$DATABASE_URL" -path internal/db/migrations "$@"; }
+migrate_db() { go run ./cmd/server migrate -database "$DATABASE_URL"; }
 
 cmd_up() {
   require_dev_tools; load_env; ensure_k3s
@@ -93,7 +92,7 @@ cmd_up() {
   rotate_log compose
   docker compose -f "$COMPOSE_FILE" up -d --wait >>"$LOG_DIR/compose.log" 2>&1
   echo "compose services up (postgres:${DEV_PG_PORT}, redis:${DEV_REDIS_PORT}, grafana:${DEV_GRAFANA_PORT})"
-  migrate_db up
+  migrate_db
   start_bg server air -c .air.server.toml
   start_bg worker air -c .air.worker.toml
   [ "${DEV_START_AGENT:-0}" = "1" ] && start_bg agent air -c .air.agent.toml
@@ -147,7 +146,6 @@ case "${1:-}" in
   down) cmd_down ;;
   status) cmd_status ;;
   logs) cmd_logs "${2:-}" ;;
-  migrate) load_env; migrate_db up ;;
-  migrate-down) load_env; migrate_db down 1 ;;
+  migrate) load_env; migrate_db ;;
   *) usage; exit 2 ;;
 esac

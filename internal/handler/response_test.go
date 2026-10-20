@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -17,10 +18,10 @@ func TestRespondRequestErrorClassifiesCanceledClient(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil).WithContext(ctx)
 
-	RespondRequestError(recorder, request, http.StatusInternalServerError, "db_error", "context canceled")
+	apiutil.WriteError(recorder, request, http.StatusInternalServerError, "db_error", "context canceled")
 
-	if recorder.Code != statusClientClosedRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, statusClientClosedRequest)
+	if recorder.Code != apiutil.StatusClientClosedRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, apiutil.StatusClientClosedRequest)
 	}
 	if recorder.Body.Len() != 0 {
 		t.Fatalf("canceled request wrote a response body: %s", recorder.Body.String())
@@ -54,35 +55,6 @@ func TestRespondJSON(t *testing.T) {
 	}
 }
 
-func TestRespondError(t *testing.T) {
-	w := httptest.NewRecorder()
-
-	RespondError(w, http.StatusBadRequest, "validation_error", "field is required")
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected status 400, got %d", w.Code)
-	}
-	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("expected Content-Type application/json, got %s", ct)
-	}
-
-	var body map[string]any
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("failed to decode body: %v", err)
-	}
-
-	errObj, ok := body["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected 'error' wrapper object, got %#v", body)
-	}
-	if errObj["code"] != "validation_error" {
-		t.Fatalf("expected code=validation_error, got %v", errObj["code"])
-	}
-	if errObj["message"] != "field is required" {
-		t.Fatalf("expected message='field is required', got %v", errObj["message"])
-	}
-}
-
 func TestRespondAcceptedOperation(t *testing.T) {
 	w := httptest.NewRecorder()
 	RespondAcceptedOperation(w, "/api/v1/tools/operations/op-1/", map[string]any{"id": "op-1"})
@@ -111,7 +83,7 @@ func TestRespondRequestErrorIncludesRequestID(t *testing.T) {
 	req.Header.Set("X-Request-ID", "req-123")
 
 	handler := middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		RespondRequestError(w, r, http.StatusForbidden, "permission_denied", "not allowed")
+		apiutil.WriteError(w, r, http.StatusForbidden, "permission_denied", "not allowed")
 	}))
 	handler.ServeHTTP(w, req)
 
@@ -134,7 +106,7 @@ func TestRespondRequestErrorIncludesRequestID(t *testing.T) {
 func TestRespondRequestErrorRedactsInternalDetails(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	RespondRequestError(w, r, http.StatusInternalServerError, "db_error", "password=secret host=internal-db:5432")
+	apiutil.WriteError(w, r, http.StatusInternalServerError, "db_error", "password=secret host=internal-db:5432")
 
 	var body struct {
 		Error map[string]string `json:"error"`

@@ -1,16 +1,18 @@
 package server
 
 import (
-	"log/slog"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Config, logger *slog.Logger, deps *RouterDependencies) {
+func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Config, logger zerolog.Logger, deps *RouterDependencies) {
 	database := c.database
 	queries := c.queries
 	rbacEngine := c.rbacEngine
@@ -34,7 +36,7 @@ func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Co
 		h.SetExtensionTickets(extensionTickets)
 		h.SetExtensionTicketIssuer(extensionTickets)
 		if err := h.SetTrustedBundleKey(cfg.ExtensionBundleTrustedKey); err != nil {
-			logger.Warn("invalid EXTENSION_BUNDLE_TRUSTED_KEY; bundle verification will fail closed", "error", err)
+			logger.Warn().Err(err).Msg("invalid EXTENSION_BUNDLE_TRUSTED_KEY; bundle verification will fail closed")
 		}
 		return h
 	}()
@@ -59,9 +61,9 @@ func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Co
 	deps.Delivery.GitOps = func() *handler.GitOpsHandler {
 		gitopsRuntime := tasks.GitOpsRuntime{Deps: tasks.GitOpsDeps{
 			Queries: queries, Enqueuer: queue, TaskOutbox: queries,
-			Decryptor: c.encryptor, Log: logger,
+			Decryptor: c.encryptor, Log: logging.Slog(logger),
 		}}
-		h := handler.NewGitOpsHandler(queries, handler.DefaultGitOpsSyncRunner(gitopsRuntime), logger)
+		h := handler.NewGitOpsHandler(queries, handler.DefaultGitOpsSyncRunner(gitopsRuntime), logging.Slog(logger))
 		h.SetRunTx(sqlcMutationTxRunner[handler.GitOpsMutationTx](database))
 		h.SetTaskOutbox(queries)
 		h.SetAuditWriter(queries)
@@ -69,7 +71,7 @@ func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Co
 		return h
 	}()
 	deps.ClusterResources.ProjectCatalogs = c.projectCatalogsHandler
-	deps.AdminPlatform.ComplianceBaselines = handler.NewComplianceBaselinesHandlerFromPool(database.Pool(), logger)
+	deps.AdminPlatform.ComplianceBaselines = handler.NewComplianceBaselinesHandlerFromPool(database.Pool(), logging.Slog(logger))
 	deps.StreamingInternal.KubectlShell = c.kubectlShell
 	deps.ClusterResources.ClusterGroups = c.clusterGroupsHandler
 	deps.ClusterResources.Vault = c.vaultHandler

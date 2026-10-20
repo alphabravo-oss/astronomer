@@ -3,14 +3,16 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
 type runtimeFoundation struct {
@@ -18,7 +20,7 @@ type runtimeFoundation struct {
 	ctx    context.Context
 }
 
-func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logger *slog.Logger, routed *routerComposition, lifecycles *charlieLifecycleGroup) (*runtimeFoundation, error) {
+func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logger zerolog.Logger, routed *routerComposition, lifecycles *charlieLifecycleGroup) (*runtimeFoundation, error) {
 	s := &Server{
 		handler: routed.router, logger: logger, db: c.database, queue: c.queue, hub: c.hub,
 		Encryptor: c.encryptor, SSO: c.ssoManager, charlieRuntime: lifecycles, charlieBridge: c.managedCharlieBridge,
@@ -64,7 +66,7 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 	}
 	if c.queries != nil {
 		if err := c.runtime.GoLoop("quota-usage-reporter", true, func(ctx context.Context) {
-			quota.RunReporter(ctx, c.queries, logger)
+			quota.RunReporter(ctx, c.queries, logging.Slog(logger))
 		}); err != nil {
 			return nil, err
 		}
@@ -87,7 +89,7 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 			return nil, err
 		}
 	}
-	metricsPublisher := livemetrics.New(c.bus, c.queries, c.clusterHandler.MetricsProvider(), logger)
+	metricsPublisher := livemetrics.New(c.bus, c.queries, c.clusterHandler.MetricsProvider(), logging.Slog(logger))
 	runReconcilers := func(ctx context.Context) error {
 		loops := []namedRuntimeLoop{
 			{name: "monitoring", run: c.monitoringHandler.RunReconciler},
@@ -103,10 +105,10 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 			}},
 		}
 		if databaseRefresh != nil {
-			loops = append(loops, namedRuntimeLoop{name: "database-update-refresh", run: func(ctx context.Context) { databaseRefresh.Run(ctx, logger) }})
+			loops = append(loops, namedRuntimeLoop{name: "database-update-refresh", run: func(ctx context.Context) { databaseRefresh.Run(ctx, logging.Slog(logger)) }})
 		}
 		if databaseScan != nil {
-			loops = append(loops, namedRuntimeLoop{name: "database-owned-scans", run: func(ctx context.Context) { databaseScan.Run(ctx, logger) }})
+			loops = append(loops, namedRuntimeLoop{name: "database-owned-scans", run: func(ctx context.Context) { databaseScan.Run(ctx, logging.Slog(logger)) }})
 		}
 		return runRuntimeLoopGroup(ctx, loops...)
 	}

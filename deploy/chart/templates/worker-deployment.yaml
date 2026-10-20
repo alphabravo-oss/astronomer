@@ -37,7 +37,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - sh
@@ -47,7 +47,7 @@ spec:
               until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
               echo "postgres up"
           resources:
-            {{- toYaml .Values.migrate.resources | nindent 12 }}
+            {{- toYaml .Values.initWait.resources | nindent 12 }}
         {{- end }}
         {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
         - name: wait-redis
@@ -55,7 +55,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - sh
@@ -65,7 +65,7 @@ spec:
               until nc -z {{ include "astronomer.fullname" . }}-redis 6379; do sleep 1; done
               echo "redis up"
           resources:
-            {{- toYaml .Values.migrate.resources | nindent 12 }}
+            {{- toYaml .Values.initWait.resources | nindent 12 }}
         {{- end }}
       containers:
         - name: worker
@@ -165,7 +165,7 @@ spec:
               value: /etc/astronomer/release/mirror-mapping.json
             {{- end }}
             {{- end }}
-          {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.catalog.ca.existingSecret .Values.catalog.signature.trustKeys.existingSecret .Values.release.manifest }}
+          {{- if or .Values.delivery.sourceResolution.ca.existingSecret (include "astronomer.deliveryTrustSecretName" .) .Values.catalog.ca.existingSecret .Values.catalog.signature.trustKeys.existingSecret .Values.release.manifest }}
           volumeMounts:
             {{- if .Values.catalog.ca.existingSecret }}
             - name: catalog-ca
@@ -187,7 +187,7 @@ spec:
               mountPath: /var/run/secrets/astronomer/delivery-source-ca
               readOnly: true
             {{- end }}
-            {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+            {{- if include "astronomer.deliveryTrustSecretName" . }}
             - name: delivery-source-trust
               mountPath: /etc/astronomer/delivery-trust
               readOnly: true
@@ -216,7 +216,7 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
-      {{- if or .Values.delivery.sourceResolution.ca.existingSecret .Values.delivery.sourceResolution.trustKeys.existingSecret .Values.catalog.ca.existingSecret .Values.catalog.signature.trustKeys.existingSecret .Values.release.manifest }}
+      {{- if or .Values.delivery.sourceResolution.ca.existingSecret (include "astronomer.deliveryTrustSecretName" .) .Values.catalog.ca.existingSecret .Values.catalog.signature.trustKeys.existingSecret .Values.release.manifest }}
       volumes:
         {{- if .Values.catalog.ca.existingSecret }}
         - name: catalog-ca
@@ -251,10 +251,10 @@ spec:
               - key: {{ .Values.delivery.sourceResolution.ca.key | quote }}
                 path: ca.pem
         {{- end }}
-        {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+        {{- if include "astronomer.deliveryTrustSecretName" . }}
         - name: delivery-source-trust
           secret:
-            secretName: {{ .Values.delivery.sourceResolution.trustKeys.existingSecret | quote }}
+            secretName: {{ include "astronomer.deliveryTrustSecretName" . | quote }}
             defaultMode: 0444
         {{- end }}
       {{- end }}

@@ -24,6 +24,7 @@ jobs:
     outputs:
       version: ${{ steps.identity.outputs.version }}
       go_version: ${{ steps.identity.outputs.go_version }}
+      go_image_digest: ${{ steps.identity.outputs.go_image_digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,6 +43,8 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
           echo "go_version=$(awk '/^go /{print $2}' go.mod)" >> "$GITHUB_OUTPUT"
+          make go-image-check
+          echo "go_image_digest=$(awk '$1 == "GO_IMAGE_DIGEST" { print $3 }' deploy/docker/go-image.lock)" >> "$GITHUB_OUTPUT"
 
   build-sign:
     name: build · sign · attest
@@ -58,7 +61,6 @@ jobs:
           - { name: server,   context: .,        dockerfile: deploy/docker/Dockerfile.server,  image: astronomer-go-server }
           - { name: worker,   context: .,        dockerfile: deploy/docker/Dockerfile.worker,  image: astronomer-go-worker }
           - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   image: astronomer-go-agent }
-          - { name: migrate,  context: .,        dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
           - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   image: astronomer-shell }
           - { name: dr,       context: .,        dockerfile: deploy/docker/Dockerfile.dr,      image: astronomer-dr }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              image: astronomer-frontend }
@@ -96,6 +98,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             GO_VERSION=${{ needs.preflight.outputs.go_version }}
+            GO_IMAGE_DIGEST=${{ needs.preflight.outputs.go_image_digest }}
             VERSION=${{ needs.preflight.outputs.version }}
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ steps.meta.outputs.build_date }}

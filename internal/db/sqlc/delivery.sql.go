@@ -1431,15 +1431,15 @@ const createDeliverySource = `-- name: CreateDeliverySource :one
 
 INSERT INTO delivery_sources (
     project_id, name, description, source_type, url, auth_mode,
-    credential_encrypted, credential_key_version, credential_epoch,
-    ca_bundle_encrypted, proxy_ref, trust_policy, created_by, updated_by
+    credential_key_id, credential_algorithm, credential_ciphertext, credential_nonce, credential_key_version, credential_epoch,
+    ca_bundle_key_id, ca_bundle_algorithm, ca_bundle_ciphertext, ca_bundle_nonce, proxy_ref, trust_policy, created_by, updated_by
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6,
-    $7, $8,
-    $9, $10,
-    $11, $12, $13,
-    $14
+    $7, $8, $9, $10, $11,
+    $12, $13, $14, $15, $16,
+    $17, $18, $19,
+    $20
 )
 RETURNING id, project_id, name, description, source_type, url, auth_mode,
           credential_key_version, credential_epoch, proxy_ref, trust_policy,
@@ -1454,10 +1454,16 @@ type CreateDeliverySourceParams struct {
 	SourceType           string          `json:"source_type"`
 	Url                  string          `json:"url"`
 	AuthMode             string          `json:"auth_mode"`
-	CredentialEncrypted  string          `json:"credential_encrypted"`
+	CredentialKeyID      string          `json:"credential_key_id"`
+	CredentialAlgorithm  string          `json:"credential_algorithm"`
+	CredentialCiphertext []byte          `json:"credential_ciphertext"`
+	CredentialNonce      []byte          `json:"credential_nonce"`
 	CredentialKeyVersion int32           `json:"credential_key_version"`
 	CredentialEpoch      int64           `json:"credential_epoch"`
-	CaBundleEncrypted    string          `json:"ca_bundle_encrypted"`
+	CaBundleKeyID        string          `json:"ca_bundle_key_id"`
+	CaBundleAlgorithm    string          `json:"ca_bundle_algorithm"`
+	CaBundleCiphertext   []byte          `json:"ca_bundle_ciphertext"`
+	CaBundleNonce        []byte          `json:"ca_bundle_nonce"`
 	ProxyRef             string          `json:"proxy_ref"`
 	TrustPolicy          json.RawMessage `json:"trust_policy"`
 	CreatedBy            pgtype.UUID     `json:"created_by"`
@@ -1495,10 +1501,16 @@ func (q *Queries) CreateDeliverySource(ctx context.Context, arg CreateDeliverySo
 		arg.SourceType,
 		arg.Url,
 		arg.AuthMode,
-		arg.CredentialEncrypted,
+		arg.CredentialKeyID,
+		arg.CredentialAlgorithm,
+		arg.CredentialCiphertext,
+		arg.CredentialNonce,
 		arg.CredentialKeyVersion,
 		arg.CredentialEpoch,
-		arg.CaBundleEncrypted,
+		arg.CaBundleKeyID,
+		arg.CaBundleAlgorithm,
+		arg.CaBundleCiphertext,
+		arg.CaBundleNonce,
 		arg.ProxyRef,
 		arg.TrustPolicy,
 		arg.CreatedBy,
@@ -2566,8 +2578,8 @@ func (q *Queries) GetDeliverySource(ctx context.Context, arg GetDeliverySourcePa
 
 const getDeliverySourceResolutionWork = `-- name: GetDeliverySourceResolutionWork :one
 SELECT r.id, r.source_id, r.bundle_version_id, r.requested_revision, r.chart_name, r.resolved_revision, r.artifact_digest, r.verification_status, r.verification_identity, r.status, r.error_code, r.resolution_attempt, r.lease_owner, r.lease_expires_at, r.fence, r.next_attempt_at, r.started_at, r.completed_at, r.created_at, s.project_id, s.name AS source_name, s.description AS source_description,
-	s.source_type, s.url, s.auth_mode, s.credential_encrypted,
-	s.credential_key_version, s.ca_bundle_encrypted, s.proxy_ref, s.trust_policy,
+	s.source_type, s.url, s.auth_mode, s.credential_key_id, s.credential_algorithm, s.credential_ciphertext, s.credential_nonce,
+	s.credential_key_version, s.ca_bundle_key_id, s.ca_bundle_algorithm, s.ca_bundle_ciphertext, s.ca_bundle_nonce, s.proxy_ref, s.trust_policy,
 	bv.renderer, bv.scope, bv.renderer_spec, bv.reconciliation_policy,
 	bv.requirements, bv.dependency_bundle_ids
 FROM delivery_source_resolutions r
@@ -2610,9 +2622,15 @@ type GetDeliverySourceResolutionWorkRow struct {
 	SourceType           string             `json:"source_type"`
 	Url                  string             `json:"url"`
 	AuthMode             string             `json:"auth_mode"`
-	CredentialEncrypted  string             `json:"credential_encrypted"`
+	CredentialKeyID      string             `json:"credential_key_id"`
+	CredentialAlgorithm  string             `json:"credential_algorithm"`
+	CredentialCiphertext []byte             `json:"credential_ciphertext"`
+	CredentialNonce      []byte             `json:"credential_nonce"`
 	CredentialKeyVersion int32              `json:"credential_key_version"`
-	CaBundleEncrypted    string             `json:"ca_bundle_encrypted"`
+	CaBundleKeyID        string             `json:"ca_bundle_key_id"`
+	CaBundleAlgorithm    string             `json:"ca_bundle_algorithm"`
+	CaBundleCiphertext   []byte             `json:"ca_bundle_ciphertext"`
+	CaBundleNonce        []byte             `json:"ca_bundle_nonce"`
 	ProxyRef             string             `json:"proxy_ref"`
 	TrustPolicy          json.RawMessage    `json:"trust_policy"`
 	Renderer             pgtype.Text        `json:"renderer"`
@@ -2652,9 +2670,15 @@ func (q *Queries) GetDeliverySourceResolutionWork(ctx context.Context, arg GetDe
 		&i.SourceType,
 		&i.Url,
 		&i.AuthMode,
-		&i.CredentialEncrypted,
+		&i.CredentialKeyID,
+		&i.CredentialAlgorithm,
+		&i.CredentialCiphertext,
+		&i.CredentialNonce,
 		&i.CredentialKeyVersion,
-		&i.CaBundleEncrypted,
+		&i.CaBundleKeyID,
+		&i.CaBundleAlgorithm,
+		&i.CaBundleCiphertext,
+		&i.CaBundleNonce,
 		&i.ProxyRef,
 		&i.TrustPolicy,
 		&i.Renderer,
@@ -2748,7 +2772,7 @@ SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_v
        bv.resolved_revision, bv.artifact_digest, bv.source_spec,
        COALESCE(d.desired_renderer_spec, bv.renderer_spec) AS renderer_spec, bv.reconciliation_policy,
        s.source_type, s.url, s.auth_mode, s.credential_epoch,
-       s.credential_encrypted, s.ca_bundle_encrypted,
+       s.credential_key_id, s.credential_algorithm, s.credential_ciphertext, s.credential_nonce, s.ca_bundle_key_id, s.ca_bundle_algorithm, s.ca_bundle_ciphertext, s.ca_bundle_nonce,
        s.trust_policy, s.proxy_ref
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
@@ -2810,8 +2834,14 @@ type ListClusterDeliveryAssignmentsRow struct {
 	Url                        string             `json:"url"`
 	AuthMode                   string             `json:"auth_mode"`
 	CredentialEpoch            int64              `json:"credential_epoch"`
-	CredentialEncrypted        string             `json:"credential_encrypted"`
-	CaBundleEncrypted          string             `json:"ca_bundle_encrypted"`
+	CredentialKeyID            string             `json:"credential_key_id"`
+	CredentialAlgorithm        string             `json:"credential_algorithm"`
+	CredentialCiphertext       []byte             `json:"credential_ciphertext"`
+	CredentialNonce            []byte             `json:"credential_nonce"`
+	CaBundleKeyID              string             `json:"ca_bundle_key_id"`
+	CaBundleAlgorithm          string             `json:"ca_bundle_algorithm"`
+	CaBundleCiphertext         []byte             `json:"ca_bundle_ciphertext"`
+	CaBundleNonce              []byte             `json:"ca_bundle_nonce"`
 	TrustPolicy                json.RawMessage    `json:"trust_policy"`
 	ProxyRef                   string             `json:"proxy_ref"`
 }
@@ -2870,8 +2900,14 @@ func (q *Queries) ListClusterDeliveryAssignments(ctx context.Context, arg ListCl
 			&i.Url,
 			&i.AuthMode,
 			&i.CredentialEpoch,
-			&i.CredentialEncrypted,
-			&i.CaBundleEncrypted,
+			&i.CredentialKeyID,
+			&i.CredentialAlgorithm,
+			&i.CredentialCiphertext,
+			&i.CredentialNonce,
+			&i.CaBundleKeyID,
+			&i.CaBundleAlgorithm,
+			&i.CaBundleCiphertext,
+			&i.CaBundleNonce,
 			&i.TrustPolicy,
 			&i.ProxyRef,
 		); err != nil {
@@ -4326,7 +4362,8 @@ func (q *Queries) RetryDeliverySourceResolution(ctx context.Context, arg RetryDe
 
 const revokeDeliverySource = `-- name: RevokeDeliverySource :one
 UPDATE delivery_sources
-SET credential_encrypted = '', credential_key_version = 0,
+SET credential_key_id = '', credential_algorithm = '', credential_ciphertext = NULL,
+    credential_nonce = NULL, credential_key_version = 0,
     credential_epoch = credential_epoch + 1, status = 'revoked',
     last_error_code = 'credential_revoked', updated_by = $1
 WHERE id = $2 AND project_id = $3
@@ -4392,13 +4429,16 @@ func (q *Queries) RevokeDeliverySource(ctx context.Context, arg RevokeDeliverySo
 const rotateDeliverySourceCredential = `-- name: RotateDeliverySourceCredential :one
 UPDATE delivery_sources
 SET auth_mode = $1,
-    credential_encrypted = $2,
-    credential_key_version = $3,
+    credential_key_id = $2,
+    credential_algorithm = $3,
+    credential_ciphertext = $4,
+    credential_nonce = $5,
+    credential_key_version = $6,
     credential_epoch = credential_epoch + 1,
     status = 'pending',
     last_error_code = '',
-    updated_by = $4
-WHERE id = $5 AND project_id = $6
+    updated_by = $7
+WHERE id = $8 AND project_id = $9
 RETURNING id, project_id, name, description, source_type, url, auth_mode,
           credential_key_version, credential_epoch, proxy_ref, trust_policy,
           status, last_resolved_at, last_error_code, created_by, updated_by,
@@ -4407,7 +4447,10 @@ RETURNING id, project_id, name, description, source_type, url, auth_mode,
 
 type RotateDeliverySourceCredentialParams struct {
 	AuthMode             string      `json:"auth_mode"`
-	CredentialEncrypted  string      `json:"credential_encrypted"`
+	CredentialKeyID      string      `json:"credential_key_id"`
+	CredentialAlgorithm  string      `json:"credential_algorithm"`
+	CredentialCiphertext []byte      `json:"credential_ciphertext"`
+	CredentialNonce      []byte      `json:"credential_nonce"`
 	CredentialKeyVersion int32       `json:"credential_key_version"`
 	UpdatedBy            pgtype.UUID `json:"updated_by"`
 	ID                   uuid.UUID   `json:"id"`
@@ -4438,7 +4481,10 @@ type RotateDeliverySourceCredentialRow struct {
 func (q *Queries) RotateDeliverySourceCredential(ctx context.Context, arg RotateDeliverySourceCredentialParams) (RotateDeliverySourceCredentialRow, error) {
 	row := q.db.QueryRow(ctx, rotateDeliverySourceCredential,
 		arg.AuthMode,
-		arg.CredentialEncrypted,
+		arg.CredentialKeyID,
+		arg.CredentialAlgorithm,
+		arg.CredentialCiphertext,
+		arg.CredentialNonce,
 		arg.CredentialKeyVersion,
 		arg.UpdatedBy,
 		arg.ID,
@@ -4725,9 +4771,12 @@ SET description = $1,
     url = $2,
     proxy_ref = $3,
     trust_policy = $4,
-    ca_bundle_encrypted = CASE WHEN $5::boolean THEN $6 ELSE ca_bundle_encrypted END,
-    updated_by = $7
-WHERE id = $8 AND project_id = $9
+    ca_bundle_key_id = CASE WHEN $5::boolean THEN $6 ELSE ca_bundle_key_id END,
+    ca_bundle_algorithm = CASE WHEN $5::boolean THEN $7 ELSE ca_bundle_algorithm END,
+    ca_bundle_ciphertext = CASE WHEN $5::boolean THEN $8 ELSE ca_bundle_ciphertext END,
+    ca_bundle_nonce = CASE WHEN $5::boolean THEN $9 ELSE ca_bundle_nonce END,
+    updated_by = $10
+WHERE id = $11 AND project_id = $12
 RETURNING id, project_id, name, description, source_type, url, auth_mode,
           credential_key_version, credential_epoch, proxy_ref, trust_policy,
           status, last_resolved_at, last_error_code, created_by, updated_by,
@@ -4735,15 +4784,18 @@ RETURNING id, project_id, name, description, source_type, url, auth_mode,
 `
 
 type UpdateDeliverySourceParams struct {
-	Description       string          `json:"description"`
-	Url               string          `json:"url"`
-	ProxyRef          string          `json:"proxy_ref"`
-	TrustPolicy       json.RawMessage `json:"trust_policy"`
-	ReplaceCaBundle   bool            `json:"replace_ca_bundle"`
-	CaBundleEncrypted string          `json:"ca_bundle_encrypted"`
-	UpdatedBy         pgtype.UUID     `json:"updated_by"`
-	ID                uuid.UUID       `json:"id"`
-	ProjectID         uuid.UUID       `json:"project_id"`
+	Description        string          `json:"description"`
+	Url                string          `json:"url"`
+	ProxyRef           string          `json:"proxy_ref"`
+	TrustPolicy        json.RawMessage `json:"trust_policy"`
+	ReplaceCaBundle    bool            `json:"replace_ca_bundle"`
+	CaBundleKeyID      string          `json:"ca_bundle_key_id"`
+	CaBundleAlgorithm  string          `json:"ca_bundle_algorithm"`
+	CaBundleCiphertext []byte          `json:"ca_bundle_ciphertext"`
+	CaBundleNonce      []byte          `json:"ca_bundle_nonce"`
+	UpdatedBy          pgtype.UUID     `json:"updated_by"`
+	ID                 uuid.UUID       `json:"id"`
+	ProjectID          uuid.UUID       `json:"project_id"`
 }
 
 type UpdateDeliverySourceRow struct {
@@ -4774,7 +4826,10 @@ func (q *Queries) UpdateDeliverySource(ctx context.Context, arg UpdateDeliverySo
 		arg.ProxyRef,
 		arg.TrustPolicy,
 		arg.ReplaceCaBundle,
-		arg.CaBundleEncrypted,
+		arg.CaBundleKeyID,
+		arg.CaBundleAlgorithm,
+		arg.CaBundleCiphertext,
+		arg.CaBundleNonce,
 		arg.UpdatedBy,
 		arg.ID,
 		arg.ProjectID,

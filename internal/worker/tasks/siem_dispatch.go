@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,9 +14,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // Migration 055 — SIEM dispatcher + retention task types.
@@ -72,7 +71,7 @@ type SIEMTransportFactory func(sub sqlc.SiemForwarder, secret authBlob) (siem.Tr
 // SIEMDeps is the SIEM dispatcher's explicit dependency set.
 type SIEMDeps struct {
 	Queries          SIEMQuerier
-	Encryptor        *auth.Encryptor
+	Encryptor        *crypto.Encryptor
 	TransportFactory SIEMTransportFactory
 	HTTPClient       *http.Client
 }
@@ -102,7 +101,7 @@ type cachedSIEMHTTPClient struct {
 	client *http.Client
 }
 
-// authBlob is the decrypted shape stored in siem_forwarders.auth_encrypted.
+// authBlob is the decrypted shape sealed in siem_forwarders.auth_*.
 // The handler accepts free-form JSON on input so future auth styles
 // (mTLS cert, OAuth client_credentials, AWS sigv4) can be added without
 // a migration; today we read just token / username / password.
@@ -201,7 +200,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 	}
 
 	// Decrypt the auth blob once per drain.
-	secret, err := runtime.decryptSIEMAuthBlob(sub.AuthEncrypted)
+	secret, err := runtime.decryptSIEMAuthBlob(crypto.FromParts(sub.AuthKeyID, sub.AuthAlgorithm, sub.AuthCiphertext, sub.AuthNonce))
 	if err != nil {
 		runtimeLogger(ctx).WarnContext(ctx, "siem: decrypt auth blob failed",
 			"forwarder", sub.Name, "error", err)
@@ -401,23 +400,24 @@ func extractResourceHints(detail json.RawMessage) (resourceID, resourceType, act
 	return
 }
 
-// decryptAuthBlob undoes the Fernet wrap the handler applies on create.
-// Returns the empty blob (no token, no auth) when auth_encrypted is
-// empty — that's the default for forwarders that don't need auth (e.g.
+// decryptSIEMAuthBlob opens the auth the handler sealed on create.
+// Returns the empty blob (no token, no auth) when no sealed auth is
+// stored — that's the default for forwarders that don't need auth (e.g.
 // a syslog UDP sink on a private network).
-func (runtime DispatchRuntime) decryptSIEMAuthBlob(encrypted string) (authBlob, error) {
-	if strings.TrimSpace(encrypted) == "" {
+func (runtime DispatchRuntime) decryptSIEMAuthBlob(sealed crypto.Sealed) (authBlob, error) {
+	if sealed.IsZero() {
 		return authBlob{}, nil
 	}
 	if runtime.SIEM.Encryptor == nil {
 		return authBlob{}, errors.New("encryptor unavailable")
 	}
-	plain, err := runtime.SIEM.Encryptor.Decrypt(encrypted)
+	plain, err := runtime.SIEM.Encryptor.Decrypt(sealed)
 	if err != nil {
 		return authBlob{}, err
 	}
+	defer zeroBytes(plain)
 	var blob authBlob
-	if err := json.Unmarshal([]byte(plain), &blob); err != nil {
+	if err := json.Unmarshal(plain, &blob); err != nil {
 		return authBlob{}, fmt.Errorf("decode auth: %w", err)
 	}
 	return blob, nil

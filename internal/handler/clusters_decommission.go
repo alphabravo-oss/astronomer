@@ -11,9 +11,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -141,13 +141,13 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	if cluster.IsLocal {
 		// The local cluster represents the host this server itself runs in;
 		// decommissioning it would tear down the management plane. Refuse.
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Cannot decommission the local cluster")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Cannot decommission the local cluster")
 		return
 	}
 
@@ -190,7 +190,7 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 						}
 					})
 				if forceErr != nil {
-					respondTransactionalMutationError(w, r, forceErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to force cluster decommission")
+					respondTransactionalMutationError(w, r, forceErr, http.StatusInternalServerError, apiutil.UpdateError, "Failed to force cluster decommission")
 					return
 				}
 				existing = escalated
@@ -232,7 +232,7 @@ func (h *ClusterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateDecommissionFailed, "Failed to enqueue cluster decommission")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateDecommissionFailed, "Failed to enqueue cluster decommission")
 		return
 	}
 	h.publishEvent("cluster.decommission_enqueued", map[string]any{
@@ -280,7 +280,7 @@ func (h *ClusterHandler) GetDecommission(w http.ResponseWriter, r *http.Request)
 	}
 	row, err := h.queries.GetLatestClusterDecommissionByCluster(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No decommission for cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "No decommission for cluster")
 		return
 	}
 	statusURL := fmt.Sprintf("/api/v1/clusters/%s/decommission/", id.String())

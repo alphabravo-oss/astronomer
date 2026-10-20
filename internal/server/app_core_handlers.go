@@ -2,9 +2,10 @@ package server
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -16,17 +17,18 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	encryptor := c.encryptor
 	bus := events.NewBus()
-	hub := tunnel.NewHubWithValidator(logger, queries)
+	hub := tunnel.NewHubWithValidator(logging.Slog(logger), queries)
 	hub.SetDeliveryStateProvider(deliveryprovider.New(queries, encryptor))
 	deliveryStatusIngester := deliverystatus.NewIngester(deliverystatus.NewSQLRunner(database.Pool()))
-	deliveryStatusIngester.SetLogger(logger)
+	deliveryStatusIngester.SetLogger(logging.Slog(logger))
 	hub.SetDeliveryStatusSink(deliveryStatusIngester)
 	hub.SetPublisher(busPublisherAdapter{bus: bus})
 	// Cross-pod tunnel proxy fallback. Each pod publishes "I own this
@@ -40,11 +42,11 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	podIP := strings.TrimSpace(cfg.PodIP)
 	if podIP != "" && cfg.RedisURL != "" {
 		addr := podIP + ":8000"
-		if loc, lerr := tunnel.NewLocatorFromAsynqRedisURL(cfg.RedisURL, addr, logger); lerr != nil {
-			logger.Warn("tunnel locator init failed; cross-pod proxy disabled", "error", lerr)
+		if loc, lerr := tunnel.NewLocatorFromAsynqRedisURL(cfg.RedisURL, addr, logging.Slog(logger)); lerr != nil {
+			logger.Warn().Err(lerr).Msg("tunnel locator init failed; cross-pod proxy disabled")
 		} else {
 			hub.SetLocator(loc)
-			logger.Info("tunnel locator wired", "address", addr)
+			logger.Info().Str("address", addr).Msg("tunnel locator wired")
 		}
 	} else if cfg.ServerReplicas > 1 && cfg.RedisURL != "" && podIP == "" {
 		// L19: a multi-replica deployment with redis but no POD_IP leaves the
@@ -52,8 +54,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 		// exec request landing on a non-owning replica 503s. Fail readiness loudly
 		// (the rollout stalls) rather than silently degrade.
 		locatorReadinessErr = "ASTRONOMER_POD_IP is unset on a multi-replica deployment (server_replicas>1) with redis configured; the cross-pod tunnel locator is disabled and non-owning replicas will 503 — set ASTRONOMER_POD_IP (Helm injects it from status.podIP; add it to raw k8s manifests)"
-		logger.Error("tunnel locator MISCONFIGURED (L19): /readyz will fail until ASTRONOMER_POD_IP is set",
-			"server_replicas", cfg.ServerReplicas)
+		logger.Error().Int("server_replicas", cfg.ServerReplicas).Msg("tunnel locator MISCONFIGURED (L19): /readyz will fail until ASTRONOMER_POD_IP is set")
 	}
 	// A4 / M5+L13: the per-IP connect FAILURE limiter protects the agent hub
 	// WebSocket path. The limiter
@@ -69,7 +70,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	requester := handler.NewTunnelK8sRequester(hub)
 	// Cross-pod fallback for server-internal tunnel calls (shell open,
 	// project reconciler, etc.). The dedicated internal PSK is independent of
-	// the Fernet credential-encryption key.
+	// the age credential-encryption key.
 	requester.SetInternalPSK(cfg.InternalPSK)
 	helmRequester := handler.NewTunnelHelmRequester(hub)
 	// Same cross-pod PSK plumbing as the k8s requester: enables the
@@ -78,10 +79,10 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	helmRequester.SetInternalPSK(cfg.InternalPSK)
 	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
 	monitoringHandler.SetRunTx(sqlcMutationTxRunner[handler.MonitoringMutationTx](database))
-	monitoringHandler.SetLogger(logger)
+	monitoringHandler.SetLogger(logging.Slog(logger))
 	grafanaTickets := auth.NewGrafanaTicketStore(auth.GrafanaTicketTTL)
 	if gbackend, terr := auth.NewRedisGrafanaTicketBackendFromURL(cfg.RedisURL); terr != nil {
-		logger.Warn("grafana tickets: redis backend unavailable, using per-pod in-memory store", "error", terr)
+		logger.Warn().Err(terr).Msg("grafana tickets: redis backend unavailable, using per-pod in-memory store")
 	} else {
 		grafanaTickets = auth.NewGrafanaTicketStoreWithBackend(auth.GrafanaTicketTTL, gbackend)
 	}
@@ -104,7 +105,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 		return time.Duration(grafanaSessionTTL(ctx)) * time.Minute
 	})
 	// Migration 146: the Thanos/Prometheus/Alertmanager credential is
-	// Fernet-sealed at rest. This handler both reads it (to build a monitoring
+	// age-sealed at rest. This handler both reads it (to build a monitoring
 	// client) and read-modify-writes the column it lives in.
 	monitoringHandler.SetEncryptor(encryptor)
 	alertingHandler := handler.NewAlertingHandlerWithDeps(queries, requester)
@@ -117,7 +118,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	toolHandler := handler.NewToolHandlerWithHelm(queries, helmRequester)
 	toolHandler.SetK8sRequester(requester)
 	toolHandler.SetRunTx(sqlcMutationTxRunner[handler.ToolMutationTx](database))
-	toolHandler.SetLogger(logger)
+	toolHandler.SetLogger(logging.Slog(logger))
 	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
 	catalogHandler.SetCursorCodec(c.cursorCodec)
@@ -126,8 +127,8 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	}
 	catalogHandler.SetK8sRequester(requester)
 	catalogHandler.SetRunTx(sqlcMutationTxRunner[handler.CatalogMutationTx](database))
-	catalogHandler.SetLogger(logger)
-	// Migration 145: chart-repository credentials are Fernet-sealed at rest.
+	catalogHandler.SetLogger(logging.Slog(logger))
+	// Migration 145: chart-repository credentials are age-sealed at rest.
 	catalogHandler.SetEncryptor(encryptor)
 	// P4.9 — catalog_release.changed liveness events on installed-chart writes.
 	catalogHandler.SetEventBus(bus)
@@ -141,7 +142,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// CRs + real S3 SigV4 probes instead of the legacy stub paths.
 	backupHandler.SetEncryptor(encryptor)
 	backupHandler.SetK8sRequester(requester)
-	backupHandler.SetLogger(logger)
+	backupHandler.SetLogger(logging.Slog(logger))
 	backupHandler.SetEventBus(bus)
 	loggingHandler := handler.NewLoggingHandler(queries)
 	loggingHandler.SetRunTx(sqlcMutationTxRunner[handler.LoggingMutationTx](database))
@@ -150,7 +151,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// patches the baseline fluent-bit Helm extraVolumeMounts. Comparison.md §7/§10/§11.
 	loggingHandler.SetK8sRequester(requester)
 	loggingHandler.SetHelmRequester(helmRequester)
-	loggingHandler.SetLogger(logger)
+	loggingHandler.SetLogger(logging.Slog(logger))
 	loggingHandler.SetEventBus(bus)
 	loggingHandler.SetEncryptor(encryptor)
 	securityHandler := handler.NewSecurityHandler(queries)
@@ -158,7 +159,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// tunnel and runs an in-process poller until the report lands).
 	securityHandler.SetK8sRequester(requester)
 	securityHandler.SetClusterQuerier(queries)
-	securityHandler.SetLogger(logger)
+	securityHandler.SetLogger(logging.Slog(logger))
 	securityHandler.SetEventBus(bus)
 	securityHandler.SetRunTx(sqlcMutationTxRunner[handler.SecurityMutationTx](database))
 	// P4.9 — apiserver allow-list surface (migration 070). Previously the
@@ -172,7 +173,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	apiserverAllowlistHandler.SetRunTx(sqlcMutationTxRunner[handler.ApiserverAllowlistMutationTx](database))
 	workloadHandler := handler.NewWorkloadHandlerWithDeps(queries, requester)
 	workloadHandler.SetRunTx(sqlcMutationTxRunner[handler.WorkloadMutationTx](database))
-	workloadHandler.SetLogger(logger)
+	workloadHandler.SetLogger(logging.Slog(logger))
 	// The tunnel requester also implements the live pod watch used by the
 	// /pods/watch/ SSE endpoint.
 	workloadHandler.SetPodWatcher(requester)

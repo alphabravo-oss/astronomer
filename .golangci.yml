@@ -8,6 +8,9 @@ run:
   tests: true
   # A lint run must never mutate go.mod / go.sum.
   modules-download-mode: readonly
+  # Integration tests (guide ch.07) are linted with the rest of the tree.
+  build-tags:
+    - integration
 
 formatters:
   enable:
@@ -45,6 +48,10 @@ linters:
       statements: 50
     nestif:
       min-complexity: 5
+    paralleltest:
+      # Subtests that share a fixture are sequenced by design; top-level
+      # tests always run in parallel.
+      ignore-missing-subtests: true
     staticcheck:
       # golangci-lint's default staticcheck set with ST1005 added. `checks`
       # REPLACES the default, so the default entries are repeated verbatim.
@@ -75,15 +82,16 @@ linters:
       # complexity linters are enforced on new code and on every package that
       # has already been extracted; the legacy paths below are exempt until
       # they are rewritten (tracked in docs/decisions/0007-rest-to-connect-rpc.md).
-      - path: ^(internal/handler|internal/server|cmd/astro|internal/charlie|internal/delivery|internal/worker|internal/catalog|internal/ops|internal/tunnel|internal/agent|internal/crd|internal/scanner|internal/gitops|internal/astrocli|internal/auth|internal/db|internal/observability|internal/monitoring|internal/compliance|internal/notify|internal/webhook|internal/siem|internal/rbac|internal/toolui|internal/kubectl|internal/maintenance|internal/helmruntime|internal/httpclient|internal/registration|internal/credential|internal/cloudcreds|internal/dexconfig|internal/controlplane|internal/vault|internal/email|internal/quota|internal/projectquota|internal/projects|internal/audit|internal/anomaly|internal/apisvr|internal/netpol|internal/mesh|internal/dashboards|internal/gatekeeperpolicy|internal/lokiauth|internal/grafanaproxy|internal/events|internal/deferredreplay|internal/downstreamboundary|internal/jsoncontract|internal/pagination|internal/principal|internal/redaction|internal/reqctx|internal/sessionpolicy|internal/tableviews|internal/userpreferences|internal/metrics|internal/cacheinvalidate|internal/callerid|internal/config|internal/redisconn|internal/releasecontract|internal/kubeutil|internal/strutil|internal/operationstate|internal/platformsettings|internal/agentlifecycle|internal/agentcompat|internal/envconfig|internal/httpserver|cmd/|deploy/|pkg/|scripts/)
+      - path: ^(internal/handler|internal/server|cmd/astro|internal/charlie|internal/delivery|internal/worker|internal/catalog|internal/ops|internal/tunnel|internal/agent|internal/scanner|internal/gitops|internal/astrocli|internal/auth|internal/db|internal/observability|internal/monitoring|internal/compliance|internal/notify|internal/webhook|internal/siem|internal/rbac|internal/toolui|internal/kubectl|internal/maintenance|internal/helmruntime|internal/httpclient|internal/registration|internal/credential|internal/cloudcreds|internal/dexconfig|internal/controlplane|internal/vault|internal/email|internal/quota|internal/projectquota|internal/projects|internal/audit|internal/anomaly|internal/apisvr|internal/netpol|internal/mesh|internal/dashboards|internal/gatekeeperpolicy|internal/lokiauth|internal/grafanaproxy|internal/events|internal/deferredreplay|internal/downstreamboundary|internal/jsoncontract|internal/pagination|internal/principal|internal/redaction|internal/reqctx|internal/sessionpolicy|internal/tableviews|internal/userpreferences|internal/metrics|internal/cacheinvalidate|internal/callerid|internal/config|internal/redisconn|internal/releasecontract|internal/kubeutil|internal/strutil|internal/operationstate|internal/platformsettings|internal/agentlifecycle|internal/agentcompat|internal/envconfig|internal/httpserver|cmd/|deploy/|pkg/|scripts/)
         linters:
           - cyclop
           - gocognit
           - funlen
           - nestif
-      # Existing test files predate the t.Parallel() rule; they are retagged and
-      # parallelised as each domain is rewritten (Phase 1 testing substrate).
-      - path: _test\.go$
+      # Legacy unit-test files predate the t.Parallel() rule and are
+      # parallelised as each domain is rewritten (Phase 2). Every
+      # *_integration_test.go (the Phase 1 testdb substrate) is enforced.
+      - path-except: _integration_test\.go$
         linters:
           - paralleltest
           - tparallel

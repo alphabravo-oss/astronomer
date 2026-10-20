@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"syscall"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
@@ -285,7 +287,7 @@ func bindMetadataArtifact(ctx context.Context, path string, maximum int64) (meta
 		return empty, err
 	}
 	before, err := os.Lstat(path)
-	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 || before.Size() > maximum || before.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) || before.Sys().(*syscall.Stat_t).Nlink != 1 {
+	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 || before.Size() > maximum || before.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) || before.Sys().(*syscall.Stat_t).Nlink != 1 {
 		return empty, errors.New("private recovery artifact identity or budget differs")
 	}
 	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)

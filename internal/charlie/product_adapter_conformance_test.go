@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +20,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -340,7 +341,7 @@ func newAdapterConformanceGuard(t *testing.T, authority *adapterConformanceAutho
 	if err != nil {
 		t.Fatal(err)
 	}
-	guard.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	guard.SetLogger(zerolog.Nop())
 	return guard, privateKey
 }
 

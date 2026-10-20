@@ -471,7 +471,7 @@ spec:
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/audit-events-dropped.md
 
         # ── Published development key in use ────────────────────────────
-        # The chart used to ship a working JWT signing key + Fernet key as
+        # The chart used to ship a working JWT signing key + encryption key as
         # its defaults, and the runtime accepted them silently outside
         # production. An install still holding either one can have admin
         # tokens forged against it and every stored credential decrypted by

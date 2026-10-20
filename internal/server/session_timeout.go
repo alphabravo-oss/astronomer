@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -26,7 +26,7 @@ func configureSessionTimeoutPolicy(
 	authHandler *handler.AuthHandler,
 	jwtManager *auth.JWTManager,
 	queries sessionTimeoutSettingQuerier,
-	logger *slog.Logger,
+	logger zerolog.Logger,
 ) {
 	resolveMinutes := newSessionTimeoutResolver(queries, logger)
 	authHandler.SetSessionTimeoutPolicy(resolveMinutes)
@@ -38,16 +38,10 @@ func configureSessionTimeoutPolicy(
 	})
 }
 
-func newSessionTimeoutResolver(queries sessionTimeoutSettingQuerier, logger *slog.Logger) func(context.Context) int {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func newSessionTimeoutResolver(queries sessionTimeoutSettingQuerier, logger zerolog.Logger) func(context.Context) int {
 	return func(ctx context.Context) int {
 		if queries == nil {
-			logger.Error("session timeout settings store is unavailable; using safe default",
-				"setting_key", sessionpolicy.SettingKey,
-				"default_minutes", sessionpolicy.DefaultMinutes,
-			)
+			logger.Error().Str("setting_key", sessionpolicy.SettingKey).Int("default_minutes", sessionpolicy.DefaultMinutes).Msg("session timeout settings store is unavailable; using safe default")
 			return sessionpolicy.DefaultMinutes
 		}
 
@@ -56,23 +50,13 @@ func newSessionTimeoutResolver(queries sessionTimeoutSettingQuerier, logger *slo
 			return sessionpolicy.DefaultMinutes
 		}
 		if err != nil {
-			logger.Error("session timeout setting read failed; using safe default",
-				"setting_key", sessionpolicy.SettingKey,
-				"default_minutes", sessionpolicy.DefaultMinutes,
-				"error", err,
-			)
+			logger.Error().Str("setting_key", sessionpolicy.SettingKey).Int("default_minutes", sessionpolicy.DefaultMinutes).Err(err).Msg("session timeout setting read failed; using safe default")
 			return sessionpolicy.DefaultMinutes
 		}
 
 		minutes, parseErr := sessionpolicy.ParseMinutes(row.Value)
 		if parseErr != nil {
-			logger.Error("session timeout setting is invalid; using safe default",
-				"setting_key", sessionpolicy.SettingKey,
-				"default_minutes", sessionpolicy.DefaultMinutes,
-				"minimum_minutes", sessionpolicy.MinMinutes,
-				"maximum_minutes", sessionpolicy.MaxMinutes,
-				"error", parseErr,
-			)
+			logger.Error().Str("setting_key", sessionpolicy.SettingKey).Int("default_minutes", sessionpolicy.DefaultMinutes).Int("minimum_minutes", sessionpolicy.MinMinutes).Int("maximum_minutes", sessionpolicy.MaxMinutes).Err(parseErr).Msg("session timeout setting is invalid; using safe default")
 		}
 		return minutes
 	}

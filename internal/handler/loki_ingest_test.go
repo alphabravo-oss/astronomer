@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
@@ -237,24 +236,5 @@ func TestBuildLokiQueryACLGrantsAndDedupes(t *testing.T) {
 	}
 	if got := acl.Users["fleet-viewer@example.com"]; len(got) != 1 || got[0] != c1.String() {
 		t.Fatalf("global monitoring:read must only get matching cluster orgs, got %v", got)
-	}
-}
-
-func TestSecretInventoryDocumentsLokiIngestTokens(t *testing.T) {
-	raw, err := os.ReadFile("../db/migrations/migration_secret_columns_test.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := string(raw)
-	if !strings.Contains(s, "003_loki_ingest_tokens.up.sql:token_hash") || !strings.Contains(s, "003_loki_ingest_tokens.up.sql:token_encrypted") {
-		t.Fatal("migration_secret_columns_test.go must classify loki_ingest_tokens hash and Fernet columns")
-	}
-	inv, err := os.ReadFile("../../docs/secret-column-inventory.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := string(inv)
-	if !strings.Contains(doc, "loki_ingest_tokens.token_hash") || !strings.Contains(doc, "loki_ingest_tokens.token_encrypted") {
-		t.Fatal("docs/secret-column-inventory.md must list loki_ingest_tokens columns")
 	}
 }

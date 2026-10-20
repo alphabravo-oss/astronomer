@@ -400,6 +400,7 @@ func TestPublisher_RegistryCreateEmitsChanged(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	h := NewClusterRegistriesHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	setClusterRegistryTestRunTx(h, q)
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)

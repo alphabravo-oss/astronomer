@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -299,7 +301,7 @@ func (t *BusTap) insertOne(ctx context.Context, job enqueueJob) {
 				_ = t.q.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 					ForwarderID:  job.forwarderID,
 					LastError:    "queue full; oldest rows dropped",
-					QueueDepth:   int32(t.maxQueue),
+					QueueDepth:   safeconv.Int32(t.maxQueue),
 					DroppedTotal: int64(len(ids)),
 				})
 			}

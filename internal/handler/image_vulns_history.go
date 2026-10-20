@@ -33,8 +33,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // ImageVulnHistoryQuerier is the extra surface ImageVulnHandler's
@@ -57,7 +57,7 @@ func (h *ImageVulnHandler) ClusterHistory(w http.ResponseWriter, r *http.Request
 	}
 	q, ok := h.queries.(ImageVulnHistoryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.HistoryUnavailable, "Snapshot store not wired on this build")
+		apiutil.WriteError(w, r, http.StatusNotImplemented, apiutil.HistoryUnavailable, "Snapshot store not wired on this build")
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *ImageVulnHandler) ClusterHistory(w http.ResponseWriter, r *http.Request
 		Limit:     limit,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HistoryError, "Failed to list scan history")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.HistoryError, "Failed to list scan history")
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *ImageVulnHandler) ClusterDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	q, ok := h.queries.(ImageVulnHistoryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.DiffUnavailable, "Snapshot store not wired on this build")
+		apiutil.WriteError(w, r, http.StatusNotImplemented, apiutil.DiffUnavailable, "Snapshot store not wired on this build")
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *ImageVulnHandler) ClusterExportCSV(w http.ResponseWriter, r *http.Reque
 		Offset:    0,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ExportError, "Failed to export scan results")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ExportError, "Failed to export scan results")
 		return
 	}
 
@@ -256,12 +256,12 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 	}
 	reportID, err := uuid.Parse(chi.URLParam(r, "report_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid report ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid report ID")
 		return
 	}
 	q, ok := h.queries.(ImageVulnHistoryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.HistoryUnavailable, "Snapshot store not wired on this build")
+		apiutil.WriteError(w, r, http.StatusNotImplemented, apiutil.HistoryUnavailable, "Snapshot store not wired on this build")
 		return
 	}
 
@@ -275,7 +275,7 @@ func (h *ImageVulnHandler) ReportHistory(w http.ResponseWriter, r *http.Request)
 		Limit:    limit,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HistoryError, "Failed to list scan history")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.HistoryError, "Failed to list scan history")
 		return
 	}
 

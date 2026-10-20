@@ -4,18 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestAuthorityLogIsBoundedAndContentFree(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	logger := zerolog.New(&output)
 	LogAuthorityDecision(logger, DecisionLog{
 		SessionID:  strings.Repeat("s", 200),
 		ActionID:   strings.Repeat("a", 200),
@@ -43,7 +44,7 @@ func TestAuthorityLogIsBoundedAndContentFree(t *testing.T) {
 
 func TestAuthorityLogHashesOpaqueIDsAndRejectsArbitraryCapabilityLabel(t *testing.T) {
 	var output bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	logger := zerolog.New(&output)
 	LogAuthorityDecision(logger, DecisionLog{SessionID: "session-SENTINEL", ActionID: "action-SENTINEL", Capability: "secret-SENTINEL", Decision: AuthorityDecision{Code: DeniedAuthorization}})
 	line := output.String()
 	if strings.Contains(line, "SENTINEL") || !strings.Contains(line, `"capability":"unknown"`) || !strings.Contains(line, "session_digest") || !strings.Contains(line, "action_digest") {
@@ -54,43 +55,43 @@ func TestAuthorityLogHashesOpaqueIDsAndRejectsArbitraryCapabilityLabel(t *testin
 func TestCharlieOperationalSerializerUsesClosedSchemas(t *testing.T) {
 	tests := []struct {
 		name        string
-		write       func(*slog.Logger)
+		write       func(zerolog.Logger)
 		event       string
 		allowedKeys []string
 	}{
 		{
 			name: "authority", event: "charlie_authority_decision",
-			write: func(logger *slog.Logger) {
+			write: func(logger zerolog.Logger) {
 				LogAuthorityDecision(logger, DecisionLog{SessionID: "session", ActionID: "action", Capability: "astronomer.tunnel.health", Mode: ModeReadOnly, Effect: EffectRead, Decision: AuthorityDecision{Code: DeniedAuthorization}})
 			},
-			allowedKeys: []string{"time", "level", "msg", "event", "session_digest", "action_digest", "capability", "mode", "effect", "result", "code"},
+			allowedKeys: []string{"time", "level", "message", "event", "session_digest", "action_digest", "capability", "mode", "effect", "result", "code"},
 		},
 		{
 			name: "failure", event: "charlie.operational.failure",
-			write: func(logger *slog.Logger) {
+			write: func(logger zerolog.Logger) {
 				LogOperationalFailure(context.Background(), logger, "charlie.action_audit_persist_failed", "correlation")
 			},
-			allowedKeys: []string{"time", "level", "msg", "event", "failure_code", "correlation_digest"},
+			allowedKeys: []string{"time", "level", "message", "event", "failure_code", "correlation_digest"},
 		},
 		{
 			name: "http", event: "charlie.http.mutation",
-			write: func(logger *slog.Logger) {
+			write: func(logger zerolog.Logger) {
 				LogHTTPAudit(context.Background(), logger, "POST", 403, 2, "request", "correlation")
 			},
-			allowedKeys: []string{"time", "level", "msg", "event", "outcome_code", "method", "status_code", "duration_ms", "request_digest", "correlation_digest"},
+			allowedKeys: []string{"time", "level", "message", "event", "outcome_code", "method", "status_code", "duration_ms", "request_digest", "correlation_digest"},
 		},
 		{
 			name: "runtime", event: "charlie.runtime.lifecycle",
-			write: func(logger *slog.Logger) {
+			write: func(logger zerolog.Logger) {
 				LogRuntimeEvent(context.Background(), logger, "activated")
 			},
-			allowedKeys: []string{"time", "level", "msg", "event", "state"},
+			allowedKeys: []string{"time", "level", "message", "event", "state"},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
-			test.write(slog.New(slog.NewJSONHandler(&output, nil)))
+			test.write(zerolog.New(&output).With().Timestamp().Logger())
 			var row map[string]any
 			if err := json.Unmarshal(output.Bytes(), &row); err != nil {
 				t.Fatalf("decode operational row: %v", err)
@@ -115,7 +116,7 @@ func TestCharlieOperationalSerializerUsesClosedSchemas(t *testing.T) {
 func TestCharlieOperationalSerializerBoundsUnknownValuesAndHashesCorrelation(t *testing.T) {
 	const canary = "caller-provider-secret-SENTINEL"
 	var output bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	logger := zerolog.New(&output)
 	LogOperationalFailure(context.Background(), logger, canary, canary)
 	LogHTTPAudit(context.Background(), logger, canary, -1, -1, canary, canary)
 	LogAuthorityDecision(logger, DecisionLog{SessionID: canary, ActionID: canary, Capability: canary, Mode: Mode(canary), Effect: Effect(canary), Decision: AuthorityDecision{Code: DenialCode(canary)}})
@@ -135,7 +136,7 @@ func TestCharlieOperationalFailureVocabularySerializesExactly(t *testing.T) {
 	for code := range operationalFailureCodes {
 		t.Run(code, func(t *testing.T) {
 			var output bytes.Buffer
-			LogOperationalFailure(context.Background(), slog.New(slog.NewJSONHandler(&output, nil)), code, "correlation-SENTINEL")
+			LogOperationalFailure(context.Background(), zerolog.New(&output), code, "correlation-SENTINEL")
 			var row map[string]any
 			if err := json.Unmarshal(output.Bytes(), &row); err != nil {
 				t.Fatal(err)
@@ -154,7 +155,7 @@ func FuzzCharlieOperationalSerializerNeverEmitsCallerCanary(f *testing.F) {
 	f.Fuzz(func(t *testing.T, value string) {
 		canary := "CALLER-SENTINEL-" + value
 		var output bytes.Buffer
-		logger := slog.New(slog.NewJSONHandler(&output, nil))
+		logger := zerolog.New(&output)
 		LogOperationalFailure(context.Background(), logger, canary, canary)
 		LogHTTPAudit(context.Background(), logger, canary, 403, 1, canary, canary)
 		LogAuthorityDecision(logger, DecisionLog{SessionID: canary, ActionID: canary, Capability: canary, Mode: Mode(canary), Effect: Effect(canary), Decision: AuthorityDecision{Code: DenialCode(canary)}})

@@ -8,21 +8,25 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	rows, err := h.queries.ListWebhookSubscriptions(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to list webhook subscriptions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to list webhook subscriptions")
 		return
 	}
 	items := make([]subscriptionResponse, 0, len(rows))
@@ -38,47 +42,47 @@ func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/admin/webhooks/.
 func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	var req subscriptionRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Apply defaults for required fields.
 	if req.Name == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "name is required")
 		return
 	}
 	if req.URL == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "url is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "url is required")
 		return
 	}
 	if req.Secret == nil || strings.TrimSpace(*req.Secret) == "" || *req.Secret == SecretSentinel {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "secret is required on create")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "secret is required on create")
 		return
 	}
 	merged, vErr := h.mergeForCreate(req)
 	if vErr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, vErr)
 		return
 	}
 	// Uniqueness check (the unique index would catch this too, but a
 	// pre-flight returns a friendlier error than the raw constraint
 	// violation).
 	if existing, err := h.queries.GetWebhookSubscriptionByName(r.Context(), merged.Name); err == nil && existing.ID != uuid.Nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A webhook subscription with this name already exists")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A webhook subscription with this name already exists")
 		return
 	}
 
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor is not configured; cannot store webhook secret")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor is not configured; cannot store webhook secret")
 		return
 	}
-	secretEnc, err := h.encryptor.Encrypt(*req.Secret)
+	secretEnc, err := h.encryptor.EncryptString(*req.Secret)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt webhook secret")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt webhook secret")
 		return
 	}
 
@@ -86,15 +90,15 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	headersJSON, _ := json.Marshal(merged.ExtraHeaders)
 
 	params := sqlc.CreateWebhookSubscriptionParams{
-		Name:            merged.Name,
-		Url:             merged.URL,
-		SecretEncrypted: secretEnc,
+		Name:        merged.Name,
+		Url:         merged.URL,
+		SecretKeyID: secretEnc.KeyID, SecretAlgorithm: secretEnc.Algorithm, SecretCiphertext: secretEnc.Ciphertext, SecretNonce: secretEnc.Nonce,
 		EventFilters:    filtersJSON,
 		PayloadTemplate: merged.PayloadTemplate,
 		ExtraHeaders:    headersJSON,
 		Enabled:         merged.Enabled,
-		MaxRetries:      int32(merged.MaxRetries),
-		TimeoutSeconds:  int32(merged.TimeoutSeconds),
+		MaxRetries:      safeconv.Int32(merged.MaxRetries),
+		TimeoutSeconds:  safeconv.Int32(merged.TimeoutSeconds),
 		CreatedBy:       currentUserUUID(r),
 	}
 	saved, err := executeMutation(r, h.runTx,
@@ -109,7 +113,7 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to create webhook subscription")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to create webhook subscription")
 		return
 	}
 	if h.tap != nil {
@@ -121,21 +125,21 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/admin/webhooks/{id}/.
 func (h *WebhookHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription id")
 		return
 	}
 	row, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Webhook subscription not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read webhook subscription")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read webhook subscription")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toSubscriptionResponse(row))
@@ -144,48 +148,48 @@ func (h *WebhookHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Update handles PUT /api/v1/admin/webhooks/{id}/.
 func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription id")
 		return
 	}
 	existing, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Webhook subscription not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read webhook subscription")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read webhook subscription")
 		return
 	}
 	var req subscriptionRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	merged, vErr := h.mergeForUpdate(existing, req)
 	if vErr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, vErr)
 		return
 	}
 	// Secret handling: SecretSentinel means "keep existing". Any other
 	// non-empty value is re-encrypted.
-	encryptedSecret := existing.SecretEncrypted
+	encryptedSecret := crypto.FromParts(existing.SecretKeyID, existing.SecretAlgorithm, existing.SecretCiphertext, existing.SecretNonce)
 	if req.Secret != nil && *req.Secret != SecretSentinel {
 		if strings.TrimSpace(*req.Secret) == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "secret cannot be blanked; supply a new value or omit the field")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "secret cannot be blanked; supply a new value or omit the field")
 			return
 		}
 		if h.encryptor == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor unavailable")
 			return
 		}
-		enc, encErr := h.encryptor.Encrypt(*req.Secret)
+		enc, encErr := h.encryptor.EncryptString(*req.Secret)
 		if encErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt secret")
 			return
 		}
 		encryptedSecret = enc
@@ -194,16 +198,16 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	headersJSON, _ := json.Marshal(merged.ExtraHeaders)
 
 	params := sqlc.UpdateWebhookSubscriptionParams{
-		ID:              id,
-		Name:            merged.Name,
-		Url:             merged.URL,
-		SecretEncrypted: encryptedSecret,
+		ID:          id,
+		Name:        merged.Name,
+		Url:         merged.URL,
+		SecretKeyID: encryptedSecret.KeyID, SecretAlgorithm: encryptedSecret.Algorithm, SecretCiphertext: encryptedSecret.Ciphertext, SecretNonce: encryptedSecret.Nonce,
 		EventFilters:    filtersJSON,
 		PayloadTemplate: merged.PayloadTemplate,
 		ExtraHeaders:    headersJSON,
 		Enabled:         merged.Enabled,
-		MaxRetries:      int32(merged.MaxRetries),
-		TimeoutSeconds:  int32(merged.TimeoutSeconds),
+		MaxRetries:      safeconv.Int32(merged.MaxRetries),
+		TimeoutSeconds:  safeconv.Int32(merged.TimeoutSeconds),
 	}
 	saved, err := executeMutation(r, h.runTx,
 		func(q WebhookMutationTx) (sqlc.WebhookSubscription, error) {
@@ -216,7 +220,7 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to update webhook subscription")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to update webhook subscription")
 		return
 	}
 	if h.tap != nil {
@@ -229,21 +233,21 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 // webhook_deliveries means the delivery history is wiped automatically.
 func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid subscription id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid subscription id")
 		return
 	}
 	existing, err := h.queries.GetWebhookSubscription(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Webhook subscription not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Webhook subscription not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read webhook subscription")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read webhook subscription")
 		return
 	}
 	// T6.064 — refuse delete when the subscription is named in the
@@ -252,7 +256,7 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// must either revert the baseline or detach the requirement first.
 	if slug, required := activeBaselineRequiresWebhook(r.Context(), h.queries, existing.Name); required {
 		if !baselineOverrideAllowed(h.override, r) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.BaselineRequired,
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.BaselineRequired,
 				fmt.Sprintf("Webhook %q is required by the active compliance baseline %q.", existing.Name, slug))
 			return
 		}
@@ -270,7 +274,7 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete webhook subscription")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to delete webhook subscription")
 		return
 	}
 	if h.tap != nil {

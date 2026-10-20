@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -209,7 +211,7 @@ func copyProjectedMember(ctx context.Context, epoch, source *os.File, epochName 
 		return errors.New("owned Job material copy failed")
 	}
 	var sealed, entry unix.Stat_t
-	if unix.Fstat(outFD, &sealed) != nil || unix.Fstatat(int(target.Fd()), name, &entry, unix.AT_SYMLINK_NOFOLLOW) != nil || !projectedMaterialStatSame(sealed, entry) || sealed.Mode&unix.S_IFMT != unix.S_IFREG || sealed.Mode&07777 != 0400 || sealed.Uid != uint32(uid) || sealed.Nlink != 1 || sealed.Size != before.Size {
+	if unix.Fstat(outFD, &sealed) != nil || unix.Fstatat(int(target.Fd()), name, &entry, unix.AT_SYMLINK_NOFOLLOW) != nil || !projectedMaterialStatSame(sealed, entry) || sealed.Mode&unix.S_IFMT != unix.S_IFREG || sealed.Mode&07777 != 0400 || sealed.Uid != safeconv.Uint32(uid) || sealed.Nlink != 1 || sealed.Size != before.Size {
 		return errors.New("owned Job private material owner changed")
 	}
 	readback, err := io.ReadAll(io.LimitReader(io.NewSectionReader(output, 0, member.maximum+1), member.maximum+1))

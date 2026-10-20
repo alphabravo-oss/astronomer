@@ -5,21 +5,18 @@
 -- with type-safe arguments around these queries.
 
 -- name: ListCloudCredentialsForProject :many
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
+SELECT *
 FROM cloud_credentials
 WHERE project_id = $1
 ORDER BY name ASC;
 
 -- name: GetCloudCredentialByID :one
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
+SELECT *
 FROM cloud_credentials
 WHERE id = $1;
 
 -- name: GetCloudCredentialByProjectAndName :one
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
+SELECT *
 FROM cloud_credentials
 WHERE project_id = $1 AND name = $2;
 
@@ -28,8 +25,7 @@ WHERE project_id = $1 AND name = $2;
 -- explicit target_refs/materialization relationship used for Kubernetes
 -- Secret delivery. DISTINCT collapses one credential targeting multiple
 -- namespaces in the same cluster.
-SELECT DISTINCT c.id, c.project_id, c.name, c.provider, c.description,
-       c.data_encrypted, c.target_refs, c.created_by, c.created_at, c.updated_at
+SELECT DISTINCT c.*
 FROM cloud_credentials c
 JOIN cloud_credential_materializations m ON m.credential_id = c.id
 WHERE m.cluster_id = $1
@@ -37,20 +33,21 @@ ORDER BY c.name ASC;
 
 -- name: CreateCloudCredential :one
 INSERT INTO cloud_credentials (
-    project_id, name, provider, description, data_encrypted, target_refs, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, project_id, name, provider, description, data_encrypted, target_refs,
-          created_by, created_at, updated_at;
+    project_id, name, provider, description, data_key_id, data_algorithm, data_ciphertext, data_nonce, target_refs, created_by
+) VALUES ($1, $2, $3, $4, $5, $8, $9, $10, $6, $7)
+RETURNING *;
 
 -- name: UpdateCloudCredential :one
 UPDATE cloud_credentials
 SET description    = $2,
-    data_encrypted = $3,
+    data_key_id = $3,
+    data_algorithm = $5,
+    data_ciphertext = $6,
+    data_nonce = $7,
     target_refs    = $4,
     updated_at     = now()
 WHERE id = $1
-RETURNING id, project_id, name, provider, description, data_encrypted, target_refs,
-          created_by, created_at, updated_at;
+RETURNING *;
 
 -- name: DeleteCloudCredential :exec
 DELETE FROM cloud_credentials WHERE id = $1;

@@ -8,13 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -33,7 +34,7 @@ func (r *recordingLokiReconciler) ReconcileLokiIngest(context.Context) error {
 	return r.err
 }
 
-func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
+func TestRotateOutputTokenMintsHashAndSealedToken(t *testing.T) {
 	clusterID := uuid.New()
 	q := newLoggingFakeQuerier()
 	out, err := q.CreateLoggingOutput(context.Background(), sqlc.CreateLoggingOutputParams{
@@ -47,11 +48,11 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := newLoggingHandlerForTest(q)
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,12 +102,12 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 	if stored.TokenHash != lokiauth.HashBearer(wrap.Data.Token) {
 		t.Fatalf("stored hash does not match minted token")
 	}
-	plain, err := enc.Decrypt(stored.TokenEncrypted)
+	plain, err := enc.DecryptString(crypto.FromParts(stored.TokenKeyID, stored.TokenAlgorithm, stored.TokenCiphertext, stored.TokenNonce))
 	if err != nil {
 		t.Fatalf("decrypt stored token: %v", err)
 	}
 	if plain != wrap.Data.Token {
-		t.Fatal("Fernet round-trip mismatch")
+		t.Fatal("sealed round-trip mismatch")
 	}
 	if recReconcile.calls != 1 {
 		t.Fatalf("reconcile calls = %d, want 1", recReconcile.calls)

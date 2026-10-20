@@ -22,6 +22,7 @@ package handler
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,11 +31,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/dexconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
@@ -61,7 +63,6 @@ type DexQuerier interface {
 	RestoreDexSSOForGeneration(ctx context.Context, arg sqlc.RestoreDexSSOForGenerationParams) (sqlc.RestoreDexSSOForGenerationRow, error)
 	MarkDexRuntimeStaged(ctx context.Context, arg sqlc.MarkDexRuntimeStagedParams) (sqlc.DexSetting, error)
 	MarkDexRuntimeApplied(ctx context.Context, arg sqlc.MarkDexRuntimeAppliedParams) (sqlc.DexSetting, error)
-	BackfillDexPublicClientsEnvelope(ctx context.Context, arg sqlc.BackfillDexPublicClientsEnvelopeParams) (sqlc.DexSetting, error)
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
 
 	// SSO bridge — register-as-sso writes here.
@@ -91,7 +92,7 @@ type dexRunTxFunc func(context.Context, func(DexMutationTx) error) error
 type DexHandler struct {
 	queries             DexQuerier
 	runTx               dexRunTxFunc
-	encryptor           *auth.Encryptor
+	encryptor           *crypto.Encryptor
 	k8s                 K8sRequester
 	log                 *slog.Logger
 	rolloutPollInterval time.Duration
@@ -136,9 +137,9 @@ func (h *DexHandler) TransactionalAuditWired() bool {
 	return h != nil && h.runTx != nil
 }
 
-// SetEncryptor wires the Fernet encryptor used to encrypt secret connector
+// SetEncryptor wires the age encryptor used to encrypt secret connector
 // fields (clientSecret, bindPW, ...) before they hit the database.
-func (h *DexHandler) SetEncryptor(enc *auth.Encryptor) {
+func (h *DexHandler) SetEncryptor(enc *crypto.Encryptor) {
 	if h != nil {
 		h.encryptor = enc
 	}
@@ -254,77 +255,101 @@ func isEmptyValue(v any) bool {
 	return false
 }
 
-// encryptSecretFields walks raw and replaces every spec.Secret key with its
-// Fernet-encrypted value. Secret-bearing input fails closed when the
-// encryptor is unavailable. Callers should pass a freshly-decoded map.
-func (h *DexHandler) encryptSecretFields(connectorType string, raw map[string]any) error {
-	if h == nil || raw == nil {
-		return nil
+// splitSecretFields REMOVES every spec.Secret key from raw (secrets never stay
+// in the config JSONB, not even blanked) and returns the non-empty string
+// values, which belong in the sealed secrets_* family of dex_connectors.
+func splitSecretFields(connectorType string, raw map[string]any) (map[string]string, error) {
+	secrets := map[string]string{}
+	if raw == nil {
+		return secrets, nil
 	}
 	canonical, err := dexconfig.CanonicalConnectorType(connectorType)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	spec := dexConnectorRegistry[canonical]
-	for _, key := range spec.Secret {
+	for _, key := range dexConnectorRegistry[canonical].Secret {
 		v, ok := raw[key]
 		if !ok {
 			continue
 		}
-		s, ok := v.(string)
-		if !ok || s == "" {
-			continue
+		delete(raw, key)
+		if s, isStr := v.(string); isStr && s != "" {
+			secrets[key] = s
 		}
-		if h.encryptor == nil {
-			return fmt.Errorf("encrypt %s: encryptor is not configured", key)
-		}
-		// Existing ciphertext is decrypted then re-encrypted with the active
-		// primary key. This is both double-encryption protection and the online
-		// key-rotation path used when a connector is re-saved.
-		if plaintext, err := h.encryptor.Decrypt(s); err == nil {
-			s = plaintext
-		}
-		ct, err := h.encryptor.Encrypt(s)
-		if err != nil {
-			return fmt.Errorf("encrypt %s: %w", key, err)
-		}
-		raw[key] = ct
 	}
-	return nil
+	return secrets, nil
 }
 
-// decryptSecretFields walks raw and replaces every spec.Secret key with its
-// plaintext value. Used only while rendering the in-memory document that is
-// written to the runtime Secret. Missing keys and decrypt failures fail closed
-// so ciphertext can never be handed to Dex as if it were a credential.
-func (h *DexHandler) decryptSecretFields(connectorType string, raw map[string]any) error {
-	if h == nil || raw == nil {
+// sealConnectorSecrets seals the connector's secret fields as ONE JSON object.
+// No secrets is the zero sealed value; secret-bearing input fails closed when
+// the encryptor is unavailable.
+func (h *DexHandler) sealConnectorSecrets(secrets map[string]string) (crypto.Sealed, error) {
+	if len(secrets) == 0 {
+		return crypto.Sealed{}, nil
+	}
+	if h == nil || h.encryptor == nil {
+		return crypto.Sealed{}, errors.New("encrypt connector secrets: encryptor is not configured")
+	}
+	raw, err := json.Marshal(secrets)
+	if err != nil {
+		return crypto.Sealed{}, fmt.Errorf("encode connector secrets: %w", err)
+	}
+	sealed, err := h.encryptor.Encrypt(raw)
+	clear(raw)
+	if err != nil {
+		return crypto.Sealed{}, fmt.Errorf("encrypt connector secrets: %w", err)
+	}
+	return sealed, nil
+}
+
+// openConnectorSecrets returns the plaintext secret fields of a stored
+// connector. A zero sealed value is no secrets; a decrypt failure fails
+// closed so ciphertext can never be handed to Dex as if it were a credential.
+func (h *DexHandler) openConnectorSecrets(row sqlc.DexConnector) (map[string]string, error) {
+	return openConnectorSecrets(h.encryptorOrNil(), row)
+}
+
+func (h *DexHandler) encryptorOrNil() *crypto.Encryptor {
+	if h == nil {
 		return nil
+	}
+	return h.encryptor
+}
+
+func openConnectorSecrets(enc *crypto.Encryptor, row sqlc.DexConnector) (map[string]string, error) {
+	secrets := map[string]string{}
+	if row.SecretsKeyID == "" {
+		return secrets, nil
+	}
+	if enc == nil {
+		return nil, errors.New("decrypt connector secrets: encryptor is not configured")
+	}
+	plain, err := enc.Decrypt(crypto.FromParts(row.SecretsKeyID, row.SecretsAlgorithm, row.SecretsCiphertext, row.SecretsNonce))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt connector secrets: %w", err)
+	}
+	defer clear(plain)
+	if err := json.Unmarshal(plain, &secrets); err != nil {
+		return nil, fmt.Errorf("decode connector secrets: %w", err)
+	}
+	return secrets, nil
+}
+
+// withStoredSecretMarkers puts a placeholder under every spec.Secret key when
+// the connector has a sealed secrets family, so stored-config validation and
+// redaction ("__<key>_set") see the secret as configured without opening it.
+func withStoredSecretMarkers(connectorType string, raw map[string]any, sealed bool) map[string]any {
+	if !sealed {
+		return raw
 	}
 	canonical, err := dexconfig.CanonicalConnectorType(connectorType)
 	if err != nil {
-		return err
+		return raw
 	}
-	spec := dexConnectorRegistry[canonical]
-	for _, key := range spec.Secret {
-		v, ok := raw[key]
-		if !ok {
-			continue
-		}
-		s, ok := v.(string)
-		if !ok || s == "" {
-			continue
-		}
-		if h.encryptor == nil {
-			return fmt.Errorf("decrypt %s: encryptor is not configured", key)
-		}
-		pt, err := h.encryptor.Decrypt(s)
-		if err != nil {
-			return fmt.Errorf("decrypt %s: %w", key, err)
-		}
-		raw[key] = pt
+	for _, key := range dexConnectorRegistry[canonical].Secret {
+		raw[key] = "(sealed)"
 	}
-	return nil
+	return raw
 }
 
 // redactSecretFields returns a shallow clone of raw with every spec.Secret

@@ -26,10 +26,6 @@ image:
     registry: ghcr.io/acme
     repository: astronomer-go-worker
     tag: worker-v2
-  migrate:
-    registry: registry.example:5000/team/platform
-    repository: astronomer-go-migrate
-    tag: live
   agent:
     registry: agents.registry:5001/nested/team
     repository: astronomer-go-agent
@@ -57,7 +53,6 @@ preflight:
 
 	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{inheritedPath, valuesPath}))
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "localastro/astronomer-go-server:live")
-	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "initContainers", "migrate", "registry.example:5000/team/platform/astronomer-go-migrate:live")
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "ghcr.io/acme/astronomer-go-worker:worker-v2")
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "frontend.registry:5443/org/astronomer-frontend:frontend-v5")
 
@@ -76,7 +71,6 @@ func TestReleaseDigestsRenderForEveryFirstPartyImage(t *testing.T) {
 		"server":   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"worker":   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		"agent":    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-		"migrate":  "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 		"frontend": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
 		"shell":    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
 	}
@@ -84,13 +78,11 @@ func TestReleaseDigestsRenderForEveryFirstPartyImage(t *testing.T) {
 		"image.server.digest=" + digest["server"],
 		"image.worker.digest=" + digest["worker"],
 		"image.agent.digest=" + digest["agent"],
-		"image.migrate.digest=" + digest["migrate"],
 		"frontend.image.digest=" + digest["frontend"],
 		"preflight.image.digest=" + digest["shell"],
 	}
 	docs := parseRenderedDocs(t, helmTemplate(t, sets...))
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "ghcr.io/alphabravo-oss/astronomer-go-server@"+digest["server"])
-	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "initContainers", "migrate", "ghcr.io/alphabravo-oss/astronomer-go-migrate@"+digest["migrate"])
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "ghcr.io/alphabravo-oss/astronomer-go-worker@"+digest["worker"])
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "ghcr.io/alphabravo-oss/astronomer-frontend@"+digest["frontend"])
 

@@ -13,13 +13,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -169,14 +169,16 @@ type AlertNotificationMutationTx interface {
 type AlertNotificationRunTx func(context.Context, func(AlertNotificationMutationTx) error) error
 
 type RuntimeDependencies struct {
-	Queries                   RuntimeQuerier
-	ManagementBackup          ManagementBackupExecutor
-	HTTPClient                *http.Client
-	CatalogHTTPClient         *http.Client
-	CatalogNetwork            *httpclient.DestinationPolicy
-	Log                       *slog.Logger
-	AgentImageRepo            string
-	AgentImageTag             string
+	Queries           RuntimeQuerier
+	ManagementBackup  ManagementBackupExecutor
+	HTTPClient        *http.Client
+	CatalogHTTPClient *http.Client
+	CatalogNetwork    *httpclient.DestinationPolicy
+	Log               *slog.Logger
+	AgentImageRepo    string
+	AgentImageTag     string
+	// ImageRegistry is REGISTRY_LOCAL for rendered agent install manifests.
+	ImageRegistry             string
 	SystemArtifactURL         string
 	SystemArtifactDigest      string
 	SystemOIDCIssuer          string
@@ -205,7 +207,7 @@ type RuntimeDependencies struct {
 	// inside the tunnel worker immediately before server-side apply. It is not
 	// wired in the standalone worker and plaintext is zeroed after use.
 	ResourceDecryptor interface {
-		DecryptBytes(token string) ([]byte, error)
+		Decrypt(sealed crypto.Sealed) ([]byte, error)
 	}
 	// Enqueuer hands follow-up tasks to the asynq queue — e.g. the alert
 	// evaluator enqueues a notification:send task per fired (rule, channel).
@@ -222,21 +224,19 @@ type RuntimeDependencies struct {
 	// to the server pods' relays; in the server process it is the shared
 	// in-memory bus. Optional and nil-safe: publishers are fire-and-forget.
 	Bus *events.Bus
-	// CatalogDecryptor unwraps helm_repositories.auth_config_encrypted
-	// (migration 145) for the unattended catalog:sync sweep. The interactive
+	// CatalogDecryptor opens the sealed helm_repositories.auth_config_* family for the unattended catalog:sync sweep. The interactive
 	// handler and this sweep are SEPARATE readers of the same credential, and
 	// wiring only one of them is how an encryption-at-rest change ships half
 	// done: the operator clicks Sync and it works, then every scheduled sweep
-	// 401s. Nil-safe — a nil decryptor reads pre-145 (unsealed) rows fine and
+	// 401s. Nil-safe — a nil decryptor reads unsealed rows fine and
 	// declines to authenticate sealed ones (see catalog.ResolveAuthConfig).
 	CatalogDecryptor catalog.Decryptor
-	// MonitoringCipher seals and unseals monitoring_backends.auth_config_encrypted
-	// (migration 146). Unlike CatalogDecryptor this needs BOTH halves: the
+	// MonitoringCipher seals and unseals the monitoring_backends.auth_config_* family. Unlike CatalogDecryptor this needs BOTH halves: the
 	// monitoring reconcile tick does a read-modify-write on the column to
 	// stamp the shared-Thanos status, so it must re-seal what it resolved.
 	//
-	// Nil-safe — a nil cipher reads pre-146 (unsealed) rows fine, declines to
-	// authenticate sealed ones, and writes back the pre-146 row shape.
+	// Nil-safe — a nil cipher reads unsealed rows fine, declines to
+	// authenticate sealed ones, and writes back an unsealed row.
 	MonitoringCipher MonitoringCipher
 }
 
@@ -269,17 +269,17 @@ func (runtime CoreRuntime) BindHandler(handler asynq.HandlerFunc) asynq.HandlerF
 }
 
 // MonitoringCipher is the narrow both-directions surface the monitoring
-// credential envelope needs. *auth.Encryptor satisfies it.
+// credential envelope needs. *crypto.Encryptor satisfies it.
 type MonitoringCipher interface {
-	Encrypt(plaintext string) (string, error)
-	Decrypt(token string) (string, error)
+	Encrypt(plaintext []byte) (crypto.Sealed, error)
+	Decrypt(sealed crypto.Sealed) ([]byte, error)
 }
 
-// MonitoringCipherFor adapts a possibly-nil *auth.Encryptor, for the same
-// reason CatalogDecryptorFor does: a nil *auth.Encryptor assigned straight
+// MonitoringCipherFor adapts a possibly-nil *crypto.Encryptor, for the same
+// reason CatalogDecryptorFor does: a nil *crypto.Encryptor assigned straight
 // into an interface field is a NON-nil interface holding a nil pointer, so
 // every `== nil` guard downstream passes and the first call panics.
-func MonitoringCipherFor(enc *auth.Encryptor) MonitoringCipher {
+func MonitoringCipherFor(enc *crypto.Encryptor) MonitoringCipher {
 	if enc == nil {
 		return nil
 	}
@@ -302,16 +302,16 @@ func monitoringEncryptor(ctx context.Context) imonitoring.Encryptor {
 	return runtimeDependencies(ctx).MonitoringCipher
 }
 
-// CatalogDecryptorFor adapts a possibly-nil *auth.Encryptor to the narrow
+// CatalogDecryptorFor adapts a possibly-nil *crypto.Encryptor to the narrow
 // interface the catalog credential resolver takes.
 //
-// The explicit nil is the point: assigning a nil *auth.Encryptor straight into
+// The explicit nil is the point: assigning a nil *crypto.Encryptor straight into
 // an interface field yields a NON-nil interface holding a nil pointer, so
 // every `dec == nil` check downstream would pass and the first Decrypt would
 // panic on a nil receiver. Both processes that wire this (internal/server and
 // cmd/worker) can legitimately have no encryptor in development, so this is a
 // live path, not a theoretical one.
-func CatalogDecryptorFor(enc *auth.Encryptor) catalog.Decryptor {
+func CatalogDecryptorFor(enc *crypto.Encryptor) catalog.Decryptor {
 	if enc == nil {
 		return nil
 	}
@@ -343,9 +343,6 @@ func normalizeRuntimeDependencies(deps RuntimeDependencies) RuntimeDependencies 
 	}
 	if deps.Log == nil {
 		deps.Log = slog.Default()
-	}
-	if deps.AgentImageRepo == "" {
-		deps.AgentImageRepo = "ghcr.io/alphabravo-oss/astronomer-go-agent"
 	}
 	if deps.AgentImageTag == "" {
 		deps.AgentImageTag = "latest"

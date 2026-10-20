@@ -14,13 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type operationalDBFake struct{ version int64 }
 
 func (f operationalDBFake) Health(context.Context) error { return nil }
-func (f operationalDBFake) SchemaVersion(context.Context) (int64, bool, error) {
-	return f.version, false, nil
+func (f operationalDBFake) SchemaVersion(context.Context) (int64, error) {
+	return f.version, nil
 }
 func (f operationalDBFake) Pool() *pgxpool.Pool { return nil }
 
@@ -143,7 +144,7 @@ func TestOperationalCatalogRepositoriesExposeSyncDiagnosticsWithoutURLSecrets(t 
 	queries := &operationalQueriesFake{settings: map[string]json.RawMessage{}, repositories: []sqlc.HelmRepository{{
 		ID: uuid.New(), Name: "private charts", Url: "https://user:SENTINEL@charts.example.invalid/private/index.yaml?token=SENTINEL",
 		RepoType: "helm", AuthType: "basic", AuthConfig: json.RawMessage(`{"username":"operator","password":"SENTINEL"}`),
-		AuthConfigEncrypted: "SENTINEL-CIPHERTEXT", Enabled: true,
+		AuthConfigKeyID: "k", AuthConfigAlgorithm: crypto.AlgorithmAgeX25519, AuthConfigCiphertext: []byte("SENTINEL-CIPHERTEXT"), Enabled: true,
 		LastSyncAttemptedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		LastSyncError:       "request returned 401 authorization token=SENTINEL",
 	}}}

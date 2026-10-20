@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
@@ -162,11 +164,11 @@ func amountSize(amount model.Amount, total int, roundUp bool) int {
 	if amount.Type == model.AmountCount {
 		return int(amount.Value)
 	}
-	value := uint64(total) * uint64(amount.Value)
+	value := safeconv.Uint64(total) * uint64(amount.Value)
 	if roundUp && value%100 != 0 {
 		value += 100
 	}
-	return int(value / 100)
+	return safeconv.Int(value / 100)
 }
 
 func batchCohorts(candidates []placement.Candidate, size, offset int, prefix string) []Cohort {

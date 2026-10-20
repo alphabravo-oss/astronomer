@@ -46,7 +46,6 @@ func TestExplicitRuntimeDescriptorsCannotFallBackToGlobals(t *testing.T) {
 		tasks.CharlieAlertDispatchTaskType:           false,
 		tasks.CharlieAlertReconcileType:              false,
 		tasks.AgentTokenRotateSweepType:              false,
-		tasks.PlaintextCredentialMigrationType:       false,
 		tasks.CRDOwnershipDriftCheckType:             false,
 		tasks.ApiserverAllowlistReconcileType:        false,
 		tasks.ApiserverAllowlistReconcileAllType:     false,

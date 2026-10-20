@@ -35,6 +35,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -725,6 +726,9 @@ func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
 	for i := 0; i < typ.NumField(); i++ {
 		groupType := typ.Field(i)
 		groupValue := value.Field(i)
+		if groupType.Type.Kind() != reflect.Struct {
+			continue
+		}
 		for j := 0; j < groupType.Type.NumField(); j++ {
 			field := groupType.Type.Field(j)
 			if field.Type.Kind() != reflect.Pointer {
@@ -1378,11 +1382,11 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodeEncryptor, err := auth.NewEncryptor(key)
+	nodeEncryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1474,7 +1478,7 @@ func (routeSecurityNodeMutationTx) CreateNodeOperationIdempotent(_ context.Conte
 	return sqlc.NodeOperation{
 		ID: uuid.New(), IdempotencyScope: arg.IdempotencyScope, IdempotencyKey: arg.IdempotencyKey,
 		RequestDigest: arg.RequestDigest, ClusterID: arg.ClusterID, NodeName: arg.NodeName,
-		Action: arg.Action, ParametersEncrypted: arg.ParametersEncrypted, Generation: 1,
+		Action: arg.Action, ParametersKeyID: arg.ParametersKeyID, ParametersAlgorithm: arg.ParametersAlgorithm, ParametersCiphertext: arg.ParametersCiphertext, ParametersNonce: arg.ParametersNonce, Generation: 1,
 		Status: "pending", Progress: json.RawMessage(`{}`), CreatedByID: arg.CreatedByID,
 		CreatedAt: now, UpdatedAt: now,
 	}, nil

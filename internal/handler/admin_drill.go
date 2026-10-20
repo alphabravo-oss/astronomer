@@ -22,14 +22,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -83,7 +84,7 @@ type AdminDrillHandler struct {
 	k8s                     kubernetes.Interface
 	namespace               string
 	releaseName             string
-	encryptor               *auth.Encryptor
+	encryptor               *crypto.Encryptor
 	httpClient              *http.Client
 	backupImage             string
 	serviceAccount          string
@@ -124,7 +125,7 @@ func NewAdminDrillHandler(queries AdminDrillQuerier) *AdminDrillHandler {
 	}
 }
 
-func (h *AdminDrillHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *AdminDrillHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -181,7 +182,7 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		// don't 500. The dashboard will show "never run" and the
 		// staleness alert will fire on the metric side.
 	default:
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 
@@ -195,7 +196,7 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pgx.ErrNoRows):
 		// No successful drill yet.
 	default:
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 
@@ -217,13 +218,13 @@ func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) 
 		Offset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 
 	total, err := h.queries.CountBackupDrillResults(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 
@@ -288,7 +289,7 @@ func (h *AdminDrillHandler) gateManagementBackupMutation(w http.ResponseWriter, 
 		return false
 	}
 	if h == nil || !h.managementBackupEnabled {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Management backup is disabled")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Management backup is disabled")
 		return false
 	}
 	return true

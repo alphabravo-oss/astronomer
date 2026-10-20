@@ -14,6 +14,7 @@ import (
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -70,12 +71,17 @@ func (f *fakeQueries) FinalizeDeliveryAssignmentSnapshot(_ context.Context, arg 
 
 type fakeDecryptor map[string]string
 
-func (f fakeDecryptor) Decrypt(value string) (string, error) {
-	plain, ok := f[value]
+func (f fakeDecryptor) Decrypt(sealed crypto.Sealed) ([]byte, error) {
+	plain, ok := f[string(sealed.Ciphertext)]
 	if !ok {
-		return "", errors.New("ciphertext rejected")
+		return nil, errors.New("ciphertext rejected")
 	}
-	return plain, nil
+	return []byte(plain), nil
+}
+
+// fakeSealed stands in for a sealed column value whose ciphertext is label.
+func fakeSealed(label string) crypto.Sealed {
+	return crypto.Sealed{KeyID: "test-key", Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: []byte(label)}
 }
 
 type countingDecryptor struct {
@@ -83,13 +89,13 @@ type countingDecryptor struct {
 	calls  int
 }
 
-func (d *countingDecryptor) Decrypt(value string) (string, error) {
+func (d *countingDecryptor) Decrypt(sealed crypto.Sealed) ([]byte, error) {
 	d.calls++
-	plain, ok := d.values[value]
+	plain, ok := d.values[string(sealed.Ciphertext)]
 	if !ok {
-		return "", errors.New("ciphertext rejected")
+		return nil, errors.New("ciphertext rejected")
 	}
-	return plain, nil
+	return []byte(plain), nil
 }
 
 func TestSnapshotBuildsValidatedAssignmentAndNotModified(t *testing.T) {
@@ -174,7 +180,8 @@ func TestSnapshotCredentialRotationUsesEpochWithoutHashingSecret(t *testing.T) {
 
 	// Ciphertext changes without the mandatory epoch bump: no digest changes,
 	// proving neither plaintext nor ciphertext contributes to the ETag.
-	queries.rows[0].CredentialEncrypted = "rotated"
+	r0 := &queries.rows[0]
+	r0.CredentialKeyID, r0.CredentialAlgorithm, r0.CredentialCiphertext, r0.CredentialNonce = fakeSealed("rotated").Parts()
 	decryptor["rotated"] = `{"token":"second"}`
 	unchanged, err := p.Snapshot(context.Background(), testCluster, validRequest())
 	if err != nil {
@@ -232,7 +239,7 @@ func TestSnapshotIncludesSignedSystemReleaseAndWriteOnlyRegistryCredential(t *te
 		AgentVersion: "v1.0.0", AgentImage: "registry.example.test/astronomer/agent@sha256:" + strings.Repeat("c", 64),
 		MinimumKubernetes: "v1.33.0", MaximumKubernetes: "v1.35.99", CrdStorageVersion: "v1",
 		Interval: "5m", Timeout: "15m", VerificationPolicy: verification,
-		RegistryCredentialEncrypted: "sealed-system", CredentialEpoch: 7, AssignmentGeneration: 4,
+		RegistryCredentialKeyID: "test-key", RegistryCredentialAlgorithm: crypto.AlgorithmAgeX25519, RegistryCredentialCiphertext: []byte("sealed-system"), CredentialEpoch: 7, AssignmentGeneration: 4,
 	}}
 	provider := New(queries, fakeDecryptor{"sealed-system": `{"auths":{"registry.example.test":{"auth":"opaque"}}}`})
 	response, err := provider.Snapshot(context.Background(), testCluster, validRequest())
@@ -246,7 +253,8 @@ func TestSnapshotIncludesSignedSystemReleaseAndWriteOnlyRegistryCredential(t *te
 		t.Fatal(err)
 	}
 	firstETag := response.ETag
-	queries.system.RegistryCredentialEncrypted = "rotated-system"
+	s := queries.system
+	s.RegistryCredentialKeyID, s.RegistryCredentialAlgorithm, s.RegistryCredentialCiphertext, s.RegistryCredentialNonce = fakeSealed("rotated-system").Parts()
 	provider.decryptor = fakeDecryptor{"rotated-system": `{"auths":{"registry.example.test":{"auth":"different"}}}`}
 	unchanged, err := provider.Snapshot(context.Background(), testCluster, validRequest())
 	if err != nil {
@@ -290,8 +298,8 @@ func gitRow(t *testing.T) sqlc.ListClusterDeliveryAssignmentsRow {
 		DesiredOverrides: json.RawMessage(`{}`),
 		RendererSpec:     mustJSON(t, renderer), ReconciliationPolicy: mustJSON(t, policy),
 		SourceType: string(model.SourceGit), Url: "https://git.example.test/platform/apps.git",
-		AuthMode: string(model.AuthBasic), CredentialEpoch: 1, CredentialEncrypted: "sealed",
-		CaBundleEncrypted: "sealed-ca", TrustPolicy: mustJSON(t, trust),
+		AuthMode: string(model.AuthBasic), CredentialEpoch: 1, CredentialKeyID: "test-key", CredentialAlgorithm: crypto.AlgorithmAgeX25519, CredentialCiphertext: []byte("sealed"),
+		CaBundleKeyID: "test-key", CaBundleAlgorithm: crypto.AlgorithmAgeX25519, CaBundleCiphertext: []byte("sealed-ca"), TrustPolicy: mustJSON(t, trust),
 	}
 }
 

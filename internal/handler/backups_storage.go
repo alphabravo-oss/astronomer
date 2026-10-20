@@ -7,9 +7,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
@@ -35,13 +35,13 @@ func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Reques
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list storage configs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list storage configs")
 		return
 	}
 
 	total, err := h.queries.CountBackupStorageConfigs(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count storage configs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count storage configs")
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 
 	clusterID, err := h.optionalClusterID(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if !h.authorizeBackup(w, r, clusterID, rbac.VerbCreate) {
@@ -93,10 +93,9 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 
 	encrypted, err := h.encryptCredentials(req.AccessKey, req.SecretKey)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt credentials")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt credentials")
 		return
 	}
-	legacyAccessKey, legacySecretKey := legacyBackupCredentialColumns(req.AccessKey, req.SecretKey, encrypted)
 
 	veleroNS := strings.TrimSpace(req.VeleroNamespace)
 	if veleroNS == "" {
@@ -108,20 +107,18 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	params := sqlc.CreateBackupStorageConfigParams{
-		Name:                 req.Name,
-		StorageType:          req.StorageType,
-		Bucket:               req.Bucket,
-		Prefix:               req.Prefix,
-		Region:               req.Region,
-		EndpointUrl:          req.EndpointURL,
-		AccessKey:            legacyAccessKey,
-		SecretKey:            legacySecretKey,
-		IsDefault:            req.IsDefault,
-		CreatedByID:          currentUserUUID(r),
-		ClusterID:            clusterID,
-		VeleroNamespace:      veleroNS,
-		BslName:              bslName,
-		EncryptedCredentials: encrypted,
+		Name:             req.Name,
+		StorageType:      req.StorageType,
+		Bucket:           req.Bucket,
+		Prefix:           req.Prefix,
+		Region:           req.Region,
+		EndpointUrl:      req.EndpointURL,
+		IsDefault:        req.IsDefault,
+		CreatedByID:      currentUserUUID(r),
+		ClusterID:        clusterID,
+		VeleroNamespace:  veleroNS,
+		BslName:          bslName,
+		CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
 	}
 	config, err := executeMutation(r, h.runTx,
 		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {
@@ -136,7 +133,7 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create storage config")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create storage config")
 		return
 	}
 	if err := h.applyVeleroBSL(r.Context(), config, req.AccessKey, req.SecretKey); err != nil && h.log != nil {
@@ -151,13 +148,13 @@ func (h *BackupHandler) CreateStorageConfig(w http.ResponseWriter, r *http.Reque
 func (h *BackupHandler) GetStorageConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage config ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage config ID")
 		return
 	}
 
 	config, err := h.queries.GetBackupStorageConfigByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, config.ClusterID, rbac.VerbRead) {
@@ -171,7 +168,7 @@ func (h *BackupHandler) GetStorageConfig(w http.ResponseWriter, r *http.Request)
 func (h *BackupHandler) DeleteStorageConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage config ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage config ID")
 		return
 	}
 
@@ -179,7 +176,7 @@ func (h *BackupHandler) DeleteStorageConfig(w http.ResponseWriter, r *http.Reque
 	// put the friendly name in the audit row.
 	existing, err := h.queries.GetBackupStorageConfigByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbDelete) {
@@ -194,7 +191,7 @@ func (h *BackupHandler) DeleteStorageConfig(w http.ResponseWriter, r *http.Reque
 			return mutationAuditEvent{action: "backup.storage.delete", resourceType: "backup_storage_config", resourceID: config.ID.String(), resourceName: configName, status: http.StatusNoContent}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete storage config")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete storage config")
 		return
 	}
 
@@ -205,19 +202,19 @@ func (h *BackupHandler) DeleteStorageConfig(w http.ResponseWriter, r *http.Reque
 func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage config ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage config ID")
 		return
 	}
 
 	var req CreateStorageConfigRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 
 	clusterID, err := h.optionalClusterID(req.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 
@@ -226,7 +223,7 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 	// onto a cluster they lack permission for.
 	existing, err := h.queries.GetBackupStorageConfigByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbUpdate) {
@@ -238,10 +235,9 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 
 	encrypted, err := h.encryptCredentials(req.AccessKey, req.SecretKey)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt credentials")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt credentials")
 		return
 	}
-	legacyAccessKey, legacySecretKey := legacyBackupCredentialColumns(req.AccessKey, req.SecretKey, encrypted)
 
 	veleroNS := strings.TrimSpace(req.VeleroNamespace)
 	if veleroNS == "" {
@@ -253,20 +249,18 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	params := sqlc.UpdateBackupStorageConfigParams{
-		ID:                   id,
-		Name:                 req.Name,
-		StorageType:          req.StorageType,
-		Bucket:               req.Bucket,
-		Prefix:               req.Prefix,
-		Region:               req.Region,
-		EndpointUrl:          req.EndpointURL,
-		AccessKey:            legacyAccessKey,
-		SecretKey:            legacySecretKey,
-		IsDefault:            req.IsDefault,
-		ClusterID:            clusterID,
-		VeleroNamespace:      veleroNS,
-		BslName:              bslName,
-		EncryptedCredentials: encrypted,
+		ID:               id,
+		Name:             req.Name,
+		StorageType:      req.StorageType,
+		Bucket:           req.Bucket,
+		Prefix:           req.Prefix,
+		Region:           req.Region,
+		EndpointUrl:      req.EndpointURL,
+		IsDefault:        req.IsDefault,
+		ClusterID:        clusterID,
+		VeleroNamespace:  veleroNS,
+		BslName:          bslName,
+		CredentialsKeyID: encrypted.KeyID, CredentialsAlgorithm: encrypted.Algorithm, CredentialsCiphertext: encrypted.Ciphertext, CredentialsNonce: encrypted.Nonce,
 	}
 	config, err := executeMutation(r, h.runTx,
 		func(q BackupMutationTx) (sqlc.BackupStorageConfig, error) {
@@ -281,7 +275,7 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update storage config")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update storage config")
 		return
 	}
 
@@ -301,12 +295,12 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 func (h *BackupHandler) TestStorageConfig(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage config ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage config ID")
 		return
 	}
 	cfg, err := h.queries.GetBackupStorageConfigByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, cfg.ClusterID, rbac.VerbUpdate) {
@@ -314,13 +308,13 @@ func (h *BackupHandler) TestStorageConfig(w http.ResponseWriter, r *http.Request
 	}
 	access, secret, err := h.decryptCredentials(cfg)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to decrypt credentials")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to decrypt credentials")
 		return
 	}
 	if err := h.probeS3Bucket(r.Context(), cfg, access, secret); err != nil {
 		safeReason := redaction.String(err.Error())
 		if auditErr := h.persistStorageTestAudit(r, cfg, false, safeReason); auditErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 			return
 		}
 		RespondJSON(w, http.StatusOK, map[string]any{
@@ -330,7 +324,7 @@ func (h *BackupHandler) TestStorageConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.persistStorageTestAudit(r, cfg, true, ""); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{

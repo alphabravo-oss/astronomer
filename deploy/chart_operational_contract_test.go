@@ -41,7 +41,7 @@ var productionWiringSets = []string{
 	"postgres.external.dsnSecretRef.name=astronomer-postgres-dsn",
 	"redis.external.address=redis.astronomer.svc.cluster.local:6379",
 	"secrets.secretKey=prod-jwt-signing-key",
-	"secrets.encryptionKey=prod-fernet-key",
+	"secrets.encryptionKey=AGE-SECRET-KEY-19RJN0RE0F29YSVD40EJR7JQHT388FHUSF2R8RLXGMVZW2KHQZHEQ6WPG8U",
 	"bootstrap.email=admin@example.com",
 	// F8: production requires a pinned bootstrap password (or existingSecret).
 	"bootstrap.password=prod-admin-initial",
@@ -58,7 +58,6 @@ var productionWiringSets = []string{
 	"image.server.digest=" + productionTestImageDigest,
 	"image.worker.digest=" + productionTestImageDigest,
 	"image.agent.digest=" + productionTestImageDigest,
-	"image.migrate.digest=" + productionTestImageDigest,
 	"utilities.busybox.digest=" + productionTestImageDigest,
 	"postgres.image.digest=" + productionTestImageDigest,
 	"redis.image.digest=" + productionTestImageDigest,
@@ -150,7 +149,6 @@ func parseRenderedDocs(t *testing.T, out string) []renderedDoc {
 func TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	allowedHooks := map[string]string{
-		"Job/astronomer-migrate":   "post-install,post-upgrade",
 		"Job/astronomer-preflight": "pre-install,pre-upgrade",
 		// The preflight Job needs its own SA + RBAC created BEFORE it (earlier
 		// hook-weight) so a fresh install doesn't deadlock on the main SA not
@@ -803,19 +801,12 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 		"image.pullPolicy=Always",
 		"image.server.tag=v-server",
 		"image.worker.tag=v-worker",
-		"image.migrate.tag=v-migrate",
 		"frontend.image.tag=v-frontend",
-		// This test deliberately gives each image a distinct tag to prove the
-		// per-image tag plumbing; that trips the F1 server↔migrate skew guard,
-		// so opt into the skew explicitly (it is not a real deploy).
-		"image.allowSchemaSkew=true",
 	))
 
-	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/astronomer-go-server:v-server", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-server", "initContainers", "migrate", "registry.example.com/platform/astronomer-go-migrate:v-migrate", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "registry.example.com/platform/astronomer-go-worker:v-worker", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/astronomer-frontend:v-frontend", "Always")
-	assertContainerImage(t, docs, "Job", "astronomer-migrate", "containers", "migrate", "registry.example.com/platform/astronomer-go-migrate:v-migrate", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/alphabravo-oss/astronomer-go-server:v-server", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "registry.example.com/platform/alphabravo-oss/astronomer-go-worker:v-worker", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/alphabravo-oss/astronomer-frontend:v-frontend", "Always")
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-postgres", "containers", "postgres", "registry.example.com/platform/postgres:16-alpine", "Always")
 	// The bundled cache engine is Valkey (BSD-licensed Redis fork); the resource
 	// stays named "redis" but the image is valkey/valkey (see values.yaml).
@@ -1057,7 +1048,7 @@ func TestSecretsCarryResourcePolicyKeep(t *testing.T) {
 	secret := findRenderedDoc(t, docs, "Secret", "astronomer-secrets")
 	annotations := nestedMap(secret, "metadata", "annotations")
 	if annotations == nil {
-		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the Fernet/JWT keys survive helm uninstall")
+		t.Fatal("astronomer-secrets has no annotations block; helm.sh/resource-policy=keep is required so the encryption/JWT keys survive helm uninstall")
 	}
 	if got := stringValue(annotations["helm.sh/resource-policy"]); got != "keep" {
 		t.Fatalf("astronomer-secrets helm.sh/resource-policy = %q, want keep", got)
@@ -1086,7 +1077,7 @@ func TestProductionRequiresBackupsWired(t *testing.T) {
 
 // OPS-01: production with backups enabled must also require encryption-key
 // wrap custody. S3-only wiring leaves CronJobs green but key backup inert —
-// a restore onto a new cluster then cannot decrypt Fernet columns.
+// a restore onto a new cluster then cannot decrypt sealed columns.
 func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 

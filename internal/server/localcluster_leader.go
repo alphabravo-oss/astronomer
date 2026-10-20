@@ -3,11 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection"
@@ -23,7 +23,7 @@ const localAgentLeaderLease = "astronomer-local-agent"
 // singleton management-cluster tunnel. The lease context cancels every local
 // agent loop before another replica can acquire leadership.
 func buildLocalAgentLeaderRuntime(
-	logger *slog.Logger,
+	logger zerolog.Logger,
 	queries *sqlc.Queries,
 	clusterID uuid.UUID,
 	helmRuntime helmruntime.Config,
@@ -31,12 +31,9 @@ func buildLocalAgentLeaderRuntime(
 	identity string,
 	deliveryConfig localAgentDeliveryConfig,
 ) (func(context.Context) error, error) {
-	if logger == nil {
-		logger = slog.Default()
-	}
 	restConfig, err := rest.InClusterConfig()
 	if err != nil {
-		logger.Warn("local agent disabled: not running in-cluster", "error", err)
+		logger.Warn().Err(err).Msg("local agent disabled: not running in-cluster")
 		return nil, nil
 	}
 	client, err := kubernetes.NewForConfig(restConfig)
@@ -85,7 +82,7 @@ func buildLocalAgentLeaderRuntime(
 			Name:            localAgentLeaderLease,
 			Callbacks: leaderelection.LeaderCallbacks{
 				OnStartedLeading: func(leaderCtx context.Context) {
-					logger.Info("local agent leadership acquired", "identity", identity)
+					logger.Info().Str("identity", identity).Msg("local agent leadership acquired")
 					localAgent, buildErr := buildLocalAgentRuntime(
 						leaderCtx,
 						logger,
@@ -112,14 +109,14 @@ func buildLocalAgentLeaderRuntime(
 				},
 				OnStoppedLeading: func() {
 					if ctx.Err() == nil {
-						logger.Warn("local agent leadership lost", "identity", identity)
+						logger.Warn().Str("identity", identity).Msg("local agent leadership lost")
 					} else {
-						logger.Info("local agent leadership stopped", "identity", identity)
+						logger.Info().Str("identity", identity).Msg("local agent leadership stopped")
 					}
 				},
 				OnNewLeader: func(newIdentity string) {
 					if newIdentity != identity {
-						logger.Info("local agent leader elected", "identity", newIdentity)
+						logger.Info().Str("identity", newIdentity).Msg("local agent leader elected")
 					}
 				},
 			},

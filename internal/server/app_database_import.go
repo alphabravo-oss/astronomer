@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -118,8 +117,8 @@ func prepareDatabaseTransferCommand(bounded context.Context, cfg *config.Config)
 	if database.SchemaHealth(bounded) != nil {
 		return nil, errors.New("offline database import schema health invalid")
 	}
-	schema, dirty, err := database.SchemaVersion(bounded)
-	if err != nil || dirty || schema != db.ExpectedSchemaVersion {
+	schema, err := database.SchemaVersion(bounded)
+	if err != nil || schema != db.ExpectedSchemaVersion {
 		return nil, errors.New("offline database import current schema required")
 	}
 	restart, err := provider.NewDatabaseRestartRevoker(database.Pool(), options)
@@ -159,7 +158,7 @@ func prepareDatabaseTransferCommand(bounded context.Context, cfg *config.Config)
 		return nil, err
 	}
 	defer clear(ca)
-	encryptor, err := auth.NewEncryptor(cfg.EncryptionKey)
+	encryptor, err := cfg.LoadEncryptor()
 	if err != nil {
 		return nil, errors.New("offline database import existing credential reader unavailable")
 	}

@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"log/slog"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/platformsettings"
@@ -10,9 +11,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) configureRouterPolicies(_ context.Context, logger *slog.Logger, deps *RouterDependencies) {
+func (c *productionComposition) configureRouterPolicies(_ context.Context, logger zerolog.Logger, deps *RouterDependencies) {
 	database := c.database
 	queries := c.queries
 
@@ -37,7 +39,7 @@ func (c *productionComposition) configureRouterPolicies(_ context.Context, logge
 			}
 			return tier
 		})
-		readAuditHandler := handler.NewReadAuditPolicyHandler(queries, logger)
+		readAuditHandler := handler.NewReadAuditPolicyHandler(queries, logging.Slog(logger))
 		readAuditHandler.SetAuditWriter(queries)
 		readAuditHandler.SetRunTx(sqlcMutationTxRunner[handler.ReadAuditPolicyMutationTx](database))
 		readAuditHandler.SetCacheInvalidator(readAuditEvaluator)
@@ -51,7 +53,7 @@ func (c *productionComposition) configureRouterPolicies(_ context.Context, logge
 		deps.AdminPlatform.Dashboards.SetSettingsCache(deps.CoreAuth.SettingsCache)
 	}
 
-	quotaEnforcer := quota.New(queries, logger)
+	quotaEnforcer := quota.New(queries, logging.Slog(logger))
 	quota.MustRegister()
 	scanner.MustRegisterMetrics()
 	if deps.ClusterResources.Clusters != nil {

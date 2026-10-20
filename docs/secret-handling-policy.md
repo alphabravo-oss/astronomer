@@ -28,7 +28,7 @@ and `docs/control-plane-state-contract.md`.
 | --- | --- | --- | --- |
 | Password verifier | One-way password hash | `users.password` | Store bcrypt or approved legacy hash during migration only; never expose in API/export. |
 | One-time or bearer token | Hash only | API tokens, password reset tokens, registration tokens after migration, agent tokens | Display plaintext once, store hash, compare by hash, audit lifecycle without token value. |
-| Reusable integration credential | Fernet ciphertext | Delivery source credential, SMTP password, SSO client secret, Vault auth blob, cluster registry password, cloud credentials | Encrypt before persistence, decrypt only at the consumer boundary, redact on read. |
+| Reusable integration credential | age-sealed column family (`<c>_key_id`, `<c>_algorithm`, `<c>_ciphertext`, `<c>_nonce`) via `pkg/crypto` | Delivery source credential, SMTP password, SSO client secret, Vault auth blob, cluster registry password, cloud credentials | Encrypt before persistence, decrypt only at the consumer boundary, redact on read. |
 | External reference | Reference string | `${vault://connection/mount/path#key}` | Persist the reference, resolve at execution/install time, never write resolved value back to Postgres. |
 | Kubernetes Secret | Kubernetes Secret object | Helm bootstrap Secret, chart-managed TLS Secret, pull secret | Prefer existing/external Secret in production; do not copy raw data into support bundles or CRD status. |
 | Public certificate metadata | Metadata only | TLS certificate subject, DNS names, not-after date | Certificate PEM bytes and private keys stay out of bundles; status can include bounded public metadata. |
@@ -42,7 +42,7 @@ Every secret-looking Postgres column must appear in
 The current policy expects these major categories:
 
 - `*_token_hash`: hash-only token lookup.
-- `*_encrypted`: Fernet ciphertext under `auth.Encryptor`.
+- `<c>_key_id` / `<c>_algorithm` / `<c>_ciphertext` / `<c>_nonce`: age-sealed value written and read only through `pkg/crypto`, registered in `internal/db/sealedcols` (ADR-0010).
 - Legacy plaintext columns must have a migration path and test coverage proving
   new writes do not reintroduce plaintext.
 
@@ -186,7 +186,7 @@ For any change that adds or touches secrets:
 
 - [ ] Is plaintext persistence avoided?
 - [ ] If a token is created, is the persisted value hash-only after handoff?
-- [ ] If a reusable credential is stored, is it Fernet-encrypted?
+- [ ] If a reusable credential is stored, is it sealed through `pkg/crypto` and registered in `internal/db/sealedcols`?
 - [ ] If an external secret manager can own the secret, is a reference path
       supported or documented?
 - [ ] Is the column present in `docs/secret-column-inventory.md`?

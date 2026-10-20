@@ -68,7 +68,7 @@ const auditSystemActivitySQL = `(
 
 const auditEffectiveClassSQL = `(CASE
 	WHEN a.action LIKE 'auth.%' OR a.action LIKE 'sso.%' THEN 'auth'
-	WHEN a.action LIKE 'read.%' OR a.action = 'charlie.http.read' OR a.action_class = 'read' THEN 'read'
+	WHEN a.action LIKE 'read.%' OR a.action LIKE '%.viewed' OR a.action = 'charlie.http.read' OR a.action_class = 'read' THEN 'read'
 	WHEN a.action_class = 'system' OR a.source = 'worker' OR a.action LIKE 'agent.%' OR a.action LIKE 'audit_log%' OR a.action LIKE '%sync_failed' THEN 'system'
 	ELSE 'mutation'
 END)`

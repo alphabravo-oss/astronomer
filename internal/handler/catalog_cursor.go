@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -44,7 +44,7 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if page.provided && (page.cursor.Version != 2 || page.cursor.Text == nil || page.cursor.Group == nil) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid catalog chart cursor position")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid catalog chart cursor position")
 		return
 	}
 	if !filter.GlobalScope && len(filter.RepositoryIds) == 0 {
@@ -67,14 +67,14 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		charts, err = h.queries.ListFilteredHelmCharts(r.Context(), sqlc.ListFilteredHelmChartsParams{GlobalScope: filter.GlobalScope, RepositoryIds: filter.RepositoryIds, Tag: filter.Tag, SearchPattern: filter.SearchPattern, QueryLimit: page.queryLimit(), QueryOffset: page.offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list charts")
 		return
 	}
 	var total *int64
 	if !page.mode {
 		count, err := h.queries.CountFilteredHelmCharts(r.Context(), filter)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count charts")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count charts")
 			return
 		}
 		total = &count

@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -31,7 +31,7 @@ func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list notification channels")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list notification channels")
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 	// canonical one the dispatcher actually formats for —
 	// see internal/worker/tasks/notification_dispatch.go.
 	if !isSupportedChannelType(channelType) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 			fmt.Sprintf("Unsupported channel type %q; supported: %s",
 				channelType, strings.Join(tasks.SupportedNotificationChannels, ", ")))
 
@@ -93,7 +93,7 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create notification channel")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create notification channel")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -106,13 +106,13 @@ func (h *AlertingHandler) CreateChannel(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) GetChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid channel ID")
 		return
 	}
 
 	channel, err := h.queries.GetNotificationChannelByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Notification channel not found")
 		return
 	}
 
@@ -123,19 +123,19 @@ func (h *AlertingHandler) GetChannel(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid channel ID")
 		return
 	}
 
 	current, err := h.queries.GetNotificationChannelByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Notification channel not found")
 		return
 	}
 
 	var req CreateChannelRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Configuration == nil {
@@ -155,7 +155,7 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 		req.ChannelType = current.ChannelType
 	}
 	if !isSupportedChannelType(req.ChannelType) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 			fmt.Sprintf("Unsupported channel type %q; supported: %s",
 				req.ChannelType, strings.Join(tasks.SupportedNotificationChannels, ", ")))
 
@@ -181,7 +181,7 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update notification channel")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update notification channel")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -193,21 +193,21 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid channel ID")
 		return
 	}
 	channel, err := h.queries.GetNotificationChannelByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Notification channel not found")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Alerting transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Alerting transaction runner is not configured")
 		return
 	}
 	recipients := tasks.NotificationRecipients(channel)
 	if len(recipients) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoDestination, "Channel has no configured destination to test")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.NoDestination, "Channel has no configured destination to test")
 		return
 	}
 	deliveryID := "alert-channel-test:" + id.String() + ":" + uuid.NewString()
@@ -233,7 +233,7 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusBadGateway, apierror.EnqueueError, "Failed to enqueue test notification")
+		respondTransactionalMutationError(w, r, err, http.StatusBadGateway, apiutil.EnqueueError, "Failed to enqueue test notification")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"success": true, "message": "Test notification queued for " + channel.Name})
@@ -243,7 +243,7 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid channel ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid channel ID")
 		return
 	}
 
@@ -262,7 +262,7 @@ func (h *AlertingHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Notification channel not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Notification channel not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())

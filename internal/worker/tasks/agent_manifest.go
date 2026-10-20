@@ -67,6 +67,7 @@ func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, 
 		SystemOIDCIdentity:   runtimeDependencies(ctx).SystemOIDCIdentity,
 		SystemPublicKey:      append([]byte(nil), runtimeDependencies(ctx).SystemPublicKey...),
 		SystemPublicKeys:     cloneSystemPublicKeys(runtimeDependencies(ctx).SystemPublicKeys),
+		ImageRegistry:        runtimeDependencies(ctx).ImageRegistry,
 	})
 }
 

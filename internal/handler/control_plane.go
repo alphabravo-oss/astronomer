@@ -13,10 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -138,7 +138,7 @@ func (h *ControlPlaneHandler) Status(w http.ResponseWriter, r *http.Request) {
 func (h *ControlPlaneHandler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 	policy, err := h.queries.GetDefaultControlPlanePolicy(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PolicyError, "Failed to load control plane policy")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.PolicyError, "Failed to load control plane policy")
 		return
 	}
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
@@ -147,7 +147,7 @@ func (h *ControlPlaneHandler) GetPolicy(w http.ResponseWriter, r *http.Request) 
 func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	var req UpdateControlPlanePolicyRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	params := sqlc.UpsertDefaultControlPlanePolicyParams{
@@ -183,7 +183,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		},
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.PolicyError, "Failed to update control plane policy")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.PolicyError, "Failed to update control plane policy")
 		return
 	}
 	select {
@@ -196,7 +196,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid alert ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid alert ID")
 		return
 	}
 	alert, err := executeMutation(r, h.runTx,
@@ -212,10 +212,10 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane alert not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Control plane alert not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.AlertError, "Failed to acknowledge control plane alert")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.AlertError, "Failed to acknowledge control plane alert")
 		return
 	}
 	RespondJSON(w, http.StatusOK, controlPlaneAlertResponse(alert))
@@ -252,7 +252,7 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 		},
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SilenceError, "Failed to create control plane silence")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.SilenceError, "Failed to create control plane silence")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/controllers/silences/"+item.ID.String()+"/")
@@ -262,7 +262,7 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid silence ID")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -278,10 +278,10 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Control plane silence not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Control plane silence not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SilenceError, "Failed to delete control plane silence")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.SilenceError, "Failed to delete control plane silence")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

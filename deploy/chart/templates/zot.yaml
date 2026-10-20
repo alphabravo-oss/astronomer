@@ -1,0 +1,256 @@
+{{- /*
+Cluster-local OCI registry (project-zot), air-gap layer 1. When enabled, every
+image the chart renders and every runtime reference the server/worker re-host
+(REGISTRY_LOCAL) names this registry. Populate it with `astro airgap mirror`.
+Its own image cannot come from itself: it renders from registry.zot.image
+(re-hosted only onto an operator-supplied image.registry) and must be
+pre-loaded on air-gapped nodes.
+*/ -}}
+{{- if and .Values.registry .Values.registry.zot .Values.registry.zot.enabled }}
+{{- $zot := .Values.registry.zot -}}
+{{- $name := printf "%s-zot" (include "astronomer.fullname" .) -}}
+{{- $authSecret := $zot.auth.htpasswdSecret | default "" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 4 }}
+data:
+  config.json: |
+    {
+      "distSpecVersion": "1.1.1",
+      "storage": {
+        "rootDirectory": "/var/lib/registry",
+        "dedupe": true,
+        "gc": true
+      },
+      "http": {
+        "address": "0.0.0.0",
+        "port": "{{ int $zot.service.port }}"
+        {{- if $authSecret }},
+        "auth": {
+          "htpasswd": { "path": "/etc/zot/auth/htpasswd" },
+          "failDelay": 1
+        },
+        "accessControl": {
+          "repositories": {
+            "**": {
+              "anonymousPolicy": ["read"],
+              "defaultPolicy": ["read", "create", "update"]
+            }
+          }
+        }
+        {{- end }}
+      },
+      "log": { "level": {{ $zot.logLevel | default "info" | quote }} }
+    }
+---
+{{- if $zot.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if $zot.persistence.storageClass }}
+  storageClassName: {{ $zot.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $zot.persistence.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "registry") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson $zot | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: zot
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" $zot.image.repository "tag" $zot.image.tag "digest" $zot.image.digest "registry" "" "online" $zot.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "/etc/zot/config.json"]
+          ports:
+            - name: registry
+              containerPort: {{ int $zot.service.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: registry
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: registry
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml $zot.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/zot/config.json
+              subPath: config.json
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/registry
+            - name: tmp
+              mountPath: /tmp
+            {{- if $authSecret }}
+            - name: auth
+              mountPath: /etc/zot/auth
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}
+        - name: storage
+          {{- if $zot.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $name }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if $authSecret }}
+        - name: auth
+          secret:
+            secretName: {{ $authSecret }}
+            items:
+              - key: htpasswd
+                path: htpasswd
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 4 }}
+spec:
+  type: {{ $zot.service.type }}
+  {{- if $zot.service.clusterIP }}
+  clusterIP: {{ $zot.service.clusterIP }}
+  {{- end }}
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "registry") | nindent 4 }}
+  ports:
+    - name: registry
+      port: {{ int $zot.service.port }}
+      targetPort: registry
+      protocol: TCP
+      {{- if and (eq $zot.service.type "NodePort") $zot.service.nodePort }}
+      nodePort: {{ int $zot.service.nodePort }}
+      {{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+# Registry ingress: release pods (server/worker resolution, in-namespace
+# clients) plus the node/kubelet pull sources in pullCIDRs. Anonymous access
+# is read-only when auth.htpasswdSecret is set. No egress: zot never syncs
+# from upstream registries (layer 3 is fail closed, never a public default).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "registry") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ int $zot.service.port }}
+    {{- with $zot.networkPolicy.pullCIDRs }}
+    - from:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ int $zot.service.port }}
+    {{- end }}
+  egress: []
+---
+# Lets the server and worker resolve runtime references against layer 1.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}-clients
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "registry") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ .Release.Name | quote }}]
+      - key: app.kubernetes.io/component
+        operator: In
+        values: ["server", "worker"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "registry") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ int $zot.service.port }}
+{{- end }}
+{{- end }}

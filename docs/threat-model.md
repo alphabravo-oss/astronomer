@@ -361,7 +361,7 @@ Controls:
 - Nightly management-plane backups cover Postgres only; Redis is treated as rebuildable queue state.
 - Restore drills restore into an ephemeral sidecar Postgres and write only the drill result to production.
 - Backup jobs use dedicated credential mounts and tmp scratch volumes.
-- Secret rotation procedures keep Fernet/JWT keys outside backup artifacts and support multi-key rotation windows.
+- Secret rotation procedures keep age/JWT keys outside backup artifacts and support multi-key rotation windows.
 
 Review checks:
 

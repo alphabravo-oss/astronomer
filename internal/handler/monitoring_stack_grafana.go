@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/deploy/dashboards"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
@@ -92,7 +92,7 @@ func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Re
 	return req, h.sharedGrafanaHelmValues(req, backend), backend, nil
 }
 
-func (h *MonitoringHandler) sharedGrafanaPrecheck(ctx context.Context, req SharedGrafanaRequest, op string) (int, string, string, bool) {
+func (h *MonitoringHandler) sharedGrafanaPrecheck(ctx context.Context, req SharedGrafanaRequest, op string) (int, apiutil.Code, string, bool) {
 	if op != "install" && op != "replace" {
 		return 0, "", "", true
 	}
@@ -105,7 +105,7 @@ func (h *MonitoringHandler) sharedGrafanaPrecheck(ctx context.Context, req Share
 	if msg == "" {
 		msg = "grafana sizer verdict failed"
 	}
-	return http.StatusPreconditionFailed, apierror.SizerFailed, msg, false
+	return http.StatusPreconditionFailed, apiutil.SizerFailed, msg, false
 }
 
 func (h *MonitoringHandler) updateSharedGrafanaMetadata(ctx context.Context, backend sqlc.MonitoringBackend, req SharedGrafanaRequest, status string) error {

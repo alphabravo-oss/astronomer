@@ -112,7 +112,7 @@ func newFakeQuerier() *fakeQuerier {
 	prodID := uuid.New()
 	prod := sqlc.VaultConnection{
 		ID: prodID, Name: "prod", AuthMethod: "token", DefaultMount: "secret",
-		Enabled: true, AuthEncrypted: `{"token":"root"}`,
+		Enabled: true,
 	}
 	return &fakeQuerier{
 		conns: map[string]sqlc.VaultConnection{"prod": prod},

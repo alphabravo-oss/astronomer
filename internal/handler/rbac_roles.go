@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -17,12 +17,12 @@ func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
 	offset := queryOffset32(r)
 	items, err := h.queries.ListGlobalRoles(r.Context(), sqlc.ListGlobalRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global roles")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list global roles")
 		return
 	}
 	total, err := h.queries.CountGlobalRoles(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count global roles")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count global roles")
 		return
 	}
 	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
@@ -56,7 +56,7 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create global role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create global role")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/rbac/global-roles/"+role.ID.String()+"/")
@@ -78,7 +78,7 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	}
 	var req roleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	permissions, rules, ok := roleDocuments(w, r, req)
@@ -105,7 +105,7 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 			return mutationAuditEvent{action: "role.update", resourceType: "global_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusOK, detail: map[string]any{"scope": "global"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update global role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update global role")
 		return
 	}
 	// Role rules are denormalised into every cached binding for every user
@@ -125,7 +125,7 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 	// an error in Postgres, so the old path answered 204 for an unknown ID).
 	existing, err := h.queries.GetGlobalRoleByID(r.Context(), id)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Global role not found")
 		return
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
@@ -138,7 +138,7 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 			return mutationAuditEvent{action: "role.delete", resourceType: "global_role", resourceID: id.String(), resourceName: roleName, status: http.StatusNoContent, detail: map[string]any{"scope": "global"}}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Global role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Global role not found")
 		return
 	}
 	// ON DELETE CASCADE on global_role_bindings means every binding for this
@@ -156,12 +156,12 @@ func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
 	offset := queryOffset32(r)
 	items, err := h.queries.ListClusterRoles(r.Context(), sqlc.ListClusterRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster roles")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cluster roles")
 		return
 	}
 	total, err := h.queries.CountClusterRoles(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count cluster roles")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count cluster roles")
 		return
 	}
 	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
@@ -192,7 +192,7 @@ func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create cluster role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create cluster role")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/rbac/cluster-roles/"+role.ID.String()+"/")
@@ -206,7 +206,7 @@ func (h *RBACHandler) GetClusterRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.queries.GetClusterRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster role not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, role)
@@ -219,7 +219,7 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 	}
 	var req roleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	permissions, rules, ok := roleDocuments(w, r, req)
@@ -243,7 +243,7 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 			return mutationAuditEvent{action: "role.update", resourceType: "cluster_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusOK, detail: map[string]any{"scope": "cluster"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update cluster role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update cluster role")
 		return
 	}
 	h.invalidateAll()
@@ -257,7 +257,7 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 	}
 	existing, err := h.queries.GetClusterRoleByID(r.Context(), id)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Cluster role not found")
 		return
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
@@ -270,7 +270,7 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 			return mutationAuditEvent{action: "role.delete", resourceType: "cluster_role", resourceID: id.String(), resourceName: roleName, status: http.StatusNoContent, detail: map[string]any{"scope": "cluster"}}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster role not found")
 		return
 	}
 	h.invalidateAll()
@@ -286,12 +286,12 @@ func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
 	offset := queryOffset32(r)
 	items, err := h.queries.ListProjectRoles(r.Context(), sqlc.ListProjectRolesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project roles")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list project roles")
 		return
 	}
 	total, err := h.queries.CountProjectRoles(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project roles")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count project roles")
 		return
 	}
 	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
@@ -322,7 +322,7 @@ func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create project role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create project role")
 		return
 	}
 	w.Header().Set("Location", "/api/v1/rbac/project-roles/"+role.ID.String()+"/")
@@ -336,7 +336,7 @@ func (h *RBACHandler) GetProjectRole(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := h.queries.GetProjectRoleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project role not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, role)
@@ -349,7 +349,7 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 	}
 	var req roleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	permissions, rules, ok := roleDocuments(w, r, req)
@@ -373,7 +373,7 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 			return mutationAuditEvent{action: "role.update", resourceType: "project_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusOK, detail: map[string]any{"scope": "project"}}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project role")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project role")
 		return
 	}
 	h.invalidateAll()
@@ -387,7 +387,7 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 	}
 	existing, err := h.queries.GetProjectRoleByID(r.Context(), id)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Project role not found")
 		return
 	}
 	if rejectBuiltinRoleWrite(w, r, existing.IsBuiltin) {
@@ -400,7 +400,7 @@ func (h *RBACHandler) DeleteProjectRole(w http.ResponseWriter, r *http.Request) 
 			return mutationAuditEvent{action: "role.delete", resourceType: "project_role", resourceID: id.String(), resourceName: roleName, status: http.StatusNoContent, detail: map[string]any{"scope": "project"}}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project role not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project role not found")
 		return
 	}
 	h.invalidateAll()

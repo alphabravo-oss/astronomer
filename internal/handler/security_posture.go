@@ -4,15 +4,15 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // ControllerStatus summarizes security policy and scan state.
 func (h *SecurityHandler) ControllerStatus(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.controllerSummary(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.StatusError, "Failed to load security templates")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.StatusError, "Failed to load security templates")
 		return
 	}
 	RespondJSON(w, http.StatusOK, summary)

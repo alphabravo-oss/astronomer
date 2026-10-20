@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -82,7 +84,7 @@ func runOnce(ctx context.Context, queries ReporterQuerier, log *slog.Logger) {
 		for _, r := range rows {
 			reportProjectRow(r)
 		}
-		if int32(len(rows)) < reporterPageSize {
+		if safeconv.Int32(len(rows)) < reporterPageSize {
 			break
 		}
 		offset += reporterPageSize
@@ -101,7 +103,7 @@ func runOnce(ctx context.Context, queries ReporterQuerier, log *slog.Logger) {
 		for _, r := range rows {
 			reportUserRow(r)
 		}
-		if int32(len(rows)) < reporterPageSize {
+		if safeconv.Int32(len(rows)) < reporterPageSize {
 			break
 		}
 		offset += reporterPageSize

@@ -7,8 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -31,13 +31,13 @@ func (h *BackupHandler) ListBackups(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list backups")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list backups")
 		return
 	}
 
 	total, err := h.queries.CountBackups(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count backups")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count backups")
 		return
 	}
 
@@ -74,13 +74,13 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 
 	storageID, err := uuid.Parse(req.StorageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid storage ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid storage ID")
 		return
 	}
 
 	storage, err := h.queries.GetBackupStorageConfigByID(r.Context(), storageID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Storage config not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Storage config not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, storage.ClusterID, rbac.VerbCreate) {
@@ -124,7 +124,7 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create backup")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create backup")
 		return
 	}
 
@@ -145,13 +145,13 @@ func (h *BackupHandler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) GetBackup(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Backup not found")
 		return
 	}
 
 	backup, err := h.queries.GetBackupByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Backup not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, backup.ClusterID, rbac.VerbRead) {
@@ -165,12 +165,12 @@ func (h *BackupHandler) GetBackup(w http.ResponseWriter, r *http.Request) {
 func (h *BackupHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid backup ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid backup ID")
 		return
 	}
 	existing, err := h.queries.GetBackupByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Backup not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Backup not found")
 		return
 	}
 	if !h.authorizeBackup(w, r, existing.ClusterID, rbac.VerbDelete) {
@@ -183,7 +183,7 @@ func (h *BackupHandler) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 			return mutationAuditEvent{action: "backup.delete", resourceType: "backup", resourceID: backup.ID.String(), resourceName: backupName, status: http.StatusNoContent}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete backup")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete backup")
 		return
 	}
 	h.publishBackupChanged(existing.ClusterID, id, "backup")

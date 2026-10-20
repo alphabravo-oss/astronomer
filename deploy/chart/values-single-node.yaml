@@ -1,5 +1,6 @@
 # Compact, non-HA installation. Install the CloudNativePG operator first.
 # Layer site-specific routing, secrets, image digests and backup settings last.
+# Off-host backups to a non-AWS S3 store: values-single-node-backup.yaml.
 # Production HA continues to use values-production.yaml on independent nodes.
 config:
   env: development

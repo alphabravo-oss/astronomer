@@ -9,12 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -40,7 +42,7 @@ type MonitoringHandler struct {
 	// to start a production server without one. When nil, the credential is
 	// written to the plaintext JSONB column exactly as it was before 146,
 	// which is the row shape the resolver's legacy branch already handles.
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	// grafanaTickets is the dedicated mint/redeem store (prefix grafana-ticket:).
 	// Not StreamTicketStore. Nil disables the bounce endpoints.
 	grafanaTickets *auth.GrafanaTicketStore
@@ -73,9 +75,9 @@ func (h *MonitoringHandler) SetRunTx(runTx monitoringRunTxFunc) {
 
 func (h *MonitoringHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func respondMonitoringMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+func respondMonitoringMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, errMonitoringOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"Idempotency-Key already identifies a different monitoring operation")
 		return
 	}
@@ -106,9 +108,9 @@ type GrafanaExpose struct {
 	TLSIssuerKind     string
 }
 
-// SetEncryptor wires the Fernet encryptor used for the monitoring-backend
+// SetEncryptor wires the age encryptor used for the monitoring-backend
 // credential at rest (migration 146).
-func (h *MonitoringHandler) SetEncryptor(encryptor *auth.Encryptor) {
+func (h *MonitoringHandler) SetEncryptor(encryptor *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -118,7 +120,7 @@ func (h *MonitoringHandler) SetEncryptor(encryptor *auth.Encryptor) {
 // monitoringDecryptor / monitoringSealer return h.encryptor narrowed to one
 // direction, or a genuinely nil interface when none is wired. Returning
 // h.encryptor directly would hand back a non-nil interface holding a nil
-// *auth.Encryptor, and every nil guard downstream would pass straight into a
+// *crypto.Encryptor, and every nil guard downstream would pass straight into a
 // nil-receiver Decrypt.
 func (h *MonitoringHandler) monitoringDecryptor() imonitoring.Decryptor {
 	if h == nil || h.encryptor == nil {

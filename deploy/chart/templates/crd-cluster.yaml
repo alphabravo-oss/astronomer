@@ -33,7 +33,7 @@ spec:
       - astronomer
   # Multi-version serving: v1alpha1 and v1beta1 are both served with an
   # identical schema (identity conversion — the Go types are shared verbatim,
-  # see internal/crd/types.go). v1alpha1 stays the storage version so existing
+  # see internal/operator/lifecycle/types.go). v1alpha1 stays the storage version so existing
   # stored objects are untouched by the promotion. No conversion webhook is
   # needed while the schemas are byte-identical. See docs/crd-versioning.md.
   versions:

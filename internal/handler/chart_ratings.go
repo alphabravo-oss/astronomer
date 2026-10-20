@@ -29,10 +29,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -169,18 +169,18 @@ func executeChartRatingMutation(
 	})
 }
 
-func respondChartRatingMutationError(w http.ResponseWriter, r *http.Request, err error, forbiddenMessage, fallbackCode, fallbackMessage string) {
+func respondChartRatingMutationError(w http.ResponseWriter, r *http.Request, err error, forbiddenMessage string, fallbackCode apiutil.Code, fallbackMessage string) {
 	switch {
 	case errors.Is(err, errChartRatingChartNotFound):
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "chart not found")
 	case errors.Is(err, errChartRatingNotFound):
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "rating not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "rating not found")
 	case errors.Is(err, errChartRatingCallerMissing):
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Caller not found")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Caller not found")
 	case errors.Is(err, errChartRatingForbidden):
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, forbiddenMessage)
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, forbiddenMessage)
 	case errors.Is(err, errChartRatingConflict):
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "rating does not belong to this chart")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "rating does not belong to this chart")
 	default:
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)
 	}
@@ -288,37 +288,37 @@ func parseInstallationID(s *string) (pgtype.UUID, bool) {
 func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 
 	var body createOrUpdateRatingRequest
 	if err := decodeV1JSONBody(r, &body); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Body must be valid JSON")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Body must be valid JSON")
 		return
 	}
 	if body.Stars < 1 || body.Stars > 5 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStars, "stars must be 1-5")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidStars, "stars must be 1-5")
 		return
 	}
 	note := sanitizeNote(body.Note)
 	if len(note) > NoteMaxLen {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoteTooLong, "note must be 280 chars or fewer")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.NoteTooLong, "note must be 280 chars or fewer")
 		return
 	}
 	instID, ok := parseInstallationID(body.InstallationID)
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "installation_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "installation_id must be a UUID")
 		return
 	}
 
@@ -360,7 +360,7 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		h.log.ErrorContext(r.Context(), "commit rating upsert", "error", err)
-		respondChartRatingMutationError(w, r, err, "only the rating's owner may modify it", apierror.CreateError, "could not create or update rating")
+		respondChartRatingMutationError(w, r, err, "only the rating's owner may modify it", apiutil.CreateError, "could not create or update rating")
 		return
 	}
 	if result.status == http.StatusCreated {
@@ -405,7 +405,7 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	limit := queryLimit32(r, 20)
@@ -417,12 +417,12 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 		ChartID: chartID, Limit: limit, Offset: offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	total, err := h.queries.CountChartRatingsByChart(r.Context(), chartID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, err.Error())
 		return
 	}
 	out := make([]ratingResponse, 0, len(rows))
@@ -436,17 +436,17 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 func (h *ChartRatingsHandler) GetAggregate(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	agg, err := h.queries.GetChartRatingAggregate(r.Context(), chartID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AggregateError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AggregateError, err.Error())
 		return
 	}
 	hist, err := h.queries.ChartRatingHistogram(r.Context(), chartID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HistogramFailed, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.HistogramFailed, err.Error())
 		return
 	}
 	resp := aggregateResponse{
@@ -462,17 +462,17 @@ func (h *ChartRatingsHandler) GetAggregate(w http.ResponseWriter, r *http.Reques
 func (h *ChartRatingsHandler) GetMyRating(w http.ResponseWriter, r *http.Request) {
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return
 	}
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	got, err := h.queries.GetChartRatingForUserChart(r.Context(), sqlc.GetChartRatingForUserChartParams{
@@ -480,10 +480,10 @@ func (h *ChartRatingsHandler) GetMyRating(w http.ResponseWriter, r *http.Request
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "no rating")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "no rating")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, toRatingResponse(got))
@@ -501,26 +501,26 @@ func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Reques
 	}
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	ratingID, err := uuid.Parse(chi.URLParam(r, "rating_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "rating_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "rating_id must be a UUID")
 		return
 	}
 	var body createOrUpdateRatingRequest
 	if err := decodeV1JSONBody(r, &body); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Body must be valid JSON")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Body must be valid JSON")
 		return
 	}
 	if body.Stars < 1 || body.Stars > 5 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidStars, "stars must be 1-5")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidStars, "stars must be 1-5")
 		return
 	}
 	note := sanitizeNote(body.Note)
 	if len(note) > NoteMaxLen {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoteTooLong, "note must be 280 chars or fewer")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.NoteTooLong, "note must be 280 chars or fewer")
 		return
 	}
 	result, err := executeChartRatingMutation(r, h, func(q ChartRatingMutationTx) (chartRatingMutationResult, error) {
@@ -548,7 +548,7 @@ func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Reques
 		return chartRatingMutationResult{rating: updated, action: "chart.rating.updated", status: http.StatusOK}, err
 	})
 	if err != nil {
-		respondChartRatingMutationError(w, r, err, "only the rating's owner may modify it", apierror.UpdateError, "could not update rating")
+		respondChartRatingMutationError(w, r, err, "only the rating's owner may modify it", apiutil.UpdateError, "could not update rating")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toRatingResponse(result.rating))
@@ -563,12 +563,12 @@ func (h *ChartRatingsHandler) DeleteRating(w http.ResponseWriter, r *http.Reques
 	}
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	ratingID, err := uuid.Parse(chi.URLParam(r, "rating_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "rating_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "rating_id must be a UUID")
 		return
 	}
 	_, err = executeChartRatingMutation(r, h, func(q ChartRatingMutationTx) (chartRatingMutationResult, error) {
@@ -598,7 +598,7 @@ func (h *ChartRatingsHandler) DeleteRating(w http.ResponseWriter, r *http.Reques
 		return chartRatingMutationResult{rating: existing, action: "chart.rating.deleted", status: http.StatusNoContent}, nil
 	})
 	if err != nil {
-		respondChartRatingMutationError(w, r, err, "only the rating's owner may delete it", apierror.DeleteError, "could not delete rating")
+		respondChartRatingMutationError(w, r, err, "only the rating's owner may delete it", apiutil.DeleteError, "could not delete rating")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -623,7 +623,7 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 	}
 	results, err := catalog.TopCharts(r.Context(), h.queries, 50)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	// TopCharts is limit-capped; omit an inexact total.
@@ -635,7 +635,7 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "chart_id must be a UUID")
 		return
 	}
 	projectID, projectScoped, ok := catalogProjectQuery(w, r)
@@ -648,7 +648,7 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 	}
 	results, err := catalog.SimilarCharts(r.Context(), h.queries, chartID, 20)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, err.Error())
 		return
 	}
 	// SimilarCharts is limit-capped; omit an inexact total.
@@ -666,7 +666,7 @@ func (h *ChartRatingsHandler) authorizeRecommendationChart(w http.ResponseWriter
 	}
 	chart, err := h.queries.GetHelmChartByID(r.Context(), chartID)
 	if err != nil || !h.recommendationChartVisible(r.Context(), chart, projectID, projectScoped) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "chart not found")
 		return false
 	}
 	return true
@@ -707,12 +707,12 @@ func (h *ChartRatingsHandler) recommendationChartVisible(ctx context.Context, ch
 func requireChartRatingUserID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	auth, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return uuid.Nil, false
 	}
 	userID, err := uuid.Parse(auth.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Invalid user ID")
 		return uuid.Nil, false
 	}
 	return userID, true

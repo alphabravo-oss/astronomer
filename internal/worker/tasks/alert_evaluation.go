@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -239,7 +241,7 @@ func listAllAlertRules(ctx context.Context) ([]sqlc.AlertRule, error) {
 			break
 		}
 		all = append(all, page...)
-		if int32(len(page)) < alertEvalSweepPageSize {
+		if safeconv.Int32(len(page)) < alertEvalSweepPageSize {
 			break
 		}
 	}
@@ -260,7 +262,7 @@ func listActiveSilences(ctx context.Context) ([]sqlc.AlertSilence, error) {
 			break
 		}
 		all = append(all, page...)
-		if int32(len(page)) < alertEvalSweepPageSize {
+		if safeconv.Int32(len(page)) < alertEvalSweepPageSize {
 			break
 		}
 	}
@@ -291,7 +293,7 @@ func listAllAlertEventsByRule(ctx context.Context, ruleID uuid.UUID) ([]sqlc.Ale
 			break
 		}
 		all = append(all, page...)
-		if int32(len(page)) < alertEvalSweepPageSize {
+		if safeconv.Int32(len(page)) < alertEvalSweepPageSize {
 			break
 		}
 	}
@@ -683,7 +685,7 @@ func buildFleetHealthSnapshot(ctx context.Context) (*fleetHealthSnapshot, error)
 		for _, liveness := range livenessRows {
 			snap.liveness[liveness.ClusterID] = liveness.LastHeartbeat
 		}
-		if int32(len(clusters)) < alertEvalSweepPageSize {
+		if safeconv.Int32(len(clusters)) < alertEvalSweepPageSize {
 			break
 		}
 	}

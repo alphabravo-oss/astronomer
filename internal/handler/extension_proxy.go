@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -61,12 +61,12 @@ type ExtensionMountsResponse struct {
 // Mounts returns the enabled-extensions projection for the host loader.
 func (h *ExtensionHandler) Mounts(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension registry is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension registry is not configured")
 		return
 	}
 	rows, err := h.queries.ListUIExtensions(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list extensions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list extensions")
 		return
 	}
 	resp := ExtensionMountsResponse{
@@ -218,13 +218,13 @@ var extNamespaceRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 // ProxyData implements the §DataProxy algorithm, failing closed at each step.
 func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil || h.engine == nil || h.bindings == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension data proxy is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension data proxy is not configured")
 		return
 	}
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	dataSourceID := strings.TrimSpace(chi.URLParam(r, "dataSourceId"))
 	if !extensionNameRE.MatchString(name) || dataSourceID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Invalid extension or data source")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Invalid extension or data source")
 		return
 	}
 
@@ -232,7 +232,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		// An empty body is valid (GET-style source with no overrides).
 		if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
@@ -240,16 +240,16 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	// Step 1 — load + gate the extension from the STORED manifest.
 	row, err := h.findExtension(r.Context(), name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Extension not found")
 		return
 	}
 	if !row.Enabled || row.CompatibilityStatus != "compatible" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Extension is not enabled or compatible")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IncompatibleExtension, "Extension is not enabled or compatible")
 		return
 	}
 	var manifest ExtensionManifest
 	if json.Unmarshal(row.Manifest, &manifest) != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Extension manifest is unreadable")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IncompatibleExtension, "Extension manifest is unreadable")
 		return
 	}
 
@@ -261,7 +261,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	ticket := strings.TrimSpace(r.Header.Get("X-Extension-Ticket"))
 	ds, isBundle, found := findDataSource(manifest, dataSourceID, ticket != "")
 	if !found {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown data source")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown data source")
 		return
 	}
 
@@ -285,7 +285,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	// engine, same bindings, same call as appmiddleware.RequirePermission.
 	bindings, err := h.bindings.GetUserBindings(r.Context(), userID.String())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to read user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to read user permissions")
 		return
 	}
 	allowed := h.engine.CheckPermission(bindings, rbac.Resource(ds.RBAC.Resource), rbac.Verb(ds.RBAC.Verb), scopeCluster, scopeProject, namespace)
@@ -301,7 +301,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 			"dataSourceId": dataSourceID, "resource": ds.RBAC.Resource, "verb": ds.RBAC.Verb,
 			"clusterId": clusterID.String(), "allowed": false,
 		})
-		RespondRequestError(w, r, http.StatusForbidden, apierror.ExtensionRBACDenied, "Your permissions do not allow this extension data source")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.ExtensionRBACDenied, "Your permissions do not allow this extension data source")
 		return
 	}
 
@@ -310,7 +310,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	// the Auth middleware on every unsafe-method cookie request; we re-assert it
 	// here so a misrouted/ticket-less POST cannot mutate without the token.
 	if ds.Method == "POST" && ticket == "" && !auth.ValidateCSRF(r) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "CSRF validation failed")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "CSRF validation failed")
 		return
 	}
 
@@ -319,14 +319,14 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	// keys. No client field redirects the upstream.
 	filledPath, perr := buildUpstreamPath(ds.Path, clusterID, projectID, namespace, req.PathParams)
 	if perr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, perr.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFormat, perr.Error())
 		return
 	}
 	query := mergeDeclaredQuery(ds.Query, req.Query)
 
 	// Step 7 — dispatch in-process (the second RBAC gate). Project + truncate.
 	if h.upstream == nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, "Extension upstream is not configured")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.ProxyError, "Extension upstream is not configured")
 		return
 	}
 	payload, uerr := h.upstream(r.Context(), ExtensionUpstreamRequest{
@@ -334,7 +334,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 		UserID: userID, ClusterID: clusterID, ProjectID: projectID, Namespace: namespace,
 	})
 	if uerr != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, "Extension upstream request failed")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.ProxyError, "Extension upstream request failed")
 		return
 	}
 	projected, rows, truncated := projectPayload(payload, ds.Shape, ds.Fields, ds.MaxRows)
@@ -367,12 +367,12 @@ func (h *ExtensionHandler) resolveCaller(r *http.Request, req extProxyRequest, d
 	}
 	if ticket != "" {
 		if h.tickets == nil {
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Extension tickets are not configured")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Extension tickets are not configured")
 			return uuid.Nil, uuid.Nil, false
 		}
 		uid, err := h.tickets.Validate(ticket, name, dataSourceID, clusterID)
 		if err != nil || uid == uuid.Nil {
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid extension ticket")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid extension ticket")
 			return uuid.Nil, uuid.Nil, false
 		}
 		return uid, clusterID, true
@@ -381,17 +381,17 @@ func (h *ExtensionHandler) resolveCaller(r *http.Request, req extProxyRequest, d
 	// without a ticket, and findDataSource already restricts the search side,
 	// but guard here too: never let a session caller hit a bundle source.
 	if isBundle {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown data source")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown data source")
 		return uuid.Nil, uuid.Nil, false
 	}
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return uuid.Nil, uuid.Nil, false
 	}
 	uid, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid user identity")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid user identity")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return uid, clusterID, true

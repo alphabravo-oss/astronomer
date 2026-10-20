@@ -21,6 +21,7 @@ var buildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 }, []string{"version", "commit", "build_time", "go_version", "fips_mode"})
 
 func init() {
+	Version = Normalize(Version)
 	buildInfo.WithLabelValues(Version, GitCommit, BuildDate, runtime.Version(), FIPSMode).Set(1)
 }
 

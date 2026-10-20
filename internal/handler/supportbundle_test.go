@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	corev1 "k8s.io/api/core/v1"
@@ -187,7 +189,7 @@ func TestSupportBundleCharlieSectionIsLocalMetadataOnly(t *testing.T) {
 			ID: connectionID, Active: true, RequestedMode: "approval", VerifiedMode: "read_only",
 			HealthState: "degraded", OnboardingState: "consumed", AgentProtocolVersion: "1.0.0",
 			ChartVersion: "1.0.0", LeaderInstanceID: "instance-present", FencingEpoch: 4,
-			CentralUrl: canary, LocalTrustMaterialEncrypted: canary, AgentSecretName: canary,
+			CentralUrl: canary, LocalTrustMaterialKeyID: canary, LocalTrustMaterialAlgorithm: crypto.AlgorithmAgeX25519, LocalTrustMaterialCiphertext: []byte(canary), AgentSecretName: canary,
 			AgentSecretHmac: canary, SigningKeyFingerprint: canary,
 			CertificateExpiresAt: expiresAt, EnrollmentCredentialsExpiresAt: expiresAt,
 			ArtifactCredentialExpiresAt: expiresAt, OnboardingPackageExpiresAt: expiresAt,

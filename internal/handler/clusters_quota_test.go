@@ -75,7 +75,8 @@ func TestClusterHandler_GlobalCapReject(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	errMap, _ := resp["error"].(map[string]any)
-	if errMap["limit"] != "max_total_clusters" {
-		t.Errorf("expected limit=max_total_clusters, got %v", errMap["limit"])
+	details, _ := errMap["details"].(map[string]any)
+	if details["limit"] != "max_total_clusters" {
+		t.Errorf("expected limit=max_total_clusters, got %v", details["limit"])
 	}
 }

@@ -13,8 +13,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -67,10 +67,10 @@ func (k *resourceOperationK8s) Do(_ context.Context, _ string, method, path stri
 	return &protocol.K8sResponsePayload{StatusCode: k.status, Body: k.encoded}, nil
 }
 
-func resourceTaskEncryptor(t *testing.T) *auth.Encryptor {
+func resourceTaskEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, _ := auth.GenerateKey()
-	enc, err := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,13 +80,13 @@ func resourceTaskEncryptor(t *testing.T) *auth.Encryptor {
 func TestHandleResourceOperationApplyUsesGenerationFenceAndSanitizedEvidence(t *testing.T) {
 	enc := resourceTaskEncryptor(t)
 	const manifest = `{"apiVersion":"v1","kind":"Secret","metadata":{"name":"db","namespace":"payments"},"stringData":{"password":"SENTINEL"}}`
-	ciphertext, err := enc.Encrypt(manifest)
+	ciphertext, err := enc.EncryptString(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	op := sqlc.ResourceOperation{
 		ID: uuid.New(), ClusterID: uuid.New(), Action: "apply", ApiPath: "/api/v1/namespaces/payments/secrets/db",
-		ManifestEncrypted: ciphertext, ForceApply: true, Generation: 3, ObservedGeneration: 2, Status: "running",
+		ManifestKeyID: ciphertext.KeyID, ManifestAlgorithm: ciphertext.Algorithm, ManifestCiphertext: ciphertext.Ciphertext, ForceApply: true, Generation: 3, ObservedGeneration: 2, Status: "running",
 	}
 	store := &resourceOperationTaskStore{operation: op}
 	response := base64.StdEncoding.EncodeToString([]byte(`{"metadata":{"resourceVersion":"42"},"stringData":{"password":"SENTINEL"}}`))

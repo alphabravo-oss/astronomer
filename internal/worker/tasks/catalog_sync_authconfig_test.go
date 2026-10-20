@@ -1,54 +1,54 @@
 package tasks
 
 // The scheduled catalog:sync sweep is the SECOND reader of a chart-repository
-// credential (internal/handler/catalog.go is the first). Migration 145 sealed
-// that credential behind a Fernet envelope, and the classic way an
+// credential (internal/handler/catalog.go is the first). The credential is
+// sealed (pkg/crypto), and the classic way an
 // encryption-at-rest change ships half-done is to wire the interactive path
 // and forget the unattended one: the operator clicks Sync, it works, and then
 // every 6-hourly sweep quietly 401s against the same repository.
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
-func sweepTestEncryptor(t *testing.T) *auth.Encryptor {
+func sweepTestEncryptor(t *testing.T) *crypto.Encryptor {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
 	return enc
 }
 
-func sealedSweepRepo(t *testing.T, enc *auth.Encryptor, name, url, authType, doc string) sqlc.HelmRepository {
+func sealedSweepRepo(t *testing.T, enc *crypto.Encryptor, name, url, authType, doc string) sqlc.HelmRepository {
 	t.Helper()
-	ciphertext, public, err := catalog.SealAuthConfig(json.RawMessage(doc), enc)
+	sealed, public, err := catalog.SealAuthConfig(json.RawMessage(doc), enc)
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
-	if ciphertext == "" {
+	if sealed.IsZero() {
 		t.Fatalf("fixture %q sealed to nothing", doc)
 	}
-	return sqlc.HelmRepository{
+	repo := sqlc.HelmRepository{
 		ID: uuid.New(), Name: name, Url: url, RepoType: "helm",
-		AuthType: authType, AuthConfig: public, AuthConfigEncrypted: ciphertext,
+		AuthType: authType, AuthConfig: public,
 	}
+	repo.AuthConfigKeyID, repo.AuthConfigAlgorithm, repo.AuthConfigCiphertext, repo.AuthConfigNonce = sealed.Parts()
+	return repo
 }
 
 // TestHandleCatalogSyncDecryptsSealedRepoAuth — the sweep recovers the same
@@ -98,7 +98,7 @@ func TestHandleCatalogSyncDecryptsSealedRepoAuth(t *testing.T) {
 
 // TestHandleCatalogSyncSendsNoCredentialWhenDecryptFails is the anti-regression
 // for the decryptGitAuth shape in gitops_sync.go, which returns the CIPHERTEXT
-// on decrypt failure. Sending a Fernet token as a password gets a 401 from
+// on decrypt failure. Sending ciphertext as a password gets a 401 from
 // upstream and is recorded against the repository as an authentication
 // problem — pointing the operator at registry ACLs when the actual fault is
 // ASTRONOMER_ENCRYPTION_KEY.
@@ -132,10 +132,9 @@ func TestHandleCatalogSyncSendsNoCredentialWhenDecryptFails(t *testing.T) {
 	}
 }
 
-// TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow — the upgrade
-// window. Until the sealing sweep converts a row it still holds the whole
-// document in the JSONB with an empty envelope, and the sweep must keep
-// authenticating it.
+// TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow — a row with no
+// sealed value (written by a development server without a key) holds the
+// whole document in the JSONB, and the sweep must keep authenticating it.
 func TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow(t *testing.T) {
 	defer httpclient.DisableGuardForTest()()
 
@@ -144,7 +143,7 @@ func TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow(t *testing.T) {
 		ID: uuid.New(), Name: "pre-145", Url: srv.URL, RepoType: "helm",
 		AuthType:   "basic",
 		AuthConfig: json.RawMessage(`{"username":"u","password":"p"}`),
-		// AuthConfigEncrypted empty — the pre-upgrade shape.
+		// No sealed value: the JSONB is the whole document.
 	}
 	q := &catalogSweepQuerier{repos: []sqlc.HelmRepository{legacy}}
 	ctx := testRuntimeContext(RuntimeDependencies{
@@ -162,143 +161,5 @@ func TestHandleCatalogSyncStillReadsPreMigrationPlaintextRow(t *testing.T) {
 	user, pass, ok := reqs[0].BasicAuth()
 	if !ok || user != "u" || pass != "p" {
 		t.Fatalf("pre-145 plaintext row stopped authenticating on the sweep: ok=%v user=%q", ok, user)
-	}
-}
-
-// TestPlaintextCredentialMigrationSealsChartRepositoryAuthConfig — this is
-// what ends the upgrade window opened by migration 145.
-//
-// Pre-fix there was no converter at all: a repository created before the
-// upgrade and never re-saved would have kept its password in the clear
-// indefinitely, so the security fix would only ever have applied to rows
-// somebody happened to edit.
-func TestPlaintextCredentialMigrationSealsChartRepositoryAuthConfig(t *testing.T) {
-	enc := sweepTestEncryptor(t)
-
-	legacy := sqlc.HelmRepository{
-		ID: uuid.New(), Name: "pre-145", AuthType: "basic",
-		AuthConfig: json.RawMessage(`{"username":"u","password":"s3cret","charts":["app"]}`),
-	}
-	// No secret to protect — must be left alone so the chart list stays
-	// readable to the catalog API.
-	noSecret := sqlc.HelmRepository{
-		ID: uuid.New(), Name: "public-oci", AuthType: "",
-		AuthConfig: json.RawMessage(`{"charts":["app"]}`),
-	}
-	q := &fakePlaintextCredentialMigrationQuerier{repos: []sqlc.HelmRepository{legacy, noSecret}}
-	runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
-
-	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
-		t.Fatalf("migration: %v", err)
-	}
-
-	if len(q.repoSeals) != 1 {
-		t.Fatalf("expected exactly 1 sealed repository, got %d", len(q.repoSeals))
-	}
-	sealed := q.repoSeals[0]
-	if sealed.ID != legacy.ID {
-		t.Fatalf("sealed the wrong row: %s", sealed.ID)
-	}
-	if s := string(sealed.AuthConfig); s == "" || strings.Contains(s, "s3cret") {
-		t.Fatalf("plaintext column still carries the credential after sealing: %s", s)
-	}
-	plain, err := enc.Decrypt(sealed.AuthConfigEncrypted)
-	if err != nil {
-		t.Fatalf("sealed ciphertext does not decrypt: %v", err)
-	}
-	var doc map[string]any
-	_ = json.Unmarshal([]byte(plain), &doc)
-	if doc["password"] != "s3cret" {
-		t.Fatalf("sealing lost the credential: %v", doc)
-	}
-	// The chart list must survive in the plaintext projection.
-	var public map[string]any
-	_ = json.Unmarshal(sealed.AuthConfig, &public)
-	if _, ok := public["charts"]; !ok {
-		t.Fatalf("non-secret chart list was stripped: %s", sealed.AuthConfig)
-	}
-
-	// Idempotent: a second run finds nothing left to do (the fake mirrors the
-	// SQL predicate, so a sealed row stops matching).
-	before := len(q.repoSeals)
-	if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
-		t.Fatalf("second migration run: %v", err)
-	}
-	if len(q.repoSeals) != before {
-		t.Fatalf("re-sealed an already-sealed row: %d -> %d", before, len(q.repoSeals))
-	}
-}
-
-// TestPlaintextCredentialMigrationSealsPastAFullPageOfUnsealableRows pins the
-// starvation bug: the sweep used to stop as soon as a page produced no seals.
-//
-// The query re-reads from a fixed position because sealing removes a row from
-// the predicate, and the old loop's `!sealedAny` guard was there to stop that
-// re-read from spinning forever. But the predicate also matched rows with
-// nothing to seal (an OCI repo whose auth_config is only a `charts` list), and
-// those never leave the result set. A full page of them sorting ahead of a
-// credentialed row meant `sealedAny` stayed false, the sweep returned, and the
-// password stayed in the clear on every subsequent run as well — silent, and
-// in the direction of not encrypting.
-//
-// pageSize is 500, so the fixture needs more than that to reach the bug at
-// all; the 2-row fixture above cannot.
-func TestPlaintextCredentialMigrationSealsPastAFullPageOfUnsealableRows(t *testing.T) {
-	enc := sweepTestEncryptor(t)
-
-	const unsealableRows = 600 // > the sweep's 500-row page
-	repos := make([]sqlc.HelmRepository, 0, unsealableRows+1)
-	for i := 0; i < unsealableRows; i++ {
-		repos = append(repos, sqlc.HelmRepository{
-			ID: uuid.New(), Name: "public-oci", AuthType: "",
-			AuthConfig: json.RawMessage(`{"charts":["app"]}`),
-		})
-	}
-	// Sorts last, so every page of unsealable rows is walked before it.
-	credentialed := sqlc.HelmRepository{
-		ID: uuid.New(), Name: "private", AuthType: "basic",
-		AuthConfig: json.RawMessage(`{"username":"u","password":"s3cret"}`),
-	}
-	repos = append(repos, credentialed)
-
-	// Both halves of the fix are load-bearing on their own, so both are
-	// exercised: "narrow" is the shipped SQL predicate, which never offers an
-	// unsealable row in the first place; "loose" is the pre-fix predicate,
-	// proving the loop still reaches the credential when the SQL and
-	// catalog.SealAuthConfig disagree about what is sealable.
-	for _, tc := range []struct {
-		name  string
-		loose bool
-	}{
-		{"narrow sql predicate", false},
-		{"loose sql predicate (pre-fix)", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rows := make([]sqlc.HelmRepository, len(repos))
-			copy(rows, repos)
-			q := &fakePlaintextCredentialMigrationQuerier{repos: rows, looseRepoListPredicate: tc.loose}
-			runtime := MaintenanceRuntime{PlaintextCredentials: PlaintextCredentialMigrationDeps{Queries: q, Encryptor: enc}}
-
-			if err := runtime.HandlePlaintextCredentialMigration(context.Background(), nil); err != nil {
-				t.Fatalf("migration: %v", err)
-			}
-
-			if len(q.repoSeals) != 1 {
-				t.Fatalf("expected the credentialed row to be sealed exactly once, got %d seals", len(q.repoSeals))
-			}
-			if q.repoSeals[0].ID != credentialed.ID {
-				t.Fatalf("sealed the wrong row: %s", q.repoSeals[0].ID)
-			}
-			plain, err := enc.Decrypt(q.repoSeals[0].AuthConfigEncrypted)
-			if err != nil {
-				t.Fatalf("sealed ciphertext does not decrypt: %v", err)
-			}
-			if !strings.Contains(plain, "s3cret") {
-				t.Fatalf("sealing lost the credential: %s", plain)
-			}
-			if s := string(q.repoSeals[0].AuthConfig); strings.Contains(s, "s3cret") {
-				t.Fatalf("plaintext column still carries the credential: %s", s)
-			}
-		})
 	}
 }

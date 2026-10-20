@@ -87,7 +87,6 @@ const (
 	// every materialization not in the "applied" state on a 30m cadence.
 	TypeCloudCredentialMaterialize    = tasks.CloudCredentialMaterializeType
 	TypeCloudCredentialDriftReconcile = tasks.CloudCredentialDriftReconcileType
-	TypePlaintextCredentialMigration  = tasks.PlaintextCredentialMigrationType
 	// Migration 055: SIEM forwarder dispatch + retention sweep. The
 	// dispatcher drains every enabled forwarder's queue every 2s; the
 	// cleanup task prunes queue rows older than 7 days regardless of

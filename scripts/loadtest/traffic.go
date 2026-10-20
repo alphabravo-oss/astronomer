@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm reconnectStormConfig, duration time.Duration, log *slog.Logger) {
@@ -308,7 +310,7 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 				if scheduleCtx.Err() != nil {
 					return
 				}
-				index := uint64(scheduled)
+				index := safeconv.Uint64(scheduled)
 				scheduled++
 				inflight.Add(1)
 				go func() { defer inflight.Done(); cfg.workloadRequest(requestCtx, index) }()

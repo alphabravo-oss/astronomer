@@ -13,7 +13,7 @@
 ## Context
 
 The implementation already converged on standard-library logging,
-golang-migrate, OTLP/HTTP tracing, Alpine runtime images, and golangci-lint v2.
+goose (embedded, advisory-locked, applied at server boot), OTLP/gRPC tracing, distroless runtime images, and golangci-lint v2.
 Earlier engineering guides also mentioned zerolog, Goose, distroless images,
 OTLP/gRPC, and Air. The release needs an explicit choice so contributors do not
 create parallel operational paths.

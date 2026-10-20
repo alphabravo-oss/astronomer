@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -24,14 +24,14 @@ func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterID, rbac.ResourceClusters, rbac.VerbRead)
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	items := make([]map[string]any, 0)
 	for _, namespace := range namespaceNames(all, names) {
 		rows, err := h.listEventPages(r.Context(), clusterID.String(), namespace, queryLimitMax(r, 100, 500))
 		if err != nil {
-			RespondRequestError(w, r, 503, apierror.ProxyError, err.Error())
+			apiutil.WriteError(w, r, 503, apiutil.ProxyError, err.Error())
 			return
 		}
 		items = append(items, rows...)

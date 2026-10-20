@@ -17,12 +17,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const maxCredentialValueBytes = 256 << 10
@@ -30,7 +32,7 @@ const maxCredentialValueBytes = 256 << 10
 // CredentialEncryptor is deliberately write-only. The HTTP surface can seal
 // source material, but it cannot decrypt or inspect existing credentials.
 type CredentialEncryptor interface {
-	Encrypt(plaintext string) (string, error)
+	Encrypt(plaintext []byte) (crypto.Sealed, error)
 }
 
 // SourceQueries is the complete persistence surface used by SourceHandler.
@@ -76,7 +78,7 @@ func (h *SourceHandler) SetRunTx(runTx sourceRunTxFunc) {
 func (h *SourceHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
 // NewSourceHandler creates a source handler. credentialKeyVersion identifies
-// the primary Fernet key generation written beside new ciphertext. It must be
+// the primary encryption key generation written beside new ciphertext. It must be
 // positive before a request containing secret material can succeed.
 func NewSourceHandler(queries SourceQueries, encryptor CredentialEncryptor, credentialKeyVersion int32) *SourceHandler {
 	return &SourceHandler{queries: queries, encryptor: encryptor, credentialKeyVersion: credentialKeyVersion}
@@ -210,40 +212,40 @@ type sourceResponse struct {
 func (h *SourceHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	limit, offset, err := parsePagination(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPagination, err.Error())
 		return
 	}
 	status, err := sourceStatusFilter(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFilter, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	items, err := h.queries.ListDeliverySources(r.Context(), sqlc.ListDeliverySourcesParams{
 		ProjectID: projectID, Status: status, QueryOffset: offset, QueryLimit: limit,
 	})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	total, err := h.queries.CountDeliverySources(r.Context(), sqlc.CountDeliverySourcesParams{ProjectID: projectID, Status: status})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response := make([]sourceResponse, 0, len(items))
 	for _, item := range items {
 		converted, err := sourceFromListRow(item)
 		if err != nil {
-			respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 			return
 		}
 		response = append(response, converted)
@@ -254,34 +256,34 @@ func (h *SourceHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create validates and seals all write-only material before any database write.
 func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request createSourceRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	request.ProjectID = projectID
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	if err := validateDisplayFields(request.Name, request.Description); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if len(request.URL) > 2048 {
-		respondError(w, http.StatusBadRequest, "validation_error", "url must be at most 2048 bytes")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "url must be at most 2048 bytes")
 		return
 	}
 	if err := validateProxyRef(request.ProxyRef); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	domainSource := model.Source{
@@ -289,7 +291,7 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Type: request.Type, URL: request.URL, AuthMode: request.AuthMode, Trust: request.Trust,
 	}
 	if err := domainSource.Validate(); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	credential := credentialInput{}
@@ -298,18 +300,18 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	credentialData, err := credential.fluxData(request.AuthMode)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if request.CABundle != "" {
 		if err := validateCABundle(request.CABundle); err != nil {
-			respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 			return
 		}
 	}
-	credentialEncrypted, caEncrypted, keyVersion, epoch, err := h.sealSourceMaterial(credentialData, request.CABundle)
+	credentialSealed, caSealed, keyVersion, epoch, err := h.sealSourceMaterial(credentialData, request.CABundle)
 	if err != nil {
-		respondError(w, http.StatusServiceUnavailable, "credential_encryption_unavailable", "source credential encryption failed")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CredentialEncryptionUnavailable, "source credential encryption failed")
 		return
 	}
 	if request.AuthMode == model.AuthNone && len(credentialData) == 0 {
@@ -319,17 +321,19 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	trust, err := json.Marshal(request.Trust)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", "trust policy is invalid")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "trust policy is invalid")
 		return
 	}
 	actor := reqctx.UserUUID(r.Context())
 	params := sqlc.CreateDeliverySourceParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		SourceType: string(request.Type), Url: request.URL, AuthMode: string(request.AuthMode),
-		CredentialEncrypted: credentialEncrypted, CredentialKeyVersion: keyVersion, CredentialEpoch: epoch,
-		CaBundleEncrypted: caEncrypted, ProxyRef: request.ProxyRef, TrustPolicy: trust,
+		CredentialKeyVersion: keyVersion, CredentialEpoch: epoch,
+		ProxyRef: request.ProxyRef, TrustPolicy: trust,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
+	params.CredentialKeyID, params.CredentialAlgorithm, params.CredentialCiphertext, params.CredentialNonce = credentialSealed.Parts()
+	params.CaBundleKeyID, params.CaBundleAlgorithm, params.CaBundleCiphertext, params.CaBundleNonce = caSealed.Parts()
 	created, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.CreateDeliverySourceRow, error) {
 			return q.CreateDeliverySource(r.Context(), params)
@@ -345,12 +349,12 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response, err := sourceFromCreateRow(created)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	respondData(w, http.StatusCreated, response)
@@ -363,17 +367,17 @@ func (h *SourceHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	row, err := h.queries.GetDeliverySource(r.Context(), sqlc.GetDeliverySourceParams{ID: sourceID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response, err := sourceFromGetRow(row)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	respondData(w, http.StatusOK, response)
@@ -383,31 +387,31 @@ func (h *SourceHandler) Get(w http.ResponseWriter, r *http.Request) {
 // rotate-credential path so this handler never reads or echoes secret bytes.
 func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request updateSourceRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	sourceID, err := pathUUID(r, "id", "sourceID", "source_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	existing, err := h.queries.GetDeliverySource(r.Context(), sqlc.GetDeliverySourceParams{ID: sourceID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	description := existing.Description
@@ -424,22 +428,22 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	var trust model.TrustPolicy
 	if err := decodeStrictJSON(existing.TrustPolicy, &trust); err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	if request.Trust != nil {
 		trust = *request.Trust
 	}
 	if err := validateDisplayFields(existing.Name, description); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if len(sourceURL) > 2048 {
-		respondError(w, http.StatusBadRequest, "validation_error", "url must be at most 2048 bytes")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "url must be at most 2048 bytes")
 		return
 	}
 	if err := validateProxyRef(proxyRef); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	domainSource := model.Source{
@@ -447,35 +451,36 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Type: model.SourceType(existing.SourceType), URL: sourceURL, AuthMode: model.AuthMode(existing.AuthMode), Trust: trust,
 	}
 	if err := domainSource.Validate(); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	trustJSON, err := json.Marshal(trust)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", "trust policy is invalid")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "trust policy is invalid")
 		return
 	}
-	var caEncrypted string
+	var caSealed crypto.Sealed
 	replaceCA := request.CABundle != nil
 	if replaceCA {
 		if *request.CABundle != "" {
 			if err := validateCABundle(*request.CABundle); err != nil {
-				respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 				return
 			}
 		}
 		_, sealed, _, _, err := h.sealSourceMaterial(nil, *request.CABundle)
 		if err != nil {
-			respondError(w, http.StatusServiceUnavailable, "credential_encryption_unavailable", "source credential encryption failed")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CredentialEncryptionUnavailable, "source credential encryption failed")
 			return
 		}
-		caEncrypted = sealed
+		caSealed = sealed
 	}
 	params := sqlc.UpdateDeliverySourceParams{
 		Description: description, Url: sourceURL, ProxyRef: proxyRef, TrustPolicy: trustJSON,
-		ReplaceCaBundle: replaceCA, CaBundleEncrypted: caEncrypted,
-		UpdatedBy: reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
+		ReplaceCaBundle: replaceCA,
+		UpdatedBy:       reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
 	}
+	params.CaBundleKeyID, params.CaBundleAlgorithm, params.CaBundleCiphertext, params.CaBundleNonce = caSealed.Parts()
 	updated, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.UpdateDeliverySourceRow, error) {
 			return q.UpdateDeliverySource(r.Context(), params)
@@ -490,12 +495,12 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response, err := sourceFromUpdateRow(updated)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	respondData(w, http.StatusOK, response)
@@ -505,7 +510,7 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 // as a typed 409 and never bypassed with cascading handler behavior.
 func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	projectID, sourceID, ok := sourceScope(w, r)
@@ -513,7 +518,7 @@ func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	params := sqlc.DeleteDeliverySourceParams{ID: sourceID, ProjectID: projectID}
@@ -535,7 +540,7 @@ func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -546,56 +551,56 @@ func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	key, err := requiredIdempotencyKey(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request verifySourceRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	sourceID, err := pathUUID(r, "id", "sourceID", "source_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil || h.runTx == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	revision := strings.TrimSpace(request.RequestedRevision)
 	if revision == "" || len(revision) > 256 || containsControl(revision) {
-		respondError(w, http.StatusBadRequest, "validation_error", "requested_revision must be 1 through 256 safe bytes")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "requested_revision must be 1 through 256 safe bytes")
 		return
 	}
 	source, err := h.queries.GetDeliverySource(r.Context(), sqlc.GetDeliverySourceParams{ID: sourceID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	if source.Status == "revoked" {
-		respondError(w, http.StatusConflict, "source_revoked", "a revoked source cannot be verified")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.SourceRevoked, "a revoked source cannot be verified")
 		return
 	}
 	chart := strings.TrimSpace(request.Chart)
 	switch model.SourceType(source.SourceType) {
 	case model.SourceHelmHTTP, model.SourceHelmOCI:
 		if chart == "" || len(chart) > model.MaxNameLength || containsControl(chart) || strings.Contains(chart, "..") {
-			respondError(w, http.StatusBadRequest, "validation_error", "chart is required and must be a bounded safe name for Helm sources")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "chart is required and must be a bounded safe name for Helm sources")
 			return
 		}
 	case model.SourceGit, model.SourceOCIArtifact:
 		if chart != "" {
-			respondError(w, http.StatusBadRequest, "validation_error", "chart is valid only for Helm sources")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "chart is valid only for Helm sources")
 			return
 		}
 	default:
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source type is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source type is invalid")
 		return
 	}
 	params := sqlc.CreateDeliverySourceResolutionAndOutboxParams{
@@ -603,7 +608,7 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := reqctx.UserUUID(r.Context())
 	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
-		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "authenticated actor is required")
 		return
 	}
 	digest, err := asyncop.Digest(struct {
@@ -613,7 +618,7 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		Chart     string    `json:"chart"`
 	}{projectID, sourceID, revision, chart})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	var receipt asyncop.Receipt
@@ -651,10 +656,10 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, asyncop.ErrConflict) {
-			respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.IdempotencyConflict, err.Error())
 			return
 		}
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	respondAcceptedOperation(w, receipt.StatusURL, receipt)
@@ -664,36 +669,36 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 // credential epoch in the scoped SQL update. Existing material is never read.
 func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request) {
 	if err := validateIdempotencyKey(r); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_idempotency_key", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidIdempotencyKey, err.Error())
 		return
 	}
 	var request rotateCredentialRequest
 	if err := decodeRequest(w, r, &request); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	projectID, err := projectIDFromRequest(r, request.ProjectID)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return
 	}
 	sourceID, err := pathUUID(r, "id", "sourceID", "source_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return
 	}
 	if h == nil || h.queries == nil {
-		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ServiceUnavailable, "delivery source persistence is unavailable")
 		return
 	}
 	existing, err := h.queries.GetDeliverySource(r.Context(), sqlc.GetDeliverySourceParams{ID: sourceID, ProjectID: projectID})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	var trust model.TrustPolicy
 	if err := decodeStrictJSON(existing.TrustPolicy, &trust); err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	domainSource := model.Source{
@@ -701,27 +706,28 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 		Type: model.SourceType(existing.SourceType), URL: existing.Url, AuthMode: request.AuthMode, Trust: trust,
 	}
 	if err := domainSource.Validate(); err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if request.AuthMode == model.AuthNone || request.AuthMode == model.AuthWorkloadIdentity {
-		respondError(w, http.StatusBadRequest, "validation_error", "credential rotation requires basic, bearer, or SSH authentication")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "credential rotation requires basic, bearer, or SSH authentication")
 		return
 	}
 	values, err := request.Credential.fluxData(request.AuthMode)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
-	ciphertext, _, keyVersion, _, err := h.sealSourceMaterial(values, "")
+	sealed, _, keyVersion, _, err := h.sealSourceMaterial(values, "")
 	if err != nil {
-		respondError(w, http.StatusServiceUnavailable, "credential_encryption_unavailable", "source credential encryption failed")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CredentialEncryptionUnavailable, "source credential encryption failed")
 		return
 	}
 	params := sqlc.RotateDeliverySourceCredentialParams{
-		AuthMode: string(request.AuthMode), CredentialEncrypted: ciphertext, CredentialKeyVersion: keyVersion,
+		AuthMode: string(request.AuthMode), CredentialKeyVersion: keyVersion,
 		UpdatedBy: reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
 	}
+	params.CredentialKeyID, params.CredentialAlgorithm, params.CredentialCiphertext, params.CredentialNonce = sealed.Parts()
 	rotated, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.RotateDeliverySourceCredentialRow, error) {
 			return q.RotateDeliverySourceCredential(r.Context(), params)
@@ -736,23 +742,23 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 			}
 		})
 	if err != nil {
-		respondDatabaseError(w, err)
+		respondDatabaseError(w, r, err)
 		return
 	}
 	response, err := sourceFromRotateRow(rotated)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "invalid_persisted_state", "stored delivery source metadata is invalid")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidPersistedState, "stored delivery source metadata is invalid")
 		return
 	}
 	respondData(w, http.StatusOK, response)
 }
 
-func (h *SourceHandler) sealSourceMaterial(credential map[string]string, caBundle string) (credentialEncrypted, caEncrypted string, keyVersion int32, epoch int64, err error) {
+func (h *SourceHandler) sealSourceMaterial(credential map[string]string, caBundle string) (credentialSealed, caSealed crypto.Sealed, keyVersion int32, epoch int64, err error) {
 	if len(credential) == 0 && caBundle == "" {
-		return "", "", 0, 0, nil
+		return crypto.Sealed{}, crypto.Sealed{}, 0, 0, nil
 	}
 	if h.encryptor == nil || h.credentialKeyVersion < 1 {
-		return "", "", 0, 0, errors.New("credential encryptor is unavailable")
+		return crypto.Sealed{}, crypto.Sealed{}, 0, 0, errors.New("credential encryptor is unavailable")
 	}
 	if len(credential) != 0 {
 		keys := make([]string, 0, len(credential))
@@ -766,32 +772,32 @@ func (h *SourceHandler) sealSourceMaterial(credential map[string]string, caBundl
 		}
 		plaintext, marshalErr := json.Marshal(ordered)
 		if marshalErr != nil {
-			return "", "", 0, 0, marshalErr
+			return crypto.Sealed{}, crypto.Sealed{}, 0, 0, marshalErr
 		}
-		credentialEncrypted, err = h.encryptor.Encrypt(string(plaintext))
+		credentialSealed, err = h.encryptor.Encrypt(plaintext)
 		clear(plaintext)
-		if err != nil || credentialEncrypted == "" {
-			return "", "", 0, 0, errors.New("encrypt credential")
+		if err != nil || credentialSealed.IsZero() {
+			return crypto.Sealed{}, crypto.Sealed{}, 0, 0, errors.New("encrypt credential")
 		}
 	}
 	if caBundle != "" {
-		caEncrypted, err = h.encryptor.Encrypt(caBundle)
-		if err != nil || caEncrypted == "" {
-			return "", "", 0, 0, errors.New("encrypt CA bundle")
+		caSealed, err = h.encryptor.Encrypt([]byte(caBundle))
+		if err != nil || caSealed.IsZero() {
+			return crypto.Sealed{}, crypto.Sealed{}, 0, 0, errors.New("encrypt CA bundle")
 		}
 	}
-	return credentialEncrypted, caEncrypted, h.credentialKeyVersion, 1, nil
+	return credentialSealed, caSealed, h.credentialKeyVersion, 1, nil
 }
 
 func sourceScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
 	projectID, err := projectIDFromRequest(r, uuid.Nil)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_project_scope", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProjectScope, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	sourceID, err := pathUUID(r, "id", "sourceID", "source_id")
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_resource_id", err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResourceID, err.Error())
 		return uuid.Nil, uuid.Nil, false
 	}
 	return projectID, sourceID, true

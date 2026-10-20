@@ -4,7 +4,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // registerAlertInhibitionRoutes wires the P-03 Alertmanager-style inhibition
@@ -15,23 +14,14 @@ func registerAlertInhibitionRoutes(r chi.Router, deps RouterDependencies) {
 	if deps.AdminPlatform.Alerting == nil {
 		return
 	}
-	alertsRead := requireAnyPermission(
-		deps.CoreAuth.RBACEngine,
-		deps.CoreAuth.RBACQueries,
-		permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbRead},
-		permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbList},
-	)
 	adminCreate := requireScope(iauth.ScopeAdmin)
-	alertsCreate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceAlerts, rbac.VerbCreate)
-	alertsUpdate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceAlerts, rbac.VerbUpdate)
-	alertsDelete := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceAlerts, rbac.VerbDelete)
 
 	r.Route("/admin/alerting/inhibitions", func(r chi.Router) {
-		r.With(alertsRead).Get("/", deps.AdminPlatform.Alerting.ListInhibitions)
-		r.With(adminCreate, alertsCreate).Post("/", deps.AdminPlatform.Alerting.CreateInhibition)
-		r.With(alertsRead).Get("/{id}/", deps.AdminPlatform.Alerting.GetInhibition)
-		r.With(adminCreate, alertsUpdate).Put("/{id}/", deps.AdminPlatform.Alerting.UpdateInhibition)
-		r.With(adminCreate, alertsDelete).Delete("/{id}/", deps.AdminPlatform.Alerting.DeleteInhibition)
+		r.Get("/", deps.AdminPlatform.Alerting.ListInhibitions)
+		r.With(adminCreate).Post("/", deps.AdminPlatform.Alerting.CreateInhibition)
+		r.Get("/{id}/", deps.AdminPlatform.Alerting.GetInhibition)
+		r.With(adminCreate).Put("/{id}/", deps.AdminPlatform.Alerting.UpdateInhibition)
+		r.With(adminCreate).Delete("/{id}/", deps.AdminPlatform.Alerting.DeleteInhibition)
 	})
 }
 
@@ -46,11 +36,9 @@ func registerGatekeeperConstraintRoutes(r chi.Router, deps RouterDependencies) {
 		return
 	}
 	writeClusters := requireScope(iauth.ScopeWriteClusters)
-	clustersRead := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
-	clustersUpdate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)
 
-	r.With(clustersRead).Get("/clusters/{id}/gatekeeper/constraints/", deps.ClusterResources.Gatekeeper.ListConstraints)
-	r.With(clustersRead).Post("/clusters/{id}/gatekeeper/constraints/validate/", deps.ClusterResources.Gatekeeper.ValidateConstraint)
-	r.With(writeClusters, clustersUpdate).Post("/clusters/{id}/gatekeeper/constraints/", deps.ClusterResources.Gatekeeper.CreateConstraint)
-	r.With(writeClusters, clustersUpdate).Delete("/clusters/{id}/gatekeeper/constraints/{name}/", deps.ClusterResources.Gatekeeper.DeleteConstraint)
+	r.Get("/clusters/{id}/gatekeeper/constraints/", deps.ClusterResources.Gatekeeper.ListConstraints)
+	r.Post("/clusters/{id}/gatekeeper/constraints/validate/", deps.ClusterResources.Gatekeeper.ValidateConstraint)
+	r.With(writeClusters).Post("/clusters/{id}/gatekeeper/constraints/", deps.ClusterResources.Gatekeeper.CreateConstraint)
+	r.With(writeClusters).Delete("/clusters/{id}/gatekeeper/constraints/{name}/", deps.ClusterResources.Gatekeeper.DeleteConstraint)
 }

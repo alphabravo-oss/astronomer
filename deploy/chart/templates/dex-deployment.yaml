@@ -50,7 +50,7 @@ spec:
             capabilities:
               drop:
                 - ALL
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - /bin/sh
@@ -95,7 +95,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.dex.image.repository "tag" .Values.dex.image.tag "digest" .Values.dex.image.digest "registry" .Values.dex.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.dex.image.repository "tag" .Values.dex.image.tag "digest" .Values.dex.image.digest "registry" .Values.dex.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             - /usr/local/bin/dex

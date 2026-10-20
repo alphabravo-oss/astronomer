@@ -15,20 +15,22 @@ import (
 
 const createCloudCredential = `-- name: CreateCloudCredential :one
 INSERT INTO cloud_credentials (
-    project_id, name, provider, description, data_encrypted, target_refs, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, project_id, name, provider, description, data_encrypted, target_refs,
-          created_by, created_at, updated_at
+    project_id, name, provider, description, data_key_id, data_algorithm, data_ciphertext, data_nonce, target_refs, created_by
+) VALUES ($1, $2, $3, $4, $5, $8, $9, $10, $6, $7)
+RETURNING id, project_id, name, provider, description, target_refs, created_by, created_at, updated_at, data_key_id, data_algorithm, data_ciphertext, data_nonce
 `
 
 type CreateCloudCredentialParams struct {
-	ProjectID     uuid.UUID       `json:"project_id"`
-	Name          string          `json:"name"`
-	Provider      string          `json:"provider"`
-	Description   string          `json:"description"`
-	DataEncrypted string          `json:"data_encrypted"`
-	TargetRefs    json.RawMessage `json:"target_refs"`
-	CreatedBy     pgtype.UUID     `json:"created_by"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	Name           string          `json:"name"`
+	Provider       string          `json:"provider"`
+	Description    string          `json:"description"`
+	DataKeyID      string          `json:"data_key_id"`
+	TargetRefs     json.RawMessage `json:"target_refs"`
+	CreatedBy      pgtype.UUID     `json:"created_by"`
+	DataAlgorithm  string          `json:"data_algorithm"`
+	DataCiphertext []byte          `json:"data_ciphertext"`
+	DataNonce      []byte          `json:"data_nonce"`
 }
 
 func (q *Queries) CreateCloudCredential(ctx context.Context, arg CreateCloudCredentialParams) (CloudCredential, error) {
@@ -37,9 +39,12 @@ func (q *Queries) CreateCloudCredential(ctx context.Context, arg CreateCloudCred
 		arg.Name,
 		arg.Provider,
 		arg.Description,
-		arg.DataEncrypted,
+		arg.DataKeyID,
 		arg.TargetRefs,
 		arg.CreatedBy,
+		arg.DataAlgorithm,
+		arg.DataCiphertext,
+		arg.DataNonce,
 	)
 	var i CloudCredential
 	err := row.Scan(
@@ -48,11 +53,14 @@ func (q *Queries) CreateCloudCredential(ctx context.Context, arg CreateCloudCred
 		&i.Name,
 		&i.Provider,
 		&i.Description,
-		&i.DataEncrypted,
 		&i.TargetRefs,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DataKeyID,
+		&i.DataAlgorithm,
+		&i.DataCiphertext,
+		&i.DataNonce,
 	)
 	return i, err
 }
@@ -91,8 +99,7 @@ func (q *Queries) DeleteOrphanCloudCredentialMaterializations(ctx context.Contex
 }
 
 const getCloudCredentialByID = `-- name: GetCloudCredentialByID :one
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
+SELECT id, project_id, name, provider, description, target_refs, created_by, created_at, updated_at, data_key_id, data_algorithm, data_ciphertext, data_nonce
 FROM cloud_credentials
 WHERE id = $1
 `
@@ -106,18 +113,20 @@ func (q *Queries) GetCloudCredentialByID(ctx context.Context, id uuid.UUID) (Clo
 		&i.Name,
 		&i.Provider,
 		&i.Description,
-		&i.DataEncrypted,
 		&i.TargetRefs,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DataKeyID,
+		&i.DataAlgorithm,
+		&i.DataCiphertext,
+		&i.DataNonce,
 	)
 	return i, err
 }
 
 const getCloudCredentialByProjectAndName = `-- name: GetCloudCredentialByProjectAndName :one
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
+SELECT id, project_id, name, provider, description, target_refs, created_by, created_at, updated_at, data_key_id, data_algorithm, data_ciphertext, data_nonce
 FROM cloud_credentials
 WHERE project_id = $1 AND name = $2
 `
@@ -136,11 +145,14 @@ func (q *Queries) GetCloudCredentialByProjectAndName(ctx context.Context, arg Ge
 		&i.Name,
 		&i.Provider,
 		&i.Description,
-		&i.DataEncrypted,
 		&i.TargetRefs,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DataKeyID,
+		&i.DataAlgorithm,
+		&i.DataCiphertext,
+		&i.DataNonce,
 	)
 	return i, err
 }
@@ -229,8 +241,7 @@ func (q *Queries) ListCloudCredentialMaterializations(ctx context.Context, crede
 }
 
 const listCloudCredentialsForCluster = `-- name: ListCloudCredentialsForCluster :many
-SELECT DISTINCT c.id, c.project_id, c.name, c.provider, c.description,
-       c.data_encrypted, c.target_refs, c.created_by, c.created_at, c.updated_at
+SELECT DISTINCT c.id, c.project_id, c.name, c.provider, c.description, c.target_refs, c.created_by, c.created_at, c.updated_at, c.data_key_id, c.data_algorithm, c.data_ciphertext, c.data_nonce
 FROM cloud_credentials c
 JOIN cloud_credential_materializations m ON m.credential_id = c.id
 WHERE m.cluster_id = $1
@@ -256,11 +267,14 @@ func (q *Queries) ListCloudCredentialsForCluster(ctx context.Context, clusterID 
 			&i.Name,
 			&i.Provider,
 			&i.Description,
-			&i.DataEncrypted,
 			&i.TargetRefs,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DataKeyID,
+			&i.DataAlgorithm,
+			&i.DataCiphertext,
+			&i.DataNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -274,8 +288,7 @@ func (q *Queries) ListCloudCredentialsForCluster(ctx context.Context, clusterID 
 
 const listCloudCredentialsForProject = `-- name: ListCloudCredentialsForProject :many
 
-SELECT id, project_id, name, provider, description, data_encrypted, target_refs,
-       created_by, created_at, updated_at
+SELECT id, project_id, name, provider, description, target_refs, created_by, created_at, updated_at, data_key_id, data_algorithm, data_ciphertext, data_nonce
 FROM cloud_credentials
 WHERE project_id = $1
 ORDER BY name ASC
@@ -301,11 +314,14 @@ func (q *Queries) ListCloudCredentialsForProject(ctx context.Context, projectID 
 			&i.Name,
 			&i.Provider,
 			&i.Description,
-			&i.DataEncrypted,
 			&i.TargetRefs,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DataKeyID,
+			&i.DataAlgorithm,
+			&i.DataCiphertext,
+			&i.DataNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -352,27 +368,35 @@ func (q *Queries) MarkCloudCredentialMaterializationFailed(ctx context.Context, 
 const updateCloudCredential = `-- name: UpdateCloudCredential :one
 UPDATE cloud_credentials
 SET description    = $2,
-    data_encrypted = $3,
+    data_key_id = $3,
+    data_algorithm = $5,
+    data_ciphertext = $6,
+    data_nonce = $7,
     target_refs    = $4,
     updated_at     = now()
 WHERE id = $1
-RETURNING id, project_id, name, provider, description, data_encrypted, target_refs,
-          created_by, created_at, updated_at
+RETURNING id, project_id, name, provider, description, target_refs, created_by, created_at, updated_at, data_key_id, data_algorithm, data_ciphertext, data_nonce
 `
 
 type UpdateCloudCredentialParams struct {
-	ID            uuid.UUID       `json:"id"`
-	Description   string          `json:"description"`
-	DataEncrypted string          `json:"data_encrypted"`
-	TargetRefs    json.RawMessage `json:"target_refs"`
+	ID             uuid.UUID       `json:"id"`
+	Description    string          `json:"description"`
+	DataKeyID      string          `json:"data_key_id"`
+	TargetRefs     json.RawMessage `json:"target_refs"`
+	DataAlgorithm  string          `json:"data_algorithm"`
+	DataCiphertext []byte          `json:"data_ciphertext"`
+	DataNonce      []byte          `json:"data_nonce"`
 }
 
 func (q *Queries) UpdateCloudCredential(ctx context.Context, arg UpdateCloudCredentialParams) (CloudCredential, error) {
 	row := q.db.QueryRow(ctx, updateCloudCredential,
 		arg.ID,
 		arg.Description,
-		arg.DataEncrypted,
+		arg.DataKeyID,
 		arg.TargetRefs,
+		arg.DataAlgorithm,
+		arg.DataCiphertext,
+		arg.DataNonce,
 	)
 	var i CloudCredential
 	err := row.Scan(
@@ -381,11 +405,14 @@ func (q *Queries) UpdateCloudCredential(ctx context.Context, arg UpdateCloudCred
 		&i.Name,
 		&i.Provider,
 		&i.Description,
-		&i.DataEncrypted,
 		&i.TargetRefs,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DataKeyID,
+		&i.DataAlgorithm,
+		&i.DataCiphertext,
+		&i.DataNonce,
 	)
 	return i, err
 }

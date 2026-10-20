@@ -9,31 +9,22 @@ import (
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
-// fernetish is a stand-in cipher. The real envelope is auth.Encryptor's Fernet
-// token; this package must not import internal/auth (it is a leaf that both
-// the handler and the worker depend on), and what is under test here is the
-// column split and the failure behaviour, not the crypto.
-type fernetish struct {
-	prefix    string
-	failOnAny bool
-}
-
-func (f fernetish) Encrypt(plaintext string) (string, error) {
-	return f.prefix + plaintext, nil
-}
-
-func (f fernetish) Decrypt(token string) (string, error) {
-	if f.failOnAny || !strings.HasPrefix(token, f.prefix) {
-		return "", errWrongKey{}
+// newTestEncryptor returns a real age keyring with one fresh key.
+func newTestEncryptor(t *testing.T) *crypto.Encryptor {
+	t.Helper()
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
 	}
-	return strings.TrimPrefix(token, f.prefix), nil
+	enc, err := crypto.NewEncryptor(key)
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	return enc
 }
-
-type errWrongKey struct{}
-
-func (errWrongKey) Error() string { return "fernet: invalid token (wrong key?)" }
 
 const credentialedDoc = `{
 	"token": "s3cr3t-thanos-token",
@@ -50,12 +41,12 @@ const credentialedDoc = `{
 // Pre-fix, there was no envelope at all — auth_config held the token and the
 // password in the clear, which is the whole finding.
 func TestSealAuthConfigRemovesCredentialFromTheClearColumn(t *testing.T) {
-	enc := fernetish{prefix: "sealed:"}
+	enc := newTestEncryptor(t)
 	ciphertext, public, err := SealAuthConfig(json.RawMessage(credentialedDoc), enc)
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
 	}
-	if ciphertext == "" {
+	if ciphertext.IsZero() {
 		t.Fatal("SealAuthConfig produced no envelope for a document carrying a credential")
 	}
 	for _, secret := range []string{"s3cr3t-thanos-token", "hunter2", "ops"} {
@@ -97,12 +88,12 @@ func TestSealAuthConfigRemovesCredentialFromTheClearColumn(t *testing.T) {
 // case, and sealing its operationPolicies would make the operation
 // reconciler's retry policy depend on a successful decrypt for no gain.
 func TestSealAuthConfigLeavesAConfigOnlyDocumentInTheClear(t *testing.T) {
-	ciphertext, public, err := SealAuthConfig(json.RawMessage(`{"operationPolicies":{"maxRetryAttempts":2}}`), fernetish{prefix: "sealed:"})
+	ciphertext, public, err := SealAuthConfig(json.RawMessage(`{"operationPolicies":{"maxRetryAttempts":2}}`), newTestEncryptor(t))
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
 	}
-	if ciphertext != "" {
-		t.Fatalf("sealed a document with nothing secret in it: %q", ciphertext)
+	if !ciphertext.IsZero() {
+		t.Fatalf("sealed a document with nothing secret in it: %+v", ciphertext)
 	}
 	if !strings.Contains(string(public), "maxRetryAttempts") {
 		t.Fatalf("config-only document was not preserved: %s", public)
@@ -113,17 +104,17 @@ func TestSealAuthConfigLeavesAConfigOnlyDocumentInTheClear(t *testing.T) {
 // column pair goes in, and the outbound request to Thanos carries the right
 // Authorization header.
 func TestNewClientRecoversTheSealedCredential(t *testing.T) {
-	enc := fernetish{prefix: "sealed:"}
+	enc := newTestEncryptor(t)
 	ciphertext, public, err := SealAuthConfig(json.RawMessage(`{"token":"s3cr3t-thanos-token"}`), enc)
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
 	}
 
 	got := captureAuthorization(t, BackendConfig{
-		AuthType:            "bearer",
-		AuthConfig:          public,
-		AuthConfigEncrypted: ciphertext,
-		Decryptor:           enc,
+		AuthType:         "bearer",
+		AuthConfig:       public,
+		AuthConfigSealed: ciphertext,
+		Decryptor:        enc,
 	})
 	if got != "Bearer s3cr3t-thanos-token" {
 		t.Fatalf("Authorization = %q, want the decrypted bearer token", got)
@@ -157,23 +148,23 @@ func TestNewClientReadsAPreMigrationRow(t *testing.T) {
 // request goes out unauthenticated, the upstream 401s, and the log line says
 // what actually happened.
 func TestNewClientSendsNoCredentialWhenDecryptFails(t *testing.T) {
-	enc := fernetish{prefix: "sealed:"}
+	enc := newTestEncryptor(t)
 	ciphertext, public, err := SealAuthConfig(json.RawMessage(`{"token":"s3cr3t-thanos-token"}`), enc)
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
 	}
 
 	got := captureAuthorization(t, BackendConfig{
-		AuthType:            "bearer",
-		AuthConfig:          public,
-		AuthConfigEncrypted: ciphertext,
+		AuthType:         "bearer",
+		AuthConfig:       public,
+		AuthConfigSealed: ciphertext,
 		// Rotated key / wrong ASTRONOMER_ENCRYPTION_KEY.
-		Decryptor: fernetish{prefix: "sealed:", failOnAny: true},
+		Decryptor: newTestEncryptor(t),
 	})
 	if got != "" {
 		t.Fatalf("Authorization = %q, want no header at all", got)
 	}
-	if strings.Contains(got, ciphertext) {
+	if strings.Contains(got, string(ciphertext.Ciphertext)) {
 		t.Fatalf("the ciphertext itself was sent as a credential: %q", got)
 	}
 }
@@ -182,13 +173,13 @@ func TestNewClientSendsNoCredentialWhenDecryptFails(t *testing.T) {
 // an envelope and then lost its encryptor entirely.
 func TestNewClientSendsNoCredentialWithoutAKey(t *testing.T) {
 	got := captureAuthorization(t, BackendConfig{
-		AuthType:            "bearer",
-		AuthConfig:          json.RawMessage(`{}`),
-		AuthConfigEncrypted: "sealed:{\"token\":\"s3cr3t\"}",
-		Decryptor:           nil,
+		AuthType:         "bearer",
+		AuthConfig:       json.RawMessage(`{}`),
+		AuthConfigSealed: crypto.Sealed{KeyID: "k1", Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: []byte("sealed")},
+		Decryptor:        nil,
 	})
 	if got != "" {
-		t.Fatalf("Authorization = %q, want no header when no Fernet key is configured", got)
+		t.Fatalf("Authorization = %q, want no header when no encryption key is configured", got)
 	}
 }
 
@@ -206,7 +197,7 @@ func TestNewClientSendsNoCredentialWithoutAKey(t *testing.T) {
 // the whole point of not sniffing the bytes — the alternative rules ("prefer
 // whichever looks like a credential", "prefer the newer-looking one") are
 // unimplementable, and a plaintext document that happens to start with 'g'
-// would be misread as a Fernet token.
+// would be misread as ciphertext.
 //
 // The consequence is worth stating plainly, because it is the cost of this
 // design: during a mixed-version window a write by an old binary is IGNORED by
@@ -216,7 +207,7 @@ func TestNewClientSendsNoCredentialWithoutAKey(t *testing.T) {
 // operator re-saving the backend, or the monitoring:reconcile status stamp —
 // resolves and re-seals, and the row is consistent again.
 func TestNewClientPrefersTheEnvelopeOverAStaleJSONBColumn(t *testing.T) {
-	enc := fernetish{prefix: "sealed:"}
+	enc := newTestEncryptor(t)
 	ciphertext, _, err := SealAuthConfig(json.RawMessage(`{"token":"sealed-token"}`), enc)
 	if err != nil {
 		t.Fatalf("SealAuthConfig: %v", err)
@@ -225,20 +216,18 @@ func TestNewClientPrefersTheEnvelopeOverAStaleJSONBColumn(t *testing.T) {
 	got := captureAuthorization(t, BackendConfig{
 		AuthType: "bearer",
 		// What an old binary put back in the clear.
-		AuthConfig:          json.RawMessage(`{"token":"written-by-an-old-binary"}`),
-		AuthConfigEncrypted: ciphertext,
-		Decryptor:           enc,
+		AuthConfig:       json.RawMessage(`{"token":"written-by-an-old-binary"}`),
+		AuthConfigSealed: ciphertext,
+		Decryptor:        enc,
 	})
 	if got != "Bearer sealed-token" {
 		t.Fatalf("Authorization = %q, want the envelope to win over the stale plaintext column", got)
 	}
 }
 
-// TestHasAuthConfigSecretMatchesTheSweepPredicate pins the Go half of the
-// agreement with ListMonitoringBackendsWithLegacyAuthConfig. A row the SQL
-// returns but this function calls unsealable never leaves the sweep's result
-// set, and a full page of them ahead of a credentialed row starves it.
-func TestHasAuthConfigSecretMatchesTheSweepPredicate(t *testing.T) {
+// TestHasAuthConfigSecretAllowList pins which documents carry something worth
+// sealing.
+func TestHasAuthConfigSecretAllowList(t *testing.T) {
 	cases := map[string]bool{
 		`{}`: false,
 		`{"operationPolicies":{"maxRetryAttempts":1}}`: false,

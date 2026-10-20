@@ -14,9 +14,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // SetTrustedBundleKey installs the base64 (std encoding) Ed25519 public key
@@ -94,28 +94,28 @@ var (
 func (h *ExtensionHandler) VerifyBundle(w http.ResponseWriter, r *http.Request) {
 	var req VerifyBundleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	bundle, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Bundle))
 	if err != nil || len(bundle) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "bundle must be non-empty base64")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFormat, "bundle must be non-empty base64")
 		return
 	}
 	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Signature))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "signature must be base64")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFormat, "signature must be base64")
 		return
 	}
 	checksum := bundleChecksum(bundle)
 	if vErr := verifyExtensionBundle(bundle, sig, req.Checksum, h.trustedKey); vErr != nil {
 		switch {
 		case errors.Is(vErr, errBundleNoTrustedKey):
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension bundle verification is not configured")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension bundle verification is not configured")
 		case errors.Is(vErr, errBundleChecksum):
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "Bundle checksum mismatch")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidFormat, "Bundle checksum mismatch")
 		default:
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSignature, "Bundle signature verification failed")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidSignature, "Bundle signature verification failed")
 		}
 		return
 	}
@@ -128,12 +128,12 @@ func (h *ExtensionHandler) VerifyBundle(w http.ResponseWriter, r *http.Request) 
 	gated := false
 	if name := strings.TrimSpace(req.Name); name != "" {
 		if h.runTx == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "extension transaction runner is not configured")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "extension transaction runner is not configured")
 			return
 		}
 		ok, gErr := h.markBundleVerified(r, name, checksum)
 		if gErr != nil {
-			respondTransactionalMutationError(w, r, gErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to record bundle verification")
+			respondTransactionalMutationError(w, r, gErr, http.StatusInternalServerError, apiutil.UpdateError, "Failed to record bundle verification")
 			return
 		}
 		gated = ok

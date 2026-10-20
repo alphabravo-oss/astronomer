@@ -33,10 +33,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -128,7 +128,7 @@ func (h *GatekeeperConstraintsHandler) ListConstraints(w http.ResponseWriter, r 
 		return
 	}
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Gatekeeper constraint store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Gatekeeper constraint store is not available")
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *GatekeeperConstraintsHandler) ListConstraints(w http.ResponseWriter, r 
 
 	authored, err := h.queries.ListAuthoredConstraintsForCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list authored constraints")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list authored constraints")
 		return
 	}
 	customItems := make([]map[string]any, 0, len(authored))
@@ -251,7 +251,7 @@ func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r
 		return
 	}
 	if h.queries == nil || h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnwired, "Gatekeeper apply path is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TunnelUnwired, "Gatekeeper apply path is not available")
 		return
 	}
 
@@ -266,7 +266,7 @@ func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r
 		YAML      string `json:"yaml"`
 	}{ClusterID: clusterID.String(), YAML: req.YAML})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode Gatekeeper constraint request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode Gatekeeper constraint request")
 		return
 	}
 	receipt := ConstraintValidationResponse{Valid: true, Errors: []string{}, Applied: false, Name: manifest.Name, Kind: manifest.Kind}
@@ -302,11 +302,11 @@ func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r
 		return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_creates", row.ID, digest, receipt)
 	})
 	if errors.Is(err, errOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint create request")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint create request")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to queue Gatekeeper constraint")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to queue Gatekeeper constraint")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
@@ -325,12 +325,12 @@ func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r
 		return
 	}
 	if h.queries == nil || h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Gatekeeper constraint store is not available")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StoreUnavailable, "Gatekeeper constraint store is not available")
 		return
 	}
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Constraint name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Constraint name is required")
 		return
 	}
 	getParams := sqlc.GetAuthoredConstraintByNameParams{
@@ -343,7 +343,7 @@ func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r
 		Name      string `json:"name"`
 	}{ClusterID: clusterID.String(), Name: name})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode Gatekeeper constraint delete request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode Gatekeeper constraint delete request")
 		return
 	}
 	receipt := GatekeeperConstraintMutationResponse{Name: name}
@@ -382,15 +382,15 @@ func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r
 		return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_deletes", authored.ID, digest, receipt)
 	})
 	if errors.Is(err, errOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint delete request")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint delete request")
 		return
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Authored constraint not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Authored constraint not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to queue Gatekeeper constraint deletion")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to queue Gatekeeper constraint deletion")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)

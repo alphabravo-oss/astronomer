@@ -12,9 +12,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/tableviews"
 )
 
@@ -86,7 +86,7 @@ func tableViewScopeLock(userID uuid.UUID, tableKey string) string {
 func (h *TableViewsHandler) decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxTableViewBodyBytes)
 	if err := decodeStrictJSONBody(r, dst); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid table view document")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid table view document")
 		return false
 	}
 	return true
@@ -95,11 +95,11 @@ func (h *TableViewsHandler) decodeBody(w http.ResponseWriter, r *http.Request, d
 func (h *TableViewsHandler) preflight(w http.ResponseWriter, r *http.Request, needTx bool) (uuid.UUID, bool) {
 	userID, ok := preferenceUserID(r)
 	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return uuid.Nil, false
 	}
 	if h == nil || (needTx && h.runTx == nil) || (!needTx && h.reader == nil) {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Table views are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Table views are not configured")
 		return uuid.Nil, false
 	}
 	return userID, true
@@ -113,12 +113,12 @@ func (h *TableViewsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	tableKey := r.URL.Query().Get("table_key")
 	if err := tableviews.ValidateTableKey(tableKey); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	rows, err := h.reader.ListUserTableViews(r.Context(), sqlc.ListUserTableViewsParams{UserID: userID, TableKey: tableKey})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to load table views")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to load table views")
 		return
 	}
 	items := make([]tableViewResponse, 0, len(rows))
@@ -148,17 +148,17 @@ func (h *TableViewsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := tableviews.ValidateTableKey(req.TableKey); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	name, err := tableviews.NormalizeName(req.Name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	state, err := tableviews.NormalizeState(req.State)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	var stored sqlc.UserTableView
@@ -206,7 +206,7 @@ func (h *TableViewsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid table view id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid table view id")
 		return
 	}
 	var req updateTableViewRequest
@@ -214,14 +214,14 @@ func (h *TableViewsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == nil && req.State == nil && req.IsDefault == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Nothing to update")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Nothing to update")
 		return
 	}
 	params := sqlc.UpdateUserTableViewParams{ID: id, UserID: userID}
 	if req.Name != nil {
 		name, err := tableviews.NormalizeName(*req.Name)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 			return
 		}
 		params.Name = pgtype.Text{String: name, Valid: true}
@@ -229,7 +229,7 @@ func (h *TableViewsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.State != nil {
 		state, err := tableviews.NormalizeState(*req.State)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 			return
 		}
 		params.State = state
@@ -278,7 +278,7 @@ func (h *TableViewsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid table view id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid table view id")
 		return
 	}
 	err = h.runTx(r.Context(), func(q TableViewsMutationTx) error {
@@ -305,13 +305,13 @@ func (h *TableViewsHandler) respondMutationError(w http.ResponseWriter, r *http.
 	case err == nil:
 		return false
 	case errors.Is(err, errTableViewLimit):
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "At most 20 saved views are allowed per table; delete one first")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "At most 20 saved views are allowed per table; delete one first")
 	case errors.Is(err, errTableViewNotFound):
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Table view not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Table view not found")
 	case isUniqueViolation(err):
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A view with that name already exists for this table")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A view with that name already exists for this table")
 	default:
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.InternalError, message)
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.InternalError, message)
 	}
 	return true
 }

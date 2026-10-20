@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -152,35 +152,35 @@ type createNativeRuleRequest struct {
 func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createNativeRuleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid request body")
 		return
 	}
 
 	userID, err := uuid.Parse(strings.TrimSpace(req.UserID))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "userId must be a valid user UUID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "userId must be a valid user UUID")
 		return
 	}
 	resource := strings.TrimSpace(req.Resource)
 	if resource == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "resource is required (a plural resource name, or '*' for all in the group)")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "resource is required (a plural resource name, or '*' for all in the group)")
 		return
 	}
 	apiGroup := strings.TrimSpace(req.APIGroup)
 	if escalationGroups[strings.ToLower(apiGroup)] {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody,
 			"native rules cannot target privilege-escalation api groups (rbac/admission/apiregistration/apiextensions); use a coarse RBAC grant for those")
 		return
 	}
 	if len(req.Verbs) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "at least one verb is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "at least one verb is required")
 		return
 	}
 	verbs := make([]string, 0, len(req.Verbs))
 	for _, v := range req.Verbs {
 		v = strings.ToLower(strings.TrimSpace(v))
 		if !allowedNativeVerbs[v] {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody,
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody,
 				"verb must be one of read|list|watch|create|update|delete|* (exec/logs are not grantable via native rules)")
 			return
 		}
@@ -191,7 +191,7 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if s := strings.TrimSpace(req.ClusterID); s != "" {
 		cid, err := uuid.Parse(s)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "clusterId must be a valid cluster UUID or omitted for all clusters")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "clusterId must be a valid cluster UUID or omitted for all clusters")
 			return
 		}
 		clusterID = pgtype.UUID{Bytes: cid, Valid: true}
@@ -229,7 +229,7 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create native rule (does the user exist?)")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create native rule (does the user exist?)")
 		return
 	}
 	if h.invalidate != nil {
@@ -247,7 +247,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 	if uid := strings.TrimSpace(r.URL.Query().Get("userId")); uid != "" {
 		userID, err := uuid.Parse(uid)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "userId must be a valid UUID")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "userId must be a valid UUID")
 			return
 		}
 		limit, offset := queryLimitOffset(r, 20)
@@ -255,12 +255,12 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 			UserID: userID, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 		})
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list native rules")
 			return
 		}
 		total, err := h.queries.CountNativeRBACRulesByUser(r.Context(), userID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count native rules")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to count native rules")
 			return
 		}
 		items := nativeRulesToResponses(rows)
@@ -270,7 +270,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit, offset := queryLimitMax32(r, 100, 500), queryOffset32(r)
 	rows, err := h.queries.ListNativeRBACRules(r.Context(), sqlc.ListNativeRBACRulesParams{Limit: limit, Offset: offset})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list native rules")
 		return
 	}
 	paging.Write(w, nativeRulesToResponses(rows), paging.FromPage(int(limit), int(offset), len(rows)))
@@ -280,7 +280,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *NativeRBACHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid rule ID")
 		return
 	}
 	row, err := executeMutation(r, h.runTx,
@@ -300,10 +300,10 @@ func (h *NativeRBACHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Native rule not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Native rule not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete native rule")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete native rule")
 		return
 	}
 	if h.invalidate != nil {
@@ -326,12 +326,12 @@ func (h *NativeRBACHandler) enforceNoNativeEscalation(w http.ResponseWriter, r *
 	}
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to author this rule")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to author this rule")
 		return false
 	}
 	callerBindings, err := h.bindings.GetUserBindings(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LoadError, "Failed to load caller bindings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LoadError, "Failed to load caller bindings")
 		return false
 	}
 	charged := nativeRuleChargedResources(apiGroup, resource)
@@ -342,7 +342,7 @@ func (h *NativeRBACHandler) enforceNoNativeEscalation(w http.ResponseWriter, r *
 	for _, v := range verbs {
 		for _, mapped := range charged {
 			if !h.engine.CheckPermission(callerBindings, mapped, rbac.Verb(v), cid, uuid.UUID{}, namespace) {
-				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+				apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 					"Cannot author a native rule granting permissions you do not already hold at this scope")
 				return false
 			}

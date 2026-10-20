@@ -16,9 +16,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog/configuration"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -56,12 +56,12 @@ var errCatalogProjectResolverUnavailable = errors.New("project namespace resolve
 func (h *CatalogHandler) ListCatalogApplications(w http.ResponseWriter, r *http.Request) {
 	store, ok := h.queries.(applicationCatalogQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Application catalog persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Application catalog persistence is unavailable")
 		return
 	}
 	applications, err := store.ListApplicationCatalogPresentations(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalog applications")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list catalog applications")
 		return
 	}
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"data": applications, "count": len(applications)})
@@ -70,12 +70,12 @@ func (h *CatalogHandler) ListCatalogApplications(w http.ResponseWriter, r *http.
 func (h *CatalogHandler) ListApplicationCatalogSources(w http.ResponseWriter, r *http.Request) {
 	store, ok := h.queries.(applicationCatalogSourceQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Application catalog source persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Application catalog source persistence is unavailable")
 		return
 	}
 	sources, err := store.ListApplicationCatalogSources(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list application catalog sources")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list application catalog sources")
 		return
 	}
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"data": sources, "count": len(sources)})
@@ -110,47 +110,47 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 	}
 	clusterID, err := uuid.Parse(request.ClusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid cluster_id is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "A valid cluster_id is required")
 		return
 	}
 	versionID, err := uuid.Parse(request.ChartVersionID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid chart_version_id is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "A valid chart_version_id is required")
 		return
 	}
 	if strings.TrimSpace(request.Namespace) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "A namespace is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "A namespace is required")
 		return
 	}
 	projectID, _, err := h.resolveCatalogTargetProject(r.Context(), clusterID, request.Namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve namespace ownership")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to resolve namespace ownership")
 		return
 	}
 	verb := rbac.VerbCreate
 	if request.Operation == "upgrade" {
 		verb = rbac.VerbUpdate
 	} else if request.Operation != "" && request.Operation != "install" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "operation must be install or upgrade")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "operation must be install or upgrade")
 		return
 	}
 	allowedTarget, err := h.catalogCallerAllowsTarget(r.Context(), clusterID, projectID, request.Namespace, verb)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	if !allowedTarget {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to install applications in this namespace")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to install applications in this namespace")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	version, err := h.queries.GetHelmChartVersionByID(r.Context(), versionID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart version not found")
 		return
 	}
 	if !h.authorizeCatalogPreviewChart(w, r, version, projectID) {
@@ -158,17 +158,17 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 	}
 	version, err = h.hydrateChartVersion(r.Context(), version)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Chart configuration metadata is temporarily unavailable")
 		return
 	}
 	store, ok := h.queries.(applicationCatalogQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Application catalog persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Application catalog persistence is unavailable")
 		return
 	}
 	presentation, err := store.GetApplicationCatalogPresentationByChartVersion(r.Context(), versionID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Chart version is not present in the verified application catalog")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Chart version is not present in the verified application catalog")
 		return
 	}
 	effectiveOverride := catalogInstallValues(presentation.Slug, cluster.Distribution, request.ValuesOverride)
@@ -373,17 +373,17 @@ func sha256Hex(value []byte) string {
 func (h *CatalogHandler) ListCatalogUserDiscovery(w http.ResponseWriter, r *http.Request) {
 	user := currentUserUUID(r)
 	if !user.Valid {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	store, ok := h.queries.(catalogUserDiscoveryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog discovery persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Catalog discovery persistence is unavailable")
 		return
 	}
 	rows, err := store.ListCatalogUserDiscovery(r.Context(), uuid.UUID(user.Bytes))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalog discovery state")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list catalog discovery state")
 		return
 	}
 	data := make([]map[string]any, 0, len(rows))
@@ -403,12 +403,12 @@ func (h *CatalogHandler) ListCatalogUserDiscovery(w http.ResponseWriter, r *http
 func (h *CatalogHandler) SetCatalogChartFavorite(w http.ResponseWriter, r *http.Request) {
 	chartID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid chart ID")
 		return
 	}
 	chart, err := h.queries.GetHelmChartByID(r.Context(), chartID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Chart not found")
 		return
 	}
 	if !h.authorizeChartRead(w, r, chart) {
@@ -416,22 +416,22 @@ func (h *CatalogHandler) SetCatalogChartFavorite(w http.ResponseWriter, r *http.
 	}
 	var request catalogFavoriteRequest
 	if err := decodeV1JSONBody(r, &request); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	user := currentUserUUID(r)
 	if !user.Valid {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	store, ok := h.queries.(catalogUserDiscoveryQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog discovery persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Catalog discovery persistence is unavailable")
 		return
 	}
 	row, err := store.SetCatalogChartFavorite(r.Context(), sqlc.SetCatalogChartFavoriteParams{UserID: uuid.UUID(user.Bytes), ChartID: chartID, Favorite: request.Favorite})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update favorite")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update favorite")
 		return
 	}
 	response := map[string]any{"chart_id": row.ChartID.String(), "favorite": row.Favorite, "favorite_at": nil, "last_viewed_at": nil, "view_count": row.ViewCount}
@@ -447,12 +447,12 @@ func (h *CatalogHandler) SetCatalogChartFavorite(w http.ResponseWriter, r *http.
 func (h *CatalogHandler) ListInstalledChartUpgradeVersions(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installed chart ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid installed chart ID")
 		return
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installed chart not found")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -460,12 +460,12 @@ func (h *CatalogHandler) ListInstalledChartUpgradeVersions(w http.ResponseWriter
 	}
 	store, ok := h.queries.(catalogUpgradeVersionQuerier)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog upgrade discovery is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Catalog upgrade discovery is unavailable")
 		return
 	}
 	versions, err := store.ListUpgradeVersionsForInstalledChart(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list upgrade versions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list upgrade versions")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{"data": versions, "count": len(versions)})

@@ -104,7 +104,7 @@ func resolveAuditActionClass(action, source, stored string) string {
 	switch {
 	case strings.HasPrefix(a, "auth.") || strings.HasPrefix(a, "sso."):
 		return "auth"
-	case strings.HasPrefix(a, "read.") || a == "charlie.http.read":
+	case strings.HasPrefix(a, "read.") || a == "charlie.http.read" || strings.HasSuffix(a, ".viewed"):
 		return "read"
 	case s == "worker",
 		strings.HasPrefix(a, "agent."),

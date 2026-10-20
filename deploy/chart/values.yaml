@@ -21,7 +21,8 @@ fullnameOverride: ""
 # mounted manifest before consuming any release artifact identity.
 release:
   manifest: ""
-  # Signed output of scripts/mirror-release.py. It is accepted only alongside
+  # Signed mirror mapping (formerly scripts/mirror-release.py; not yet ported
+  # to `astro airgap`). It is accepted only alongside
   # the exact release manifest whose digest it binds.
   mirrorMapping: ""
 
@@ -66,25 +67,23 @@ catalog:
 # Container images
 # =============================================================================
 image:
-  # T23 — air-gapped: a single `registry` value applied as a prefix to
-  # EVERY image in the chart unless an image-specific override is set.
-  # The full set of images that participate is enumerated by
-  # `make images.txt` (see scripts/extract-images.sh).
-  registry: ""           # Empty registry = use local images (k3d-imported).
+  # Cluster-local registry host (air-gap layer 1). When set, EVERY image the
+  # chart renders is re-hosted onto it: the online reference
+  # (<per-image registry>/<repository>) keeps its path and loses its host, e.g.
+  # ghcr.io/alphabravo-oss/astronomer-go-server -> <registry>/alphabravo-oss/astronomer-go-server,
+  # busybox -> <registry>/busybox. `astro airgap mirror --to <registry>` copies
+  # with exactly that mapping. registry.zot.enabled sets it to the in-cluster
+  # zot automatically. Empty (and zot disabled) is the ONLINE profile: images
+  # render with their own online default registries. `astro airgap plan`
+  # enumerates every participating image.
+  registry: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
   # Production sets this true and refuses every active image without an exact
   # sha256 digest. Development keeps tag-based local-image workflows available.
   requireDigest: false
-  # F1 schema-skew guard: server and migrate ship the same DB schema and are
-  # built from one commit, so their tags MUST match. The chart fails the render
-  # when image.server.tag != image.migrate.tag (a mismatch can 503 the plane
-  # permanently via the /readyz schema floor). Set true ONLY for a deliberate
-  # skewed rollout that ships no new migration (a NOTES.txt warning then fires).
-  allowSchemaSkew: false
-  # Per-image `registry` is the online default home (first-party = GHCR). The
-  # global `image.registry` above overrides ALL of these when set (air-gap:
-  # mirror everything into one private registry). Empty global => these defaults.
+  # Per-image `registry` is the online default home (first-party = GHCR). A
+  # cluster-local registry (image.registry or registry.zot) re-hosts them.
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
@@ -101,11 +100,67 @@ image:
     repository: astronomer-go-agent
     tag: "v2.0.1"
     digest: ""
-  migrate:
-    registry: ghcr.io/alphabravo-oss
-    repository: astronomer-go-migrate
-    tag: "v2.0.1"
-    digest: ""
+
+# =============================================================================
+# Air-gap layered registry (guide ch.09; internal/registry)
+# =============================================================================
+# Layer 1 is the cluster-local registry (image.registry, or the in-cluster zot
+# below); layer 2 is the opt-in fallback list; layer 3 fails closed. Nothing
+# ever falls through to a public default registry.
+registry:
+  # REGISTRY_FALLBACKS: host[:port][/prefix] entries consulted after a layer-1
+  # miss. Only digest-pinned references from the signed release/bundle are
+  # accepted from a fallback, and only when it serves that exact digest.
+  # Empty = fail closed at layer 1. Requires a cluster-local registry.
+  fallbacks: []
+  # REGISTRY_PLAIN_HTTP: extra registry hosts reached without TLS (the
+  # in-cluster zot is added automatically when it is the local registry).
+  plainHTTPHosts: []
+  zot:
+    # In-cluster OCI registry (project-zot). Enabling it makes it the
+    # cluster-local registry for every image and runtime reference unless
+    # image.registry names another one. Populate with `astro airgap mirror`.
+    enabled: false
+    # Host[:port] written into image references. Default:
+    # <fullname>-zot.<namespace>.svc.cluster.local:<service.port>. Node
+    # container runtimes must map this name to the registry (k3s/RKE2
+    # registries.yaml mirror -> http://127.0.0.1:<nodePort> or the ClusterIP);
+    # see docs/airgapped-install.md.
+    host: ""
+    # The registry cannot serve its own image: pre-load it on air-gapped
+    # nodes. It is re-hosted only onto an operator-supplied image.registry.
+    image:
+      registry: ghcr.io
+      repository: project-zot/zot
+      tag: v2.1.22
+      digest: "sha256:96cda11459ce6f8c60da3b03f03e9f67fd11b3ae2d82c4c04c92b3c608996080"
+    logLevel: info
+    service:
+      type: ClusterIP       # NodePort lets kubelets pull via 127.0.0.1:<nodePort>
+      port: 5000
+      nodePort: null
+      clusterIP: ""         # Optional fixed ClusterIP for node mirror config
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: ""
+    auth:
+      # Secret with key `htpasswd` (bcrypt). When set, anonymous clients get
+      # read-only access and pushes require a listed user; when empty the
+      # registry is anonymous read/write inside the NetworkPolicy boundary.
+      htpasswdSecret: ""
+    networkPolicy:
+      # Sources allowed to pull besides in-namespace pods: kubelet pulls come
+      # from node addresses. Narrow to the node CIDRs in production.
+      pullCIDRs:
+        - 0.0.0.0/0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
 
 # =============================================================================
 # Utility images
@@ -316,18 +371,56 @@ postgres:
       number: 1
     monitoring:
       enablePodMonitor: false
+    # Fast-shutdown knobs (seconds; 0 keeps the CloudNativePG defaults of
+    # 1800/180). Lower them temporarily when adding the Barman Cloud plugin
+    # to a running cluster: the primary restarts to gain the plugin sidecar
+    # and its archiver cannot reach the sidecar during a smart shutdown.
+    # See docs/management-plane-dr-runbook.md "Adding Barman Cloud to a live cluster".
+    stopDelay: 0
+    smartShutdownTimeout: 0
     # Optional continuous backup/PITR through the upstream CNPG-I Barman Cloud
-    # plugin. The plugin and referenced ObjectStore CR must be installed and
-    # managed separately; this chart never creates storage credentials.
+    # plugin. Install the plugin separately. The ObjectStore named by
+    # objectStoreName is either managed outside the chart (objectStore.create
+    # false) or rendered from objectStore.* below; the chart never creates
+    # storage credentials, it only references an existing Secret.
     barmanCloud:
       enabled: false
       pluginName: barman-cloud.cloudnative-pg.io
       objectStoreName: ""
+      objectStore:
+        create: false
+        # s3://<bucket>/<prefix>/ — the Cluster name is appended as serverName.
+        destinationPath: ""
+        # Empty targets AWS S3; set for S3-compatible stores (RustFS, MinIO,
+        # Ceph RGW), e.g. http://rustfs.backup.svc:9000. Open the matching
+        # networkPolicy.walArchiveEgressCIDRs/walArchiveEgressPorts.
+        endpointURL: ""
+        # Optional CA bundle Secret for a TLS endpoint with a private CA.
+        endpointCA: {name: "", key: ""}
+        # AWS_DEFAULT_REGION for the plugin sidecar (required by most
+        # S3-compatible stores even when they ignore it).
+        region: ""
+        s3Credentials:
+          accessKeyId: {name: "", key: ACCESS_KEY_ID}
+          secretAccessKey: {name: "", key: SECRET_ACCESS_KEY}
+        wal:
+          compression: gzip
+          maxParallel: 2
+        data:
+          compression: gzip
+          jobs: 2
+        # Barman recovery window; base backups and WAL older than this are
+        # pruned by the plugin every retentionPolicyIntervalSeconds.
+        retentionPolicy: 30d
+        retentionPolicyIntervalSeconds: 1800
       scheduledBackup:
         enabled: false
         # CloudNativePG uses a six-field cron expression (seconds first).
         schedule: "0 0 2 * * *"
         backupOwnerReference: self
+        # Take the first backup as soon as the ScheduledBackup is created
+        # instead of waiting for the first schedule tick.
+        immediate: false
       recovery:
         # Recovery bootstraps a new CNPG cluster; do not enable it on an
         # initialized cluster. Leave targetTime empty for latest recovery.
@@ -508,30 +601,18 @@ redis:
     database: 0
 
 # =============================================================================
-# Migrations
+# Init containers (wait-for-postgres / wait-for-redis)
 # =============================================================================
-migrate:
-  enabled: true
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 65534
-    runAsGroup: 65534
-    fsGroup: 65534
-    seccompProfile:
-      type: RuntimeDefault
-  securityContext:
-    allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
+# Schema migrations are embedded in the server binary and applied at boot
+# under a PostgreSQL advisory lock (guide ch.02); there is no migrate image.
+initWait:
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 25m
+      memory: 32Mi
     limits:
-      cpu: 500m
-      memory: 256Mi
+      cpu: 200m
+      memory: 64Mi
 preflight:
   enabled: true
   image:
@@ -551,7 +632,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 81
+    targetVersion: 84
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -719,6 +800,12 @@ delivery:
     # through the API.
     trustKeys:
       existingSecret: ""
+      # With existingSecret empty the chart renders <fullname>-delivery-trust
+      # holding only trusted_root.json: the Sigstore public-good trusted root
+      # pinned in files/sigstore/trusted_root.json (byte-identical to the one
+      # compiled into the astro CLI). Without it verified-release mode cannot
+      # verify keyless-signed release artifacts. Rotate by bumping the chart.
+      chartManagedTrustedRoot: true
 
   rollout:
     workerConcurrency: 16
@@ -766,7 +853,8 @@ dex:
     maxSkew: 1
     whenUnsatisfiable: ScheduleAnyway
   image:
-    repository: dexidp/dex
+    # ghcr.io carries the keyless signature (same digest as docker.io/dexidp/dex).
+    repository: ghcr.io/dexidp/dex
     tag: v2.45.1
     digest: ""
     registry: ""              # T23 air-gapped override; falls back to image.registry
@@ -826,20 +914,26 @@ secrets:
   internalPSKPreviousKey: ASTRONOMER_INTERNAL_PSK_PREVIOUS
   postgresPasswordKey: POSTGRES_PASSWORD
   # REQUIRED (no default). The chart used to ship a working JWT signing key and
-  # Fernet key here, which meant every default install was forgeable by anyone
+  # encryption key here, which meant every default install was forgeable by anyone
   # holding this repository. Both are now empty and the render fails until you
   # supply your own or point at secrets.existingSecret — including in
   # development, because dev installs hold real cluster credentials too.
   # Generate with: openssl rand -base64 32
   secretKey: ""
-  # Fernet key (32 random bytes, url-safe base64). REQUIRED to be a real
-  # Fernet key — Astronomer wraps SSO/agent secrets with it. Keep it for the
-  # life of the install; losing it makes every encrypted column undecryptable
-  # (rotation reencrypts all wrapped values). Generate
-  # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  # age keyring (ASTRONOMER_ENCRYPTION_KEY). REQUIRED. One or more entries,
+  # newline- or comma-separated, each "AGE-SECRET-KEY-1..." or
+  # "label:AGE-SECRET-KEY-1..." (the label becomes the key_id stamped on every
+  # sealed row; unlabelled keys get a fingerprint id). The FIRST entry is the
+  # current key used for every write; later entries are previous keys kept only
+  # so rows sealed under them still decrypt until `astro admin rotate-keys` has
+  # rewritten them. Keep every key for the life of the rows that use it; losing
+  # it makes those columns undecryptable. Fernet keys are rejected. Generate
+  # with: astro admin generate-encryption-key (or age-keygen).
+  # See docs/decisions/0010-age-column-encryption.md and
+  # docs/secret-rotation-runbook.md.
   encryptionKey: ""
   # Dedicated HMAC key for short-lived, body-bound requests between server
-  # replicas. Keep this separate from both JWT and Fernet keys. Generate with:
+  # replicas. Keep this separate from both the JWT and encryption keys. Generate with:
   # openssl rand -base64 48
   internalPSK: ""
   # Verification-only predecessor accepted during a rolling key rotation. Set
@@ -1045,7 +1139,19 @@ networkPolicy:
   # shipper. Optional workloads receive no catch-all egress from the legacy
   # bucket; operators must name their actual dependency networks here.
   objectStoreEgressCIDRs: []
+  # TCP ports the DR jobs may use towards objectStoreEgressCIDRs. Add the
+  # S3 API port of a non-AWS store (RustFS/MinIO/Ceph RGW, e.g. 9000).
+  objectStoreEgressPorts: [443, 80]
   loggingSinkEgressCIDRs: []
+  # CloudNativePG mode with barmanCloud.enabled: the Barman Cloud plugin
+  # sidecar in each PostgreSQL instance pod archives WAL and base backups to
+  # the ObjectStore endpoint. Name that endpoint's network and S3 API ports.
+  walArchiveEgressCIDRs: []
+  walArchiveEgressPorts: [443]
+  # Namespace of the CloudNativePG operator and Barman Cloud plugin, and the
+  # plugin's CNPG-I gRPC port (instance manager -> plugin Service).
+  cnpgSystemNamespace: cnpg-system
+  barmanCloudPluginPort: 9090
 
 # =============================================================================
 # Metrics scraping
@@ -1205,10 +1311,10 @@ managementBackup:
       name: ""
       key: "passphrase"
   # ---------------------------------------------------------------------------
-  # F4 (HIGH · DR): back up the Fernet/JWT encryption-key Secret WITH the DB.
+  # F4 (HIGH · DR): back up the age/JWT encryption-key Secret WITH the DB.
   # ---------------------------------------------------------------------------
   # pg_dump alone is not a recoverable backup: every encrypted column (agent
-  # tokens, SSO client secrets, and wrapped delivery/integration credentials) is Fernet-
+  # tokens, SSO client secrets, and wrapped delivery/integration credentials) is age-
   # wrapped with secrets.encryptionKey, which lives in a Kubernetes Secret, NOT
   # in Postgres. Restore onto a NEW cluster without that key and every such row
   # is permanently undecryptable. This captures the key Secret alongside the
@@ -1329,13 +1435,15 @@ managementRestoreDrill:
   # data. Without this the drill can stay green while real DR is broken (the key
   # was never backed up, or drifted from the ciphertext). The drill downloads
   # the latest wrapped key bundle (written by managementBackup.encryptionKeyBackup),
-  # unwraps it with the SAME wrapping passphrase, and Fernet-verifies one known
+  # unwraps it with the SAME wrapping passphrase, and age-decrypts one known
   # encrypted column in the restored DB — failing the drill if it can't.
   decryptCheck:
     enabled: true
-    # A known Fernet-encrypted delivery credential to sample when one exists.
+    # A known sealed column family (table + family base name) to sample when
+    # a row exists; the drill decrypts <column>_ciphertext with the backed-up
+    # keyring using the age CLI.
     table: "delivery_sources"
-    column: "credential_encrypted"
+    column: "credential"
     # Must match managementBackup.encryptionKeyBackup.keyPrefix.
     keyPrefix: "keys"
   # Image bundling postgresql-client + aws-cli — reuse the same image
@@ -1347,14 +1455,16 @@ managementRestoreDrill:
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # The sidecar Postgres that the drill restores INTO. emptyDir-backed
-  # and torn down with the pod; keep the image in lockstep with the
-  # bundled postgres so a successful restore actually proves nothing
-  # broke against the production Postgres version.
+  # and torn down with the pod; keep its major in lockstep with the
+  # CloudNativePG server (postgres.cloudNativePG.imageName, 17.11) and the
+  # astronomer-dr image's client tools (PostgreSQL 17) so a successful
+  # restore proves the production dump restores on the production major.
   sidecar:
     image:
       repository: postgres
-      tag: "16-alpine"
-      digest: ""
+      tag: "17-alpine"
+      # postgres:17-alpine (= 17.11-alpine) multi-arch index, 2026-10-20.
+      digest: "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
       pullPolicy: IfNotPresent
       registry: ""    # T23 air-gapped override; falls back to image.registry
     # Throwaway password used between the two containers inside the

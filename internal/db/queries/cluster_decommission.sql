@@ -165,13 +165,25 @@ RETURNING *;
 -- the cluster row; setting decommissioned_at preserves the id for audit_archive
 -- referential integrity and lets the UI render historical references.
 
+-- The tombstone cascades to the cluster's delivery deployments in the same
+-- statement: they can never be observed again, so leaving them active kept the
+-- delivery backlog/stale-status alerts firing forever. 'removed' is the
+-- terminal deployment phase; the reason is kept in last_error_code.
+
 -- name: TombstoneCluster :exec
-UPDATE clusters
-SET
-    decommissioned_at = now(),
-    status = 'decommissioned',
-    updated_at = now()
-WHERE id = $1;
+WITH tombstoned AS (
+    UPDATE clusters
+    SET
+        decommissioned_at = now(),
+        status = 'decommissioned',
+        updated_at = now()
+    WHERE clusters.id = sqlc.arg(id)
+    RETURNING clusters.id
+)
+UPDATE cluster_deployments d
+SET phase = 'removed', last_error_code = 'cluster_decommissioned', last_message = ''
+FROM tombstoned
+WHERE d.cluster_id = tombstoned.id AND d.phase <> 'removed';
 
 -- Dependent row cleanup: every table that holds a cluster_id FK has its
 -- entries removed here. The CASCADE behaviour on the original FK definitions

@@ -36,7 +36,7 @@ func TestSignedMetadataActualCryptographyReturnsFreshCanonicalManifest(t *testin
 	}
 	t.Cleanup(metadata.Close)
 	verified, err := metadata.Verify(context.Background())
-	if err != nil || verified.Release.Version != "v1.2.2" || len(verified.Astronomer.Images) != 7 {
+	if err != nil || verified.Release.Version != "v1.2.2" || len(verified.Astronomer.Images) != 6 {
 		t.Fatal("actual authenticated canonical manifest differs", err)
 	}
 	verified.Release.Version = "v9.9.9"

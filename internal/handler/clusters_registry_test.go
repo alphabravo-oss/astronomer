@@ -99,7 +99,6 @@ func (q *clusterRegistryTestQuerier) UpsertClusterRegistryConfig(_ context.Conte
 		ClusterID:          arg.ClusterID,
 		PrivateRegistryUrl: arg.PrivateRegistryUrl,
 		RegistryUsername:   arg.RegistryUsername,
-		RegistryPassword:   arg.RegistryPassword,
 		Insecure:           arg.Insecure,
 		CaBundle:           arg.CaBundle,
 	}, nil
@@ -191,6 +190,7 @@ func TestUpdateRegistryConfigAuditsLegacyRegistryMutation(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}
 	h := NewClusterHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	h.SetRunTx(func(_ context.Context, fn func(ClusterMutationTx) error) error { return fn(q) })
 	body, _ := json.Marshal(UpdateRegistryConfigRequest{
 		PrivateRegistryUrl: "https://registry.example.com",
@@ -226,6 +226,7 @@ func TestDeleteRegistryConfig(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}
 	h := NewClusterHandler(q)
+	h.SetEncryptor(registryTestEnc)
 	h.SetRunTx(func(_ context.Context, fn func(ClusterMutationTx) error) error { return fn(q) })
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/registry/", nil)
@@ -251,6 +252,7 @@ func TestDeleteRegistryConfig(t *testing.T) {
 func TestDeleteRegistryConfigRejectsBadID(t *testing.T) {
 	q := &clusterRegistryTestQuerier{}
 	h := NewClusterHandler(q)
+	h.SetEncryptor(registryTestEnc)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/not-a-uuid/registry/", nil)
 	rctx := chi.NewRouteContext()

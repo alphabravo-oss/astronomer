@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -73,7 +75,7 @@ func (writer *MeasurementPipe) Write(payload []byte) (int, error) {
 		if !errors.Is(err, unix.EAGAIN) && !errors.Is(err, unix.EINTR) {
 			return copied, errors.New("database measurement pipe write failed")
 		}
-		descriptors := []unix.PollFd{{Fd: int32(writer.fd), Events: unix.POLLOUT}}
+		descriptors := []unix.PollFd{{Fd: safeconv.Int32(writer.fd), Events: unix.POLLOUT}}
 		if _, err := unix.Poll(descriptors, 100); err != nil && !errors.Is(err, unix.EINTR) {
 			return copied, errors.New("database measurement pipe poll failed")
 		}

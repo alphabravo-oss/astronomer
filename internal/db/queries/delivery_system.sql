@@ -1,5 +1,5 @@
 -- Signed downstream delivery-system releases and staged rollout state.
--- Public projections deliberately omit registry_credential_encrypted.
+-- Public projections deliberately omit registry_credential_{key_id,algorithm,ciphertext,nonce}.
 
 -- name: ListDeliverySystemReleases :many
 SELECT id, release_sequence, version, artifact_url, artifact_digest,
@@ -41,18 +41,17 @@ WITH seeded AS (
     FROM delivery_system_releases r
     WHERE r.state = 'released'
     ON CONFLICT (cluster_id) DO NOTHING
-), current AS (
-    SELECT a.cluster_id, a.phase
-    FROM delivery_system_cluster_assignments a
-    WHERE a.cluster_id = sqlc.arg(cluster_id)
-    FOR UPDATE
 ), updated AS (
     UPDATE delivery_system_cluster_assignments a
     SET observed_distribution_digest = sqlc.arg(observed_distribution_digest)::text,
         observed_agent_version = sqlc.arg(observed_agent_version)::text,
         last_observed_at = sqlc.arg(observed_at),
         acknowledged_at = COALESCE(acknowledged_at, sqlc.arg(observed_at)),
+        -- pending (cohort not yet released by ReleaseSystemRolloutNextCohort)
+        -- and aborted assignments only record the observation: promoting them
+        -- would count an unreleased cluster as done and stall the engine.
         phase = CASE
+            WHEN a.phase IN ('pending','aborted') THEN a.phase
             WHEN sqlc.arg(inventory_ready)::boolean
              AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
              AND sqlc.arg(observed_agent_version)::text = r.agent_version
@@ -67,6 +66,7 @@ WITH seeded AS (
             ELSE 'applying'
         END,
         ready_at = CASE
+            WHEN a.phase IN ('pending','aborted') THEN a.ready_at
             WHEN sqlc.arg(inventory_ready)::boolean
              AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
              AND sqlc.arg(observed_agent_version)::text = r.agent_version
@@ -76,12 +76,19 @@ WITH seeded AS (
              AND sqlc.arg(observed_distribution_digest)::text = r.distribution_digest
              AND sqlc.arg(observed_agent_version)::text = r.agent_version THEN ''
             ELSE sqlc.arg(error_code)::text END
-    FROM delivery_system_releases r
+    -- prev captures the pre-update phase inside the UPDATE itself. A separate
+    -- `SELECT ... FOR UPDATE` CTE joined afterwards skips the row this same
+    -- command already updated, so the statement returned no row at all.
+    FROM delivery_system_releases r,
+         (SELECT p.cluster_id, p.phase
+          FROM delivery_system_cluster_assignments p
+          WHERE p.cluster_id = sqlc.arg(cluster_id)
+          FOR UPDATE) prev
     WHERE a.cluster_id = sqlc.arg(cluster_id) AND r.id = a.desired_release_id
-    RETURNING a.*
+      AND prev.cluster_id = a.cluster_id
+    RETURNING a.*, prev.phase AS previous_phase
 )
-SELECT updated.*, current.phase AS previous_phase
-FROM updated JOIN current USING (cluster_id);
+SELECT * FROM updated;
 
 -- name: CreateDeliverySystemEvent :one
 INSERT INTO delivery_system_events (

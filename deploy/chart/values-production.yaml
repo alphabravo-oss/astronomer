@@ -14,7 +14,7 @@
 #     --set config.serverURL=https://astronomer.example.com \
 #     --set 'gateway.hosts={astronomer.example.com}' \
 #     --set gateway.tls.secretName=astronomer-tls \
-#     --set-file secrets.encryptionKey=./prod-fernet-key
+#     --set-file secrets.encryptionKey=./prod-encryption-key
 #
 # What this file DOES change vs values.yaml:
 #   1. Uses three CloudNativePG instances and Valkey Sentinel. Install the
@@ -239,15 +239,17 @@ config:
 
 # ── Secrets ───────────────────────────────────────────────────────────────
 # The chart ships NO key material in any profile — the render fails until you
-# supply both. Generate the Fernet key with
-#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# supply both. Generate the age encryption key with
+#   astro admin generate-encryption-key --label prod-2026 > ./prod-encryption-key
+# (or age-keygen). Rotation: prepend a new key, run `astro admin rotate-keys`,
+# then drop the old key — see docs/secret-rotation-runbook.md.
 # and pass via:
-#   --set-file secrets.encryptionKey=./prod-fernet-key
+#   --set-file secrets.encryptionKey=./prod-encryption-key
 # (Same for secrets.secretKey — JWT signing material; openssl rand -base64 32.)
 secrets:
   existingSecret: ""
   secretKey: ""        # required — JWT signing
-  encryptionKey: ""    # required — wraps SSO/agent secrets
+  encryptionKey: ""    # required — age keyring that seals stored credentials
 
 # ── Dex (migration 045) ───────────────────────────────────────────────────
 # Production posture: Dex is the only source of truth for who can sign in.
@@ -411,7 +413,7 @@ managementBackup:
     wrappingSecretRef:
       name: ""   # REQUIRED — separate custody from both S3 identities
       key: "passphrase"
-  # F4 (HIGH · DR): back up the Fernet/JWT encryption key WITH the DB, wrapped
+  # F4 (HIGH · DR): back up the age/JWT encryption key WITH the DB, wrapped
   # with a SEPARATELY-held passphrase. Without this a restore onto a new cluster
   # is undecryptable. STRONGLY recommended in production. Create the wrapping
   # secret out-of-band and hold it in DIFFERENT custody than the S3 credentials:

@@ -9,14 +9,16 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -35,7 +37,7 @@ func (h *ResourceHandler) GetGeneralSettings(w http.ResponseWriter, r *http.Requ
 	}
 	cfg, err := h.queries.GetPlatformConfig(r.Context())
 	if err != nil && err != pgx.ErrNoRows {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Failed to load platform settings")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SettingsError, "Failed to load platform settings")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -66,11 +68,11 @@ type UpdateGeneralSettingsRequest struct {
 func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.Request) {
 	var req UpdateGeneralSettingsRequest
 	if err := decodeStrictJSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "settings transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "settings transaction runner is not configured")
 		return
 	}
 	var cfg sqlc.PlatformConfiguration
@@ -89,7 +91,7 @@ func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.R
 		})
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SettingsError, "Failed to update platform settings")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.SettingsError, "Failed to update platform settings")
 		return
 	}
 	if h.settingsCache != nil {
@@ -217,14 +219,14 @@ func csvStringToJSON(raw string) json.RawMessage {
 	return encoded
 }
 
-func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, providerType string, cfg auth.SSOProviderConfig, clientID, secretEncrypted string) error {
+func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, providerType string, cfg auth.SSOProviderConfig, clientID string, clientSecret crypto.Sealed) error {
 	if h == nil || h.ssoMgr == nil {
 		return fmt.Errorf("sso manager is not configured")
 	}
 	if providerType == "oidc" {
-		return h.ssoMgr.RegisterOIDCProvider(ctx, providerKey, cfg.IssuerURL, clientID, secretEncrypted, cfg.RedirectURL, cfg.Scopes)
+		return h.ssoMgr.RegisterOIDCProvider(ctx, providerKey, cfg.IssuerURL, clientID, clientSecret, cfg.RedirectURL, cfg.Scopes)
 	}
-	return h.ssoMgr.RegisterProvider(providerType, clientID, secretEncrypted, cfg.RedirectURL, cfg.Scopes)
+	return h.ssoMgr.RegisterProvider(providerType, clientID, clientSecret, cfg.RedirectURL, cfg.Scopes)
 }
 
 func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +236,7 @@ func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := h.sso.GetEnabledSSOProviders(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to load SSO providers")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SSOError, "Failed to load SSO providers")
 		return
 	}
 	items := make([]SSOProviderResponse, 0, len(rows))
@@ -275,36 +277,36 @@ type SSOProviderResponse struct {
 // CreateSSOProvider handles POST /api/v1/settings/sso/.
 func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Request) {
 	if h.sso == nil || h.encryptor == nil || h.ssoMgr == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSOUnavailable, "SSO provider management is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SSOUnavailable, "SSO provider management is not configured")
 		return
 	}
 	var req SSOProviderRequest
 	if err := decodeStrictJSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Provider name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Provider name is required")
 		return
 	}
 	switch req.Type {
 	case "github", "google", "oidc":
 	default:
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.UnsupportedProvider, "Supported provider types are github, google, and oidc")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.UnsupportedProvider, "Supported provider types are github, google, and oidc")
 		return
 	}
 	if strings.TrimSpace(req.Config.ClientID) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Client ID is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Client ID is required")
 		return
 	}
 	if strings.TrimSpace(req.Config.ClientSecret) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Client secret is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Client secret is required")
 		return
 	}
 	if req.Type == "oidc" && strings.TrimSpace(req.Config.MetadataURL) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "metadata_url is required for OIDC providers")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "metadata_url is required for OIDC providers")
 		return
 	}
 
@@ -312,16 +314,16 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 	if req.Type == "oidc" {
 		providerKey = ssoProviderKeyFromName(req.Name)
 		if providerKey == "" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Provider name must contain letters or numbers")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Provider name must contain letters or numbers")
 			return
 		}
 	}
 	if len(providerKey) > 16 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Provider key must be 16 characters or fewer")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Provider key must be 16 characters or fewer")
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "SSO settings transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "SSO settings transaction runner is not configured")
 		return
 	}
 
@@ -332,12 +334,12 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 	}
 	configJSON, err := json.Marshal(config)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode SSO config")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode SSO config")
 		return
 	}
-	secretEncrypted, err := h.encryptor.Encrypt(req.Config.ClientSecret)
+	secretEncrypted, err := h.encryptor.EncryptString(req.Config.ClientSecret)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt SSO client secret")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt SSO client secret")
 		return
 	}
 
@@ -352,24 +354,24 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 	}
 
 	params := sqlc.CreateSSOConfigurationParams{
-		Provider:              providerKey,
-		IsEnabled:             enabled,
-		DisplayName:           req.Name,
-		Config:                configJSON,
-		ClientID:              strings.TrimSpace(req.Config.ClientID),
-		ClientSecretEncrypted: secretEncrypted,
-		AllowedOrganizations:  allowedOrgs,
-		AllowedDomains:        json.RawMessage(`[]`),
-		AutoCreateUsers:       autoCreateUsers,
-		DefaultGlobalRoleID:   pgtype.UUID{},
+		Provider:          providerKey,
+		IsEnabled:         enabled,
+		DisplayName:       req.Name,
+		Config:            configJSON,
+		ClientID:          strings.TrimSpace(req.Config.ClientID),
+		ClientSecretKeyID: secretEncrypted.KeyID, ClientSecretAlgorithm: secretEncrypted.Algorithm, ClientSecretCiphertext: secretEncrypted.Ciphertext, ClientSecretNonce: secretEncrypted.Nonce,
+		AllowedOrganizations: allowedOrgs,
+		AllowedDomains:       json.RawMessage(`[]`),
+		AutoCreateUsers:      autoCreateUsers,
+		DefaultGlobalRoleID:  pgtype.UUID{},
 	}
 	created, err := h.createSSOProviderTx(r, params)
 	if err != nil {
 		if errors.Is(err, errSSOProviderConflict) || isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "An SSO provider with this key already exists")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "An SSO provider with this key already exists")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create SSO provider")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create SSO provider")
 		return
 	}
 
@@ -381,10 +383,10 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 				h.ssoMgr.RemoveProvider(providerKey)
 			}
 			if compensateErr := h.compensateSSOCreate(r, created); compensateErr != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RegistrationError, "SSO provider was saved but runtime activation failed; operator repair is required")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RegistrationError, "SSO provider was saved but runtime activation failed; operator repair is required")
 				return
 			}
-			RespondRequestError(w, r, http.StatusBadGateway, apierror.RegistrationError, "SSO provider runtime activation failed; the saved configuration was removed")
+			apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.RegistrationError, "SSO provider runtime activation failed; the saved configuration was removed")
 			return
 		}
 	}
@@ -395,26 +397,26 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 // DeleteSSOProvider handles DELETE /api/v1/settings/sso/{id}/.
 func (h *ResourceHandler) DeleteSSOProvider(w http.ResponseWriter, r *http.Request) {
 	if h.sso == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSOUnavailable, "SSO provider management is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SSOUnavailable, "SSO provider management is not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid SSO provider ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid SSO provider ID")
 		return
 	}
 	var existing sqlc.SsoConfiguration
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "SSO settings transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "SSO settings transaction runner is not configured")
 		return
 	}
 	existing, err = h.deleteSSOProviderTx(r, id)
 	if errors.Is(err, errSSOProviderNotFound) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SSO provider not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SSO provider not found")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete SSO provider")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete SSO provider")
 		return
 	}
 	// Runtime removal follows the committed delete. RemoveProvider is

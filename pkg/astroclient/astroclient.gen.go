@@ -6759,6 +6759,9 @@ type DeliverySystemCompatibility struct {
 	CurrentRelease    *DeliverySystemRelease        `json:"current_release"`
 	CurrentRollout    *DeliverySystemRollout        `json:"current_rollout"`
 	ObservedInventory []DeliveryCompatibilityCount  `json:"observed_inventory"`
+
+	// PendingRelease Newest draft system release above current_release (staged by a server upgrade, promoted by a system rollout).
+	PendingRelease *DeliverySystemRelease `json:"pending_release"`
 }
 
 // DeliverySystemCompatibilityEnvelope defines model for DeliverySystemCompatibilityEnvelope.
@@ -7748,7 +7751,7 @@ type HelmRepository struct {
 // HelmRepositoryAuthConfig Credential document for a chart repository. This is the ONLY place
 // credentials are accepted; the top level of the request body is not.
 //
-// At rest the secret-valued keys live in a Fernet envelope
+// At rest the secret-valued keys live in an age-sealed column
 // (`helm_repositories.auth_config_encrypted`, migration 145) and only the
 // non-secret keys stay queryable as JSONB. Responses replace every
 // non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -12650,7 +12653,7 @@ type PostCatalogRepositoriesJSONBody struct {
 	// AuthConfig Credential document for a chart repository. This is the ONLY place
 	// credentials are accepted; the top level of the request body is not.
 	//
-	// At rest the secret-valued keys live in a Fernet envelope
+	// At rest the secret-valued keys live in an age-sealed column
 	// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
 	// non-secret keys stay queryable as JSONB. Responses replace every
 	// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry
@@ -12680,7 +12683,7 @@ type PutCatalogRepositoriesByIdJSONBody struct {
 	// AuthConfig Credential document for a chart repository. This is the ONLY place
 	// credentials are accepted; the top level of the request body is not.
 	//
-	// At rest the secret-valued keys live in a Fernet envelope
+	// At rest the secret-valued keys live in an age-sealed column
 	// (`helm_repositories.auth_config_encrypted`, migration 145) and only the
 	// non-secret keys stay queryable as JSONB. Responses replace every
 	// non-empty secret with `__ASTRONOMER_SECRET_UNCHANGED__` and never carry

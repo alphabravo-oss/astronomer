@@ -3,9 +3,9 @@
 #
 # Every target is phony. VERSION/COMMIT/DATE use ?= so CI can override them.
 
-.PHONY: help dev dev-down dev-status dev-logs build test test-integration lint vet fmt \
-        generate sqlc migrate migrate-down check security gosec govulncheck secrets-scan \
-        fips-build updates docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
+.PHONY: help dev dev-down dev-status dev-logs build test test-integration envtest lint vet fmt \
+        generate sqlc migrate check security gosec govulncheck secrets-scan \
+        fips-build updates go-image-check docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
         frontend-check clean $(BINARIES)
 
 SHELL := /bin/bash
@@ -36,12 +36,19 @@ GOTESTSUM           ?= go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION)
 SQLC                ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 OAPI_CODEGEN        ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 TEST_RESULTS_DIR    ?= test-results
+# envtest (kube-apiserver + etcd) for the operator integration tests.
+SETUP_ENVTEST       ?= go run sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.25.2
+ENVTEST_K8S_VERSION ?= 1.37.0
+ENVTEST_BIN_DIR     ?= $(or $(TMPDIR),/tmp)/astronomer-envtest
 
 # ── Images ───────────────────────────────────────────────────────────────────
 IMG_REGISTRY ?= ghcr.io/alphabravo-oss
 IMG_TAG      ?= $(VERSION)
-IMAGES       := server worker agent migrate shell dr frontend
+IMAGES       := server worker agent shell dr frontend
+# Go builder image digest pin (one checked-in source of truth for every Go stage).
+include deploy/docker/go-image.lock
 DOCKER_BUILD_ARGS = --build-arg GO_VERSION=$(GO_VERSION) \
+                    --build-arg GO_IMAGE_DIGEST=$(GO_IMAGE_DIGEST) \
                     --build-arg VERSION=$(VERSION) \
                     --build-arg GIT_COMMIT=$(GIT_COMMIT) \
                     --build-arg BUILD_DATE=$(BUILD_DATE)
@@ -82,9 +89,13 @@ test: ## Unit tests (no Docker) with race detector, JUnit XML in test-results/
 	@mkdir -p $(TEST_RESULTS_DIR)
 	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/unit.xml -- -race -count=1 ./...
 
-test-integration: ## Integration tests behind the `integration` build tag (real Postgres/Redis)
+test-integration: ## Unit + integration tests (`integration` build tag): testcontainers Postgres 17 + Redis, pgtestdb clone per test
 	@mkdir -p $(TEST_RESULTS_DIR)
-	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration ./...
+	KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path)" \
+	  $(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration -p 8 ./...
+
+envtest: ## Download the envtest kube-apiserver/etcd binaries and print KUBEBUILDER_ASSETS
+	@echo "KUBEBUILDER_ASSETS=$$($(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path)"
 
 e2e: e2e-live ## Alias for e2e-live
 
@@ -123,11 +134,8 @@ generate: sqlc ## Regenerate every checked-in artifact (sqlc, OpenAPI types/clie
 
 # ── Migrations ───────────────────────────────────────────────────────────────
 DATABASE_URL ?= postgres://astronomer:astronomer@localhost:15432/astronomer?sslmode=disable
-migrate: ## Apply pending migrations (DATABASE_URL)
-	go run ./cmd/migrator -database "$(DATABASE_URL)" -path internal/db/migrations up
-
-migrate-down: ## Roll back one migration (DATABASE_URL)
-	go run ./cmd/migrator -database "$(DATABASE_URL)" -path internal/db/migrations down 1
+migrate: ## Apply pending embedded goose migrations (DATABASE_URL); the server also does this at boot
+	go run ./cmd/server migrate -database "$(DATABASE_URL)"
 
 # ── Security gates (guide ch.06) ─────────────────────────────────────────────
 security: gosec govulncheck secrets-scan ## gosec (fail on HIGH) + govulncheck + gitleaks full history
@@ -137,8 +145,7 @@ gosec: ## gosec SARIF, fails on HIGH severity findings
 	# tools/gosec/go.mod pins gosec v2.29.0 plus a golang.org/x/tools new enough to
 	# read the Go 1.27 export-data format (the release pin alone cannot type-check).
 	go run -modfile=tools/gosec/go.mod github.com/securego/gosec/v2/cmd/gosec -fmt sarif -out $(TEST_RESULTS_DIR)/gosec.sarif \
-		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient \
-		-exclude=G115 ./...  # G115: written exception in docs/security-exceptions.md (Phase 1 sweep)
+		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient ./...
 
 govulncheck: ## govulncheck SARIF on the shipping Go toolchain
 	@mkdir -p $(TEST_RESULTS_DIR)
@@ -156,20 +163,33 @@ updates: ## Pending dependency upgrades (Go modules + npm)
 	cd frontend && npm outdated || true
 
 # ── Container images ─────────────────────────────────────────────────────────
-docker-build: $(addprefix docker-build-,$(IMAGES)) ## Build every production image
+docker-build: go-image-check $(addprefix docker-build-,$(IMAGES)) ## Build every production image
+
+# Fails when go.mod's Go version and the go-image.lock pin disagree, or when the
+# pinned digest is not the current index digest of golang:<version>-alpine.
+go-image-check: ## Verify deploy/docker/go-image.lock matches go.mod and the registry
+	@test "$(GO_IMAGE_VERSION)" = "$(GO_VERSION)" || { \
+		echo "go-image.lock pins golang:$(GO_IMAGE_VERSION)-alpine but go.mod says go $(GO_VERSION)" >&2; exit 1; }
+	@remote="$$(docker buildx imagetools inspect golang:$(GO_VERSION)-alpine --format '{{json .Manifest.Digest}}' | tr -d '"')"; \
+	test "$$remote" = "$(GO_IMAGE_DIGEST)" || { \
+		echo "golang:$(GO_VERSION)-alpine index digest is $$remote, go-image.lock pins $(GO_IMAGE_DIGEST)" >&2; exit 1; }; \
+	echo "go-image.lock OK: golang:$(GO_VERSION)-alpine@$(GO_IMAGE_DIGEST)"
 
 docker-build-frontend: ## Build the frontend image
 	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) \
 		-f frontend/Dockerfile -t $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG) frontend
 
-docker-build-%: ## Build one image: docker-build-server|worker|agent|migrate|shell|dr
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/astronomer-go-$*:$(IMG_TAG) .
+# Repository names match the chart and release workflow: server/worker/agent are
+# astronomer-go-<name>; shell and dr are astronomer-<name>.
+image_repo = $(if $(filter shell dr,$(1)),astronomer-$(1),astronomer-go-$(1))
+docker-build-%: ## Build one image: docker-build-server|worker|agent|shell|dr
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/$(call image_repo,$*):$(IMG_TAG) .
 
 # The base values profile requires release-stamped digests and real key material;
 # lint with the dev profile, the qualified kube minor and throwaway lint-only keys.
 HELM_LINT_ARGS = -f deploy/chart/values-dev.yaml --kube-version 1.35.0 \
 	--set-string secrets.secretKey=helm-lint-only-jwt-signing-key-0000 \
-	--set-string secrets.encryptionKey=aGVsbS1saW50LW9ubHktZmVybmV0LWtleS0wMDAwMDA=
+	--set-string secrets.encryptionKey=AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9
 helm-lint: ## helm lint + template dry-run of deploy/chart
 	helm lint deploy/chart $(HELM_LINT_ARGS)
 	helm template astronomer deploy/chart $(HELM_LINT_ARGS) > /dev/null

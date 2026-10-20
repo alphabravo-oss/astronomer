@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type actionReceiptQueries interface {
@@ -21,13 +22,13 @@ type actionReceiptQueries interface {
 	TransitionCharlieActionReceipt(context.Context, sqlc.TransitionCharlieActionReceiptParams) (sqlc.CharlieActionReceipt, error)
 }
 
-// actionReceiptCipher is satisfied by Astronomer's rotation-aware Fernet
-// encryptor. Arguments and terminal results are needed for post-crash
+// actionReceiptCipher is satisfied by Astronomer's rotation-aware age
+// encryptor (pkg/crypto). Arguments and terminal results are needed for post-crash
 // postcondition reconciliation and exact replay, but must never be stored as
 // plaintext or emitted to logs/support bundles.
 type actionReceiptCipher interface {
-	Encrypt(string) (string, error)
-	Decrypt(string) (string, error)
+	Encrypt([]byte) (crypto.Sealed, error)
+	Decrypt(crypto.Sealed) ([]byte, error)
 }
 
 type DBActionReceiptStore struct {
@@ -71,8 +72,8 @@ func NewDBActionReceiptStore(queries actionReceiptQueries, cipher actionReceiptC
 }
 
 func (s *DBActionReceiptStore) Claim(ctx context.Context, action ActionEnvelope, capability CapabilityDescriptor) (ReceiptClaim, error) {
-	argumentsEncrypted, err := s.cipher.Encrypt(string(action.Arguments))
-	if err != nil || argumentsEncrypted == "" {
+	argumentsSealed, err := s.cipher.Encrypt(action.Arguments)
+	if err != nil || argumentsSealed.IsZero() {
 		return ReceiptClaim{}, fmt.Errorf("encrypt Charlie action receipt arguments")
 	}
 	connection, err := s.queries.GetCharlieConnectionByDeploymentID(ctx, action.DeploymentID)
@@ -89,7 +90,8 @@ func (s *DBActionReceiptStore) Claim(ctx context.Context, action ActionEnvelope,
 		ConnectionID: connection.ID, SessionID: session.ID,
 		CharlieActionID: action.ActionID, TurnID: action.TurnID,
 		Capability: capability.Name, Effect: string(capability.Effect),
-		ArgumentDigest: action.ArgumentDigest, ArgumentsEncrypted: argumentsEncrypted,
+		ArgumentDigest: action.ArgumentDigest, ArgumentsKeyID: argumentsSealed.KeyID, ArgumentsAlgorithm: argumentsSealed.Algorithm,
+		ArgumentsCiphertext: argumentsSealed.Ciphertext, ArgumentsNonce: argumentsSealed.Nonce,
 		AuthorizationHash: HashDelegation(action.AuthorizationRef),
 		FencingEpoch:      action.FencingEpoch, ProductIdempotencyKey: action.IdempotencyKey,
 		LeaseOwner: s.leaseOwner, LeaseExpiresAt: leaseExpiresAt,
@@ -147,14 +149,15 @@ func (s *DBActionReceiptStore) Transition(ctx context.Context, action ActionEnve
 	if err != nil || len(encoded) == 0 || len(encoded) > maxActionResult+(16<<10) {
 		return fmt.Errorf("%w", errReceiptTransitionEncode)
 	}
-	resultEncrypted, err := s.cipher.Encrypt(string(encoded))
-	if err != nil || resultEncrypted == "" {
+	resultSealed, err := s.cipher.Encrypt(encoded)
+	if err != nil || resultSealed.IsZero() {
 		return fmt.Errorf("%w", errReceiptTransitionEncrypt)
 	}
 	_, err = s.queries.TransitionCharlieActionReceipt(ctx, sqlc.TransitionCharlieActionReceiptParams{
 		NextState: next, ResultDigest: digestBytes(encoded), ResultStatus: result.State,
-		ResultEncrypted: resultEncrypted,
-		ID:              receipt.ID, ExpectedState: receipt.State, LeaseOwner: s.leaseOwner,
+		ResultKeyID: resultSealed.KeyID, ResultAlgorithm: resultSealed.Algorithm,
+		ResultCiphertext: resultSealed.Ciphertext, ResultNonce: resultSealed.Nonce,
+		ID: receipt.ID, ExpectedState: receipt.State, LeaseOwner: s.leaseOwner,
 		FencingEpoch: action.FencingEpoch,
 	})
 	if err != nil {
@@ -164,11 +167,11 @@ func (s *DBActionReceiptStore) Transition(ctx context.Context, action ActionEnve
 }
 
 func (s *DBActionReceiptStore) decryptResult(receipt sqlc.CharlieActionReceipt) (ActionResult, error) {
-	if receipt.ResultEncrypted == "" || receipt.ResultDigest == "" {
+	if receipt.ResultKeyID == "" || receipt.ResultDigest == "" {
 		return ActionResult{}, fmt.Errorf("Charlie terminal receipt has no replay result")
 	}
-	plain, err := s.cipher.Decrypt(receipt.ResultEncrypted)
-	if err != nil || len(plain) == 0 || len(plain) > maxActionResult+(16<<10) || digestBytes([]byte(plain)) != receipt.ResultDigest {
+	plain, err := s.cipher.Decrypt(crypto.FromParts(receipt.ResultKeyID, receipt.ResultAlgorithm, receipt.ResultCiphertext, receipt.ResultNonce))
+	if err != nil || len(plain) == 0 || len(plain) > maxActionResult+(16<<10) || digestBytes(plain) != receipt.ResultDigest {
 		return ActionResult{}, fmt.Errorf("Charlie terminal receipt replay integrity failed")
 	}
 	var result ActionResult
@@ -177,7 +180,7 @@ func (s *DBActionReceiptStore) decryptResult(receipt sqlc.CharlieActionReceipt) 
 	// example, deliberately replays the original blocked result; requiring those
 	// two vocabularies to be identical would turn a safe exact replay into an
 	// integrity failure after a disable race.
-	if json.Unmarshal([]byte(plain), &result) != nil || result.State != receipt.ResultStatus {
+	if json.Unmarshal(plain, &result) != nil || result.State != receipt.ResultStatus {
 		return ActionResult{}, fmt.Errorf("Charlie terminal receipt replay state is invalid")
 	}
 	if len(result.Result) > maxActionResult || (len(result.Result) > 0 && !json.Valid(result.Result)) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -131,7 +132,7 @@ func mcpRuntimeFixture(t *testing.T) (*MCPRuntime, *mcpRuntimeFakeQueries) {
 		},
 		ActionSigningKeyFile: filepath.Join(directory, "action.key"), LeaseOwner: "server-test",
 		ReceiptCipher: receiptTestCipher{}, FindingRecorder: mcpRuntimeFindingRecorder{},
-	}, gateFeature(true), queries, bindings, DenyAutoSafety{}, UnavailableCapabilityExecutor{}, nil)
+	}, gateFeature(true), queries, bindings, DenyAutoSafety{}, UnavailableCapabilityExecutor{}, zerolog.Nop())
 	if err != nil {
 		t.Fatal(err)
 	}

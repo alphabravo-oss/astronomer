@@ -23,6 +23,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	buildversion "github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 var (
@@ -140,8 +141,11 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 
 		components, systemComponents, apiVersions := inventoryJSON(payload.ControllerInventory)
 		compatibilityResult := compatibility.Evaluate(payload.ControllerInventory)
+		// Agents stamped without the "v" (older or locally built binaries)
+		// must still match the release's agent_version byte-for-byte.
+		observedAgentVersion := buildversion.Normalize(payload.ControllerInventory.AgentVersion)
 		accepted, err := tx.AcceptDeliveryStatusInventory(ctx, sqlc.AcceptDeliveryStatusInventoryParams{
-			ClusterID: authenticatedCluster, AgentVersion: payload.ControllerInventory.AgentVersion,
+			ClusterID: authenticatedCluster, AgentVersion: observedAgentVersion,
 			FluxVersion: payload.ControllerInventory.FluxVersion,
 			Components:  components, SystemComponents: systemComponents, ApiVersions: apiVersions,
 			DistributionDigest: payload.ControllerInventory.DistributionDigest,
@@ -166,7 +170,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			observedAt := time.Now().UTC()
 			observed, err := systemTx.ObserveDeliverySystemAssignment(ctx, sqlc.ObserveDeliverySystemAssignmentParams{
 				ClusterID: authenticatedCluster, ObservedDistributionDigest: payload.ControllerInventory.DistributionDigest,
-				ObservedAgentVersion: payload.ControllerInventory.AgentVersion, ObservedAt: inventoryObservedAt(payload.ControllerInventory, observedAt),
+				ObservedAgentVersion: observedAgentVersion, ObservedAt: inventoryObservedAt(payload.ControllerInventory, observedAt),
 				InventoryReady: payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),
 				ErrorCode: compatibilityResult.Code,
 			})

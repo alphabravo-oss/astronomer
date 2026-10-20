@@ -38,9 +38,10 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/credential"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
-// Decryptor unwraps the Fernet envelope; Encryptor seals it. *auth.Encryptor
+// Decryptor opens the sealed value; Encryptor seals it. *crypto.Encryptor
 // satisfies both. They are interfaces so this package keeps depending on
 // nothing but the standard library and the leaf envelope package.
 type (
@@ -55,7 +56,7 @@ var ErrAuthConfigUnavailable = credential.ErrUnavailable
 
 // NonSecretAuthConfigKeys is the ALLOW-LIST of auth_config keys that stay in
 // the clear in the JSONB column. Everything else in the document is treated as
-// a credential and lives only inside the Fernet envelope.
+// a credential and lives only inside the sealed value.
 //
 // The direction is deliberately the opposite of catalog.AuthConfigSecretKeys,
 // which strips a deny-list. That fits helm_repositories, whose document IS a
@@ -101,7 +102,7 @@ var NonSecretAuthConfigKeys = []string{
 // types carrying this column — sqlc.MonitoringBackend and
 // sqlc.GetClusterMonitoringContextRow — and a helper that only accepted one of
 // them would leave the other path reading the JSONB directly.
-func ResolveAuthConfig(sealed string, public json.RawMessage, dec Decryptor) (json.RawMessage, error) {
+func ResolveAuthConfig(sealed crypto.Sealed, public json.RawMessage, dec Decryptor) (json.RawMessage, error) {
 	return credential.Resolve(sealed, public, dec, "monitoring backend auth_config")
 }
 
@@ -110,7 +111,7 @@ func ResolveAuthConfig(sealed string, public json.RawMessage, dec Decryptor) (js
 // the stored JSONB projection of an already-sealed row re-seals a document
 // with the credential missing, which is the exact failure this package exists
 // to prevent.
-func SealAuthConfig(full json.RawMessage, enc Encryptor) (ciphertext string, public json.RawMessage, err error) {
+func SealAuthConfig(full json.RawMessage, enc Encryptor) (sealed crypto.Sealed, public json.RawMessage, err error) {
 	return credential.Seal(full, enc, HasAuthConfigSecret, StripAuthConfigSecrets, "monitoring backend auth_config")
 }
 
@@ -118,7 +119,7 @@ func SealAuthConfig(full json.RawMessage, enc Encryptor) (ciphertext string, pub
 // is the ONLY way anything in this codebase writes monitoring_backends.
 //
 // The two columns are halves of one value, and the sqlc params struct compiles
-// perfectly well with AuthConfigEncrypted left at its zero value: a writer that
+// perfectly well with the AuthConfig sealed fields left at their zero value: a writer that
 // set only the projection would store the stripped document with an empty
 // envelope, which reads back as a backend that never had a credential. There is
 // no compiler error and no runtime error; the only symptom is 401s hours later,
@@ -136,21 +137,17 @@ func SealInto(params *sqlc.UpsertDefaultMonitoringBackendParams, doc map[string]
 	if err != nil {
 		return err
 	}
-	ciphertext, public, err := SealAuthConfig(full, enc)
+	sealed, public, err := SealAuthConfig(full, enc)
 	if err != nil {
 		return err
 	}
 	params.AuthConfig = public
-	params.AuthConfigEncrypted = ciphertext
+	params.AuthConfigKeyID, params.AuthConfigAlgorithm, params.AuthConfigCiphertext, params.AuthConfigNonce = sealed.Parts()
 	return nil
 }
 
 // HasAuthConfigSecret reports whether a decoded document carries anything
 // outside the non-secret allow-list, i.e. anything worth sealing.
-//
-// This must stay in exact step with the SQL predicate in
-// ListMonitoringBackendsWithLegacyAuthConfig: a row the query returns but this
-// function calls unsealable never leaves the sweep's result set.
 func HasAuthConfigSecret(doc map[string]any) bool {
 	for key := range doc {
 		if !slices.Contains(NonSecretAuthConfigKeys, key) {

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -154,8 +156,8 @@ func (h *SCIMHandler) PatchGroup(w http.ResponseWriter, r *http.Request) {
 func (h *SCIMHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	startIndex, count := scimPaging(r)
 	names, err := h.queries.ListSCIMGroupNames(r.Context(), sqlc.ListSCIMGroupNamesParams{
-		Limit:  int32(count),
-		Offset: int32(startIndex - 1),
+		Limit:  safeconv.Int32(count),
+		Offset: safeconv.Int32(startIndex - 1),
 	})
 	if err != nil {
 		h.scimError(w, http.StatusInternalServerError, "failed to list groups")

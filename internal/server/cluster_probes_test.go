@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -80,7 +80,7 @@ func (r *probeRequesterFake) Do(ctx context.Context, _ string, _ string, _ strin
 func TestSweepClusterProbesPagesEntireFleet(t *testing.T) {
 	q := &probeQuerierFake{clusters: probeClusterIDs(int(clusterProbePageSize) + 1)}
 	var cursor uuid.UUID
-	if err := sweepClusterProbes(context.Background(), slog.Default(), q, &probeRequesterFake{}, &cursor); err != nil {
+	if err := sweepClusterProbes(context.Background(), zerolog.Nop(), q, &probeRequesterFake{}, &cursor); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 	q.mu.Lock()
@@ -109,7 +109,7 @@ func TestFanOutClusterProbesIsBounded(t *testing.T) {
 	q := &probeQuerierFake{}
 	r := &probeRequesterFake{delay: 10 * time.Millisecond}
 	var cursor uuid.UUID
-	if err := fanOutClusterProbes(context.Background(), slog.Default(), q, r, clusters, &cursor); err != nil {
+	if err := fanOutClusterProbes(context.Background(), zerolog.Nop(), q, r, clusters, &cursor); err != nil {
 		t.Fatalf("fan out: %v", err)
 	}
 	if got, want := r.calls.Load(), int32(len(clusters)*2); got != want {
@@ -150,7 +150,7 @@ func TestClusterProbesResumeAfterSlowTickBeyondFirstPage(t *testing.T) {
 	for tick := 0; tick < total/clusterProbeConcurrency; tick++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
-		go func() { done <- sweepClusterProbes(ctx, slog.Default(), q, r, &cursor) }()
+		go func() { done <- sweepClusterProbes(ctx, zerolog.Nop(), q, r, &cursor) }()
 		for range clusterProbeConcurrency {
 			select {
 			case <-r.started:
@@ -170,7 +170,7 @@ func TestClusterProbesResumeAfterSlowTickBeyondFirstPage(t *testing.T) {
 	if len(r.seen) != total {
 		t.Fatalf("visited %d/%d clusters", len(r.seen), total)
 	}
-	if err := sweepClusterProbes(context.Background(), slog.Default(), q, &probeRequesterFake{}, &cursor); err != nil {
+	if err := sweepClusterProbes(context.Background(), zerolog.Nop(), q, &probeRequesterFake{}, &cursor); err != nil {
 		t.Fatal(err)
 	}
 	if cursor != uuid.Nil {

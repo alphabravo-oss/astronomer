@@ -4,13 +4,13 @@
 -- name: CreateDeliverySource :one
 INSERT INTO delivery_sources (
     project_id, name, description, source_type, url, auth_mode,
-    credential_encrypted, credential_key_version, credential_epoch,
-    ca_bundle_encrypted, proxy_ref, trust_policy, created_by, updated_by
+    credential_key_id, credential_algorithm, credential_ciphertext, credential_nonce, credential_key_version, credential_epoch,
+    ca_bundle_key_id, ca_bundle_algorithm, ca_bundle_ciphertext, ca_bundle_nonce, proxy_ref, trust_policy, created_by, updated_by
 ) VALUES (
     sqlc.arg(project_id), sqlc.arg(name), sqlc.arg(description),
     sqlc.arg(source_type), sqlc.arg(url), sqlc.arg(auth_mode),
-    sqlc.arg(credential_encrypted), sqlc.arg(credential_key_version),
-    sqlc.arg(credential_epoch), sqlc.arg(ca_bundle_encrypted),
+    sqlc.arg(credential_key_id), sqlc.arg(credential_algorithm), sqlc.arg(credential_ciphertext), sqlc.arg(credential_nonce), sqlc.arg(credential_key_version),
+    sqlc.arg(credential_epoch), sqlc.arg(ca_bundle_key_id), sqlc.arg(ca_bundle_algorithm), sqlc.arg(ca_bundle_ciphertext), sqlc.arg(ca_bundle_nonce),
     sqlc.arg(proxy_ref), sqlc.arg(trust_policy), sqlc.narg(created_by),
     sqlc.narg(updated_by)
 )
@@ -59,7 +59,10 @@ RETURNING id, project_id, name, description, source_type, url, auth_mode,
 -- name: RotateDeliverySourceCredential :one
 UPDATE delivery_sources
 SET auth_mode = sqlc.arg(auth_mode),
-    credential_encrypted = sqlc.arg(credential_encrypted),
+    credential_key_id = sqlc.arg(credential_key_id),
+    credential_algorithm = sqlc.arg(credential_algorithm),
+    credential_ciphertext = sqlc.arg(credential_ciphertext),
+    credential_nonce = sqlc.arg(credential_nonce),
     credential_key_version = sqlc.arg(credential_key_version),
     credential_epoch = credential_epoch + 1,
     status = 'pending',
@@ -73,7 +76,8 @@ RETURNING id, project_id, name, description, source_type, url, auth_mode,
 
 -- name: RevokeDeliverySource :one
 UPDATE delivery_sources
-SET credential_encrypted = '', credential_key_version = 0,
+SET credential_key_id = '', credential_algorithm = '', credential_ciphertext = NULL,
+    credential_nonce = NULL, credential_key_version = 0,
     credential_epoch = credential_epoch + 1, status = 'revoked',
     last_error_code = 'credential_revoked', updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id)
@@ -92,7 +96,10 @@ SET description = sqlc.arg(description),
     url = sqlc.arg(url),
     proxy_ref = sqlc.arg(proxy_ref),
     trust_policy = sqlc.arg(trust_policy),
-    ca_bundle_encrypted = CASE WHEN sqlc.arg(replace_ca_bundle)::boolean THEN sqlc.arg(ca_bundle_encrypted) ELSE ca_bundle_encrypted END,
+    ca_bundle_key_id = CASE WHEN sqlc.arg(replace_ca_bundle)::boolean THEN sqlc.arg(ca_bundle_key_id) ELSE ca_bundle_key_id END,
+    ca_bundle_algorithm = CASE WHEN sqlc.arg(replace_ca_bundle)::boolean THEN sqlc.arg(ca_bundle_algorithm) ELSE ca_bundle_algorithm END,
+    ca_bundle_ciphertext = CASE WHEN sqlc.arg(replace_ca_bundle)::boolean THEN sqlc.arg(ca_bundle_ciphertext) ELSE ca_bundle_ciphertext END,
+    ca_bundle_nonce = CASE WHEN sqlc.arg(replace_ca_bundle)::boolean THEN sqlc.arg(ca_bundle_nonce) ELSE ca_bundle_nonce END,
     updated_by = sqlc.narg(updated_by)
 WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id)
 RETURNING id, project_id, name, description, source_type, url, auth_mode,
@@ -264,8 +271,8 @@ RETURNING *;
 
 -- name: GetDeliverySourceResolutionWork :one
 SELECT r.*, s.project_id, s.name AS source_name, s.description AS source_description,
-	s.source_type, s.url, s.auth_mode, s.credential_encrypted,
-	s.credential_key_version, s.ca_bundle_encrypted, s.proxy_ref, s.trust_policy,
+	s.source_type, s.url, s.auth_mode, s.credential_key_id, s.credential_algorithm, s.credential_ciphertext, s.credential_nonce,
+	s.credential_key_version, s.ca_bundle_key_id, s.ca_bundle_algorithm, s.ca_bundle_ciphertext, s.ca_bundle_nonce, s.proxy_ref, s.trust_policy,
 	bv.renderer, bv.scope, bv.renderer_spec, bv.reconciliation_policy,
 	bv.requirements, bv.dependency_bundle_ids
 FROM delivery_source_resolutions r
@@ -720,7 +727,7 @@ SELECT d.*, t.project_id, bv.source_id, bv.renderer, bv.scope,
        bv.resolved_revision, bv.artifact_digest, bv.source_spec,
        COALESCE(d.desired_renderer_spec, bv.renderer_spec) AS renderer_spec, bv.reconciliation_policy,
        s.source_type, s.url, s.auth_mode, s.credential_epoch,
-       s.credential_encrypted, s.ca_bundle_encrypted,
+       s.credential_key_id, s.credential_algorithm, s.credential_ciphertext, s.credential_nonce, s.ca_bundle_key_id, s.ca_bundle_algorithm, s.ca_bundle_ciphertext, s.ca_bundle_nonce,
        s.trust_policy, s.proxy_ref
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id

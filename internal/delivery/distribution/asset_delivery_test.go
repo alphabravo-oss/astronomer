@@ -9,7 +9,7 @@ func TestSplitScannerDatabaseLocationsUseExactMirroredSubject(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("a", 64)
 	values := map[string]any{"dbRegistry": "vendor.example.test", "dbRepository": "distribution/assets/trivy-database@" + digest, "javaDbRegistry": "vendor.example.test", "javaDbRepository": "distribution/assets/trivy-java-database@" + digest}
 	locations := map[string]string{"vendor.example.test/distribution/assets/trivy-database@" + digest: "mirror.corp.local/release/db@" + digest, "vendor.example.test/distribution/assets/trivy-java-database@" + digest: "mirror.corp.local/release/java@" + digest}
-	projected, err := rewriteValues(values, locations)
+	projected, err := rewriteValues(values, exactTable(locations))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func TestSplitScannerDatabaseLocationsUseExactMirroredSubject(t *testing.T) {
 	}
 	for _, targets := range []map[string]string{{}, {"vendor.example.test/db@" + digest: "mirror.corp.local/db@sha256:" + strings.Repeat("b", 64)}} {
 		values := map[string]any{"dbRegistry": "vendor.example.test", "dbRepository": "db@" + digest}
-		if _, err := rewriteDatabaseLocations(values, targets); err == nil {
+		if _, err := rewriteDatabaseLocations(values, exactTable(targets)); err == nil {
 			t.Fatal("missing or changed database subject was rewritten")
 		}
 	}

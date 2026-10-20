@@ -20,9 +20,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -116,7 +116,7 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 	}
 	nodeName := strings.TrimSpace(chi.URLParam(r, "node_name"))
 	if nodeName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "node_name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "node_name is required")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -125,22 +125,22 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	caller := currentUserUUID(r)
 	if !caller.Valid || caller.Bytes == uuid.Nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Invalid caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Invalid caller")
 		return
 	}
 	if h == nil || h.nodeMutationRunTx == nil || h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable node mutation storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Durable node mutation storage is unavailable")
 		return
 	}
 	plain, err := json.Marshal(parameters)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid node operation parameters")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid node operation parameters")
 		return
 	}
 	defer zeroSensitiveBytes(plain)
-	encrypted, err := h.encryptor.Encrypt(string(plain))
+	encrypted, err := h.encryptor.Encrypt(plain)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Node operation encryption is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Node operation encryption is unavailable")
 		return
 	}
 	digestBytes := sha256.Sum256([]byte(strings.Join([]string{action, clusterID.String(), nodeName, string(plain)}, "\x00")))
@@ -152,7 +152,7 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 		operation, err = q.CreateNodeOperationIdempotent(r.Context(), sqlc.CreateNodeOperationIdempotentParams{
 			IdempotencyScope: scope, IdempotencyKey: key, RequestDigest: digest,
 			ClusterID: clusterID, NodeName: nodeName, Action: action,
-			ParametersEncrypted: encrypted, CreatedByID: caller,
+			ParametersKeyID: encrypted.KeyID, ParametersAlgorithm: encrypted.Algorithm, ParametersCiphertext: encrypted.Ciphertext, ParametersNonce: encrypted.Nonce, CreatedByID: caller,
 		})
 		if err != nil {
 			return err
@@ -178,16 +178,16 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 			})
 	})
 	if errors.Is(err, errNodeOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different node operation")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different node operation")
 		return
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "node_operations_active_target_idx" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Another node operation is already active for this target")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Another node operation is already active for this target")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist node operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "Failed to persist node operation")
 		return
 	}
 	location := "/api/v1/nodes/" + operation.ClusterID.String() + "/" + url.PathEscape(operation.NodeName) + "/operations/" + operation.ID.String() + "/"
@@ -196,39 +196,39 @@ func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Re
 
 func (h *ResourceHandler) GetNodeOperation(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.nodeOperations == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Node operation storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Node operation storage is unavailable")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid node operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid node operation ID")
 		return
 	}
 	operation, err := h.nodeOperations.GetNodeOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Node operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Node operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load node operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to load node operation")
 		return
 	}
 	clusterID, clusterErr := reqctx.ClusterID(r)
 	if clusterErr != nil || operation.ClusterID != clusterID || operation.NodeName != chi.URLParam(r, "node_name") {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Node operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Node operation not found")
 		return
 	}
 	if h.nodeOperationReadAuthorizer == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Node operation authorization is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Node operation authorization is unavailable")
 		return
 	}
 	allowed, authErr := h.nodeOperationReadAuthorizer(r.Context(), operation.ClusterID.String(), operation.Action)
 	if authErr != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to authorize node operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "Failed to authorize node operation")
 		return
 	}
 	if !allowed {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Node operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Node operation not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, nodeOperationResponse(operation))
@@ -236,18 +236,18 @@ func (h *ResourceHandler) GetNodeOperation(w http.ResponseWriter, r *http.Reques
 
 func (h *ResourceHandler) previewNodeDrain(w http.ResponseWriter, r *http.Request, clusterID, nodeName string, req drainNodeRequest) {
 	if h == nil || h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "Cluster tunnel requester is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, "Cluster tunnel requester is unavailable")
 		return
 	}
 	resp, err := h.requester.Do(r.Context(), clusterID, http.MethodGet,
 		"/api/v1/pods?fieldSelector=spec.nodeName="+url.QueryEscape(nodeName), nil, requestHeaders(""))
 	if err != nil || ensureSuccess(resp) != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.K8sError, "Unable to inspect pods on node")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.K8sError, "Unable to inspect pods on node")
 		return
 	}
 	var pods drainPodList
 	if parseJSONResponse(resp, &pods) != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.K8sError, "Unable to inspect pods on node")
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.K8sError, "Unable to inspect pods on node")
 		return
 	}
 	ignoreDaemonSets := true
@@ -300,12 +300,12 @@ func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 	var req drainNodeRequest
 	if r.Body != nil {
 		if err := decodeV1JSONBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
 	if req.GracePeriodSeconds != nil && *req.GracePeriodSeconds < -1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "grace_period_seconds must be -1 or greater")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "grace_period_seconds must be -1 or greater")
 		return
 	}
 	if req.DryRun {

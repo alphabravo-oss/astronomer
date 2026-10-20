@@ -36,7 +36,7 @@ func TestTargetRenderedPinsRetainLegacyRolesAndManagedAgentContract(t *testing.T
 	if err := targetManifestPins([]byte(raw.String()), manifest); err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range []string{"server", "worker", "migrate", "frontend", "shell"} {
+	for _, role := range []string{"server", "worker", "frontend", "shell"} {
 		for _, image := range manifest.Astronomer.Images {
 			if image.Name == role {
 				bad := strings.Replace(raw.String(), image.Reference, "changed.invalid/image", 1)

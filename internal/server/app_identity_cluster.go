@@ -4,19 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	jwtManager := c.jwtManager
@@ -35,7 +36,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	authHandler.SetPasswordRehasher(queries)
 	authHandler.SetRoleBindings(queries)
 	authHandler.SetAuditWriter(queries)
-	authHandler.SetLogger(logger)
+	authHandler.SetLogger(logging.Slog(logger))
 	// Auth hardening (migration 039): account lockout + JWT session revocation.
 	authHandler.SetLockoutQuerier(queries)
 	authHandler.SetRevocationQuerier(queries)
@@ -46,7 +47,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	configureSessionTimeoutPolicy(authHandler, jwtManager, queries, logger)
 	// Single sign-out (migration 054 / NIST 800-53 AC-12). Wired when
 	// the encryptor is available: the stored upstream id_token is
-	// Fernet-encrypted at rest, so without the key Logout has nothing
+	// age-sealed at rest, so without the key Logout has nothing
 	// to decrypt. The post_logout_redirect_uri is derived from the
 	// callback base URL — keeping it adjacent to the SSO redirect URI
 	// means the same dashboard hostname is registered with the IdP for
@@ -58,7 +59,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 		authHandler.SetPostLogoutRedirectURL(callbackBase + "/auth/logout-done/")
 	}
 
-	// 2FA / TOTP (migration 043). The handler needs the Fernet
+	// 2FA / TOTP (migration 043). The handler needs the age
 	// encryptor to wrap secrets at rest; without it we skip wiring so
 	// /auth/totp/* returns 503 not_configured if invoked. The Login
 	// gate degrades to the legacy password-only flow.
@@ -67,7 +68,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 		totpHandler = handler.NewTOTPHandler(queries, queries, encryptor, jwtManager)
 		totpHandler.SetRunTx(sqlcMutationTxRunner[handler.TOTPMutationTx](database))
 		totpHandler.SetIssuer(cfg.TOTPIssuer)
-		totpHandler.SetLogger(logger)
+		totpHandler.SetLogger(logging.Slog(logger))
 		totpHandler.SetPasswordRehasher(queries)
 		totpHandler.SetRequireAll(cfg.TOTPRequire)
 		totpHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
@@ -84,7 +85,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 				return false // setting never written -> documented default
 			}
 			if err != nil {
-				logger.Error("totp.required policy read failed; failing closed (enforcing MFA)", "error", err)
+				logger.Error().Err(err).Msg("totp.required policy read failed; failing closed (enforcing MFA)")
 				return true // transient/unknown DB error -> enforce, do not bypass
 			}
 			var v bool
@@ -125,7 +126,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	dexHandler.SetRunTx(sqlcMutationTxRunner[handler.DexMutationTx](database))
 	dexHandler.SetEncryptor(encryptor)
 	dexHandler.SetK8sRequester(requester)
-	dexHandler.SetLogger(logger)
+	dexHandler.SetLogger(logging.Slog(logger))
 
 	clusterHandler := handler.NewClusterHandler(queries)
 	clusterHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterMutationTx](database))
@@ -135,6 +136,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentDisconnector(hub)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
+	clusterHandler.SetImageRegistry(cfg.RegistryLocal)
 	clusterHandler.SetAgentTelemetry(cfg.AgentOTELExporterEndpoint, cfg.AgentOTELExporterInsecure, cfg.AgentOTELSamplerRatio, cfg.Env)
 	clusterHandler.SetDeliverySystemBootstrapKeys(
 		cfg.DeliveryFluxDistributionRepository,

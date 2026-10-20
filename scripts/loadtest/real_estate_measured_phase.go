@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 type estatePhaseTotals struct {
@@ -87,7 +89,7 @@ func runMeasuredEstatePhase(parent context.Context, c *config, m estateManifest,
 		recorder := newEstateRequestRecorder(catalog)
 		if len(catalog) > 0 {
 			cfg.workloadRequest = func(reqCtx context.Context, index uint64) {
-				i := int(index % uint64(len(catalog)))
+				i := safeconv.Int(index % uint64(len(catalog)))
 				if failure := doEstateRequest(reqCtx, client, c.server, token, catalog[i], i, recorder); failure != "" && spec.Mode == "search" {
 					cancel()
 				}

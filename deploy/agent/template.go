@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
+	"github.com/alphabravocompany/astronomer-go/internal/registry"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -60,6 +61,10 @@ type InstallTemplateData struct {
 	OTELInsecure     bool
 	OTELSamplerRatio string
 	Environment      string
+	// ImageRegistry is REGISTRY_LOCAL. When set, the embedded Flux controller
+	// images are re-hosted onto it (digests unchanged), like every other
+	// runtime reference the management plane renders.
+	ImageRegistry string
 }
 
 // CAChecksumFromPEM computes the Rancher CATTLE_CA_CHECKSUM-style pin for a CA
@@ -85,7 +90,28 @@ func CAChecksumFromPEM(caPEM string) string {
 }
 
 func RenderInstallYAML(data InstallTemplateData) string {
-	return fluxdistribution.InstallYAML() + "\n" + RenderAgentYAML(data)
+	return rehostImages(fluxdistribution.InstallYAML(), data.ImageRegistry) + "\n" + RenderAgentYAML(data)
+}
+
+// rehostImages rewrites every `image:` line of manifest onto local with
+// registry.Rehost. An empty local (online profile) leaves it unchanged.
+func rehostImages(manifest, local string) string {
+	if local == "" {
+		return manifest
+	}
+	lines := strings.Split(manifest, "\n")
+	for index, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		ref, found := strings.CutPrefix(trimmed, "image: ")
+		if !found {
+			continue
+		}
+		ref = strings.Trim(ref, "\"'")
+		if rehosted, err := registry.Rehost(ref, local); err == nil {
+			lines[index] = line[:len(line)-len(strings.TrimLeft(line, " "))] + "image: " + rehosted
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // RenderAgentYAML returns the repeat-apply portion of the bootstrap manifest.

@@ -1,9 +1,10 @@
+//go:build integration
+
 package sqlc
 
 import (
 	"context"
 	"crypto/sha256"
-	"os"
 	"sort"
 	"sync"
 	"testing"
@@ -12,13 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func TestRefreshSessionConcurrentRotationAndReplayRevokesFamily(t *testing.T) {
-	dsn := os.Getenv("REFRESH_SESSION_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("REFRESH_SESSION_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {

@@ -58,6 +58,7 @@ func waitSecurity(t *testing.T, timeout time.Duration, condition func() bool) {
 }
 
 func TestDistributedJWTAndRBACInvalidationAcrossReplicas(t *testing.T) {
+	t.Parallel()
 	mini := miniredis.RunT(t)
 	clientA := redis.NewClient(&redis.Options{Addr: mini.Addr()})
 	clientB := redis.NewClient(&redis.Options{Addr: mini.Addr()})
@@ -161,6 +162,7 @@ func TestDistributedJWTAndRBACInvalidationAcrossReplicas(t *testing.T) {
 }
 
 func TestRedisDisconnectBypassesPrimedJWTAndRBACCaches(t *testing.T) {
+	t.Parallel()
 	mini := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mini.Addr(), DialTimeout: 50 * time.Millisecond, ReadTimeout: 50 * time.Millisecond, MaxRetries: 0})
 	t.Cleanup(func() { _ = client.Close() })

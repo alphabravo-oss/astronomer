@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 // Empty bodies retain documented defaults; malformed bodies never do.
@@ -19,7 +19,7 @@ func decodeOptionalJSON[T any](w http.ResponseWriter, r *http.Request, out *T) b
 		return true
 	}
 	if err != nil || decoded == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return false
 	}
 	*out = *decoded

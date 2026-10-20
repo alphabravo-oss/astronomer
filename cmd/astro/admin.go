@@ -14,6 +14,8 @@
 //   backup-drill
 //   shell-sessions           list
 //   agents                   posture
+//   rotate-keys              (direct PostgreSQL; re-encrypt sealed columns)
+//   generate-encryption-key
 //
 // Request bodies for create/update/test operations are accepted as raw
 // JSON via --data (or --data @file / --data - for stdin). The SDK exposes
@@ -63,6 +65,8 @@ selected by the global -o/--output flag (table|json|yaml).`,
 		newAdminBackupDrillCmd(),
 		newAdminShellSessionsCmd(),
 		newAdminAgentsCmd(),
+		newAdminRotateKeysCmd(),
+		newAdminGenerateEncryptionKeyCmd(),
 	)
 	return cmd
 }

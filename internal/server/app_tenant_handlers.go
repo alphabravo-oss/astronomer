@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -15,9 +15,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	jwtManager := c.jwtManager
@@ -37,7 +38,7 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 		return fmt.Errorf("parse REDIS_URL: %w", redisErr)
 	}
 	queue := asynq.NewClient(redisOpt)
-	taskLeader, leaderErr := leader.NewDedicated(ctx, database.Pool(), logger)
+	taskLeader, leaderErr := leader.NewDedicated(ctx, database.Pool(), logging.Slog(logger))
 	if leaderErr != nil {
 		return leaderErr
 	}
@@ -46,13 +47,13 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	securityTarget := securityCacheTarget{jwt: jwtManager, rbac: rbacQuerier.Cache()}
 	if redisClient, ok := redisOpt.MakeRedisClient().(redis.UniversalClient); ok && redisClient != nil {
 		runtimeRedisClient = redisClient
-		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logger)
+		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logging.Slog(logger))
 	} else if cfg.ServerReplicas > 1 {
-		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logger)
-		logger.Error("distributed security cache invalidation is unavailable in a multi-replica deployment")
+		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logging.Slog(logger))
+		logger.Error().Msg("distributed security cache invalidation is unavailable in a multi-replica deployment")
 	} else {
-		securityCacheCoordinator = cacheinvalidate.NewLocalOnly(securityTarget, cfg.ProcessHostname, logger)
-		logger.Warn("distributed security cache invalidation is disabled; using local-only caches")
+		securityCacheCoordinator = cacheinvalidate.NewLocalOnly(securityTarget, cfg.ProcessHostname, logging.Slog(logger))
+		logger.Warn().Msg("distributed security cache invalidation is disabled; using local-only caches")
 	}
 	jwtManager.SetCacheInvalidationCoordinator(securityCacheCoordinator)
 	if securityTarget.rbac != nil {
@@ -62,7 +63,7 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 		Queries: queries,
 		K8s:     requester,
 		Outbox:  queries,
-		Log:     logger,
+		Log:     logging.Slog(logger),
 		Bus:     bus,
 	}, Leader: taskLeader}
 	// Phase B3 — project enforcement controller. Namespace mutations persist
@@ -74,7 +75,7 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	projectHandler.SetEncryptor(encryptor)
 	projectHandler.SetTaskOutbox(queries)
 	projectHandler.SetK8sRequester(requester)
-	projectHandler.SetLogger(logger)
+	projectHandler.SetLogger(logging.Slog(logger))
 	// MUST be set: project_namespaces feeds the synthetic namespace-scoped
 	// bindings, so an add/remove-namespace that does not flush this cache leaves
 	// a revoked namespace authorizing reads until the entry expires on its own.

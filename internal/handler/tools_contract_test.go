@@ -26,7 +26,7 @@ func TestCertManagerToolMigrationContract(t *testing.T) {
 	if !ok {
 		t.Fatal("failed to resolve caller path")
 	}
-	path := filepath.Join(filepath.Dir(file), "..", "db", "migrations", "001_initial.up.sql")
+	path := filepath.Join(filepath.Dir(file), "..", "db", "migrations", "00001_initial.sql")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read migration: %v", err)

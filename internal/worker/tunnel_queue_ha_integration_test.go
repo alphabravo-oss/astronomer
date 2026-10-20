@@ -1,3 +1,5 @@
+//go:build integration
+
 package worker
 
 import (
@@ -30,6 +32,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 type diagnosticK8sRequester struct{ inner handler.K8sRequester }
@@ -58,13 +62,10 @@ const (
 // TestTunnelQueueHAIntegration is opt-in because it flushes a dedicated Redis
 // database. scripts/test-tunnel-queue-ha.sh creates disposable dependencies.
 func TestTunnelQueueHAIntegration(t *testing.T) {
-	databaseURL, redisURL := os.Getenv(haDatabaseEnv), os.Getenv(haRedisEnv)
-	if databaseURL == "" || redisURL == "" {
-		t.Skip("run scripts/test-tunnel-queue-ha.sh")
-	}
-	if os.Getenv("ASTRONOMER_TUNNEL_HA_TEST_ALLOW_DESTRUCTIVE") != "1" {
-		t.Fatal("refusing to flush Redis without the dedicated-database guard")
-	}
+	t.Parallel()
+	// Both backends are disposable containers owned by this test, so flushing
+	// Redis is safe.
+	databaseURL, redisURL := testdb.DSN(t), testdb.Redis(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -96,7 +97,6 @@ func TestTunnelQueueHAIntegration(t *testing.T) {
 	agentToken := "tunnel-ha-agent-" + uuid.NewString()
 	if _, err := queries.UpsertClusterAgentToken(ctx, sqlc.UpsertClusterAgentTokenParams{
 		ClusterID: clusterID,
-		Token:     agentToken,
 		TokenHash: auth.HashOpaqueToken(agentToken),
 	}); err != nil {
 		t.Fatal(err)
@@ -252,6 +252,7 @@ func stopHAHelper(h *haHelper) {
 // isolated OS process, so owner termination cannot be confused with goroutine
 // cancellation in the test process.
 func TestTunnelQueueHAHelperProcess(t *testing.T) {
+	t.Parallel()
 	role := os.Getenv("ASTRONOMER_TUNNEL_HA_HELPER_ROLE")
 	if role == "" {
 		t.Skip("helper process only")

@@ -32,7 +32,6 @@ INGRESS_NGINX_VERSION="${INGRESS_NGINX_VERSION:-4.15.1}"
 IMG_SERVER="${IMG_SERVER:-dd-53367c3}"
 IMG_WORKER="${IMG_WORKER:-dd-53367c3}"
 IMG_FRONTEND="${IMG_FRONTEND:-dd-2de57b1}"
-IMG_MIGRATE="${IMG_MIGRATE:-dd-4caf792}"
 IMG_AGENT="${IMG_AGENT:-f03fcf5-k3sfix}"
 
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -122,13 +121,12 @@ import_img(){ docker save "$1" | k3s ctr images import - >/dev/null && echo "  i
 import_img "astronomer-go-server:${IMG_SERVER}"
 import_img "astronomer-go-worker:${IMG_WORKER}"
 import_img "astronomer-frontend:${IMG_FRONTEND}"
-import_img "astronomer-go-migrate:${IMG_MIGRATE}"
 import_img "astronomer-go-agent:${IMG_AGENT}"
 
-# ── 5. Astronomer (fresh helm install; migrate.enabled=true runs all migrations) ─
+# ── 5. Astronomer (fresh helm install; the server applies migrations at boot) ─
 log "helm install astronomer"
 # The chart ships no default key material (it used to default to a JWT signing
-# key and Fernet key published in this repository), so the authoritative values
+# key and encryption key published in this repository), so the authoritative values
 # file carrying secrets.secretKey / secrets.encryptionKey — or a pre-created
 # Secret referenced by secrets.existingSecret — is now mandatory, not optional.
 if [[ ! -f "$VALUES" ]]; then
@@ -143,10 +141,8 @@ helm upgrade --install astronomer "${REPO_DIR}/deploy/chart" \
   --set image.pullPolicy=IfNotPresent \
   --set image.server.tag="${IMG_SERVER}" \
   --set image.worker.tag="${IMG_WORKER}" \
-  --set image.migrate.tag="${IMG_MIGRATE}" \
   --set image.agent.tag="${IMG_AGENT}" \
   --set frontend.image.tag="${IMG_FRONTEND}" \
-  --set migrate.enabled=true \
   --set ingress.enabled=true --set ingress.className=nginx --set ingress.host="${HOST}" \
   --set-string "config.trustedProxyCIDRs[0]=${POD_CIDR}" \
   --set tls.source=secret --set tls.secretName=astronomer-tls \

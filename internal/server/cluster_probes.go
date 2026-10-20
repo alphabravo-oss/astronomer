@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -43,8 +43,8 @@ type clusterProbeQuerier interface {
 // (AgentReachable, GatewayAPISupported) from the server process. These require
 // the tunnel-backed K8sRequester which only the server has. It is owned and
 // joined by the server runtime instead of starting an untracked goroutine.
-func runClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
-	if logger == nil || queries == nil || requester == nil {
+func runClusterProbeReconciler(ctx context.Context, logger zerolog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
+	if queries == nil || requester == nil {
 		return
 	}
 	// Short initial delay so the first sweep doesn't race tunnel registration
@@ -62,7 +62,7 @@ func runClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries
 	for {
 		runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		if err := sweepClusterProbes(runCtx, logger, queries, requester, &cursor); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			logger.Warn("cluster probe sweep failed", "error", err)
+			logger.Warn().Err(err).Msg("cluster probe sweep failed")
 		}
 		cancel()
 		select {
@@ -73,7 +73,7 @@ func runClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries
 	}
 }
 
-func sweepClusterProbes(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, cursor *uuid.UUID) error {
+func sweepClusterProbes(ctx context.Context, logger zerolog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, cursor *uuid.UUID) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -94,7 +94,7 @@ func sweepClusterProbes(ctx context.Context, logger *slog.Logger, queries cluste
 	}
 }
 
-func fanOutClusterProbes(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, clusters []uuid.UUID, cursor *uuid.UUID) error {
+func fanOutClusterProbes(ctx context.Context, logger zerolog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, clusters []uuid.UUID, cursor *uuid.UUID) error {
 	sem := make(chan struct{}, clusterProbeConcurrency)
 	var wg sync.WaitGroup
 	for _, clusterID := range clusters {
@@ -124,7 +124,7 @@ func fanOutClusterProbes(ctx context.Context, logger *slog.Logger, queries clust
 	return ctx.Err()
 }
 
-func probeOne(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, clusterID uuid.UUID) {
+func probeOne(ctx context.Context, logger zerolog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, clusterID uuid.UUID) {
 	// Positive machine-origin marker: this is a background health probe with no
 	// human anywhere near it (design doc §10.5, agent lifecycle / health). It is
 	// stamped rather than left to fall through as "no user", because §7
@@ -138,8 +138,7 @@ func probeOne(ctx context.Context, logger *slog.Logger, queries clusterProbeQuer
 			Reason:    reason,
 			Message:   message,
 		}); err != nil {
-			logger.Warn("upsert cluster condition failed",
-				"cluster_id", clusterID.String(), "type", condType, "error", err)
+			logger.Warn().Str("cluster_id", clusterID.String()).Str("type", condType).Err(err).Msg("upsert cluster condition failed")
 		}
 	}
 

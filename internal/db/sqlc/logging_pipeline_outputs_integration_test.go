@@ -1,22 +1,23 @@
+//go:build integration
+
 package sqlc
 
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted(t *testing.T) {
-	dsn := os.Getenv("AUDIT_OUTBOX_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("AUDIT_OUTBOX_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {

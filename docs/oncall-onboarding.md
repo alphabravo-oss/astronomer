@@ -96,7 +96,7 @@ objects, rollout rows, generation counters, or agent checkpoints by hand.
 ## Common runbooks
 
 - `docs/management-plane-dr-runbook.md` — restore from pg_dump
-- `docs/secret-rotation-runbook.md` — Fernet / JWT / agent token rotation
+- `docs/secret-rotation-runbook.md` — age encryption key / JWT / agent token rotation
 - `docs/upgrade-runbook.md` — `helm upgrade` + `helm rollback`
 - `docs/verify-images.md` — cosign + SBOM verification (when CI is enabled)
 
@@ -116,7 +116,7 @@ respond to real incidents.
 - **`kubectl edit` on a Helm-managed management-plane resource.** It may work
   for the current pod cycle but the next signed Helm upgrade will replace it.
   Change the reviewed values file and use `scripts/upgrade-release.sh`.
-- **The Fernet `secrets.encryptionKey` without following the runbook.**
+- **The age `secrets.encryptionKey` without following the runbook.**
   Rotating it without the multi-key transition makes every encrypted
   column unreadable.
 

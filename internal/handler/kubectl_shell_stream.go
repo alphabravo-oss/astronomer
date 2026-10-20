@@ -7,9 +7,9 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -94,7 +94,7 @@ func (h *KubectlShellHandler) SetExecProxy(p ExecProxy) {
 // exec relay implementation; this path only adds the session lookup.
 func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	if h.Queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell is not configured")
 		return
 	}
 	// WS upgrade requests come from browsers that can't set Authorization
@@ -103,7 +103,7 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		clusterID, _ := reqctx.ClusterID(r)
 		userID, ok := auth.AuthorizeStreamRequestWithTickets(r, h.TokenQueries, h.JWT, h.StreamTickets, auth.StreamKindShell, clusterID)
 		if !ok {
-			RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+			apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 			return
 		}
 		// Inject the resolved user into the request context so
@@ -118,7 +118,7 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if row.Status != "active" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SessionNotActive, "Session is not active")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.SessionNotActive, "Session is not active")
 		return
 	}
 	// Stamp last_input_at — even just opening the WS counts as "engaged".
@@ -128,14 +128,14 @@ func (h *KubectlShellHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		// Boot ordering bug — the server wiring forgot to call
 		// SetExecProxy. Surface a clear 503 instead of silently 200ing
 		// a WS that goes nowhere.
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell exec proxy is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell exec proxy is not configured")
 		return
 	}
 
 	// Recheck current authorization before upgrading an existing session.
 	wsScope, ok := h.deriveScopeForCaller(r.Context(), row.UserID, row.ClusterID, kubectl.EffectiveVerbs{Read: true, Update: true, Delete: true})
 	if !ok {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Kubectl shell scope could not be determined for the caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Kubectl shell scope could not be determined for the caller")
 		return
 	}
 

@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type fakeOnboardingStore struct {
@@ -180,8 +180,8 @@ func TestOnboardingConsumerRollsBackRetriesAndReplaysIdempotently(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, _ := auth.GenerateKey()
-	encryptor, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	encryptor, _ := crypto.NewEncryptor(key)
 	store := &fakeOnboardingStore{installationID: uuid.MustParse("3c608d44-848c-45d6-bd86-246be0b880af"), failAdvance: 2}
 	events := []string{}
 	secrets := &fakeAgentSecretWriter{events: &events}
@@ -260,8 +260,8 @@ func TestOnboardingAuditFailureCreatesNoStateOrExternalMaterial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, _ := auth.GenerateKey()
-	encryptor, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	encryptor, _ := crypto.NewEncryptor(key)
 	store := &fakeOnboardingStore{installationID: uuid.New()}
 	events := []string{}
 	consumer := &OnboardingConsumer{

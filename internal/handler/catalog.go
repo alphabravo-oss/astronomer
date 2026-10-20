@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 
@@ -15,7 +17,6 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
@@ -175,9 +176,8 @@ type CatalogHandler struct {
 	vaultResolver *avault.Resolver
 	bus           *events.Bus
 	// encryptor seals/unseals helm_repositories.auth_config (migration 145).
-	// Legacy plaintext rows remain readable for migration, but every new
-	// credential-bearing write fails closed when this dependency is absent.
-	encryptor *auth.Encryptor
+	// Every credential-bearing write fails closed when this dependency is absent.
+	encryptor *crypto.Encryptor
 	runTx     catalogRunTxFunc
 	// chartHydration collapses concurrent README/values cache misses for the
 	// same immutable chart version. The durable row remains the cache; this

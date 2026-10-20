@@ -27,7 +27,7 @@ retries then drops. BYO sinks are independent. Metrics scrape is unaffected.
      not a banner.
 
 2. **Hash Secret vs member Secret.** List APIs never return the bearer.
-   Re-render is Fernet `token_encrypted` → member Secret
+   Re-render is the age-sealed `token_*` family → member Secret
    `astronomer-loki-ingest-token` mounted at
    `/var/run/astronomer/loki-ingest/token`. A rotate without waiting for
    the logging reconciler leaves members on the old token (`unauth`).

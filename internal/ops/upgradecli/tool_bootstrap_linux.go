@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"errors"
 	"os"
 	"path/filepath"
@@ -75,7 +77,7 @@ func privateBootstrapDirectory(directory string) error {
 		return errors.New("absolute private bootstrap directory required")
 	}
 	current, err := os.Lstat(directory)
-	if err != nil || !current.IsDir() || current.Mode().Perm() != 0700 || current.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !current.IsDir() || current.Mode().Perm() != 0700 || current.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return errors.New("owned private bootstrap directory required")
 	}
 	resolved, err := filepath.EvalSymlinks(directory)

@@ -3,19 +3,21 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // TestGitOpsUpdate_EncryptsNewAuthAtRest is the regression for the
 // "Update stores new git auth token in plaintext" bug. When an encryptor is
 // wired and a PUT supplies a fresh (non-sentinel) credential, the value
-// written to auth_encrypted must be Fernet ciphertext that decrypts back to
+// written to auth_* sealed must be age ciphertext that decrypts back to
 // the supplied cleartext — never the cleartext itself.
 func TestGitOpsUpdate_EncryptsNewAuthAtRest(t *testing.T) {
 	callerID := uuid.New()
@@ -23,18 +25,18 @@ func TestGitOpsUpdate_EncryptsNewAuthAtRest(t *testing.T) {
 	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
 	id := uuid.New()
 	q.sources[id] = sqlc.GitopsRegistrationSource{
-		ID:                  id,
-		Name:                "demo",
-		RepoUrl:             "https://example/demo",
-		Branch:              "main",
-		AuthMode:            "https_token",
-		AuthEncrypted:       "original-secret",
+		ID:        id,
+		Name:      "demo",
+		RepoUrl:   "https://example/demo",
+		Branch:    "main",
+		AuthMode:  "https_token",
+		AuthKeyID: "test-key", AuthAlgorithm: crypto.AlgorithmAgeX25519, AuthCiphertext: []byte("original-secret"),
 		SyncMode:            "interval",
 		SyncIntervalSeconds: 60,
 		OnDelete:            "log",
 		Enabled:             true,
 	}
-	enc, err := auth.NewEncryptor(mustKey(t))
+	enc, err := crypto.NewEncryptor(mustKey(t))
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
@@ -60,16 +62,16 @@ func TestGitOpsUpdate_EncryptsNewAuthAtRest(t *testing.T) {
 		t.Fatalf("update status = %d, body=%s", w.Code, w.Body.String())
 	}
 
-	stored := q.sources[id].AuthEncrypted
-	if stored == freshPAT {
-		t.Fatalf("auth stored in PLAINTEXT on update; expected Fernet ciphertext")
+	stored := crypto.FromParts(q.sources[id].AuthKeyID, q.sources[id].AuthAlgorithm, q.sources[id].AuthCiphertext, q.sources[id].AuthNonce)
+	if strings.Contains(string(stored.Ciphertext), freshPAT) {
+		t.Fatalf("auth stored in PLAINTEXT on update; expected age ciphertext")
 	}
-	if stored == "" {
+	if stored.IsZero() {
 		t.Fatalf("auth blob unexpectedly empty")
 	}
-	plain, derr := enc.Decrypt(stored)
+	plain, derr := enc.DecryptString(stored)
 	if derr != nil {
-		t.Fatalf("stored auth is not valid Fernet ciphertext: %v", derr)
+		t.Fatalf("stored auth is not valid age ciphertext: %v", derr)
 	}
 	if plain != freshPAT {
 		t.Fatalf("decrypted auth = %q, want %q", plain, freshPAT)
@@ -85,18 +87,18 @@ func TestGitOpsUpdate_SentinelStillPreservesWithEncryptor(t *testing.T) {
 	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
 	id := uuid.New()
 	q.sources[id] = sqlc.GitopsRegistrationSource{
-		ID:                  id,
-		Name:                "demo",
-		RepoUrl:             "https://example/demo",
-		Branch:              "main",
-		AuthMode:            "https_token",
-		AuthEncrypted:       "already-ciphertext",
+		ID:        id,
+		Name:      "demo",
+		RepoUrl:   "https://example/demo",
+		Branch:    "main",
+		AuthMode:  "https_token",
+		AuthKeyID: "test-key", AuthAlgorithm: crypto.AlgorithmAgeX25519, AuthCiphertext: []byte("already-ciphertext"),
 		SyncMode:            "interval",
 		SyncIntervalSeconds: 60,
 		OnDelete:            "log",
 		Enabled:             true,
 	}
-	enc, err := auth.NewEncryptor(mustKey(t))
+	enc, err := crypto.NewEncryptor(mustKey(t))
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
@@ -120,14 +122,14 @@ func TestGitOpsUpdate_SentinelStillPreservesWithEncryptor(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("update status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if got := q.sources[id].AuthEncrypted; got != "already-ciphertext" {
-		t.Fatalf("sentinel must preserve stored blob; got %q", got)
+	if got := crypto.FromParts(q.sources[id].AuthKeyID, q.sources[id].AuthAlgorithm, q.sources[id].AuthCiphertext, q.sources[id].AuthNonce); string(got.Ciphertext) != "already-ciphertext" {
+		t.Fatalf("sentinel must preserve stored blob; got %q", got.Ciphertext)
 	}
 }
 
 func mustKey(t *testing.T) string {
 	t.Helper()
-	k, err := auth.GenerateKey()
+	k, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}

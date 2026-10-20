@@ -10,17 +10,17 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 const (
@@ -28,15 +28,6 @@ const (
 	maxPageLimit     = 200
 	maxRequestBytes  = 1 << 20
 )
-
-type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-type errorEnvelope struct {
-	Error apiError `json:"error"`
-}
 
 type dataEnvelope struct {
 	Data any `json:"data"`
@@ -53,35 +44,15 @@ func respondData(w http.ResponseWriter, status int, value any) {
 	writeJSON(w, status, dataEnvelope{Data: value})
 }
 
-func respondError(w http.ResponseWriter, status int, code, message string) {
-	observability.RecordRequestError("", status)
-	writeJSON(w, status, errorEnvelope{Error: apiError{Code: code, Message: message}})
-}
-
-func respondDatabaseError(w http.ResponseWriter, err error) {
+// respondDatabaseError translates a persistence or audit failure. Audit
+// outbox unavailability is delivery-specific; everything else goes through
+// the shared apiutil classification (pgx/pgconn → catalog, else Internal).
+func respondDatabaseError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, audit.ErrOutboxUnavailable) {
-		respondError(w, http.StatusServiceUnavailable, "audit_unavailable", "mandatory audit storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "mandatory audit storage is unavailable")
 		return
 	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		respondError(w, http.StatusNotFound, "not_found", "delivery resource not found")
-		return
-	}
-	var postgresError *pgconn.PgError
-	if errors.As(err, &postgresError) {
-		switch postgresError.Code {
-		case "23505":
-			respondError(w, http.StatusConflict, "conflict", "a delivery resource with that identity already exists")
-			return
-		case "23503", "23001":
-			respondError(w, http.StatusConflict, "resource_in_use", "delivery resource is still referenced")
-			return
-		case "23514", "22001", "22P02":
-			respondError(w, http.StatusBadRequest, "validation_error", "delivery resource failed persistence validation")
-			return
-		}
-	}
-	respondError(w, http.StatusInternalServerError, "internal_error", "delivery operation failed")
+	apiutil.Respond(w, r, err)
 }
 
 type deliveryAuditEvent struct {
@@ -205,7 +176,7 @@ func parsePagination(r *http.Request) (limit, offset int32, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	return int32(limitValue), int32(offsetValue), nil
+	return safeconv.Int32(limitValue), safeconv.Int32(offsetValue), nil
 }
 
 func boundedQueryInteger(values url.Values, name string, fallback, minimum, maximum int) (int, error) {

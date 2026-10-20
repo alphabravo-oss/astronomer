@@ -5,11 +5,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -51,7 +55,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		}) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidChallenge, "Challenge token is invalid or expired")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidChallenge, "Challenge token is invalid or expired")
 		return
 	}
 	if claims.TokenType != auth.PurposeToken || claims.Purpose != auth.PurposeTOTPChallenge {
@@ -60,18 +64,18 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		}) {
 			return
 		}
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidChallenge, "Challenge token is not a TOTP challenge")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.InvalidChallenge, "Challenge token is not a TOTP challenge")
 		return
 	}
 	userID := claims.UserID
 
 	user, err := h.users.GetUserByID(r.Context(), userID)
 	if err != nil || !user.IsActive {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 	if user.LockedUntil.Valid && user.LockedUntil.Time.After(time.Now()) {
-		RespondRequestError(w, r, http.StatusLocked, apierror.AccountLocked, "Account is temporarily locked. Try again later or contact an administrator.")
+		apiutil.WriteError(w, r, http.StatusLocked, apiutil.AccountLocked, "Account is temporarily locked. Try again later or contact an administrator.")
 		return
 	}
 
@@ -79,13 +83,13 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Race: user disabled TOTP after the challenge was issued.
 		// Reject — the client should restart the login.
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.NotEnrolled, "TOTP is not enabled for this account")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.NotEnrolled, "TOTP is not enabled for this account")
 		return
 	}
-	secret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
+	secret, err := h.encryptor.DecryptString(crypto.FromParts(enrollment.SecretKeyID, enrollment.SecretAlgorithm, enrollment.SecretCiphertext, enrollment.SecretNonce))
 	if err != nil {
 		h.log.Warn("totp decrypt failed", "user_id", userID.String(), "error", err)
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Stored secret could not be read")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Stored secret could not be read")
 		return
 	}
 
@@ -103,7 +107,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	// acquiring transaction locks. Signing and publication follow commit.
 	session, err := h.jwt.PrepareTokenPairContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to prepare session")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TokenError, "Failed to prepare session")
 		return
 	}
 	var locked, inactive, newlyLocked bool
@@ -170,11 +174,11 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if locked {
-		RespondRequestError(w, r, http.StatusLocked, apierror.AccountLocked, "Account is temporarily locked. Try again later or contact an administrator.")
+		apiutil.WriteError(w, r, http.StatusLocked, apiutil.AccountLocked, "Account is temporarily locked. Try again later or contact an administrator.")
 		return
 	}
 	if inactive {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid credentials")
 		return
 	}
 	if !verified {
@@ -182,13 +186,13 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 			auth.AccountLockoutsTotal.WithLabelValues(observability.MetricValues(auth.LockoutReasonTooManyFailedAttempts)...).Inc()
 		}
 		auth.TOTPVerifiesTotal.WithLabelValues(observability.MetricValues("failed")...).Inc()
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid TOTP or recovery code")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid TOTP or recovery code")
 		return
 	}
 	h.jwt.InvalidateJTI(r.Context(), claims.ID)
 	accessToken, refreshToken, err := h.jwt.SignPreparedTokenPair(userID, session)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TokenError, "Failed to generate session")
 		return
 	}
 	outcome := "success"
@@ -206,7 +210,7 @@ func (h *TOTPHandler) recordFailedTOTPAttempt(ctx context.Context, q TOTPMutatio
 	now := time.Now().UTC()
 	updated, err := q.RecordFailedLoginAttempt(ctx, sqlc.RecordFailedLoginAttemptParams{
 		ID: user.ID, FailedLoginAt: pgtype.Timestamptz{Time: now, Valid: true},
-		LockoutThreshold: int32(threshold), LockedUntil: pgtype.Timestamptz{Time: now.Add(duration), Valid: true},
+		LockoutThreshold: safeconv.Int32(threshold), LockedUntil: pgtype.Timestamptz{Time: now.Add(duration), Valid: true},
 		LockedReason: auth.LockoutReasonTooManyFailedAttempts,
 	})
 	return err == nil && updated.LockedUntil.Valid && updated.LockedUntil.Time.After(now), err

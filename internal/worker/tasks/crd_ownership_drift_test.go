@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/lifecycle"
 )
 
 type fakeCRDOwnershipDriftQuerier struct {
@@ -54,8 +54,8 @@ func TestCRDOwnershipDriftCheckMarksPresentClusterCR(t *testing.T) {
 	row := crdOwnedClusterRow(clusterID, "platform", "prod-east")
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   crd.GroupVersion.Group,
-		Version: crd.GroupVersion.Version,
+		Group:   lifecycle.GroupVersion.Group,
+		Version: lifecycle.GroupVersion.Version,
 		Kind:    "Cluster",
 	})
 	obj.SetNamespace("platform")
@@ -82,7 +82,7 @@ func crdOwnedClusterRow(id uuid.UUID, namespace, name string) sqlc.FleetOwnershi
 	return sqlc.FleetOwnership{
 		ID:                    id,
 		ManagedBy:             "crd",
-		ExternalRefApiVersion: crd.GroupVersion.String(),
+		ExternalRefApiVersion: lifecycle.GroupVersion.String(),
 		ExternalRefKind:       "Cluster",
 		ExternalRefNamespace:  namespace,
 		ExternalRefName:       name,

@@ -29,8 +29,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *DexHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
@@ -41,12 +41,12 @@ func (h *DexHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	clients, row, err := h.loadPublicClients(r.Context(), row)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Dex static-client secrets are unavailable")
 		return
 	}
 	response, err := settingsResponse(row, clients)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SettingsError, "Stored Dex settings are invalid and must be repaired")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SettingsError, "Stored Dex settings are invalid and must be repaired")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)
@@ -56,25 +56,25 @@ func (h *DexHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req settingsRequest
 	if err := decodeDexRequest(r.Body, &req, false); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.IssuerURL) == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingIssuer, "issuer_url is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MissingIssuer, "issuer_url is required")
 		return
 	}
 	if err := validateCanonicalDexURL(req.IssuerURL, true); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "issuer_url "+err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "issuer_url "+err.Error())
 		return
 	}
 	existing, existingErr := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
 	if h.bundledIdentity != nil {
 		if existingErr != nil {
-			RespondRequestError(w, r, http.StatusConflict, apierror.SettingsError, "Bundled Dex bootstrap settings are unavailable; restart the server after the chart is ready")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.SettingsError, "Bundled Dex bootstrap settings are unavailable; restart the server after the chart is ready")
 			return
 		}
 		if _, err := h.normalizeRuntimeIdentity(existing); err != nil {
-			RespondRequestError(w, r, http.StatusConflict, apierror.SettingsError, "Bundled Dex runtime identity does not match the installed chart")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.SettingsError, "Bundled Dex runtime identity does not match the installed chart")
 			return
 		}
 		identity := *h.bundledIdentity
@@ -96,7 +96,7 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 				expected = identity.RuntimeSecretName
 			}
 			if requested != "" && requested != expected {
-				RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, field+" is immutable for bundled Dex")
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, field+" is immutable for bundled Dex")
 				return
 			}
 		}
@@ -128,28 +128,28 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		runtimePhase = h.bundledIdentity.MigrationPhase
 	}
 	if errs := k8svalidation.IsDNS1123Label(req.Namespace); len(errs) > 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace must be a valid Kubernetes DNS label")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "namespace must be a valid Kubernetes DNS label")
 		return
 	}
 	if errs := k8svalidation.IsDNS1123Label(req.ReleaseName); len(errs) > 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "release_name must be a valid Kubernetes DNS label")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "release_name must be a valid Kubernetes DNS label")
 		return
 	}
 	for label, value := range map[string]string{"deployment_name": req.DeploymentName, "service_name": req.ServiceName} {
 		if errs := k8svalidation.IsDNS1123Subdomain(value); len(errs) > 0 {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, label+" must be a valid Kubernetes name")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, label+" must be a valid Kubernetes name")
 			return
 		}
 	}
 	if errs := k8svalidation.IsDNS1123Subdomain(req.RuntimeSecretName); len(errs) > 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "runtime_secret_name must be a valid Kubernetes Secret name")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "runtime_secret_name must be a valid Kubernetes Secret name")
 		return
 	}
 	clusterUUID := pgtype.UUID{}
 	if req.ClusterID != "" {
 		id, err := uuid.Parse(req.ClusterID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster_id")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster_id")
 			return
 		}
 		clusterUUID = pgtype.UUID{Bytes: id, Valid: true}
@@ -159,7 +159,7 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		var loadErr error
 		existingClients, _, loadErr = h.loadPublicClients(r.Context(), existing)
 		if loadErr != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Dex static-client secrets are unavailable")
 			return
 		}
 	}
@@ -168,12 +168,12 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		clients = existingClients
 	}
 	if err := validatePublicClients(clients); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	encryptedClients, err := h.encryptPublicClients(clients)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured; cannot store Dex static clients")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Encryptor is not configured; cannot store Dex static clients")
 		return
 	}
 	if h.bundledIdentity != nil {
@@ -181,11 +181,11 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(existing.Extra, &req.Extra)
 	}
 	if err := validateDexExtra(req.Extra); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	if err := validateDexExpiry(req.Expiry); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	expiryBytes, _ := json.Marshal(req.Expiry)
@@ -197,21 +197,20 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		extraBytes = []byte("{}")
 	}
 	params := sqlc.StageDexSettingsAndDisableSSOParams{
-		ID:                     dexSettingsSingletonID,
-		IssuerUrl:              strings.TrimRight(req.IssuerURL, "/"),
-		ClusterID:              clusterUUID,
-		Namespace:              req.Namespace,
-		ReleaseName:            req.ReleaseName,
-		ConfigmapName:          req.RuntimeSecretName,
-		RuntimeSecretName:      req.RuntimeSecretName,
-		PublicClientsEncrypted: encryptedClients,
-		PublicClients:          mustDexJSON(clients, []byte("[]")),
-		Expiry:                 expiryBytes,
-		Extra:                  extraBytes,
-		ChartReleaseName:       req.ChartReleaseName,
-		DeploymentName:         req.DeploymentName,
-		ServiceName:            req.ServiceName,
-		RuntimePhase:           runtimePhase,
+		ID:                 dexSettingsSingletonID,
+		IssuerUrl:          strings.TrimRight(req.IssuerURL, "/"),
+		ClusterID:          clusterUUID,
+		Namespace:          req.Namespace,
+		ReleaseName:        req.ReleaseName,
+		ConfigmapName:      req.RuntimeSecretName,
+		RuntimeSecretName:  req.RuntimeSecretName,
+		PublicClientsKeyID: encryptedClients.KeyID, PublicClientsAlgorithm: encryptedClients.Algorithm, PublicClientsCiphertext: encryptedClients.Ciphertext, PublicClientsNonce: encryptedClients.Nonce,
+		Expiry:           expiryBytes,
+		Extra:            extraBytes,
+		ChartReleaseName: req.ChartReleaseName,
+		DeploymentName:   req.DeploymentName,
+		ServiceName:      req.ServiceName,
+		RuntimePhase:     runtimePhase,
 	}
 	row, err := executeMutation(r, h.runTx,
 		func(q DexMutationTx) (sqlc.DexSetting, error) {
@@ -232,12 +231,12 @@ func (h *DexHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SaveError, "Failed to save Dex settings")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.SaveError, "Failed to save Dex settings")
 		return
 	}
 	response, err := settingsResponse(row, clients)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Saved Dex settings failed validation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SettingsError, "Saved Dex settings failed validation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)

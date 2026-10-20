@@ -499,9 +499,6 @@ func TestConnectAckRotatesToDurableAgentToken(t *testing.T) {
 	if upserts[0].ClusterID.String() != clusterID {
 		t.Fatalf("expected cluster id %s, got %s", clusterID, upserts[0].ClusterID)
 	}
-	if upserts[0].Token != "" {
-		t.Fatalf("expected durable token plaintext not to be persisted")
-	}
 	if upserts[0].TokenHash != auth.HashOpaqueToken(ack.AgentToken) {
 		t.Fatalf("expected persisted token hash to match ack token")
 	}

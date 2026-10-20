@@ -15,8 +15,8 @@ import (
 	"github.com/hibiken/asynq"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -37,12 +37,12 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 	clusterID := clusterUUID.String()
 	namespaces, err := h.listNamespaces(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	pods, err := h.listPodMetadata(r.Context(), clusterID, "/api/v1/pods")
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	counts := map[string]int{}
@@ -72,7 +72,7 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 	sort.Slice(items, func(i, j int) bool { return items[i]["name"].(string) < items[j]["name"].(string) })
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourceClusters, rbac.VerbRead)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	if !all {
@@ -115,7 +115,7 @@ func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
 	clusterID := clusterUUID.String()
 	nodes, err := h.getNodes(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	// Nodes come straight from the cluster's API unpaginated; slice to the
@@ -133,7 +133,7 @@ func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 	nodeName := chi.URLParam(r, "node_name")
 	detail, err := h.getNodeDetail(r.Context(), clusterID, nodeName)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, detail)
@@ -155,7 +155,7 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		health = "all"
 	}
 	if health != "all" && health != "attention" && health != "restarted" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod health filter")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid pod health filter")
 		return
 	}
 	sortOrder := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
@@ -163,17 +163,17 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		sortOrder = "namespace_asc"
 	}
 	if !validPodSort(sortOrder) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod sort order")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid pod sort order")
 		return
 	}
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourcePods, rbac.VerbList)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	all, names, err = selectedNamespaces(r.URL.Query(), all, names)
 	if err != nil {
-		RespondRequestError(w, r, 400, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, 400, apiutil.ValidationError, err.Error())
 		return
 	}
 	limit, offset := queryLimitOffset(r, 20)
@@ -195,7 +195,7 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 			authorized = append(authorized, rows...)
 		}
 		if err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 			return
 		}
 		filtered := make([]map[string]any, 0, len(authorized))
@@ -223,7 +223,7 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		total = &exactTotal
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	if !all {
@@ -329,13 +329,13 @@ func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Reques
 	kind, namespace, name := chi.URLParam(r, "kind"), chi.URLParam(r, "namespace"), chi.URLParam(r, "name")
 	resource, err := h.fetchWorkloadResource(r.Context(), clusterID, kind, namespace, name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	selector := labelSelector(resource.Spec.Selector.MatchLabels)
 	pods, err := h.listPods(r.Context(), clusterID, namespace, selector)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	// Selector-scoped pods come straight from the cluster's API unpaginated;
@@ -353,14 +353,14 @@ func (h *WorkloadHandler) DeletePod(w http.ResponseWriter, r *http.Request) {
 	clusterID := parsedClusterID.String()
 	namespace, pod := chi.URLParam(r, "namespace"), chi.URLParam(r, "pod")
 	if len(k8svalidation.IsDNS1123Label(namespace)) != 0 || len(k8svalidation.IsDNS1123Subdomain(pod)) != 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Invalid Kubernetes namespace or pod name")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Invalid Kubernetes namespace or pod name")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable pod-delete storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Durable pod-delete storage is unavailable")
 		return
 	}
 
@@ -420,12 +420,12 @@ func (h *WorkloadHandler) DeletePod(w http.ResponseWriter, r *http.Request) {
 			})
 	})
 	if errors.Is(err, errWorkloadOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"Idempotency-Key already identifies a different pod-delete operation")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.EnqueueError,
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.EnqueueError,
 			"Failed to create pod-delete operation")
 		return
 	}
@@ -475,7 +475,7 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = ensureSuccess(resp)
 		}
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	body, _ := decodeResponseBody(resp)

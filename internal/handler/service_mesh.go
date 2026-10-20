@@ -34,8 +34,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/mesh"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -257,7 +257,7 @@ func (h *ServiceMeshHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to read service mesh detection")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GetError, "Failed to read service mesh detection")
 		return
 	}
 	RespondJSON(w, http.StatusOK, rowToResponse(row))
@@ -272,16 +272,16 @@ func (h *ServiceMeshHandler) Detect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.detector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.DetectorUnwired, "Service mesh detector is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.DetectorUnwired, "Service mesh detector is not configured")
 		return
 	}
 	if err := h.detector.DetectAndUpsert(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.DetectFailed, "Service mesh detection failed: "+err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.DetectFailed, "Service mesh detection failed: "+err.Error())
 		return
 	}
 	row, err := h.queries.GetClusterServiceMesh(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PostDetectRead, "Detection finished but the row could not be read back")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.PostDetectRead, "Detection finished but the row could not be read back")
 		return
 	}
 	recordAudit(r, h.auditor, "cluster.service_mesh.detected", "cluster", clusterID.String(), "", map[string]any{
@@ -312,7 +312,7 @@ func (h *ServiceMeshHandler) MTLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.MTLSError, "Failed to read service mesh detection")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.MTLSError, "Failed to read service mesh detection")
 		return
 	}
 	out := MTLSBreakdownResponse{
@@ -348,7 +348,7 @@ func (h *ServiceMeshHandler) Inventory(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		row = sqlc.ClusterServiceMesh{ClusterID: clusterID, DetectedMesh: mesh.MeshUnknown}
 	} else if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InventoryError, "Failed to read service mesh detection")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InventoryError, "Failed to read service mesh detection")
 		return
 	}
 
@@ -395,7 +395,7 @@ func (h *ServiceMeshHandler) ValidatePolicy(w http.ResponseWriter, r *http.Reque
 	}
 	obj, err := parseServiceMeshPolicyPayload(w, r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidPolicy, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidPolicy, err.Error())
 		return
 	}
 	out := validateServiceMeshPolicyObject(obj)
@@ -512,7 +512,7 @@ func (h *ServiceMeshHandler) requireClusterResource(w http.ResponseWriter, r *ht
 		return uuid.Nil, false
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return uuid.Nil, false
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, resource, verb) {

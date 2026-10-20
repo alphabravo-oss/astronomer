@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -31,10 +33,10 @@ func fixtureHelmRepository(withOptionals bool) sqlc.HelmRepository {
 		// Set on the row but deliberately NOT on the wire — see the DTO's
 		// closing note. Populating it here is what makes its absence from the
 		// response an assertion rather than an accident.
-		AuthConfigEncrypted: "gAAAAABm-not-a-real-token",
-		LastSyncError:       "repository returned status 401",
-		CreatedAt:           time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
-		UpdatedAt:           time.Date(2026, 2, 20, 12, 45, 30, 123456789, time.UTC),
+		AuthConfigKeyID: "test-key", AuthConfigAlgorithm: crypto.AlgorithmAgeX25519, AuthConfigCiphertext: []byte("gAAAAABm-not-a-real-token"),
+		LastSyncError: "repository returned status 401",
+		CreatedAt:     time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC),
+		UpdatedAt:     time.Date(2026, 2, 20, 12, 45, 30, 123456789, time.UTC),
 	}
 	if withOptionals {
 		repo.LastSyncedAt = pgtype.Timestamptz{
@@ -62,7 +64,7 @@ func fixtureHelmRepository(withOptionals bool) sqlc.HelmRepository {
 // sqlc.HelmRepository row directly used to emit, on every key the old shape
 // carried, with exactly two intended differences —
 //
-//   - auth_config_encrypted is REMOVED (the migration-145 Fernet envelope,
+//   - auth_config_* sealed is REMOVED (the sealed auth_config_* family,
 //     which no client has any use for), and
 //   - chart_count is ADDED (the field the frontend had always believed in and
 //     no column, query or spec entry ever produced).
@@ -107,16 +109,20 @@ func TestHelmRepositoryResponse_WireCompat(t *testing.T) {
 
 			// The two intended departures, asserted before they are removed
 			// so the comparison below can be total.
-			if _, ok := legacy["auth_config_encrypted"]; !ok {
-				t.Fatal("fixture no longer exercises auth_config_encrypted")
-			}
-			if _, ok := dto["auth_config_encrypted"]; ok {
-				t.Fatalf("the Fernet envelope is on the wire: %s", dtoJSON)
+			for _, sealedField := range []string{"auth_config_key_id", "auth_config_algorithm", "auth_config_ciphertext", "auth_config_nonce"} {
+				if _, ok := legacy[sealedField]; !ok {
+					t.Fatalf("fixture no longer exercises %s", sealedField)
+				}
+				if _, ok := dto[sealedField]; ok {
+					t.Fatalf("the sealed auth_config family is on the wire: %s", dtoJSON)
+				}
 			}
 			if got := dto["chart_count"]; got != float64(chartCount) {
 				t.Fatalf("chart_count = %v, want %d", got, chartCount)
 			}
-			delete(legacy, "auth_config_encrypted")
+			for _, sealedField := range []string{"auth_config_key_id", "auth_config_algorithm", "auth_config_ciphertext", "auth_config_nonce"} {
+				delete(legacy, sealedField)
+			}
 			delete(dto, "chart_count")
 
 			// Same key set, same values, byte for byte after canonical

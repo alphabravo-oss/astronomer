@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log/slog"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
@@ -10,9 +10,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/principal"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config, logger *slog.Logger) (RouterDependencies, error) {
+func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config, logger zerolog.Logger) (RouterDependencies, error) {
 	database := c.database
 	queries := c.queries
 	requester := c.requester
@@ -27,7 +28,7 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 	rbacHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	roleCatalog, err := rbac.LoadCatalog()
 	if err != nil {
-		logger.Error("failed to load RBAC template catalog", "error", err)
+		logger.Error().Err(err).Msg("failed to load RBAC template catalog")
 	} else {
 		rbacHandler.SetTemplateCatalog(roleCatalog)
 	}
@@ -63,7 +64,7 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 
 	chartRatings := handler.NewChartRatingsHandler(queries)
 	chartRatings.SetRecommendationPolicy(catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight))
-	chartRatings.SetLogger(logger)
+	chartRatings.SetLogger(logging.Slog(logger))
 	chartRatings.SetAuthorization(rbacEngine, rbacQuerier)
 	chartRatings.SetRunTx(sqlcMutationTxRunner[handler.ChartRatingMutationTx](database))
 
@@ -77,11 +78,11 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 		RBACEngine:  rbacEngine,
 		RBACQuerier: rbacQuerier,
 	}
-	execConsumer, err := tunnel.NewExecConsumer(hub, logger, streamSecurity)
+	execConsumer, err := tunnel.NewExecConsumer(hub, logging.Slog(logger), streamSecurity)
 	if err != nil {
 		return RouterDependencies{}, err
 	}
-	logsConsumer, err := tunnel.NewLogsConsumer(hub, logger, streamSecurity)
+	logsConsumer, err := tunnel.NewLogsConsumer(hub, logging.Slog(logger), streamSecurity)
 	if err != nil {
 		return RouterDependencies{}, err
 	}
@@ -100,6 +101,7 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 
 	return RouterDependencies{
 		CoreAuth: CoreAuthDependencies{
+			Logger:      logger,
 			JWT:         c.jwtManager,
 			Encryptor:   c.encryptor,
 			AuthQueries: queries,
@@ -167,7 +169,7 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 		},
 		StreamingInternal: StreamingInternalDependencies{
 			Hub:               hub,
-			Proxy:             tunnel.NewProxyHandler(hub, logger),
+			Proxy:             tunnel.NewProxyHandler(hub, logging.Slog(logger)),
 			InternalK8s:       newInternalK8sHandler(c, cfg, logger),
 			InternalHelm:      newInternalHelmHandler(c, cfg, logger),
 			Exec:              execConsumer,
@@ -179,18 +181,18 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 	}, nil
 }
 
-func newInternalK8sHandler(c *productionComposition, cfg *config.Config, logger *slog.Logger) *tunnel.InternalK8sHandler {
+func newInternalK8sHandler(c *productionComposition, cfg *config.Config, logger zerolog.Logger) *tunnel.InternalK8sHandler {
 	h := tunnel.NewInternalK8sHandler(c.hub, tunnel.InternalRequestKeyring{
 		Current: cfg.InternalPSK, Previous: cfg.InternalPSKPrevious,
-	}, logger)
+	}, logging.Slog(logger))
 	h.SetAuditWriter(c.queries)
 	return h
 }
 
-func newInternalHelmHandler(c *productionComposition, cfg *config.Config, logger *slog.Logger) *tunnel.InternalHelmHandler {
+func newInternalHelmHandler(c *productionComposition, cfg *config.Config, logger zerolog.Logger) *tunnel.InternalHelmHandler {
 	h := tunnel.NewInternalHelmHandler(c.hub, tunnel.InternalRequestKeyring{
 		Current: cfg.InternalPSK, Previous: cfg.InternalPSKPrevious,
-	}, logger)
+	}, logging.Slog(logger))
 	h.SetAuditWriter(c.queries)
 	return h
 }

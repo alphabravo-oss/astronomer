@@ -18,6 +18,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	agecrypto "github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // builtInProviders are the legacy provider kinds that ship with provider-
@@ -75,7 +76,7 @@ type SSOUserInfo struct {
 	Groups        []string `json:"groups,omitempty"`        // OIDC groups claim
 
 	// UpstreamIDToken is the raw upstream id_token returned by the OIDC
-	// IdP. The SSO handler persists this (Fernet-encrypted) into the
+	// IdP. The SSO handler persists this (age-sealed) into the
 	// sso_sessions row so the Logout endpoint can drive RP-initiated
 	// logout — `id_token_hint=<this>` is a required parameter of the
 	// OIDC end_session redirect (RFC 1.0 RP-initiated logout).
@@ -96,7 +97,7 @@ type SSOUserInfo struct {
 
 // SSOManager manages OAuth2/SSO flows.
 type SSOManager struct {
-	encryptor   *Encryptor
+	encryptor   *agecrypto.Encryptor
 	jwtManager  *JWTManager
 	providers   map[string]*SSOProvider
 	callbackURL string // base URL for callbacks
@@ -111,7 +112,7 @@ type SSOManager struct {
 }
 
 // NewSSOManager creates a new SSO manager.
-func NewSSOManager(encryptor *Encryptor, jwtManager *JWTManager, callbackBaseURL string) *SSOManager {
+func NewSSOManager(encryptor *agecrypto.Encryptor, jwtManager *JWTManager, callbackBaseURL string) *SSOManager {
 	return &SSOManager{
 		encryptor:   encryptor,
 		jwtManager:  jwtManager,
@@ -163,10 +164,10 @@ func defaultScopes(name string) []string {
 }
 
 // RegisterProvider configures a built-in OAuth2 provider (GitHub or Google).
-// clientSecretEncrypted is a Fernet-encrypted client secret. To register a
+// clientSecret is the sealed client secret (sso_configurations.client_secret_*). To register a
 // generic OIDC IdP (Keycloak, Authentik, Auth0, Okta, etc.) call
 // RegisterOIDCProvider instead.
-func (m *SSOManager) RegisterProvider(name, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error {
+func (m *SSOManager) RegisterProvider(name, clientID string, clientSecret agecrypto.Sealed, redirectURL string, scopes []string) error {
 	if name == "" {
 		return fmt.Errorf("provider name must not be empty")
 	}
@@ -175,7 +176,7 @@ func (m *SSOManager) RegisterProvider(name, clientID, clientSecretEncrypted, red
 	}
 
 	// Decrypt the client secret
-	secret, err := m.encryptor.Decrypt(clientSecretEncrypted)
+	secret, err := m.encryptor.DecryptString(clientSecret)
 	if err != nil {
 		return fmt.Errorf("decrypting client secret for %s: %w", name, err)
 	}
@@ -224,7 +225,7 @@ func (m *SSOManager) RegisterProvider(name, clientID, clientSecretEncrypted, red
 //
 // The provider is keyed in the manager by `name` (e.g. "keycloak"), which is
 // what shows up in the /auth/login/{provider}/ URL.
-func (m *SSOManager) RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error {
+func (m *SSOManager) RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID string, clientSecret agecrypto.Sealed, redirectURL string, scopes []string) error {
 	if name == "" {
 		return fmt.Errorf("provider name must not be empty")
 	}
@@ -236,7 +237,7 @@ func (m *SSOManager) RegisterOIDCProvider(ctx context.Context, name, issuerURL, 
 		return fmt.Errorf("issuer URL must not be empty for oidc provider %q", name)
 	}
 
-	secret, err := m.encryptor.Decrypt(clientSecretEncrypted)
+	secret, err := m.encryptor.DecryptString(clientSecret)
 	if err != nil {
 		return fmt.Errorf("decrypting client secret for %s: %w", name, err)
 	}
@@ -343,7 +344,7 @@ func (m *SSOManager) LoadFromDatabase(ctx context.Context, queries SSOConfigQuer
 			}
 		}
 		if isBuiltInProvider(row.Provider) {
-			if err := m.RegisterProvider(row.Provider, row.ClientID, row.ClientSecretEncrypted, cfg.RedirectURL, cfg.Scopes); err != nil {
+			if err := m.RegisterProvider(row.Provider, row.ClientID, agecrypto.FromParts(row.ClientSecretKeyID, row.ClientSecretAlgorithm, row.ClientSecretCiphertext, row.ClientSecretNonce), cfg.RedirectURL, cfg.Scopes); err != nil {
 				failures = append(failures, fmt.Sprintf("%s: %v", row.Provider, err))
 			}
 			continue
@@ -354,7 +355,7 @@ func (m *SSOManager) LoadFromDatabase(ctx context.Context, queries SSOConfigQuer
 			failures = append(failures, fmt.Sprintf("%s: issuer_url is required for non-built-in providers", row.Provider))
 			continue
 		}
-		if err := m.RegisterOIDCProvider(ctx, row.Provider, cfg.IssuerURL, row.ClientID, row.ClientSecretEncrypted, cfg.RedirectURL, cfg.Scopes); err != nil {
+		if err := m.RegisterOIDCProvider(ctx, row.Provider, cfg.IssuerURL, row.ClientID, agecrypto.FromParts(row.ClientSecretKeyID, row.ClientSecretAlgorithm, row.ClientSecretCiphertext, row.ClientSecretNonce), cfg.RedirectURL, cfg.Scopes); err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", row.Provider, err))
 		}
 	}

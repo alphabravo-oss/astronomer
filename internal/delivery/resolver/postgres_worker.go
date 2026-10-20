@@ -18,6 +18,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 )
 
 type ByteDecryptor interface {
-	DecryptBytes(string) ([]byte, error)
+	Decrypt(sealed crypto.Sealed) ([]byte, error)
 }
 
 type PolicyProvider interface {
@@ -175,8 +176,8 @@ func (w *PostgresWorker) requestFromWork(ctx context.Context, work sqlc.GetDeliv
 		URL: work.Url, AuthMode: model.AuthMode(work.AuthMode), Trust: trust,
 	}
 	var credential *CredentialMaterial
-	if work.CredentialEncrypted != "" {
-		plaintext, err := w.decryptor.DecryptBytes(work.CredentialEncrypted)
+	if work.CredentialKeyID != "" {
+		plaintext, err := w.decryptor.Decrypt(crypto.FromParts(work.CredentialKeyID, work.CredentialAlgorithm, work.CredentialCiphertext, work.CredentialNonce))
 		if err != nil {
 			return Request{}, cleanup, &Error{Code: CodeAuthentication, Message: "source credential could not be decrypted"}
 		}
@@ -191,8 +192,8 @@ func (w *PostgresWorker) requestFromWork(ctx context.Context, work sqlc.GetDeliv
 		caBundle = append(caBundle, w.baseCA...)
 		cleanupValues = append(cleanupValues, caBundle)
 	}
-	if work.CaBundleEncrypted != "" {
-		plaintext, err := w.decryptor.DecryptBytes(work.CaBundleEncrypted)
+	if work.CaBundleKeyID != "" {
+		plaintext, err := w.decryptor.Decrypt(crypto.FromParts(work.CaBundleKeyID, work.CaBundleAlgorithm, work.CaBundleCiphertext, work.CaBundleNonce))
 		if err != nil {
 			return Request{}, cleanup, &Error{Code: CodeAuthentication, Message: "source CA bundle could not be decrypted"}
 		}

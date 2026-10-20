@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -21,12 +21,12 @@ func (h *ClusterSnapshotsHandler) ListSnapshots(w http.ResponseWriter, r *http.R
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	rows, err := h.queries.ListClusterSnapshots(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list snapshots")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list snapshots")
 		return
 	}
 	out := make([]SnapshotResponse, 0, len(rows))
@@ -44,7 +44,7 @@ func (h *ClusterSnapshotsHandler) GetSnapshot(w http.ResponseWriter, r *http.Req
 	}
 	row, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Snapshot not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, snapshotToResponse(row))
@@ -66,7 +66,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		Namespace  string `json:"velero_namespace,omitempty"`
 	}
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	spec := req.SnapshotSpec
@@ -95,7 +95,7 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		veleroName = newVeleroBackupName(cluster.Name)
 	}
 	if !validVeleroResourceName(veleroName) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "velero_name must be a valid RFC 1123 subdomain (1-253 chars)")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "velero_name must be a valid RFC 1123 subdomain (1-253 chars)")
 		return
 	}
 
@@ -171,10 +171,10 @@ func (h *ClusterSnapshotsHandler) CreateSnapshot(w http.ResponseWriter, r *http.
 		})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, err.Error())
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create snapshot intent")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create snapshot intent")
 		return
 	}
 	row := result.row
@@ -198,7 +198,7 @@ func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.
 	}
 	row, err := h.queries.GetClusterSnapshotByID(r.Context(), snapshotID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Snapshot not found")
 		return
 	}
 
@@ -243,10 +243,10 @@ func (h *ClusterSnapshotsHandler) DeleteSnapshot(w http.ResponseWriter, r *http.
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Snapshot not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete snapshot intent")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete snapshot intent")
 		return
 	}
 	h.publishSnapshotChanged(clusterID, snapshotID, "snapshot")

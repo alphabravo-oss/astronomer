@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
 
@@ -165,7 +167,7 @@ func privateBoundInput(path string) (os.FileInfo, [32]byte, error) {
 	file := os.NewFile(uintptr(fd), "private-kubeconfig")
 	defer func(close func() error) { _ = close() }(file.Close)
 	actual, err := file.Stat()
-	if err != nil || !os.SameFile(before, actual) || !actual.Mode().IsRegular() || actual.Mode().Perm() != 0o600 || actual.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !os.SameFile(before, actual) || !actual.Mode().IsRegular() || actual.Mode().Perm() != 0o600 || actual.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return nil, empty, errors.New("private operation input owner or identity differs")
 	}
 	hash := sha256.New()

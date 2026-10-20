@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -18,21 +18,21 @@ import (
 // RotateOutputToken handles POST /api/v1/logging/outputs/{id}/rotate-token/
 // and POST /api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token/.
 //
-// Plaintext is returned once. Postgres stores SHA-256 hash + Fernet ciphertext.
+// Plaintext is returned once. Postgres stores SHA-256 hash + age ciphertext.
 // The management-cluster hash Secret is reconciled without plaintext.
 func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Request) {
 	outputID, err := parseOutputIDParam(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid output ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid output ID")
 		return
 	}
 	output, err := h.queries.GetLoggingOutputByID(r.Context(), outputID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging output not found")
 		return
 	}
 	if !output.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Logging output has no cluster_id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Logging output has no cluster_id")
 		return
 	}
 	clusterID := uuid.UUID(output.ClusterID.Bytes)
@@ -42,7 +42,7 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if want != clusterID {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Output does not belong to this cluster")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Output does not belong to this cluster")
 			return
 		}
 	}
@@ -53,29 +53,29 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !strings.EqualFold(output.OutputType, "loki") {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Ingest tokens are only issued for Loki outputs")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Ingest tokens are only issued for Loki outputs")
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Encryption is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Encryption is not configured")
 		return
 	}
 
 	plaintext, err := mintLokiIngestToken()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to mint ingest token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to mint ingest token")
 		return
 	}
-	sealed, err := h.encryptor.Encrypt(plaintext)
+	sealed, err := h.encryptor.EncryptString(plaintext)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to encrypt ingest token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to encrypt ingest token")
 		return
 	}
 	params := sqlc.UpsertLokiIngestTokenParams{
-		ClusterID:      clusterID,
-		TokenHash:      lokiauth.HashBearer(plaintext),
-		TokenEncrypted: sealed,
-		CreatedByID:    currentUserUUID(r),
+		ClusterID:  clusterID,
+		TokenHash:  lokiauth.HashBearer(plaintext),
+		TokenKeyID: sealed.KeyID, TokenAlgorithm: sealed.Algorithm, TokenCiphertext: sealed.Ciphertext, TokenNonce: sealed.Nonce,
+		CreatedByID: currentUserUUID(r),
 	}
 	mutationContext := withOperationIdempotency(r, "logging")
 	result, err := executeMutation(r, h.runTx,
@@ -93,7 +93,7 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 			}}
 		})
 	if err != nil {
-		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to rotate ingest token")
+		respondLoggingMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to rotate ingest token")
 		return
 	}
 	row := result.row

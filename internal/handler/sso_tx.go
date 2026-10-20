@@ -117,13 +117,13 @@ func (h *SSOHandler) persistSSOSession(ctx context.Context, q interface {
 	if info.UpstreamIDToken == "" {
 		return nil // This provider has no upstream logout protocol.
 	}
-	cipher, err := h.encryptor.Encrypt(info.UpstreamIDToken)
+	cipher, err := h.encryptor.EncryptString(info.UpstreamIDToken)
 	if err != nil {
 		return err
 	}
 	return q.InsertSSOSession(ctx, sqlc.InsertSSOSessionParams{
 		Jti: pair.AccessID(), UserID: userID, ProviderName: provider,
-		UpstreamIDTokenEncrypted: cipher, EndSessionEndpoint: info.EndSessionEndpoint,
+		UpstreamIDTokenKeyID: cipher.KeyID, UpstreamIDTokenAlgorithm: cipher.Algorithm, UpstreamIDTokenCiphertext: cipher.Ciphertext, UpstreamIDTokenNonce: cipher.Nonce, EndSessionEndpoint: info.EndSessionEndpoint,
 		ExpiresAt: pair.RefreshExpiry(),
 	})
 }

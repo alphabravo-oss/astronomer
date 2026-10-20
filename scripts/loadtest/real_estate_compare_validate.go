@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 var estateCommit = regexp.MustCompile(`^[a-f0-9]{40}$`)
@@ -166,7 +168,7 @@ func validateEstateHTTPRows(rows []estateRequestResult, members, tier int) error
 			return invalid
 		}
 		for _, hist := range []estateLatencyDistribution{h.HeaderLatency, h.FullResponseLatency} {
-			if !reflect.DeepEqual(hist.UpperBoundsMS, estateLatencyBoundsMS[:]) || len(hist.Counts) != len(estateLatencyBoundsMS) || hist.Samples != uint64(h.Completed) || hist.Overflow > hist.Samples {
+			if !reflect.DeepEqual(hist.UpperBoundsMS, estateLatencyBoundsMS[:]) || len(hist.Counts) != len(estateLatencyBoundsMS) || hist.Samples != safeconv.Uint64(h.Completed) || hist.Overflow > hist.Samples {
 				return invalid
 			}
 			rebuilt := estateLatencyHistogram{total: hist.Samples, overflow: hist.Overflow}

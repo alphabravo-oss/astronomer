@@ -1,0 +1,20 @@
+# The only Python left in the repository: scripts/categorical-contracts.py,
+# run by `make generate` until Phase 2 ports it to Go. Standard library only.
+[project]
+name = "astronomer-scripts"
+version = "0.0.0"
+description = "Build-time generator for categorical contract files"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# The formatter owns line length; generated-template literals stay on one line.
+ignore = ["E501"]

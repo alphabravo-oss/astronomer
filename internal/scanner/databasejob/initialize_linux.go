@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"golang.org/x/sys/unix"
 )
@@ -96,7 +98,7 @@ func initializeEmptyVolume(ctx context.Context, path string, uid int, mode uint3
 		return errors.New("owned Job initialization volume ownership failed")
 	}
 	var final unix.Stat_t
-	if unix.Fstat(int(file.Fd()), &final) != nil || final.Dev != before.Dev || final.Ino != before.Ino || final.Mode&unix.S_IFMT != unix.S_IFDIR || final.Mode&07777 != mode || final.Uid != uint32(uid) {
+	if unix.Fstat(int(file.Fd()), &final) != nil || final.Dev != before.Dev || final.Ino != before.Ino || final.Mode&unix.S_IFMT != unix.S_IFDIR || final.Mode&07777 != mode || final.Uid != safeconv.Uint32(uid) {
 		return errors.New("owned Job initialized volume changed")
 	}
 	if err := checkInitializationLocation(path, file, final); err != nil {

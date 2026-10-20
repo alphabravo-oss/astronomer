@@ -2,21 +2,22 @@ package server
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
-	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/operator/mirror"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
 
-func (c *productionComposition) initializeClusterHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func (c *productionComposition) initializeClusterHandlers(ctx context.Context, cfg *config.Config, logger zerolog.Logger) error {
 	database := c.database
 	queries := c.queries
 	bus := c.bus
@@ -54,7 +55,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 		// feature.control_plane_snapshots is additionally enabled). The task
 		// registry declares this handler optional when the chart feature is off.
 		controlPlaneSnapshotRuntime = tasks.ControlPlaneSnapshotRuntime{
-			Deps:         tasks.ControlPlaneSnapshotSweepDeps{Queries: queries, Log: logger},
+			Deps:         tasks.ControlPlaneSnapshotSweepDeps{Queries: queries, Log: logging.Slog(logger)},
 			Applier:      controlPlaneSnapshotHandler.ApplySnapshotJob,
 			StatusReader: controlPlaneSnapshotHandler.ReadSnapshotJobStatus,
 		}
@@ -81,7 +82,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	clusterSnapshotRuntime := tasks.ClusterSnapshotRuntime{Deps: tasks.ClusterSnapshotDeps{
 		Queries:        queries,
 		Driver:         handler.NewVeleroDriverAdapter(requester),
-		Log:            logger,
+		Log:            logging.Slog(logger),
 		Bus:            c.bus,
 		CaptureMetrics: handler.CaptureSnapshotWorkerMetrics(queries),
 	}}
@@ -100,7 +101,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	// handler reads them back out for the cluster-detail page. Periodic
 	// prune (every 30m) is wired via worker/scheduler.go.
 	clusterResourcesHandler := handler.NewClusterResourcesHandler(queries)
-	mirrorRouter := crd.NewMirrorRouter(queries)
+	mirrorRouter := mirror.NewRouter(queries)
 	// Sprint 062: wire the trivy VulnerabilityReport ingester into the
 	// same MirrorRouter the sprint-069 GVKs use. The agent emits trivy
 	// CRs via the same MIRROR_EVENT channel with Kind=VulnerabilityReport;
@@ -130,7 +131,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	})
 	trivyIngester := scanner.NewIngester(queries, database.Pool(), nil, trivyAuditHook)
 	trivyIngester.SetEventBus(bus)
-	mirrorRouter.SetVulnIngester(crd.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
+	mirrorRouter.SetVulnIngester(mirror.NewVulnIngesterAdapter(trivyIngester.IngestUnstructured))
 	hub.SetMirrorIngester(mirrorRouter)
 	apiserverAuditHandler := handler.NewApiserverAuditHandler(handler.NewApiserverAuditStoreAdapter(queries))
 	hub.SetAuditPersister(apiserverAuditHandler)

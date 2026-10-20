@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
@@ -277,7 +279,7 @@ func (r *recorder) snapshotDriverMetrics() {
 	g := runtime.NumGoroutine()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if uint64(g) > uint64(r.driverGoroutines) {
+	if safeconv.Uint64(g) > safeconv.Uint64(r.driverGoroutines) {
 		r.driverGoroutines = g
 	}
 	if ms.HeapAlloc > r.driverHeapBytes {

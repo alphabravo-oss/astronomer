@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -40,7 +42,7 @@ func (tx *nodeOperationMutationTx) CreateNodeOperationIdempotent(_ context.Conte
 	tx.operation = sqlc.NodeOperation{
 		ID: uuid.New(), IdempotencyScope: arg.IdempotencyScope, IdempotencyKey: arg.IdempotencyKey,
 		RequestDigest: arg.RequestDigest, ClusterID: arg.ClusterID, NodeName: arg.NodeName,
-		Action: arg.Action, ParametersEncrypted: arg.ParametersEncrypted, Generation: 1,
+		Action: arg.Action, ParametersKeyID: arg.ParametersKeyID, ParametersAlgorithm: arg.ParametersAlgorithm, ParametersCiphertext: arg.ParametersCiphertext, ParametersNonce: arg.ParametersNonce, Generation: 1,
 		Status: "pending", CreatedByID: arg.CreatedByID, Progress: json.RawMessage(`{}`),
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -107,10 +109,10 @@ func TestAllNodeMutationEntriesCommitReceiptTaskAndAuditBeforeAnyEffect(t *testi
 			if tx.tasks[0].TaskType != tasks.NodeOperationType || strings.Contains(string(tx.tasks[0].Payload), clusterID) || strings.Contains(string(tx.tasks[0].Payload), "worker-1") || strings.Contains(string(tx.tasks[0].Payload), "SENTINEL") {
 				t.Fatalf("task is not identifier-only: %s", tx.tasks[0].Payload)
 			}
-			if strings.Contains(string(tx.audits[0].Detail), "SENTINEL") || strings.Contains(tx.creates[0].ParametersEncrypted, "SENTINEL") {
-				t.Fatalf("request parameters leaked: audit=%s encrypted=%s", tx.audits[0].Detail, tx.creates[0].ParametersEncrypted)
+			if strings.Contains(string(tx.audits[0].Detail), "SENTINEL") || strings.Contains(string(tx.creates[0].ParametersCiphertext), "SENTINEL") {
+				t.Fatalf("request parameters leaked: audit=%s encrypted=%s", tx.audits[0].Detail, tx.creates[0].ParametersCiphertext)
 			}
-			plain, err := enc.DecryptBytes(tx.creates[0].ParametersEncrypted)
+			plain, err := enc.Decrypt(crypto.FromParts(tx.creates[0].ParametersKeyID, tx.creates[0].ParametersAlgorithm, tx.creates[0].ParametersCiphertext, tx.creates[0].ParametersNonce))
 			if err != nil || !json.Valid(plain) {
 				t.Fatalf("parameters are not encrypted worker-readable JSON: err=%v", err)
 			}
@@ -261,7 +263,7 @@ func TestNodeProductionWiringAndRouteGuards(t *testing.T) {
 			t.Fatalf("node post-load authorizer missing %q", required)
 		}
 	}
-	if !strings.Contains(string(routes), `r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/"`) {
+	if !strings.Contains(string(routes), `r.With(requireAuth(deps)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/"`) {
 		t.Fatal("node operation poll route does not require authentication before post-load authorization")
 	}
 }

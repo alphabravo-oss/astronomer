@@ -40,7 +40,7 @@ func helmReleaseFixture(t *testing.T) *HelmRelease {
 	}
 	input := upgrade.HelmInputs{Tool: upgrade.HelmToolBinding{Path: tool.Path, Version: tool.Version, SHA256: tool.SHA256}, Plan: plan, ChartReference: "oci://ghcr.io/alphabravo-oss/charts/astronomer", ManifestFile: path, RuntimeSources: map[string]string{}}
 	input.Manifest.Release.Version = plan.Target
-	for _, row := range []struct{ name, repo string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"migrate", "astronomer-go-migrate"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}, {"dr", "astronomer-dr"}} {
+	for _, row := range []struct{ name, repo string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}, {"dr", "astronomer-dr"}} {
 		input.Manifest.Astronomer.Images = append(input.Manifest.Astronomer.Images, releasecontract.Artifact{Name: row.name, Kind: "container_image", Reference: "ghcr.io/alphabravo-oss/" + row.repo + "@sha256:" + strings.Repeat("a", 64)})
 	}
 	for _, role := range []string{"utilities.busybox", "postgres", "redis", "dex", "managementRestoreDrill.sidecar", "managementLogging"} {
@@ -249,7 +249,7 @@ func canonicalHelmManifestFixture(version string) (releasecontract.Manifest, map
 		ChartDigest  string   `json:"chart_digest"`
 		Images       []string `json:"images"`
 	}{Slug: "synthetic-built-in", Chart: "fixture-chart", ChartVersion: "1.0.0", ChartDigest: hash})
-	for _, row := range []struct{ name, repo string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"migrate", "astronomer-go-migrate"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}, {"dr", "astronomer-dr"}} {
+	for _, row := range []struct{ name, repo string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}, {"dr", "astronomer-dr"}} {
 		manifest.Astronomer.Images = append(manifest.Astronomer.Images, artifact(row.name, "ghcr.io/alphabravo-oss/"+row.repo, "container_image"))
 	}
 	sources := map[string]string{}

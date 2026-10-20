@@ -91,8 +91,9 @@ func TestAuthHandler_TokenCreateQuotaExceeded(t *testing.T) {
 	if errMap["code"] != "quota_exceeded" {
 		t.Errorf("expected quota_exceeded code, got %v", errMap["code"])
 	}
-	if errMap["limit"] != "max_tokens_per_user" {
-		t.Errorf("expected limit=max_tokens_per_user, got %v", errMap["limit"])
+	details, _ := errMap["details"].(map[string]any)
+	if details["limit"] != "max_tokens_per_user" {
+		t.Errorf("expected limit=max_tokens_per_user, got %v", details["limit"])
 	}
 }
 

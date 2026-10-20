@@ -11,12 +11,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -34,7 +38,7 @@ type ResourceHandler struct {
 	requester K8sRequester
 	queries   ResourceQuerier
 	sso       SSOSettingsQuerier
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	ssoMgr    SSOProviderRegistrar
 	rbacCache rbacCacheInvalidator
 	// jwt flushes positive validation-cache entries after an administrative
@@ -222,8 +226,8 @@ type SSOSettingsQuerier interface {
 }
 
 type SSOProviderRegistrar interface {
-	RegisterProvider(name, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error
-	RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID, clientSecretEncrypted, redirectURL string, scopes []string) error
+	RegisterProvider(name, clientID string, clientSecret crypto.Sealed, redirectURL string, scopes []string) error
+	RegisterOIDCProvider(ctx context.Context, name, issuerURL, clientID string, clientSecret crypto.Sealed, redirectURL string, scopes []string) error
 	HasProvider(name string) bool
 	RemoveProvider(name string)
 }
@@ -311,7 +315,7 @@ func (h *ResourceHandler) SetSSOManager(mgr SSOProviderRegistrar) {
 	}
 }
 
-func (h *ResourceHandler) SetEncryptor(enc *auth.Encryptor) {
+func (h *ResourceHandler) SetEncryptor(enc *crypto.Encryptor) {
 	if h != nil {
 		h.encryptor = enc
 	}
@@ -341,11 +345,11 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 	namespace := r.URL.Query().Get("namespace")
 	path, err := listPath(resourceType, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "tunnel requester not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, "tunnel requester not configured")
 		return
 	}
 	// Treat 404 as "CRD not installed" for optional Gateway API resources.
@@ -366,7 +370,7 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 		}
 		all, allowed, authErr := h.authz.authorizedNamespaces(r.Context(), clusterUUID, resource, rbac.VerbList)
 		if authErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 			return
 		}
 		if !all {
@@ -398,7 +402,7 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 	}
 	field, descending, ok := genericResourceSort(sortOrder)
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid resource sort order")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid resource sort order")
 		return
 	}
 	sortGenericResourceItems(items, field, descending)
@@ -420,7 +424,7 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 	namespace := r.URL.Query().Get("namespace")
 	path, err := listPath(resourceType, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	resp, _, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, false)
@@ -438,7 +442,7 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 		}
 		all, allowed, authErr := h.authz.authorizedNamespaces(r.Context(), clusterUUID, resource, rbac.VerbList)
 		if authErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 			return
 		}
 		if !all {
@@ -471,7 +475,7 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 	}
 	field, descending, ok := genericResourceSort(sortOrder)
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid resource sort order")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid resource sort order")
 		return
 	}
 	sortGenericResourceItems(items, field, descending)
@@ -482,7 +486,7 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 func respondKubernetesResourceReadError(w http.ResponseWriter, r *http.Request, err error) {
 	var upstream *kubernetesResponseError
 	if errors.As(err, &upstream) && upstream.StatusCode == http.StatusForbidden {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 			"The cluster agent is not authorized to list this Kubernetes resource")
 		return
 	}
@@ -643,17 +647,17 @@ func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Req
 	}
 	namespace, err := resourceNamespace(body)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Unable to determine namespace")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Unable to determine namespace")
 		return
 	}
 	name, err := resourceName(body)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Unable to determine resource name")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Unable to determine resource name")
 		return
 	}
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	h.enqueueResourceOperation(w, r, resourceMutationIntent{
@@ -673,7 +677,7 @@ func (h *ResourceHandler) DeleteNamedResource(w http.ResponseWriter, r *http.Req
 	namespace := chi.URLParam(r, "namespace")
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	h.enqueueResourceOperation(w, r, resourceMutationIntent{
@@ -689,11 +693,11 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
-		Limit:  int32(limit),
+		Limit:  safeconv.Int32(limit),
 		Offset: 0,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ActivityError, "Failed to load activity feed")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ActivityError, "Failed to load activity feed")
 		return
 	}
 	items := make([]map[string]any, 0, len(logs))
@@ -713,17 +717,17 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 
 func (h *ResourceHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.UsersError, "user store not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	user, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, mapUser(user))
@@ -760,17 +764,17 @@ func (h *ResourceHandler) RemoveNodeAnnotation(w http.ResponseWriter, r *http.Re
 func (h *ResourceHandler) AddNodeTaint(w http.ResponseWriter, r *http.Request) {
 	var req nodeTaintRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
 	req.Effect = strings.TrimSpace(req.Effect)
 	if req.Key == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTaint, "key is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidTaint, "key is required")
 		return
 	}
 	if !validTaintEffect(req.Effect) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTaint, "effect must be NoSchedule, PreferNoSchedule, or NoExecute")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidTaint, "effect must be NoSchedule, PreferNoSchedule, or NoExecute")
 		return
 	}
 	h.enqueueNodeOperation(w, r, "add_taint", nodeOperationParameters{Key: req.Key, Value: req.Value, Effect: req.Effect})
@@ -779,17 +783,17 @@ func (h *ResourceHandler) AddNodeTaint(w http.ResponseWriter, r *http.Request) {
 func (h *ResourceHandler) RemoveNodeTaint(w http.ResponseWriter, r *http.Request) {
 	var req nodeTaintRemoveRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
 	req.Effect = strings.TrimSpace(req.Effect)
 	if req.Key == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTaint, "key is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidTaint, "key is required")
 		return
 	}
 	if req.Effect != "" && !validTaintEffect(req.Effect) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTaint, "effect must be NoSchedule, PreferNoSchedule, or NoExecute")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidTaint, "effect must be NoSchedule, PreferNoSchedule, or NoExecute")
 		return
 	}
 	h.enqueueNodeOperation(w, r, "remove_taint", nodeOperationParameters{Key: req.Key, Effect: req.Effect})
@@ -810,7 +814,7 @@ func nodeActionParams(w http.ResponseWriter, r *http.Request) (string, string, b
 	}
 	nodeName := chi.URLParam(r, "node_name")
 	if nodeName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "node_name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "node_name is required")
 		return "", "", false
 	}
 	return clusterUUID.String(), nodeName, true
@@ -828,12 +832,12 @@ func validTaintEffect(effect string) bool {
 func (h *ResourceHandler) setNodeMetadataKey(w http.ResponseWriter, r *http.Request, field string) {
 	var req nodeKeyValueRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
 	if req.Key == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKey, "key is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidKey, "key is required")
 		return
 	}
 	action := "set_label"
@@ -846,12 +850,12 @@ func (h *ResourceHandler) setNodeMetadataKey(w http.ResponseWriter, r *http.Requ
 func (h *ResourceHandler) removeNodeMetadataKey(w http.ResponseWriter, r *http.Request, field string) {
 	var req nodeKeyRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Key = strings.TrimSpace(req.Key)
 	if req.Key == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidKey, "key is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidKey, "key is required")
 		return
 	}
 	action := "remove_label"
@@ -916,11 +920,11 @@ func (h *ResourceHandler) UpdateNamedResource(w http.ResponseWriter, r *http.Req
 	name := chi.URLParam(r, "name")
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	if err := validateResourceIdentity(body, name, namespace); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	h.enqueueResourceOperation(w, r, resourceMutationIntent{
@@ -942,7 +946,7 @@ func (h *ResourceHandler) DeleteNamedResourceREST(w http.ResponseWriter, r *http
 	name := chi.URLParam(r, "name")
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	h.enqueueResourceOperation(w, r, resourceMutationIntent{
@@ -964,12 +968,12 @@ func (h *ResourceHandler) proxyNamedResourceReadOrDryRun(w http.ResponseWriter, 
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 	if resourceType == "" || name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "type and name are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "type and name are required")
 		return
 	}
 	path, err := resourcePath(resourceType, name, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	headers := requestHeaders("")
@@ -1012,7 +1016,7 @@ func (h *ResourceHandler) do(ctx context.Context, clusterID, method, path string
 func (h *ResourceHandler) proxyJSON(w http.ResponseWriter, r *http.Request, clusterID, method, path string, body []byte, headers map[string]string) {
 	resp, err := h.do(r.Context(), clusterID, method, path, body, headers)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)
@@ -1095,8 +1099,8 @@ func readResourceManifest(w http.ResponseWriter, r *http.Request) ([]byte, error
 func respondResourceManifestReadError(w http.ResponseWriter, r *http.Request, err error) {
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Resource manifest exceeds the 2 MiB limit")
+		apiutil.WriteError(w, r, http.StatusRequestEntityTooLarge, apiutil.InvalidBody, "Resource manifest exceeds the 2 MiB limit")
 		return
 	}
-	RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Failed to read request body")
+	apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Failed to read request body")
 }

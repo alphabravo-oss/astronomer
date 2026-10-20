@@ -8,15 +8,15 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
-func TestWorkerTracingConfigPreservesOperatorTransportAndWorkerIdentity(t *testing.T) {
+func TestWorkerTelemetryConfigPreservesOperatorTransportAndWorkerIdentity(t *testing.T) {
 	cfg := &config.Config{
 		OTELExporterEndpoint: "https://collector.invalid/custom/traces", OTELExporterInsecure: true,
 		OTELExporterHeaders: "Authorization=Bearer synthetic-header,X-Qualification=owned",
 		OTELServiceName:     "operator-api-name", OTELServiceVersion: "operator-api-version",
 		OTELSamplerRatio: 0.25, Env: "qualification", ProcessHostname: "owned-worker",
 	}
-	got := workerTracingConfig(cfg)
-	if got.Endpoint != cfg.OTELExporterEndpoint || got.Insecure != cfg.OTELExporterInsecure || got.SamplerRatio != cfg.OTELSamplerRatio {
+	got := workerTelemetryConfig(cfg)
+	if got.Endpoint != cfg.OTELExporterEndpoint || got.Insecure != cfg.OTELExporterInsecure || got.SampleRate != cfg.OTELSamplerRatio {
 		t.Fatal("operator transport/sampling settings changed")
 	}
 	if !reflect.DeepEqual(got.Headers, map[string]string{"Authorization": "Bearer synthetic-header", "X-Qualification": "owned"}) {
@@ -27,7 +27,7 @@ func TestWorkerTracingConfigPreservesOperatorTransportAndWorkerIdentity(t *testi
 	}
 	cfg.OTELExporterEndpoint = ""
 	cfg.OTELSamplerRatio = 0
-	if disabled := workerTracingConfig(cfg); disabled.Endpoint != "" || disabled.SamplerRatio != 0 {
+	if disabled := workerTelemetryConfig(cfg); disabled.Endpoint != "" || disabled.SampleRate != 0 {
 		t.Fatal("disabled tracing/sampling values changed")
 	}
 }

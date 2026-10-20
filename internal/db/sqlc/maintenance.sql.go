@@ -28,22 +28,28 @@ const createDeferredOperation = `-- name: CreateDeferredOperation :one
 
 INSERT INTO deferred_operations (
     window_id, operation_type, operation_spec, target_cluster_id, target_project_id,
-    deferred_until, expires_at, requested_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    deferred_until, expires_at, requested_by,
+    sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING id, window_id, operation_type, operation_spec, target_cluster_id,
           target_project_id, status, deferred_until, expires_at, requested_by,
-          last_error, dispatched_at, created_at, updated_at
+          last_error, dispatched_at, created_at, updated_at,
+          sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 `
 
 type CreateDeferredOperationParams struct {
-	WindowID        uuid.UUID          `json:"window_id"`
-	OperationType   string             `json:"operation_type"`
-	OperationSpec   json.RawMessage    `json:"operation_spec"`
-	TargetClusterID pgtype.UUID        `json:"target_cluster_id"`
-	TargetProjectID pgtype.UUID        `json:"target_project_id"`
-	DeferredUntil   pgtype.Timestamptz `json:"deferred_until"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	RequestedBy     pgtype.UUID        `json:"requested_by"`
+	WindowID             uuid.UUID          `json:"window_id"`
+	OperationType        string             `json:"operation_type"`
+	OperationSpec        json.RawMessage    `json:"operation_spec"`
+	TargetClusterID      pgtype.UUID        `json:"target_cluster_id"`
+	TargetProjectID      pgtype.UUID        `json:"target_project_id"`
+	DeferredUntil        pgtype.Timestamptz `json:"deferred_until"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	RequestedBy          pgtype.UUID        `json:"requested_by"`
+	SealedSpecKeyID      string             `json:"sealed_spec_key_id"`
+	SealedSpecAlgorithm  string             `json:"sealed_spec_algorithm"`
+	SealedSpecCiphertext []byte             `json:"sealed_spec_ciphertext"`
+	SealedSpecNonce      []byte             `json:"sealed_spec_nonce"`
 }
 
 // Deferred operations --------------------------------------------------
@@ -57,6 +63,10 @@ func (q *Queries) CreateDeferredOperation(ctx context.Context, arg CreateDeferre
 		arg.DeferredUntil,
 		arg.ExpiresAt,
 		arg.RequestedBy,
+		arg.SealedSpecKeyID,
+		arg.SealedSpecAlgorithm,
+		arg.SealedSpecCiphertext,
+		arg.SealedSpecNonce,
 	)
 	var i DeferredOperation
 	err := row.Scan(
@@ -74,6 +84,10 @@ func (q *Queries) CreateDeferredOperation(ctx context.Context, arg CreateDeferre
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SealedSpecKeyID,
+		&i.SealedSpecAlgorithm,
+		&i.SealedSpecCiphertext,
+		&i.SealedSpecNonce,
 	)
 	return i, err
 }
@@ -148,7 +162,8 @@ func (q *Queries) DeleteMaintenanceWindow(ctx context.Context, id uuid.UUID) err
 const getDeferredOperation = `-- name: GetDeferredOperation :one
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 WHERE id = $1
 `
@@ -171,6 +186,10 @@ func (q *Queries) GetDeferredOperation(ctx context.Context, id uuid.UUID) (Defer
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SealedSpecKeyID,
+		&i.SealedSpecAlgorithm,
+		&i.SealedSpecCiphertext,
+		&i.SealedSpecNonce,
 	)
 	return i, err
 }
@@ -178,7 +197,8 @@ func (q *Queries) GetDeferredOperation(ctx context.Context, id uuid.UUID) (Defer
 const getDeferredOperationForUpdate = `-- name: GetDeferredOperationForUpdate :one
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 WHERE id = $1
 FOR UPDATE
@@ -202,6 +222,10 @@ func (q *Queries) GetDeferredOperationForUpdate(ctx context.Context, id uuid.UUI
 		&i.DispatchedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SealedSpecKeyID,
+		&i.SealedSpecAlgorithm,
+		&i.SealedSpecCiphertext,
+		&i.SealedSpecNonce,
 	)
 	return i, err
 }
@@ -300,7 +324,8 @@ func (q *Queries) GetMaintenanceWindowForUpdate(ctx context.Context, id uuid.UUI
 const listDeferredOperations = `-- name: ListDeferredOperations :many
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -335,6 +360,10 @@ func (q *Queries) ListDeferredOperations(ctx context.Context, arg ListDeferredOp
 			&i.DispatchedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SealedSpecKeyID,
+			&i.SealedSpecAlgorithm,
+			&i.SealedSpecCiphertext,
+			&i.SealedSpecNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -443,7 +472,8 @@ func (q *Queries) ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWind
 const listPendingDeferredOperations = `-- name: ListPendingDeferredOperations :many
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 WHERE status = 'pending'
   AND (deferred_until IS NULL OR deferred_until <= $1)
@@ -482,6 +512,10 @@ func (q *Queries) ListPendingDeferredOperations(ctx context.Context, arg ListPen
 			&i.DispatchedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SealedSpecKeyID,
+			&i.SealedSpecAlgorithm,
+			&i.SealedSpecCiphertext,
+			&i.SealedSpecNonce,
 		); err != nil {
 			return nil, err
 		}

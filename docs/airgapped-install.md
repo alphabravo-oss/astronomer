@@ -1,6 +1,80 @@
 # Air-gapped installation and upgrade
 
-> **Note (2026-10 realignment):** the Python/Bash mirroring helpers referenced below (`mirror-release.py`, `check-build-capacity.sh`, `safe-disk-cleanup.sh`, `application-catalog-airgap.sh`) were removed with the CI tooling sweep; they return as `astro airgap` subcommands in Phase 1. Until then use the versions in git history (`git show 4904e8c:scripts/mirror-release.py`).
+> **Note (2026-10 realignment):** the Python mirroring helpers
+> (`mirror-release.py`, `airgap-kit.py`) are replaced by `astro airgap plan`
+> and `astro airgap mirror` (see "Cluster-local registry" below). The signed
+> mirror-mapping (`mirror-release.py sign/verify`) and kit `approve` steps
+> later in this runbook are not yet ported; with a cluster-local registry the
+> re-host rule is deterministic and no mapping file is needed for images.
+> Until those steps return, use the versions in git history
+> (`git show 6a88d2e04c^:scripts/mirror-release.py`).
+
+## Cluster-local registry (layer 1) — recommended
+
+The management plane resolves every runtime image and OCI artifact in three
+layers (ADR 0014): **(1)** the cluster-local registry, **(2)** an opt-in,
+digest-verified fallback list, **(3)** fail closed. It never falls back to a
+public registry. Each resolution is logged as
+`msg="registry resolution" layer=local|fallback|fail_closed`, and server,
+worker and agent log their out-of-cluster endpoints once at startup
+(`msg="egress endpoints"`).
+
+1. On a connected host, inventory the release and copy it into the registry
+   (credentials come from `docker login`/`oras login`, never flags):
+
+   ```bash
+   astro airgap plan --to registry.internal:5000 -o json > plan.json
+   astro airgap mirror --plan plan.json --to registry.internal:5000
+   # rerunning is safe: present items are skipped, partial copies resume
+   ```
+
+   Targets keep the source path and replace the host
+   (`ghcr.io/alphabravo-oss/astronomer-go-server` →
+   `registry.internal:5000/alphabravo-oss/astronomer-go-server`, `busybox` →
+   `registry.internal:5000/busybox`). Multi-arch indexes, cosign
+   signature/attestation tags and OCI referrers are copied with their digests.
+
+2. Either point the chart at that registry (`image.registry:
+   registry.internal:5000`) or run the in-cluster zot:
+
+   ```yaml
+   registry:
+     zot:
+       enabled: true                 # REGISTRY_LOCAL = <release>-zot.<ns>.svc.cluster.local:5000
+       service: {type: NodePort, nodePort: 30500}
+       auth: {htpasswdSecret: zot-htpasswd}   # anonymous read, authenticated push
+     fallbacks: []                   # REGISTRY_FALLBACKS — empty = fail closed
+   ```
+
+   Pre-load the zot image itself (`ghcr.io/project-zot/zot@sha256:96cda114…`)
+   on every node (k3s/RKE2 air-gap image tarball or `ctr images import`); the
+   registry cannot serve its own image. Then map the in-cluster name for the
+   node container runtime, e.g. k3s/RKE2 `/etc/rancher/k3s/registries.yaml`:
+
+   ```yaml
+   mirrors:
+     "astronomer-zot.astronomer.svc.cluster.local:5000":
+       endpoint: ["http://127.0.0.1:30500"]
+   ```
+
+   Populate zot with `astro airgap mirror --to <node>:30500 --plain-http
+   <node>:30500` (or through a port-forward) before installing workloads.
+
+   First install ordering: the preflight hook runs before zot exists, so the
+   first `helm install` uses `--set preflight.enabled=false` (workloads back
+   off until the mirror lands, then start); later upgrades run preflight from
+   zot normally. On kube-router (k3s) a pod can egress for a moment before its
+   NetworkPolicy rules sync; do not treat that window as a boundary.
+
+3. Optional fallbacks (`registry.fallbacks`) are consulted only after a
+   layer-1 miss, only for digest-pinned references, and only when they serve
+   the exact pinned digest. Policy-controller users: see
+   [verify-images.md](verify-images.md#sigstore-policy-controller-and-the-cluster-local-registry-zot).
+
+Known limits: the verified built-in/Flux distribution loaders fetch over
+HTTPS, so serving those release artifacts from zot needs zot TLS plus a
+`delivery.distribution.destinationPolicy` entry; Flux controller images on
+adopted clusters still come from the signed Flux distribution's own references.
 
 This runbook installs one immutable Astronomer release without allowing the
 management or member clusters to reach a public registry. A release is a single

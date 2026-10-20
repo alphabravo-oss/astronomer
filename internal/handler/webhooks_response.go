@@ -158,7 +158,7 @@ func toSubscriptionResponse(row sqlc.WebhookSubscription) subscriptionResponse {
 		Name:             row.Name,
 		URL:              row.Url,
 		Secret:           SecretSentinel,
-		SecretConfigured: row.SecretEncrypted != "",
+		SecretConfigured: row.SecretKeyID != "",
 		EventFilters:     filters,
 		PayloadTemplate:  row.PayloadTemplate,
 		ExtraHeaders:     headers,

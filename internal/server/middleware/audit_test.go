@@ -5,22 +5,24 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// newTestLogger returns a slog.Logger that writes JSON to the provided buffer.
-func newTestLogger(buf *bytes.Buffer) *slog.Logger {
-	return slog.New(slog.NewJSONHandler(buf, nil))
+// newTestLogger returns a zerolog.Logger that writes JSON to the provided buffer.
+func newTestLogger(buf *bytes.Buffer) zerolog.Logger {
+	return zerolog.New(buf).With().Timestamp().Logger()
 }
 
 // okHandler is a simple handler that writes a 200 OK response.
@@ -352,9 +354,9 @@ func TestCharlieAuthenticationDenialAuditDoesNotDuplicatePostAuthDenial(t *testi
 func TestCharlieHTTPAuditFailuresUseBoundedOperationalSerializer(t *testing.T) {
 	const canary = "database-and-correlation-SENTINEL"
 	var output bytes.Buffer
-	prior := slog.Default()
-	slog.SetDefault(newTestLogger(&output))
-	t.Cleanup(func() { slog.SetDefault(prior) })
+	prior := logging.Default()
+	logging.SetDefault(newTestLogger(&output))
+	t.Cleanup(func() { logging.SetDefault(*prior) })
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/charlie", nil)
 	request = request.WithContext(reqctx.WithRequestID(request.Context(), canary, false))

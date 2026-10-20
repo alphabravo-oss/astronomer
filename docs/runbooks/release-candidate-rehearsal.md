@@ -45,7 +45,7 @@ cluster. Deletion requires the matching `destroy-astronomer-rc-<run-id>` fence
 and occurs only after this invocation records that it created the cluster.
 
 The rehearsal installs the previous signed release, inserts a disposable
-Fernet proof, captures the full private Helm/Secret/PostgreSQL backup, restores
+encryption-key decrypt proof, captures the full private Helm/Secret/PostgreSQL backup, restores
 the dump into a clean database, verifies schema and the restored proof under
 the original key, upgrades using the pre-promotion signed manifest, and checks
 readiness. Private artifacts live only under an owner-readable `mktemp`

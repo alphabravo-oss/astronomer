@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/pbkdf2"
@@ -158,7 +160,7 @@ func verifyArgon2(stored, plaintext string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("invalid argon2 hash: %w", err)
 	}
-	keyLen := uint32(len(expected))
+	keyLen := safeconv.Uint32(len(expected))
 	if keyLen == 0 {
 		return false, fmt.Errorf("invalid argon2 hash length")
 	}

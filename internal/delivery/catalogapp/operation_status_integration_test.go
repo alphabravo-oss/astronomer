@@ -1,9 +1,10 @@
+//go:build integration
+
 package catalogapp
 
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,13 +16,13 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
 )
 
 func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
-	dsn := os.Getenv("AUDIT_OUTBOX_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("AUDIT_OUTBOX_TEST_DATABASE_URL is not set")
-	}
+	t.Parallel()
+	dsn := testdb.DSN(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {

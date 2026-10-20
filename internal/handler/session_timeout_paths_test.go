@@ -139,14 +139,14 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateSecret: %v", err)
 		}
-		encrypted, err := encryptor.Encrypt(secret)
+		encrypted, err := encryptor.EncryptString(secret)
 		if err != nil {
 			t.Fatalf("Encrypt: %v", err)
 		}
 		_, _ = store.UpsertUserTOTPEnrollment(context.Background(), sqlc.UpsertUserTOTPEnrollmentParams{
-			UserID:          user.ID,
-			SecretEncrypted: encrypted,
-			ConfirmedAt:     time.Now(),
+			UserID:      user.ID,
+			SecretKeyID: encrypted.KeyID, SecretAlgorithm: encrypted.Algorithm, SecretCiphertext: encrypted.Ciphertext, SecretNonce: encrypted.Nonce,
+			ConfirmedAt: time.Now(),
 		})
 		codes, hashes, err := auth.GenerateRecoveryCodes(1)
 		if err != nil {
