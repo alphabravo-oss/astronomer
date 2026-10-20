@@ -172,8 +172,11 @@ docker-build-frontend: ## Build the frontend image
 	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) \
 		-f frontend/Dockerfile -t $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG) frontend
 
+# Repository names match the chart and release workflow: server/worker/agent are
+# astronomer-go-<name>; shell and dr are astronomer-<name>.
+image_repo = $(if $(filter shell dr,$(1)),astronomer-$(1),astronomer-go-$(1))
 docker-build-%: ## Build one image: docker-build-server|worker|agent|shell|dr
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/astronomer-go-$*:$(IMG_TAG) .
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/$(call image_repo,$*):$(IMG_TAG) .
 
 # The base values profile requires release-stamped digests and real key material;
 # lint with the dev profile, the qualified kube minor and throwaway lint-only keys.
