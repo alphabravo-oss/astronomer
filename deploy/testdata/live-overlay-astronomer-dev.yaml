@@ -35,3 +35,12 @@ postgres:
         data: {compression: gzip, jobs: 2}
         retentionPolicy: 14d
         retentionPolicyIntervalSeconds: 1800
+# The live values pin the drill sidecar to postgres:16-alpine; the restore
+# target must match the CNPG 17.11 server. (The astronomer-dr image itself
+# needs a release built from Dockerfile.dr with postgresql17-client.)
+managementRestoreDrill:
+  sidecar:
+    image:
+      repository: docker.io/library/postgres
+      tag: 17-alpine
+      digest: sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24

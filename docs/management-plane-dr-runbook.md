@@ -297,7 +297,7 @@ Start a temporary client Pod with `psql`:
 
 ```bash
 kubectl -n astronomer run psql-restore --rm -it --restart=Never \
-  --image=postgres:16-alpine \
+  --image=postgres:17-alpine \
   --env="PGURL=$(kubectl -n astronomer get secret <dsn-secret> \
         -o jsonpath='{.data.<dsn-key>}' | base64 -d)" \
   -- psql "$PGURL" -d postgres
@@ -552,6 +552,11 @@ backups through the upstream CNPG-I Barman Cloud plugin
 (`barman-cloud.cloudnative-pg.io`). This is the PITR layer; the
 `managementBackup` dumps above remain the encrypted, Object-Locked cold copy.
 
+For a single-node install with an off-host, non-AWS S3 store (RustFS/MinIO,
+Object Lock GOVERNANCE 30 days, retention in dry-run) start from
+`deploy/chart/values-single-node-backup.yaml`, layered after
+`values-single-node.yaml`.
+
 ### Chart-managed ObjectStore
 
 Install the plugin (pinned `tag@digest`, see [verify-images](verify-images.md))
@@ -638,6 +643,14 @@ which then rolled back. Pick one:
 After the switch, take a backup immediately
 (`kubectl cnpg backup <cluster> --method plugin --plugin-name barman-cloud.cloudnative-pg.io`)
 or set `scheduledBackup.immediate: true`.
+
+### Client tools for the DR jobs
+
+`pg_dump` refuses to dump a server with a newer major version. The
+`astronomer-dr` image therefore ships the PostgreSQL **17** client tools to
+match the chart's CNPG `postgresql:17.11` image, and the restore drill's
+sidecar defaults to `postgres:17-alpine` (tag@digest). Keep all three in
+lockstep when the CNPG image moves to a new major.
 
 ---
 

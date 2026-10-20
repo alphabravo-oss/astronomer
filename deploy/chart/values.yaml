@@ -1374,14 +1374,16 @@ managementRestoreDrill:
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # The sidecar Postgres that the drill restores INTO. emptyDir-backed
-  # and torn down with the pod; keep the image in lockstep with the
-  # bundled postgres so a successful restore actually proves nothing
-  # broke against the production Postgres version.
+  # and torn down with the pod; keep its major in lockstep with the
+  # CloudNativePG server (postgres.cloudNativePG.imageName, 17.11) and the
+  # astronomer-dr image's client tools (PostgreSQL 17) so a successful
+  # restore proves the production dump restores on the production major.
   sidecar:
     image:
       repository: postgres
-      tag: "16-alpine"
-      digest: ""
+      tag: "17-alpine"
+      # postgres:17-alpine (= 17.11-alpine) multi-arch index, 2026-10-20.
+      digest: "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
       pullPolicy: IfNotPresent
       registry: ""    # T23 air-gapped override; falls back to image.registry
     # Throwaway password used between the two containers inside the

@@ -5,12 +5,18 @@ ARG VERSION=2.0.1
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
+# PostgreSQL client major must match the chart's CloudNativePG server
+# (postgres.cloudNativePG.imageName = postgresql:17.11): pg_dump refuses to dump
+# a newer server major, so a 16 client cannot back up the chart's own cluster.
 RUN apk add --no-cache \
       aws-cli \
       ca-certificates \
-      postgresql16-client \
+      postgresql17-client \
       py3-cryptography \
-      python3
+      python3 \
+    && pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17\.' \
+    && pg_restore --version | grep -Eq '^pg_restore \(PostgreSQL\) 17\.' \
+    && psql --version | grep -Eq '^psql \(PostgreSQL\) 17\.'
 
 COPY deploy/dr/dr_crypto.py /usr/local/bin/dr-crypto
 RUN chmod 0555 /usr/local/bin/dr-crypto

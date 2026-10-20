@@ -3,9 +3,11 @@ package deploy
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -323,5 +325,91 @@ func TestChartManagedObjectStoreRequiresCredentialsRef(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(stderr, "destinationPath") {
 		t.Fatalf("non-s3 destinationPath accepted: %v %s", err, stderr)
+	}
+}
+
+// cnpgMajor extracts the PostgreSQL major from the chart's CNPG imageName
+// (ghcr.io/cloudnative-pg/postgresql:17.11-...).
+func cnpgMajor(t *testing.T, imageName string) string {
+	t.Helper()
+	m := regexp.MustCompile(`/postgresql:([0-9]+)\.`).FindStringSubmatch(imageName)
+	if m == nil {
+		t.Fatalf("cannot parse PostgreSQL major from %q", imageName)
+	}
+	return m[1]
+}
+
+func TestDRToolingMatchesCNPGMajor(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"postgres.mode=cloudNativePG",
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
+		"managementBackup.encryption.sourceIdentity=test-installation",
+		"managementBackup.encryption.wrappingSecretRef.name=backup-wrap",
+		"managementRestoreDrill.enabled=true",
+	))
+	major := cnpgMajor(t, stringAt(findRenderedDoc(t, docs, "Cluster", "astronomer-postgres"), "spec", "imageName"))
+	drill := findRenderedDoc(t, docs, "CronJob", "astronomer-restore-drill")
+	podSpec := nestedMap(drill, "spec", "jobTemplate", "spec", "template", "spec")
+	image := ""
+	for _, field := range []string{"initContainers", "containers"} {
+		for _, container := range containerList(podSpec, field) {
+			if stringValue(container["name"]) == "postgres" {
+				image = stringValue(container["image"])
+			}
+		}
+	}
+	// The chart renders digest-pinned third-party images as repo@digest; the
+	// tag documents which major the digest belongs to.
+	if !regexp.MustCompile(`^postgres@sha256:[a-f0-9]{64}$`).MatchString(image) {
+		t.Errorf("restore-drill sidecar %q is not pinned by digest", image)
+	}
+	values := readRepoFile(t, filepath.Join("deploy", "chart", "values.yaml"))
+	sidecar := regexp.MustCompile(`(?s)\n  sidecar:\n    image:\n      repository: postgres\n      tag: "([^"]+)"`).FindStringSubmatch(values)
+	if sidecar == nil || sidecar[1] != major+"-alpine" {
+		t.Errorf("managementRestoreDrill.sidecar.image.tag = %v, want %s-alpine", sidecar, major)
+	}
+	dockerfile := readRepoFile(t, filepath.Join("deploy", "docker", "Dockerfile.dr"))
+	if !strings.Contains(dockerfile, "postgresql"+major+"-client") {
+		t.Errorf("Dockerfile.dr does not install postgresql%s-client", major)
+	}
+	if regexp.MustCompile(`postgresql(1[0-6]|[0-9])-client`).MatchString(dockerfile) {
+		t.Error("Dockerfile.dr still installs an older PostgreSQL client")
+	}
+}
+
+func readRepoFile(t *testing.T, rel string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func TestSingleNodeBackupOverlayWiresRustFS(t *testing.T) {
+	out := helmTemplateLive(t, []string{filepath.Join("chart", "values-single-node.yaml"), filepath.Join("chart", "values-single-node-backup.yaml")},
+		testRenderSecretKeySet, testRenderEncryptionKeySet)
+	docs := parseRenderedDocs(t, out)
+	store := findRenderedDoc(t, docs, "ObjectStore", "astronomer-recovery")
+	if got := stringAt(store, "spec", "configuration", "endpointURL"); got != "http://192.0.2.10:9000" {
+		t.Errorf("ObjectStore endpointURL = %q", got)
+	}
+	if nestedMap(findRenderedDoc(t, docs, "ScheduledBackup", "astronomer-postgres"), "spec")["immediate"] != true {
+		t.Error("example does not take an immediate first backup")
+	}
+	retention := findRenderedDoc(t, docs, "CronJob", "astronomer-management-backup-retention")
+	container := containerList(nestedMap(retention, "spec", "jobTemplate", "spec", "template", "spec"), "containers")[0]
+	if stringValue(findEnvVar(t, container, "RETENTION_DRY_RUN")["value"]) != "true" {
+		t.Error("example retention must stay in dry-run")
+	}
+	if !strings.Contains(out, "http://192.0.2.10:9000") {
+		t.Error("management backup endpoint not rendered")
+	}
+	policies := renderedNetworkPolicies(t, out)
+	for _, name := range []string{"astronomer-postgres", "astronomer-management-backup", "astronomer-management-backup-retention", "astronomer-restore-drill"} {
+		if !rulesAllowPorts(egressRulesTo(policyByName(t, policies, name), ipBlockPeer("192.0.2.10/32")), 9000) {
+			t.Errorf("%s cannot reach the RustFS S3 API 192.0.2.10:9000", name)
+		}
 	}
 }
