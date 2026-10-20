@@ -2,8 +2,10 @@ package deploy
 
 import (
 	"bytes"
+	"fmt"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -232,5 +234,94 @@ func TestCNPGNetworkPolicyDefaultsStayClosed(t *testing.T) {
 	}
 	if !slices.ContainsFunc(postgres.Spec.Egress, func(rule networkingv1.NetworkPolicyEgressRule) bool { return portsContain(rule.Ports, 53) }) {
 		t.Error("CNPG egress lost DNS")
+	}
+}
+
+// handMadeOffhostObjectStoreSpec is the spec of the ObjectStore applied by hand
+// on astronomer-dev (runtime-changes-20261020/cnpg-backup/objectstore-offhost.yaml).
+const handMadeOffhostObjectStoreSpec = `
+configuration:
+  destinationPath: s3://astronomer-recovery-offhost/
+  endpointURL: http://100.118.107.29:9000
+  s3Credentials:
+    accessKeyId: {name: offhost-rustfs-credentials, key: ACCESS_KEY_ID}
+    secretAccessKey: {name: offhost-rustfs-credentials, key: SECRET_ACCESS_KEY}
+  data: {compression: gzip, jobs: 2}
+  wal: {compression: gzip, maxParallel: 2}
+instanceSidecarConfiguration:
+  env:
+  - {name: AWS_DEFAULT_REGION, value: us-east-1}
+  retentionPolicyIntervalSeconds: 1800
+retentionPolicy: 14d
+`
+
+func TestChartManagedObjectStoreMatchesLiveObjectStore(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplateLive(t, []string{liveValuesFile, liveOverlayFile}))
+	store := findRenderedDoc(t, docs, "ObjectStore", "offhost-archive")
+	if got := stringAt(store, "apiVersion"); got != "barmancloud.cnpg.io/v1" {
+		t.Fatalf("ObjectStore apiVersion = %q", got)
+	}
+	want := parseRenderedDocs(t, "kind: Spec\nspec:\n"+indent(handMadeOffhostObjectStoreSpec, "  "))[0]["spec"]
+	if !reflect.DeepEqual(store["spec"], want) {
+		t.Fatalf("chart ObjectStore spec differs from the live one:\n got %#v\nwant %#v", store["spec"], want)
+	}
+	if nestedMap(store, "metadata", "annotations")["helm.sh/resource-policy"] != "keep" {
+		t.Error("ObjectStore must survive helm uninstall")
+	}
+	cluster := findRenderedDoc(t, docs, "Cluster", "astronomer-cnpg")
+	plugins, _ := nestedMap(cluster, "spec")["plugins"].([]any)
+	if len(plugins) != 1 || stringAt(plugins[0].(map[string]any), "parameters", "barmanObjectName") != "offhost-archive" {
+		t.Fatalf("Cluster plugins do not reference the chart-managed store: %#v", plugins)
+	}
+}
+
+func indent(text, prefix string) string {
+	lines := strings.Split(strings.Trim(text, "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func TestScheduledBackupImmediateAndShutdownKnobs(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplateLive(t, []string{liveValuesFile},
+		"postgres.cloudNativePG.barmanCloud.scheduledBackup.immediate=true",
+		"postgres.cloudNativePG.stopDelay=60",
+		"postgres.cloudNativePG.smartShutdownTimeout=15",
+	))
+	backup := findRenderedDoc(t, docs, "ScheduledBackup", "astronomer-cnpg")
+	if nestedMap(backup, "spec")["immediate"] != true {
+		t.Errorf("ScheduledBackup.spec.immediate not rendered: %#v", backup["spec"])
+	}
+	spec := nestedMap(findRenderedDoc(t, docs, "Cluster", "astronomer-cnpg"), "spec")
+	if fmt.Sprint(spec["stopDelay"]) != "60" || fmt.Sprint(spec["smartShutdownTimeout"]) != "15" {
+		t.Errorf("shutdown knobs not rendered: stopDelay=%v smartShutdownTimeout=%v", spec["stopDelay"], spec["smartShutdownTimeout"])
+	}
+	// Defaults: CNPG defaults stay in force and no ObjectStore is rendered.
+	docs = parseRenderedDocs(t, helmTemplateLive(t, []string{liveValuesFile}))
+	spec = nestedMap(findRenderedDoc(t, docs, "Cluster", "astronomer-cnpg"), "spec")
+	if _, ok := spec["stopDelay"]; ok {
+		t.Error("stopDelay rendered by default")
+	}
+	for _, doc := range docs {
+		if doc["kind"] == "ObjectStore" {
+			t.Error("ObjectStore rendered without objectStore.create")
+		}
+	}
+}
+
+func TestChartManagedObjectStoreRequiresCredentialsRef(t *testing.T) {
+	_, stderr, err := helmTemplateRaw(t, k3sKubeVersion, []string{liveValuesFile},
+		"postgres.cloudNativePG.barmanCloud.objectStore.create=true",
+		"postgres.cloudNativePG.barmanCloud.objectStore.destinationPath=s3://bucket/astronomer/",
+	)
+	if err == nil || !strings.Contains(stderr, "s3Credentials.accessKeyId.name is required") {
+		t.Fatalf("missing credentials ref accepted: %v %s", err, stderr)
+	}
+	_, stderr, err = helmTemplateRaw(t, k3sKubeVersion, []string{liveValuesFile},
+		"postgres.cloudNativePG.barmanCloud.objectStore.destinationPath=bucket-without-scheme",
+	)
+	if err == nil || !strings.Contains(stderr, "destinationPath") {
+		t.Fatalf("non-s3 destinationPath accepted: %v %s", err, stderr)
 	}
 }

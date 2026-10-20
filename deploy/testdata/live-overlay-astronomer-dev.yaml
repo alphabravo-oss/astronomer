@@ -14,3 +14,24 @@ networkPolicy:
   objectStoreEgressPorts: [9000, 443]
   walArchiveEgressCIDRs: [100.118.107.29/32]
   walArchiveEgressPorts: [9000, 443]
+# Replaces cnpg-backup/objectstore-offhost.yaml (the ObjectStore only; the
+# offhost-rustfs-credentials Secret stays operator-managed). Adopt the existing
+# object before the upgrade:
+#   kubectl -n astronomer label objectstore offhost-archive app.kubernetes.io/managed-by=Helm
+#   kubectl -n astronomer annotate objectstore offhost-archive \
+#     meta.helm.sh/release-name=astronomer meta.helm.sh/release-namespace=astronomer
+postgres:
+  cloudNativePG:
+    barmanCloud:
+      objectStore:
+        create: true
+        destinationPath: s3://astronomer-recovery-offhost/
+        endpointURL: http://100.118.107.29:9000
+        region: us-east-1
+        s3Credentials:
+          accessKeyId: {name: offhost-rustfs-credentials, key: ACCESS_KEY_ID}
+          secretAccessKey: {name: offhost-rustfs-credentials, key: SECRET_ACCESS_KEY}
+        wal: {compression: gzip, maxParallel: 2}
+        data: {compression: gzip, jobs: 2}
+        retentionPolicy: 14d
+        retentionPolicyIntervalSeconds: 1800

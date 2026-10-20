@@ -1,0 +1,57 @@
+{{- $barman := .Values.postgres.cloudNativePG.barmanCloud -}}
+{{- if and (eq (include "astronomer.postgresMode" .) "cloudNativePG") $barman.enabled $barman.objectStore.create }}
+{{- $store := $barman.objectStore -}}
+{{- $name := required "postgres.cloudNativePG.barmanCloud.objectStoreName is required when objectStore.create is true" $barman.objectStoreName -}}
+{{- $dest := required "postgres.cloudNativePG.barmanCloud.objectStore.destinationPath (s3://bucket/prefix/) is required when objectStore.create is true" $store.destinationPath -}}
+{{- $akid := required "postgres.cloudNativePG.barmanCloud.objectStore.s3Credentials.accessKeyId.name is required when objectStore.create is true" $store.s3Credentials.accessKeyId.name -}}
+{{- $sak := required "postgres.cloudNativePG.barmanCloud.objectStore.s3Credentials.secretAccessKey.name is required when objectStore.create is true" $store.s3Credentials.secretAccessKey.name -}}
+# Chart-managed Barman Cloud ObjectStore (CNPG-I plugin barman-cloud.cloudnative-pg.io).
+# Credentials stay in an operator-created Secret; only references are rendered.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "postgres") | nindent 4 }}
+  annotations:
+    # Deleting the ObjectStore would stop WAL archiving; keep it on uninstall.
+    helm.sh/resource-policy: keep
+spec:
+  configuration:
+    destinationPath: {{ $dest | quote }}
+    {{- with $store.endpointURL }}
+    endpointURL: {{ . | quote }}
+    {{- end }}
+    {{- if $store.endpointCA.name }}
+    endpointCA:
+      name: {{ $store.endpointCA.name | quote }}
+      key: {{ required "postgres.cloudNativePG.barmanCloud.objectStore.endpointCA.key is required with endpointCA.name" $store.endpointCA.key | quote }}
+    {{- end }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ $akid | quote }}
+        key: {{ $store.s3Credentials.accessKeyId.key | default "ACCESS_KEY_ID" | quote }}
+      secretAccessKey:
+        name: {{ $sak | quote }}
+        key: {{ $store.s3Credentials.secretAccessKey.key | default "SECRET_ACCESS_KEY" | quote }}
+    wal:
+      {{- with $store.wal.compression }}
+      compression: {{ . }}
+      {{- end }}
+      maxParallel: {{ $store.wal.maxParallel | default 1 }}
+    data:
+      {{- with $store.data.compression }}
+      compression: {{ . }}
+      {{- end }}
+      jobs: {{ $store.data.jobs | default 1 }}
+  {{- with $store.retentionPolicy }}
+  retentionPolicy: {{ . | quote }}
+  {{- end }}
+  instanceSidecarConfiguration:
+    retentionPolicyIntervalSeconds: {{ $store.retentionPolicyIntervalSeconds | default 1800 }}
+    {{- with $store.region }}
+    env:
+      - name: AWS_DEFAULT_REGION
+        value: {{ . | quote }}
+    {{- end }}
+{{- end }}
