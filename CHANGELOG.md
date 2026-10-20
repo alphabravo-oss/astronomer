@@ -7,6 +7,29 @@
 Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
 **This release has breaking deploy changes — read "Upgrading to 2.1.0" first.**
 
+### Security
+
+- **eMudhra intermediate CA compromise (2026-10-20).** Go 1.27.2 and older
+  accept certificate chains from the compromised eMudhra intermediates;
+  Go 1.27.3 rejects them regardless of the OS trust store. Every Go binary in
+  every 2.1.0 image is built with the pinned Go 1.27.3 builder, including the
+  third-party ones that used to come prebuilt: `kubectl` in `astronomer-shell`
+  is compiled from k8s.io/kubectl v0.35.9 (dl.k8s.io ships go1.26.8 builds) and
+  the `age` CLI in `astronomer-dr` from filippo.io/age v1.3.2 (Alpine's package
+  is go1.26.9), via the `tools/imagebins` module.
+  `scripts/check-image-go.sh` fails `make docker-build` and the release
+  workflow (amd64 + arm64) when any Go binary in an image is older than
+  go.mod's `go` line. Verified against dv-g3b-emudhra.we-have-a-problem.com
+  and dv-g3b-aaa-emudhra.we-have-a-problem.com: rejected from inside the 2.1.0
+  server image; a go1.27.2 build accepts the first host inside the 2.0.1 image.
+- Base images refreshed: distroless `static-debian13:nonroot` (was
+  debian12) for server/worker/agent, nginx `1.31.7-alpine3.24-slim` for the
+  frontend; alpine 3.24.2, node 24.22.0-alpine and golang 1.27.3-alpine were
+  already the newest digests.
+- Release images are signed in the legacy `.sig`/`.att` layout
+  (`--new-bundle-format=false`) because policy-controller 0.13.1 cannot
+  verify Sigstore bundles; the chart is signed after a `cosign login`.
+
 ### Upgrading to 2.1.0 (breaking)
 
 - **Migrations run inside the server at boot** (goose, embedded, advisory

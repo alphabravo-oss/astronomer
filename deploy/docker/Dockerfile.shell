@@ -24,9 +24,8 @@
 #       - Small enough that pulling on a fresh-cluster shell open is
 #         under the 30s readiness deadline on modest nodes.
 #
-# kubectl is fetched from dl.k8s.io — the Kubernetes Project's official
-# release CDN. We avoid Docker Hub entirely for this image so a future
-# Docker Hub rate-limit / outage / retag never breaks shell-open again.
+# kubectl is compiled from the upstream k8s.io/kubectl module with the
+# repository's pinned Go toolchain (see the kubectl stage below).
 
 # syntax=docker/dockerfile:1.7
 
@@ -41,35 +40,25 @@ COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
 COPY internal/dexconfig ./internal/dexconfig
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
-FROM gcr.io/projectsigstore/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8 AS cosign
-
-# Fetch kubectl in a throwaway stage so the runtime image does not ship curl.
-# kubectl version is pinned in lockstep with the bundled control-plane minor.
-# Bump in the same commit that bumps the k8s.io/* dependencies in go.mod so
-# the shell's kubectl version never lags the cluster's server version far
-# enough to be in the "skew unsupported" zone. The official binary is scanned
-# with the full shell image; use signed upstream patch releases to refresh
-# its bundled Go runtime and libraries.
-FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS kubectl
+# kubectl is compiled from the upstream k8s.io/kubectl module (version pinned in
+# tools/imagebins/go.mod, main copied verbatim from k8s.io/kubernetes) with the
+# pinned Go builder, so the shell never ships an upstream binary built by an
+# older Go toolchain (eMudhra CA distrust and other crypto/x509 fixes ship in
+# Go 1.27.3; dl.k8s.io kubectl 1.35.9 is built with go1.26.8). Keep the minor
+# in lockstep with the bundled control-plane minor.
+FROM golang:${GO_VERSION}-alpine@${GO_IMAGE_DIGEST} AS kubectl
 ARG KUBECTL_VERSION=v1.35.9
-ARG TARGETARCH=amd64
-COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
-# GNU coreutils is builder-only and supplies strict checksum-file parsing.
-# BusyBox sha256sum does not implement --strict and would make the verified
-# download fail before Cosign can validate the release certificate.
-RUN apk add --no-cache ca-certificates coreutils curl \
-    && KUBECTL_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}" \
-    && curl -fsSLo /kubectl "${KUBECTL_URL}/kubectl" \
-    && curl -fsSLo /kubectl.sha256 "${KUBECTL_URL}/kubectl.sha256" \
-    && curl -fsSLo /kubectl.sig "${KUBECTL_URL}/kubectl.sig" \
-    && curl -fsSLo /kubectl.cert "${KUBECTL_URL}/kubectl.cert" \
-    && echo "$(cat /kubectl.sha256)  /kubectl" | sha256sum --check --strict \
-    && cosign verify-blob /kubectl \
-        --signature /kubectl.sig \
-        --certificate /kubectl.cert \
-        --certificate-identity krel-staging@k8s-releng-prod.iam.gserviceaccount.com \
-        --certificate-oidc-issuer https://accounts.google.com \
-    && chmod +x /kubectl \
+WORKDIR /src/tools/imagebins
+COPY tools/imagebins/go.mod tools/imagebins/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY tools/imagebins/ ./
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    test "$(go list -m -f '{{.Version}}' k8s.io/kubectl)" = "v0${KUBECTL_VERSION#v1}" \
+    && minor="$(echo "${KUBECTL_VERSION}" | cut -d. -f2)" \
+    && ldv="-X k8s.io/client-go/pkg/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION}" \
+    && ldv="${ldv} -X k8s.io/client-go/pkg/version.gitMajor=1 -X k8s.io/client-go/pkg/version.gitMinor=${minor}" \
+    && ldv="${ldv} -X k8s.io/component-base/version.gitMajor=1 -X k8s.io/component-base/version.gitMinor=${minor}" \
+    && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w ${ldv}" -o /kubectl ./kubectl \
     && /kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
 
 FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS base
