@@ -65,7 +65,7 @@ function ProjectOverviewPage() {
           the operator explicitly pins something here. */}
       {project?.id ? (
         <section className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          <h3 className="text-sm font-medium text-muted-foreground">
             Widgets
           </h3>
           <WidgetGrid

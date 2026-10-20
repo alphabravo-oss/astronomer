@@ -149,7 +149,7 @@ export function clusterColumns(
         <ActionMenu
           items={[
             {
-              label: "Registration Command",
+              label: "Registration command",
               icon: <Terminal className="h-3.5 w-3.5" />,
               onClick: () =>
                 void navigate({

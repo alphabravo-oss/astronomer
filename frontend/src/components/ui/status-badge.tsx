@@ -45,7 +45,7 @@ const toneClasses: Record<ClusterBadgeTone, string> = {
   green: "border-status-success/30 bg-status-success/10 text-status-success",
   amber: "border-status-warning/30 bg-status-warning/10 text-status-warning",
   red: "border-status-error/30 bg-status-error/10 text-status-error",
-  purple: "border-primary/30 bg-primary/10 text-primary",
+  purple: "border-status-pending/30 bg-status-pending/10 text-status-pending",
 };
 
 interface StatusBadgeProps extends VariantProps<typeof statusBadgeVariants> {
@@ -89,7 +89,7 @@ export function StatusBadge({
     return (
       <span
         className={cn(
-          "inline-flex max-w-48 items-center truncate rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
+"inline-flex max-w-48 items-center truncate rounded-full border px-2 py-0.5 text-xs font-semibold",
           toneClasses[tone as ClusterBadgeTone] ?? toneClasses.slate,
           className,
         )}

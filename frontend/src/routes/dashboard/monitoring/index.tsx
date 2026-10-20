@@ -127,7 +127,7 @@ function MonitoringFleetPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Shared metrics"
+        title="Metrics"
         description="Open a cluster to see dashboards, node utilization, and the Prometheus stack for that environment."
         actions={
           grafanaOpenURL ? (

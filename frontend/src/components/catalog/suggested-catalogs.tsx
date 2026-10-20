@@ -91,7 +91,7 @@ export function SuggestedCatalogs({
                     <p className="font-medium text-foreground text-sm truncate">
                       {catalog.displayName}
                     </p>
-                    <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground uppercase font-mono">
+                    <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
                       {catalog.repoType}
                     </span>
                   </div>

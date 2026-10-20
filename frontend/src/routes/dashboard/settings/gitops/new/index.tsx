@@ -90,7 +90,7 @@ function GitOpsForm() {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-85"
           >
             Branch
@@ -109,7 +109,7 @@ function GitOpsForm() {
         </div>
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-98"
           >
             Path prefix
@@ -130,7 +130,7 @@ function GitOpsForm() {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-113"
           >
             Auth mode
@@ -157,7 +157,7 @@ function GitOpsForm() {
         </div>
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-130"
           >
             Auth token / key
@@ -183,7 +183,7 @@ function GitOpsForm() {
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-148"
           >
             Sync mode
@@ -207,7 +207,7 @@ function GitOpsForm() {
         </div>
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-164"
           >
             Interval (sec)
@@ -229,7 +229,7 @@ function GitOpsForm() {
         </div>
         <div className="space-y-1">
           <label
-            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-medium text-muted-foreground"
             htmlFor="field-bf605de5-180"
           >
             On delete

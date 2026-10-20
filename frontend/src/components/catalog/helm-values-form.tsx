@@ -304,7 +304,7 @@ function ArrayField({
                 className="rounded-md border border-border/50 bg-background/70 p-3 space-y-2"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <span className="text-xs font-medium text-muted-foreground">
                     Item {index + 1}
                   </span>
                   <ActionButton

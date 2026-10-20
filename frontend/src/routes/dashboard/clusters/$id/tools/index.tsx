@@ -40,7 +40,7 @@ function ClusterToolsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Platform Tools"
+        title="Tools"
         description={`Manage operational tools for ${cluster.displayName}`}
       />
       <ToolsTab

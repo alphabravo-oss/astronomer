@@ -235,7 +235,6 @@ describe("StatusBadge", () => {
   it("renders a tone tag instead of a status-derived color", () => {
     render(<StatusBadge tone="amber" label="Production" />);
     const badge = screen.getByText("Production");
-    expect(badge.className).toContain("uppercase");
     expect(badge.className).toContain("bg-status-warning/10");
   });
 

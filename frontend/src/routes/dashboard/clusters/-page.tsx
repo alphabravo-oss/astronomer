@@ -91,7 +91,7 @@ export function ClustersPage() {
     <PageShell>
       <PageHeader
         title="Clusters"
-        description="Monitor and manage the existing Kubernetes clusters you've registered with Astronomer"
+        description="Clusters you have registered, with connection state, capacity and the agent that manages each one."
         actions={
           <ActionButton
             intent="primary"
@@ -100,7 +100,7 @@ export function ClustersPage() {
               void navigate({ to: "/dashboard/clusters/register" })
             }
           >
-            Register Cluster
+            Register cluster
           </ActionButton>
         }
       />
@@ -264,7 +264,7 @@ export function ClustersPage() {
           setForceDelete(false);
         }}
         onConfirm={handleDelete}
-        title="Delete Cluster"
+        title="Delete cluster"
         description={`This will remove the cluster "${deleteTarget?.displayName}" from Astronomer. The underlying Kubernetes cluster will not be destroyed.`}
         confirmText="Delete"
         confirmValue={deleteTarget?.name}

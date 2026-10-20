@@ -97,7 +97,7 @@ export function ClusterAgentsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Cluster Agents"
+        title="Agents"
         description="Connected, degraded, and disconnected Astronomer agents across adopted clusters."
         actions={
           <div className="text-xs text-muted-foreground max-w-md text-right">

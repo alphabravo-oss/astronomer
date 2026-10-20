@@ -65,7 +65,7 @@ function WebhooksList() {
           <Webhook className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
             <p className="truncate font-medium text-foreground">{row.name}</p>
-            <p className="truncate font-mono text-2xs uppercase text-muted-foreground">
+            <p className="truncate font-mono text-2xs text-muted-foreground">
               {row.template}
             </p>
           </div>

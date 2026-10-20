@@ -40,7 +40,7 @@ function NewClusterTemplatePage() {
       </RouterLink>
 
       <PageHeader
-        eyebrow="Onboarding Bundles · New"
+        eyebrow="Onboarding templates · New"
         title="Create an onboarding bundle"
         description="Capture the environment, labels, tools, project defaults, and registration policy to apply to a cluster once it's registered."
       />

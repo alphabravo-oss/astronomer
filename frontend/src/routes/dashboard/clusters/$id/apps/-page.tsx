@@ -376,14 +376,14 @@ function AppsDescription({
   return (
     <>
       Browse, install, and manage Helm applications on {name || "this cluster"}.
-      Releases installed by Platform Tools are marked Managed by Platform Tools.
+      Releases installed through Tools are marked Managed by Tools.
       See the{" "}
       <RouterLink
         to="/dashboard/clusters/$id/tools"
         params={{ id: clusterId }}
         className="underline"
       >
-        Platform Tools tab
+        Tools page
       </RouterLink>
       .
     </>

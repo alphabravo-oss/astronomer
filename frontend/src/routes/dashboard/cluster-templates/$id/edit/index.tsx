@@ -68,7 +68,7 @@ function ClusterTemplateEditPage() {
       </RouterLink>
 
       <PageHeader
-        eyebrow="Onboarding Bundles · Edit"
+        eyebrow="Onboarding templates · Edit"
         title={template.displayName}
       />
 

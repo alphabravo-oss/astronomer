@@ -326,7 +326,7 @@ function ToolInstallationSummary({
     <>
       <InstallationDestination
         clusterId={clusterId}
-        manager="Platform Tools"
+        manager="Tools"
         releases={charts.map((chart) => ({
           namespace: chart.namespace,
           releaseName: chart.releaseName ?? chart.chartName,

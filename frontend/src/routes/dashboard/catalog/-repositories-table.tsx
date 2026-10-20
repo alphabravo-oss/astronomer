@@ -78,7 +78,7 @@ export function RepositoriesTable({
       kind: "badge",
       size: 100,
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground uppercase">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.repoType}
         </span>
       ),

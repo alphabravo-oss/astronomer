@@ -122,7 +122,7 @@ export function reorderWithin(
   return next;
 }
 
-export const SELECT_COLUMN_WIDTH = 40;
+export const SELECT_COLUMN_WIDTH = 32;
 /** Width reserved for a pinned column that declares no pixel size. */
 export const DEFAULT_PINNED_WIDTH = 160;
 

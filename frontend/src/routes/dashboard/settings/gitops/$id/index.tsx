@@ -158,7 +158,7 @@ function DetailInner({ id }: { id: string }) {
 
       <div className="grid gap-4 sm:grid-cols-3 text-xs">
         <div>
-          <p className="text-muted-foreground uppercase tracking-wide">Mode</p>
+          <p className="text-muted-foreground">Mode</p>
           <p className="font-mono mt-0.5">
             {source.sync_mode}
             {source.sync_mode === "interval"
@@ -167,13 +167,13 @@ function DetailInner({ id }: { id: string }) {
           </p>
         </div>
         <div>
-          <p className="text-muted-foreground uppercase tracking-wide">
+          <p className="text-muted-foreground">
             On delete
           </p>
           <p className="font-mono mt-0.5">{source.on_delete}</p>
         </div>
         <div>
-          <p className="text-muted-foreground uppercase tracking-wide">
+          <p className="text-muted-foreground">
             Last sync
           </p>
           <p className="font-mono mt-0.5">
@@ -206,7 +206,7 @@ function DetailInner({ id }: { id: string }) {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="field-6a74d3c2-187"
             >
               Branch
@@ -225,7 +225,7 @@ function DetailInner({ id }: { id: string }) {
           </div>
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="field-6a74d3c2-200"
             >
               Path prefix
@@ -246,7 +246,7 @@ function DetailInner({ id }: { id: string }) {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="field-6a74d3c2-215"
             >
               Auth mode
@@ -273,7 +273,7 @@ function DetailInner({ id }: { id: string }) {
           </div>
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="field-6a74d3c2-232"
             >
               Auth blob
@@ -301,7 +301,7 @@ function DetailInner({ id }: { id: string }) {
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="field-6a74d3c2-254"
             >
               Sync mode
@@ -325,7 +325,7 @@ function DetailInner({ id }: { id: string }) {
           </div>
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="field-6a74d3c2-270"
             >
               Interval (sec)
@@ -347,7 +347,7 @@ function DetailInner({ id }: { id: string }) {
           </div>
           <div className="space-y-1">
             <label
-              className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              className="text-xs font-medium text-muted-foreground"
               htmlFor="gitops-on-delete"
             >
               On delete
@@ -450,7 +450,7 @@ function DetailInner({ id }: { id: string }) {
           </p>
         ) : (
           <Table className="w-full text-sm">
-            <TableHeader className="text-xs text-muted-foreground uppercase">
+            <TableHeader className="text-xs text-muted-foreground">
               <TableRow>
                 <TableHead className="text-left py-2">Cluster</TableHead>
                 <TableHead className="text-left py-2">Path</TableHead>

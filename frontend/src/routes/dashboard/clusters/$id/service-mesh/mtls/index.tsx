@@ -171,13 +171,13 @@ function ClusterServiceMeshMTLSPage() {
             <Table className="w-full">
               <TableHeader>
                 <TableRow className="border-b border-border">
-                  <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
                     Namespace
                   </TableHead>
-                  <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
                     Mode
                   </TableHead>
-                  <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  <TableHead className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
                     Rules
                   </TableHead>
                 </TableRow>

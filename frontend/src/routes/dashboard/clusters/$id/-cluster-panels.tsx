@@ -227,7 +227,7 @@ export function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
   return (
     <div>
       <h3 className="text-sm font-medium text-muted-foreground mb-3">
-        Anomaly Baselines
+        Anomaly baselines
       </h3>
       <QueryStates
         query={query}
@@ -382,7 +382,7 @@ export function ClusterPlatformHealthRow({
         className="contents"
       >
         <MetricCard
-          title="Platform Tools"
+          title="Tools"
           value={toolsMetric.value}
           subtitle={toolsMetric.subtitle}
           icon={<Package className="h-4 w-4" />}
@@ -412,10 +412,10 @@ export function ClusterRecentEvents({
   const onRetry = () => void query.refetch();
   return (
     <>
-      {/* Recent Events */}
+      {/* Recent events */}
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">
-          Recent Events
+          Recent events
         </h3>
         <div className="rounded-lg border border-border overflow-hidden">
           {isError ? (

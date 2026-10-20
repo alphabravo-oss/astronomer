@@ -126,7 +126,7 @@ export function InstalledView({
               params={{ id: clusterId }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
             >
-              Open Platform Tools
+              Open Tools
             </RouterLink>
           </div>
         </div>
@@ -192,7 +192,7 @@ export function InstalledView({
             )}
             <div className="border border-border rounded-lg overflow-hidden">
               <Table className="w-full text-sm">
-                <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+                <TableHeader className="bg-muted/50 text-left text-xs">
                   <TableRow>
                     <TableHead className="px-3 py-2">Release</TableHead>
                     <TableHead className="px-3 py-2">Chart</TableHead>
@@ -278,13 +278,13 @@ function InstalledRow({
             </Tooltip>
           )}
           {isTool && (
-            <Tooltip content="This release is managed through Platform Tools. Open Platform Tools to upgrade or uninstall.">
+            <Tooltip content="This release is managed through Platform Tools. Open Tools to upgrade or uninstall.">
               <RouterLink
                 to="/dashboard/clusters/$id/tools"
                 params={{ id: clusterId }}
                 className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-sm border border-border bg-muted text-muted-foreground hover:bg-accent"
               >
-                <Wrench className="h-3 w-3" /> Platform Tools
+                <Wrench className="h-3 w-3" /> Tools
               </RouterLink>
             </Tooltip>
           )}

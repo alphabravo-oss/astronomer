@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
-import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { detailHref, kindToResourceType } from "@/lib/k8s-paths";
 import { toastPermissionDenied } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { Column } from "@/components/ui/data-table";
+import { EntityLink } from "@/ui";
 
 /** Workloads retain their purpose-built detail page. */
 export function workloadDetailHref(
@@ -30,13 +30,13 @@ export function NameLink({
   name: string;
 }) {
   return (
-    <RouterLink
+    <EntityLink
       to={detailHref(clusterId, resourceType, namespace, name)}
+      name={name}
+      secondary={namespace}
       onClick={(event) => event.stopPropagation()}
-      className="app-table-entity-link app-table-primary"
-    >
-      {name}
-    </RouterLink>
+      className="app-table-primary"
+    />
   );
 }
 

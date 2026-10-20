@@ -103,7 +103,7 @@ function MountPlaceholder({ mount }: { mount: ExtensionMount }) {
         <span className="text-sm font-medium text-foreground">
           {mount.label || mount.displayName || mount.extension}
         </span>
-        <span className="rounded-sm border border-border px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+        <span className="rounded-sm border border-border px-1.5 py-0.5 text-2xs text-muted-foreground">
           {tier === 2 ? "iframe" : "widget"}
         </span>
       </div>

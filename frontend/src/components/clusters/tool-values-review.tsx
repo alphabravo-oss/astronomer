@@ -54,7 +54,7 @@ export function ToolValuesReview({
       </p>
       {checks.length > 0 && (
         <section aria-label="Preflight checks" className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-xs font-semibold text-muted-foreground">
             Preflight
           </h3>
           {checks.map((check) => (

@@ -74,7 +74,7 @@ function GitOpsList() {
       minSize: 100,
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs font-mono uppercase text-muted-foreground">
+        <span className="text-xs font-mono text-muted-foreground">
           {row.sync_mode === "manual"
             ? "manual"
             : `every ${row.sync_interval_seconds}s`}
@@ -89,7 +89,7 @@ function GitOpsList() {
       hidden: true,
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs font-mono uppercase text-muted-foreground">
+        <span className="text-xs font-mono text-muted-foreground">
           {row.on_delete}
         </span>
       ),

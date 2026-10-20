@@ -48,9 +48,9 @@ export interface ColumnKindSpec {
 
 export const COLUMN_KINDS: Readonly<Record<ColumnKind, ColumnKindSpec>> = {
   select: {
-    size: 40,
-    minSize: 40,
-    maxSize: 40,
+    size: 32,
+    minSize: 32,
+    maxSize: 32,
     align: "left",
     overflow: "fixed",
     pin: "start",

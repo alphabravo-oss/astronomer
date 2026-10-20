@@ -214,7 +214,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           )}
         </form.AppField>
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <p className="text-xs font-medium text-muted-foreground">
             Preview
           </p>
           <form.Subscribe selector={(s) => s.values.banners}>

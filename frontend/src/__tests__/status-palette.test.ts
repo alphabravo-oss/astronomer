@@ -18,7 +18,10 @@ function walk(dir: string): string[] {
 }
 
 function statusThemeColors(): Set<string> {
-  const css = readFileSync(join(SRC, "styles", "globals.css"), "utf8");
+  // Status colours live in the shared kit tokens; globals.css adds product ones.
+  const css =
+    readFileSync(join(SRC, "ui", "tokens.css"), "utf8") +
+    readFileSync(join(SRC, "styles", "globals.css"), "utf8");
   return new Set(
     Array.from(css.matchAll(/--color-status-([a-z]+):/g), (match) => match[1]),
   );

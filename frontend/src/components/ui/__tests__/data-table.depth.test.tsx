@@ -401,7 +401,7 @@ describe("CSV export", () => {
     renderTable({ exportCsv: true });
     await user.type(screen.getByPlaceholderText("Search..."), "an");
     await waitFor(() => expect(screen.queryByText("apple")).toBeNull());
-    await user.click(screen.getByRole("button", { name: "Export CSV" }));
+    await user.click(screen.getByRole("button", { name: "Export" }));
     expect(downloadCsv).toHaveBeenCalledTimes(1);
     const [name, csv] = downloadCsv.mock.calls[0] as [string, string];
     expect(name).toMatch(/^table-\d{4}-\d{2}-\d{2}\.csv$/);
@@ -414,7 +414,7 @@ describe("CSV export", () => {
   it("prefixes formula leads", async () => {
     const user = userEvent.setup();
     renderTable({ exportCsv: true });
-    await user.click(screen.getByRole("button", { name: "Export CSV" }));
+    await user.click(screen.getByRole("button", { name: "Export" }));
     const csv = (downloadCsv.mock.calls[0] as [string, string])[1];
     expect(csv).toContain("'=cherry,");
   });
@@ -429,7 +429,7 @@ describe("CSV export", () => {
       },
     });
     expect(
-      screen.getByRole("button", { name: "Export page (CSV)" }),
+      screen.getByRole("button", { name: "Export" }),
     ).toBeInTheDocument();
   });
 });

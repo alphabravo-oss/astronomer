@@ -63,7 +63,7 @@ export function StackSummary({
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
       {rows.map(([label, value]) => (
         <div key={label} className="min-w-0">
-          <dt className="text-10 font-medium uppercase tracking-wider text-muted-foreground">
+          <dt className="text-10 font-medium text-muted-foreground">
             {label}
           </dt>
           <dd className="truncate text-xs text-foreground">{value}</dd>
@@ -88,7 +88,7 @@ export function StackFieldControl({
       {field.required && <span className="text-status-error">*</span>}
       {field.replaceTrigger && (
         <Tooltip content="Changing this needs a reinstall (Replace), not an in-place upgrade.">
-          <span className="rounded-sm bg-muted px-1 py-0.5 text-9 uppercase tracking-wide text-muted-foreground">
+          <span className="rounded-sm bg-muted px-1 py-0.5 text-9 text-muted-foreground">
             replace
           </span>
         </Tooltip>

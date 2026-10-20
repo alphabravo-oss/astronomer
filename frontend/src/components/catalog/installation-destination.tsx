@@ -11,7 +11,7 @@ interface ReleaseDestination {
 interface DestinationProps {
   clusterId: string;
   projectId?: string;
-  manager: "Applications" | "Platform Tools";
+  manager: "Applications" | "Tools";
   releases: ReleaseDestination[];
 }
 
@@ -66,7 +66,7 @@ export function InstallationDestinationView({
       <p>
         {projectId
           ? `Project context: ${projectName ? `${projectName} · ` : ""}${projectId}`
-          : manager === "Platform Tools"
+          : manager === "Tools"
             ? "Ownership: cluster-managed platform capability"
             : "Project context: select a project"}
       </p>

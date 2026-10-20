@@ -65,8 +65,8 @@ export function ApplicationConfiguration({
     });
   if (release?.source_kind === "tool")
     return (
-      <ConfigurationPage title="Managed by Platform Tools" onClose={back}>
-        <p>Configure this release from its Platform Tools page.</p>
+      <ConfigurationPage title="Managed by Tools" onClose={back}>
+        <p>Configure this release from its Tools page.</p>
       </ConfigurationPage>
     );
   if (!chartId)

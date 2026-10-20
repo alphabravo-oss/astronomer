@@ -50,7 +50,7 @@ function KindBadge({ kind }: { kind: "builtin" | "custom" }) {
       : "bg-status-success/10 text-status-success border-status-success/30";
   return (
     <span
-      className={`text-xs px-2 py-0.5 rounded-sm border font-medium uppercase ${palette}`}
+      className={`text-xs px-2 py-0.5 rounded-sm border font-medium ${palette}`}
     >
       {kind}
     </span>

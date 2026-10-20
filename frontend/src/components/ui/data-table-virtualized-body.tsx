@@ -149,7 +149,16 @@ export function VirtualizedGrid<T extends RowData>({
   );
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <div
+      className="rounded-lg border border-border overflow-hidden"
+      data-selection={
+        selectable
+          ? table.getSelectedRowModel().rows.length > 0
+            ? "active"
+            : "idle"
+          : undefined
+      }
+    >
       <div
         ref={scrollRef}
         role="grid"
@@ -429,12 +438,13 @@ export function VirtualizedGrid<T extends RowData>({
                       "flex w-full border-b border-border transition-colors",
                       "focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
                       onRowClick && "cursor-pointer hover:bg-muted/50",
-                      isSelected && "bg-muted/30",
                     )}
+                    data-selected={isSelected ? "true" : undefined}
                   >
                     {selectable && (
                       <div
                         role="gridcell"
+                        data-kind="select"
                         className={cn(
                           "flex items-center",
                           selectPadding,
@@ -488,6 +498,7 @@ export function VirtualizedGrid<T extends RowData>({
                         <div
                           key={col.key}
                           role="gridcell"
+                          data-kind={col.kind}
                           className={cn(
                             "flex min-w-0 items-center overflow-hidden",
                             pinnedClass(col),

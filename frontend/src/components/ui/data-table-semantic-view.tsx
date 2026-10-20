@@ -67,7 +67,7 @@ interface SemanticDataTableProps<T extends RowData> {
   onRowClick?: (row: T) => void;
 }
 
-const EXPAND_COLUMN_WIDTH = 40;
+const EXPAND_COLUMN_WIDTH = 32;
 
 export function SemanticDataTable<T extends RowData>({
   rows,
@@ -158,7 +158,16 @@ export function SemanticDataTable<T extends RowData>({
   };
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <div
+      className="rounded-lg border border-border overflow-hidden"
+      data-selection={
+        selectable
+          ? table.getSelectedRowModel().rows.length > 0
+            ? "active"
+            : "idle"
+          : undefined
+      }
+    >
       <div
         className={cn(
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -182,7 +191,8 @@ export function SemanticDataTable<T extends RowData>({
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (
                 <TableHead
-                  className={cn("w-10", scrolls && "bg-muted", selectPadding)}
+                  data-kind="select"
+                  className={cn("w-8", scrolls && "bg-muted", selectPadding)}
                   style={leadStyle(0, SELECT_COLUMN_WIDTH)}
                 >
                   <Checkbox
@@ -417,11 +427,11 @@ export function SemanticDataTable<T extends RowData>({
                     <TableRow
                       key={key}
                       data-row-index={index}
+                      data-selected={isSelected ? "true" : undefined}
                       className={cn(
                         "border-b border-border last:border-0 transition-colors",
                         "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                         onRowClick && "cursor-pointer hover:bg-muted/50",
-                        isSelected && "bg-muted/30",
                       )}
                       tabIndex={onRowClick ? 0 : keyboardNav ? -1 : undefined}
                       onKeyDown={(event) => {
@@ -439,6 +449,7 @@ export function SemanticDataTable<T extends RowData>({
                     >
                       {selectable && (
                         <TableCell
+                          data-kind="select"
                           className={cn(selectPadding, stickyBg)}
                           style={leadStyle(0, SELECT_COLUMN_WIDTH)}
                         >
@@ -483,6 +494,7 @@ export function SemanticDataTable<T extends RowData>({
                         return (
                           <TableCell
                             key={col.key}
+                            data-kind={col.kind}
                             className={cn(
                               cellPadding,
                               "min-w-0 overflow-hidden",

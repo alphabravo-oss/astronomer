@@ -126,7 +126,7 @@ function CatalogPage() {
       <div>
         <PageHeader
           title="Catalog"
-          description="Shared Helm repositories. Browse applications or use Platform Tools for guided cluster capabilities."
+          description="Shared Helm repositories. Browse applications, or use Tools for guided cluster capabilities."
           actions={
             <>
               <CatalogProjectPicker

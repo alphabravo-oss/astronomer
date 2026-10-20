@@ -280,7 +280,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
         pageSize={1}
       />,
     );
-    expect(screen.getByText("Showing 1-1 of 3")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–1 of 3")).toBeInTheDocument();
     expect(bodyRowText()).toHaveLength(1);
     expect(bodyRowText()[0]).toContain("Banana");
 
@@ -434,7 +434,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     );
 
     // Footer reflects the SERVER total (10), not the 2 loaded rows.
-    expect(screen.getByText("Showing 1-2 of 10")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–2 of 10")).toBeInTheDocument();
     // The 2 loaded rows are shown as-is (no further client-side slicing).
     expect(bodyRowText()).toHaveLength(2);
 
@@ -707,7 +707,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
       );
 
       expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-      expect(screen.getByText("Showing 1-2 of 10")).toBeInTheDocument();
+      expect(screen.getByText("Showing 1–2 of 10")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
       expect(onPaginationChange).toHaveBeenCalledWith(
         expect.objectContaining({ pageIndex: 1 }),

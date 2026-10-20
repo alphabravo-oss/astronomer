@@ -115,7 +115,7 @@ export function BrowseView({
                         <p>
                           {existing.chartId === c.id
                             ? "Installed"
-                            : "Related Platform Tools release"}{" "}
+                            : "Related Tools release"}{" "}
                           in {existing.namespace} as {existing.releaseName}
                         </p>
                         <Link
@@ -134,7 +134,7 @@ export function BrowseView({
                         >
                           Manage in{" "}
                           {existing.sourceKind === "tool"
-                            ? "Platform Tools"
+                            ? "Tools"
                             : "Applications"}
                         </Link>
                       </div>

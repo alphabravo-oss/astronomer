@@ -122,7 +122,7 @@ function CVECard({ row }: { row: CVERow }) {
         >
           {row.vulnerabilityId}
         </a>
-        <span className="text-xs uppercase tracking-wide">
+        <span className="text-xs">
           {row.severity}
           {row.cvssScore != null && ` · CVSS ${row.cvssScore.toFixed(1)}`}
         </span>

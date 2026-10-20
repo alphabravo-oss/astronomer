@@ -62,7 +62,7 @@ export function SeverityTiles({
     <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {SEVERITIES.map((s) => (
         <div key={s.key} className={`border rounded-lg p-4 ${s.tone}`}>
-          <div className="text-xs uppercase tracking-wide">{s.label}</div>
+          <div className="text-xs">{s.label}</div>
           <div className="text-3xl font-bold mt-1">
             {isLoading ? "—" : (summary?.[s.key] ?? 0)}
           </div>
@@ -104,7 +104,7 @@ export function DiffCard({ diff }: { diff?: ImageVulnDiff }) {
             const Icon = d > 0 ? TrendingUp : d < 0 ? TrendingDown : Minus;
             return (
               <div key={sev} className={`border rounded-sm p-2 ${tone}`}>
-                <div className="text-10 uppercase tracking-wide opacity-80">
+                <div className="text-10 opacity-80">
                   {sev}
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
@@ -199,7 +199,7 @@ export function ImagesTable({
   return (
     <section className="border border-border rounded-lg overflow-hidden">
       <Table className="w-full text-sm">
-        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+        <TableHeader className="bg-muted/50 text-left text-xs">
           <TableRow>
             <TableHead className="px-3 py-2">Image</TableHead>
             <TableHead className="px-3 py-2">Namespace</TableHead>
@@ -357,7 +357,7 @@ export function ImageDrawer({
                 so operators know more history will accumulate. */}
       <section className="border border-border rounded-md p-3 space-y-2 bg-muted/20">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-xs font-medium text-muted-foreground">
             Scan history
           </h3>
           <span className="text-10 text-muted-foreground tabular-nums">
