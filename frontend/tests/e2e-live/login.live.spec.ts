@@ -36,7 +36,7 @@ test("bootstrap admin login issues HttpOnly session, logout revokes it", async (
   // Logout via the user menu: POST /auth/logout revokes server-side and
   // clears both cookies; the SPA lands back on the login page.
   await page.getByRole("button", { name: "User menu" }).click();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/auth\/login/);
 
   // Guard bounce: with the cookies gone, a dashboard deep link redirects to
