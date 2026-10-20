@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -95,7 +97,7 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 	}
 	offset := queryOffset(r)
 	rows, err := h.Queries.ListKubectlSessionCommands(r.Context(), sqlc.ListKubectlSessionCommandsParams{
-		SessionID: row.ID, Limit: int32(limit), Offset: int32(offset),
+		SessionID: row.ID, Limit: int32(limit), Offset: safeconv.Int32(offset),
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())

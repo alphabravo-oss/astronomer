@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
@@ -148,12 +150,12 @@ func BootstrapLegacyUpgrade(ctx context.Context, args []string, input LegacyBoot
 		options.Database.Owner = replacement.Owner
 	}
 	if initial.CloudNativePG {
-		seconds := uint64(selection.Timeout / time.Second)
+		seconds := safeconv.Uint64(selection.Timeout / time.Second)
 		if seconds == 0 || seconds > uint64(^uint32(0)) {
 			return LegacyRunResult{ExitCode: 1}, errors.New("CNPG verifier wait exceeds supported seconds")
 		}
 		options.cnpg = initial.cnpg
-		options.CNPGRestore = CloudNativePGRestoreOptions{Pod: "astronomer-upgrade-verify-" + runID, Owner: options.Database.Owner, Database: options.Database.RestoreDatabase, MaximumStorageBytes: maximum, WaitSeconds: uint32(selection.Timeout / time.Second)}
+		options.CNPGRestore = CloudNativePGRestoreOptions{Pod: "astronomer-upgrade-verify-" + runID, Owner: options.Database.Owner, Database: options.Database.RestoreDatabase, MaximumStorageBytes: maximum, WaitSeconds: safeconv.Uint32(selection.Timeout / time.Second)}
 	}
 	if initial.ExternalDatabase {
 		options.ExternalDatabase = &ExternalDatabaseOptions{BackupConfirmed: selection.ExternalBackupConfirmed, SchemaVersion: initial.DatabaseState.Version, ObservedValuesSHA256: initial.DatabaseValuesSHA256}

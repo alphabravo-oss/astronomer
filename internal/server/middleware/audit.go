@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -278,7 +280,7 @@ func writeCharlieAuditLog(r *http.Request, status int, writer any, duration int6
 	if err := writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
 		Source: "http", CorrelationID: reqctx.CorrelationID(r.Context()), UserID: reqctx.UserUUID(r.Context()),
 		ActorAuthMethod: authMethod(r.Context()), Action: "charlie.http.mutation", ResourceType: "charlie_http_request",
-		StatusCode: int32(status), DurationMs: duration, RequestID: reqctx.RequestID(r.Context()), Detail: detail, ActionClass: "mutation",
+		StatusCode: safeconv.Int32(status), DurationMs: duration, RequestID: reqctx.RequestID(r.Context()), Detail: detail, ActionClass: "mutation",
 	}); err != nil {
 		charlie.LogOperationalFailure(r.Context(), *logging.Default(), "charlie.http_audit_persist_failed", reqctx.CorrelationID(r.Context()))
 	}

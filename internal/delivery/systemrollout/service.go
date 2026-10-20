@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -218,7 +220,7 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 	if len(planned) > math.MaxInt32 {
 		return View{}, fmt.Errorf("%w: managed cluster count exceeds supported range", ErrPrecondition)
 	}
-	record, err := q.CreateSystemRollout(ctx, sqlc.CreateSystemRolloutParams{ID: rolloutID, ReleaseID: request.ReleaseID, PreviousReleaseID: previous, Strategy: strategyJSON, StrategyDigest: strategyDigest, State: state, TotalClusters: int32(len(planned)), IdempotencyKey: key, ProgressDeadline: timestamp(deadline), InitiatedBy: initiatedBy})
+	record, err := q.CreateSystemRollout(ctx, sqlc.CreateSystemRolloutParams{ID: rolloutID, ReleaseID: request.ReleaseID, PreviousReleaseID: previous, Strategy: strategyJSON, StrategyDigest: strategyDigest, State: state, TotalClusters: safeconv.Int32(len(planned)), IdempotencyKey: key, ProgressDeadline: timestamp(deadline), InitiatedBy: initiatedBy})
 	view, err := viewFromRecord(record, err)
 	if err != nil {
 		return View{}, fmt.Errorf("insert system rollout: %w", err)
@@ -537,7 +539,7 @@ func releaseNextCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Ti
 	if affected < 0 || affected > int64(limit) {
 		return 0, errors.New("system rollout release count exceeds requested limit")
 	}
-	return int32(affected), nil
+	return safeconv.Int32(affected), nil
 }
 
 func rollbackComplete(current counts) bool {

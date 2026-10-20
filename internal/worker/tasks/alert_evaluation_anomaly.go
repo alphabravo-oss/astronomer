@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -99,7 +101,7 @@ func EvaluateAnomalyRuleEvals(ctx context.Context, q anomalyEvalQuerier, rule sq
 			}
 			evals = append(evals, ruleClusterEval{triggered: triggered, message: msg, details: blob, clusterID: clusterID})
 		}
-		if int32(len(page)) < anomalyEvalSweepPageSize {
+		if safeconv.Int32(len(page)) < anomalyEvalSweepPageSize {
 			break
 		}
 	}

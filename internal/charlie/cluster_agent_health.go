@@ -6,6 +6,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -73,7 +75,7 @@ func (s *ClusterAgentHealthService) List(ctx context.Context, filter ClusterAgen
 	return s.reader.CharlieClusterAgentList(ctx, sqlc.CharlieClusterAgentListParams{
 		Environment: optionalText(filter.Environment), Region: optionalText(filter.Region),
 		ConnectionState: optionalText(filter.ConnectionState),
-		PageOffset:      int32(filter.Page * filter.PageSize), PageLimit: int32(filter.PageSize),
+		PageOffset:      safeconv.Int32(filter.Page * filter.PageSize), PageLimit: int32(filter.PageSize),
 	})
 }
 

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,7 +58,7 @@ func (h *WebhookHandler) Test(w http.ResponseWriter, r *http.Request) {
 		EventName:      "webhook.test_ping",
 		EventID:        uuid.New().String(),
 		Payload:        payload,
-		PayloadSize:    int32(len(payload)),
+		PayloadSize:    safeconv.Int32(len(payload)),
 		Status:         "queued",
 		NextAttemptAt:  pgtype.Timestamptz{Time: now, Valid: true},
 	}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -46,7 +48,7 @@ func (h *CharlieFindingHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	views, err := h.access.List(r.Context(), mustUserID(actor), strings.TrimSpace(r.URL.Query().Get("status")), int32(offset), int32(limit))
+	views, err := h.access.List(r.Context(), mustUserID(actor), strings.TrimSpace(r.URL.Query().Get("status")), safeconv.Int32(offset), safeconv.Int32(limit))
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie finding access is denied")
 		return

@@ -33,6 +33,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -231,7 +233,7 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Description:     req.Description,
 		Mode:            req.Mode,
 		CronOpen:        req.CronOpen,
-		DurationMinutes: int32(req.DurationMinutes),
+		DurationMinutes: safeconv.Int32(req.DurationMinutes),
 		Timezone:        req.Timezone,
 		ClusterSelector: sel,
 		OperationTypes:  ops,
@@ -312,7 +314,7 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 			return q.UpdateMaintenanceWindow(r.Context(), sqlc.UpdateMaintenanceWindowParams{
 				ID: id, Name: req.Name, Description: req.Description, Mode: req.Mode, CronOpen: req.CronOpen,
-				DurationMinutes: int32(req.DurationMinutes), Timezone: req.Timezone, ClusterSelector: sel,
+				DurationMinutes: safeconv.Int32(req.DurationMinutes), Timezone: req.Timezone, ClusterSelector: sel,
 				OperationTypes: ops, OnBlock: req.OnBlock, Enabled: enabled,
 			})
 		},

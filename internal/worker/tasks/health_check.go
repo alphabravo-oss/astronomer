@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/hibiken/asynq"
 
 	"github.com/google/uuid"
@@ -160,7 +162,7 @@ func healthCheckTargets(ctx context.Context, clusterID string) ([]healthCheckTar
 				Distribution: cluster.Distribution, NodeCount: cluster.NodeCount, LastHeartbeat: cluster.LastHeartbeat,
 			})
 		}
-		if int32(len(page)) < healthCheckPageSize {
+		if safeconv.Int32(len(page)) < healthCheckPageSize {
 			break
 		}
 	}

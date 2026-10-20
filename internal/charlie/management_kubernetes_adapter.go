@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -121,7 +123,7 @@ func (a *ManagementKubernetesAdapter) Execute(ctx context.Context, capability Ca
 		if !a.mutableName(name) {
 			return nil, fmt.Errorf("management workload is not mutable")
 		}
-		replicas := int32(int64Argument(arguments, "replicas", 0))
+		replicas := safeconv.Int32(int64Argument(arguments, "replicas", 0))
 		deployment, err := a.kube.AppsV1().Deployments(a.namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -168,7 +170,7 @@ func (a *ManagementKubernetesAdapter) Verify(ctx context.Context, capability Cap
 		return false, err
 	}
 	if capability.Name == "astronomer.management.workload_scale" {
-		return deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == int32(int64Argument(arguments, "replicas", 0)), nil
+		return deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == safeconv.Int32(int64Argument(arguments, "replicas", 0)), nil
 	}
 	var receipt struct {
 		OperationID  string      `json:"operation_id"`
@@ -753,7 +755,7 @@ func numericValue(value any) int64 {
 	case int64:
 		return typed
 	case uint:
-		return int64(typed)
+		return safeconv.Int64(typed)
 	case uint32:
 		return int64(typed)
 	case uint64:

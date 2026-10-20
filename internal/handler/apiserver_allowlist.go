@@ -42,6 +42,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
@@ -474,8 +476,8 @@ func (h *ApiserverAllowlistHandler) Snapshots(w http.ResponseWriter, r *http.Req
 	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListApiserverAllowlistSnapshots(r.Context(), sqlc.ListApiserverAllowlistSnapshotsParams{
 		ClusterID: clusterID,
-		Limit:     int32(limit + 1),
-		Offset:    int32(offset),
+		Limit:     safeconv.Int32(limit + 1),
+		Offset:    safeconv.Int32(offset),
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list snapshots")

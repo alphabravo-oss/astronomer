@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
@@ -312,7 +314,7 @@ func flattenCISReport(report map[string]any) (CISCounts, json.RawMessage, json.R
 	}
 
 	if counts.Total == 0 && len(findings) > 0 {
-		counts.Total = int32(len(findings))
+		counts.Total = safeconv.Int32(len(findings))
 	}
 
 	summary := map[string]any{

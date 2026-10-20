@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -179,5 +181,5 @@ func replacementParams(actor uuid.UUID, p Preferences) (sqlc.UpsertUserPreferenc
 	if err != nil {
 		return zero, err
 	}
-	return sqlc.UpsertUserPreferencesParams{UserID: actor, Theme: string(p.Theme), TableDensity: string(p.TableDensity), LandingRoute: p.LandingRoute, TimeFormat: string(p.TimeFormat), Favorites: favorites, PinnedClusters: pinned, StarredTypes: starred, RowsPerPage: int32(p.RowsPerPage), DateFormat: p.DateFormat}, nil
+	return sqlc.UpsertUserPreferencesParams{UserID: actor, Theme: string(p.Theme), TableDensity: string(p.TableDensity), LandingRoute: p.LandingRoute, TimeFormat: string(p.TimeFormat), Favorites: favorites, PinnedClusters: pinned, StarredTypes: starred, RowsPerPage: safeconv.Int32(p.RowsPerPage), DateFormat: p.DateFormat}, nil
 }

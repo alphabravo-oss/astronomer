@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -148,7 +150,7 @@ func (t *Tap) HandleEvent(ctx context.Context, ev events.Event) {
 			EventName:      eventName,
 			EventID:        fmt.Sprintf("%d", ev.ID),
 			Payload:        payload,
-			PayloadSize:    int32(len(payload)),
+			PayloadSize:    safeconv.Int32(len(payload)),
 			Status:         "queued",
 			NextAttemptAt:  pgtype.Timestamptz{Time: now, Valid: true},
 		}); err != nil {

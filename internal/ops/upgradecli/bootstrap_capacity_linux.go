@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 // FreshBackupBudget derives a finite default from the actual available-space
@@ -24,7 +26,7 @@ func FreshBackupBudget(directory string, requested int64) (int64, error) {
 	if fs.Blocks > maximum/block || fs.Bavail > maximum/block {
 		return 0, errors.New("private backup capacity arithmetic exceeds supported range")
 	}
-	return backupBudget(int64(fs.Blocks*block), int64(fs.Bavail*block), requested)
+	return backupBudget(safeconv.Int64(fs.Blocks*block), safeconv.Int64(fs.Bavail*block), requested)
 }
 
 func backupBudget(total, available, requested int64) (int64, error) {

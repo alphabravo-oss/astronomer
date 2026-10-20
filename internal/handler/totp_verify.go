@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -208,7 +210,7 @@ func (h *TOTPHandler) recordFailedTOTPAttempt(ctx context.Context, q TOTPMutatio
 	now := time.Now().UTC()
 	updated, err := q.RecordFailedLoginAttempt(ctx, sqlc.RecordFailedLoginAttemptParams{
 		ID: user.ID, FailedLoginAt: pgtype.Timestamptz{Time: now, Valid: true},
-		LockoutThreshold: int32(threshold), LockedUntil: pgtype.Timestamptz{Time: now.Add(duration), Valid: true},
+		LockoutThreshold: safeconv.Int32(threshold), LockedUntil: pgtype.Timestamptz{Time: now.Add(duration), Valid: true},
 		LockedReason: auth.LockoutReasonTooManyFailedAttempts,
 	})
 	return err == nil && updated.LockedUntil.Valid && updated.LockedUntil.Time.After(now), err

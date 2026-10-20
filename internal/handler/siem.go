@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/google/uuid"
@@ -266,9 +268,9 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Format:          merged.Format,
 		TlsSkipVerify:   merged.TLSSkipVerify,
 		CaCertPem:       merged.CACertPEM,
-		BatchSize:       int32(merged.BatchSize),
-		FlushIntervalMs: int32(merged.FlushIntervalMs),
-		TimeoutSeconds:  int32(merged.TimeoutSeconds),
+		BatchSize:       safeconv.Int32(merged.BatchSize),
+		FlushIntervalMs: safeconv.Int32(merged.FlushIntervalMs),
+		TimeoutSeconds:  safeconv.Int32(merged.TimeoutSeconds),
 		Enabled:         merged.Enabled,
 		CreatedBy:       currentUserUUID(r),
 	}
@@ -381,9 +383,9 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Format:          merged.Format,
 		TlsSkipVerify:   merged.TLSSkipVerify,
 		CaCertPem:       merged.CACertPEM,
-		BatchSize:       int32(merged.BatchSize),
-		FlushIntervalMs: int32(merged.FlushIntervalMs),
-		TimeoutSeconds:  int32(merged.TimeoutSeconds),
+		BatchSize:       safeconv.Int32(merged.BatchSize),
+		FlushIntervalMs: safeconv.Int32(merged.FlushIntervalMs),
+		TimeoutSeconds:  safeconv.Int32(merged.TimeoutSeconds),
 		Enabled:         merged.Enabled,
 	}
 	saved, err := executeMutation(r, h.runTx,

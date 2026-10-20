@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -682,7 +684,7 @@ func recordMandatoryK8sProxyAudit(ctx context.Context, r *http.Request, writer a
 		ResourceType:    "cluster",
 		ResourceID:      clusterID,
 		ResourceName:    resourceName,
-		StatusCode:      int32(status),
+		StatusCode:      safeconv.Int32(status),
 		DurationMs:      durationMS,
 		RequestID:       reqctx.RequestID(r.Context()),
 		IPAddress:       reqctx.ClientIP(r),

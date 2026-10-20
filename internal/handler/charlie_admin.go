@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -494,7 +496,7 @@ func (h *CharlieAdminHandler) ListTriggerEvents(w http.ResponseWriter, r *http.R
 	if state == "" {
 		state = "dead"
 	}
-	items, err := h.backend.ListTriggerEvents(r.Context(), state, int32(offset), int32(limit))
+	items, err := h.backend.ListTriggerEvents(r.Context(), state, safeconv.Int32(offset), safeconv.Int32(limit))
 	if err != nil {
 		h.respondError(w, r, err)
 		return

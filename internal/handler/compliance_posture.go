@@ -52,6 +52,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -144,7 +146,7 @@ func (h *CompliancePostureHandler) Get(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		clusters = append(clusters, page...)
-		if int32(len(page)) < pageSize {
+		if safeconv.Int32(len(page)) < pageSize {
 			break
 		}
 	}

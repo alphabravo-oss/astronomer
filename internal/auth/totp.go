@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
@@ -255,7 +257,7 @@ func randomFromAlphabet(alphabet string, length int) (string, error) {
 	if len(alphabet) == 0 || len(alphabet) > 256 {
 		return "", errors.New("alphabet size must be in (0,256]")
 	}
-	max := byte(255 - (255 % len(alphabet)))
+	max := safeconv.Byte(255 - (255 % len(alphabet)))
 	out := make([]byte, 0, length)
 	buf := make([]byte, length*2)
 	for len(out) < length {

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -429,7 +431,7 @@ func (tx *postgresPlanningTransaction) InsertRollout(ctx context.Context, plan F
 		initiatedBy = pgtype.UUID{Bytes: actorID, Valid: true}
 	}
 	if _, err := tx.queries.CreateDeliveryRollout(ctx, sqlc.CreateDeliveryRolloutParams{
-		ID: plan.ID, TargetID: plan.TargetID, TargetGeneration: int64(plan.TargetGeneration),
+		ID: plan.ID, TargetID: plan.TargetID, TargetGeneration: safeconv.Int64(plan.TargetGeneration),
 		FromBundleVersionID: fromVersion, ToBundleVersionID: plan.Desired.BundleVersionID,
 		PlacementDigest: plan.PlacementDigest.String(), PlacementSnapshot: placementJSON,
 		Strategy: strategyJSON, StrategyDigest: plan.StrategyDigest.String(), ApprovalPolicy: approvalJSON,
@@ -449,7 +451,7 @@ func (tx *postgresPlanningTransaction) InsertRollout(ctx context.Context, plan F
 			previousVersion = pgtype.UUID{Bytes: cluster.Previous.Version.BundleVersionID, Valid: true}
 		}
 		if _, err := tx.queries.CreateDeliveryRolloutCluster(ctx, sqlc.CreateDeliveryRolloutClusterParams{
-			RolloutID: plan.ID, ClusterID: cluster.ClusterID, Cohort: int32(cluster.Cohort), ReleaseOrder: int32(cluster.Order),
+			RolloutID: plan.ID, ClusterID: cluster.ClusterID, Cohort: safeconv.Int32(cluster.Cohort), ReleaseOrder: safeconv.Int32(cluster.Order),
 			PreviousBundleVersionID: previousVersion, DesiredBundleVersionID: desired.BundleVersionID,
 			DesiredSpecDigest: desired.SpecDigest.String(), Deadline: timestamptz(plan.Deadline),
 		}); err != nil {
@@ -495,7 +497,7 @@ func decodeFrozenPlan(row sqlc.DeliveryRollout) (FrozenRollout, error) {
 	if err != nil {
 		return FrozenRollout{}, err
 	}
-	if plan.ID != row.ID || plan.TargetID != row.TargetID || int64(plan.TargetGeneration) != row.TargetGeneration ||
+	if plan.ID != row.ID || plan.TargetID != row.TargetID || safeconv.Int64(plan.TargetGeneration) != row.TargetGeneration ||
 		plan.Desired.BundleVersionID != row.ToBundleVersionID || plan.PlacementDigest.String() != row.PlacementDigest ||
 		plan.StrategyDigest.String() != row.StrategyDigest || plan.PlanDigest.String() != row.PlanDigest ||
 		plan.RequestDigest.String() != row.RequestDigest || plan.IdempotencyKey != row.IdempotencyKey {

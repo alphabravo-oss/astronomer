@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -51,7 +53,7 @@ func supplierTransferCapacity(fd int, size int64) error {
 		return errors.New("supplier database destination capacity unavailable")
 	}
 	available := filesystem.Bavail * uint64(filesystem.Bsize)
-	if uint64(size)+uint64(SupplierDatabaseTransferReserveBytes) > available {
+	if safeconv.Uint64(size)+uint64(SupplierDatabaseTransferReserveBytes) > available {
 		return errors.New("supplier database destination has insufficient reserve")
 	}
 	return nil

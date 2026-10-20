@@ -39,6 +39,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -345,7 +347,7 @@ func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *ht
 	}
 
 	pageLimit, pageOffset := queryLimitOffset(r, 50)
-	limit, offset := int32(pageLimit), int32(pageOffset)
+	limit, offset := safeconv.Int32(pageLimit), safeconv.Int32(pageOffset)
 	rows, err := h.queries.ListControlPlaneSnapshotsByCluster(r.Context(), sqlc.ListControlPlaneSnapshotsByClusterParams{
 		ClusterID: clusterID,
 		Limit:     limit,

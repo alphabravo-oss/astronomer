@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/google/uuid"
@@ -95,8 +97,8 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		PayloadTemplate: merged.PayloadTemplate,
 		ExtraHeaders:    headersJSON,
 		Enabled:         merged.Enabled,
-		MaxRetries:      int32(merged.MaxRetries),
-		TimeoutSeconds:  int32(merged.TimeoutSeconds),
+		MaxRetries:      safeconv.Int32(merged.MaxRetries),
+		TimeoutSeconds:  safeconv.Int32(merged.TimeoutSeconds),
 		CreatedBy:       currentUserUUID(r),
 	}
 	saved, err := executeMutation(r, h.runTx,
@@ -204,8 +206,8 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 		PayloadTemplate: merged.PayloadTemplate,
 		ExtraHeaders:    headersJSON,
 		Enabled:         merged.Enabled,
-		MaxRetries:      int32(merged.MaxRetries),
-		TimeoutSeconds:  int32(merged.TimeoutSeconds),
+		MaxRetries:      safeconv.Int32(merged.MaxRetries),
+		TimeoutSeconds:  safeconv.Int32(merged.TimeoutSeconds),
 	}
 	saved, err := executeMutation(r, h.runTx,
 		func(q WebhookMutationTx) (sqlc.WebhookSubscription, error) {

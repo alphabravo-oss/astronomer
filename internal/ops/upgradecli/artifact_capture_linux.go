@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 )
 
@@ -73,7 +75,7 @@ func artifactCapacity(directory string, maximum int64) error {
 	if fs.Blocks > maxInt64/block || fs.Bavail > maxInt64/block {
 		return errors.New("artifact capacity arithmetic exceeds supported range")
 	}
-	return artifactReserve(int64(fs.Blocks*block), int64(fs.Bavail*block), maximum)
+	return artifactReserve(safeconv.Int64(fs.Blocks*block), safeconv.Int64(fs.Bavail*block), maximum)
 }
 
 func artifactReserve(total, available, maximum int64) error {
@@ -108,7 +110,7 @@ func verifyArtifactCapture(ctx context.Context, directory, name string, maximum 
 		return errors.New("joined artifact metadata differs")
 	}
 	parent, err := os.Lstat(directory)
-	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return errors.New("private artifact parent differs")
 	}
 	resolved, err := filepath.EvalSymlinks(directory)
@@ -125,7 +127,7 @@ func verifyArtifactCapture(ctx context.Context, directory, name string, maximum 
 		return errors.New("private artifact parent identity changed")
 	}
 	before, err := root.Lstat(name)
-	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 || before.Size() != metadata.SizeBytes || before.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) || before.Sys().(*syscall.Stat_t).Nlink != 1 {
+	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 || before.Size() != metadata.SizeBytes || before.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) || before.Sys().(*syscall.Stat_t).Nlink != 1 {
 		return errors.New("private artifact file identity differs")
 	}
 	file, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
@@ -178,5 +180,5 @@ func verifyArtifactCapture(ctx context.Context, directory, name string, maximum 
 }
 
 func sameArtifact(before, after os.FileInfo) bool {
-	return after != nil && after.Mode().IsRegular() && after.Mode().Perm() == 0o600 && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Nlink == 1
+	return after != nil && after.Mode().IsRegular() && after.Mode().Perm() == 0o600 && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && after.Sys().(*syscall.Stat_t).Uid == safeconv.Uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Nlink == 1
 }

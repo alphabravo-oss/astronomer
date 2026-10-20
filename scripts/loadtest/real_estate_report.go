@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 type estateWindow struct {
@@ -112,7 +114,7 @@ func evaluateEstateMeasuredPhase(p estateMeasuredPhase, members, tier int) []str
 		if seen[key] {
 			add("duplicate coverage row")
 		}
-		if h.HeaderLatency.Samples != uint64(h.Completed) || h.FullResponseLatency.Samples != uint64(h.Completed) {
+		if h.HeaderLatency.Samples != safeconv.Uint64(h.Completed) || h.FullResponseLatency.Samples != safeconv.Uint64(h.Completed) {
 			add("latency histogram coverage incomplete")
 		}
 		if h.Completed > 0 && (h.HeaderLatency.P99UpperBoundMS == nil || h.FullResponseLatency.P99UpperBoundMS == nil) {

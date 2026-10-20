@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/google/uuid"
@@ -407,7 +409,7 @@ func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUp
 		out.Host = strings.TrimSpace(*req.Host)
 	}
 	if req.Port != nil {
-		out.Port = int32(*req.Port)
+		out.Port = safeconv.Int32(*req.Port)
 	}
 	if req.Username != nil {
 		out.Username = *req.Username
@@ -428,7 +430,7 @@ func (h *SMTPHandler) mergeUpdate(existing sqlc.SmtpSettings, req smtpSettingsUp
 		out.RequireTLS = *req.RequireTLS
 	}
 	if req.TimeoutSeconds != nil {
-		out.TimeoutSeconds = int32(*req.TimeoutSeconds)
+		out.TimeoutSeconds = safeconv.Int32(*req.TimeoutSeconds)
 	}
 	return out, nil
 }

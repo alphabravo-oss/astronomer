@@ -20,6 +20,8 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -89,7 +91,7 @@ func (h *ClusterAgentHandler) ClusterAdminPosture(w http.ResponseWriter, r *http
 				PrivilegeProfile: profile,
 			})
 		}
-		if int32(len(clusters)) < pageSize {
+		if safeconv.Int32(len(clusters)) < pageSize {
 			break
 		}
 	}

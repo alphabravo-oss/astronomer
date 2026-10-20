@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -605,7 +607,7 @@ func applyBridgeStatus(view *AdminStatusView, status AdminBridgeStatus) {
 	if strings.TrimSpace(status.LeaderInstanceID) != "" {
 		readyIDs[status.LeaderInstanceID] = struct{}{}
 	}
-	view.Agent.ReadyReplicas = int32(len(readyIDs))
+	view.Agent.ReadyReplicas = safeconv.Int32(len(readyIDs))
 	if status.ReplicaCount >= 0 && status.ReplicaCount <= 20 {
 		view.Agent.DesiredReplicas = int32(status.ReplicaCount)
 	}

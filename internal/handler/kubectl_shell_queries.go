@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -28,7 +30,7 @@ func (h *KubectlShellHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset := queryLimitOffset(r, 100)
 	rows, err := h.Queries.ListActiveKubectlSessionsByCluster(r.Context(), sqlc.ListActiveKubectlSessionsByClusterParams{
-		ClusterID: clusterID, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		ClusterID: clusterID, QueryLimit: safeconv.Int32(limit), QueryOffset: safeconv.Int32(offset),
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
@@ -89,7 +91,7 @@ func (h *KubectlShellHandler) AdminListAll(w http.ResponseWriter, r *http.Reques
 	offset := queryOffset(r)
 	rows, err := h.Queries.ListAllActiveKubectlSessionsPage(r.Context(), sqlc.ListAllActiveKubectlSessionsPageParams{
 		QueryLimit:  int32(limit),
-		QueryOffset: int32(offset),
+		QueryOffset: safeconv.Int32(offset),
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())

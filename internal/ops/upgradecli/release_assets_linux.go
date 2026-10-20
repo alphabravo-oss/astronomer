@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
@@ -188,7 +190,7 @@ func readOfflineReleaseInput(ctx context.Context, path string, maximum int64) ([
 		return nil, empty, errors.New("offline release directory alias forbidden")
 	}
 	before, err := os.Lstat(path)
-	if err != nil || !before.Mode().IsRegular() || (before.Mode().Perm() != 0600 && before.Mode().Perm() != 0644) || before.Size() > maximum || before.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) || before.Sys().(*syscall.Stat_t).Nlink != 1 {
+	if err != nil || !before.Mode().IsRegular() || (before.Mode().Perm() != 0600 && before.Mode().Perm() != 0644) || before.Size() > maximum || before.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) || before.Sys().(*syscall.Stat_t).Nlink != 1 {
 		return nil, empty, errors.New("offline release source mode/owner/budget differs")
 	}
 	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
@@ -232,7 +234,7 @@ func sameOfflineReleaseInput(before, after os.FileInfo) bool {
 		return false
 	}
 	mode := before.Mode().Perm()
-	return (mode == 0600 || mode == 0644) && before.Mode().IsRegular() && after.Mode().IsRegular() && before.Mode() == after.Mode() && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && before.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && before.Sys().(*syscall.Stat_t).Nlink == 1 && after.Sys().(*syscall.Stat_t).Nlink == 1
+	return (mode == 0600 || mode == 0644) && before.Mode().IsRegular() && after.Mode().IsRegular() && before.Mode() == after.Mode() && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && before.Sys().(*syscall.Stat_t).Uid == safeconv.Uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Uid == safeconv.Uint32(os.Getuid()) && before.Sys().(*syscall.Stat_t).Nlink == 1 && after.Sys().(*syscall.Stat_t).Nlink == 1
 }
 func recheckOfflineReleaseInputs(ctx context.Context, inputs []offlineReleaseInput) error {
 	for _, initial := range inputs {

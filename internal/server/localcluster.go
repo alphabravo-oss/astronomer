@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,7 +105,7 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 			if len(nodes.Items) > math.MaxInt32 {
 				return nil, fmt.Errorf("local node count exceeds the supported database range")
 			}
-			nodeCount = int32(len(nodes.Items))
+			nodeCount = safeconv.Int32(len(nodes.Items))
 		}
 	}
 

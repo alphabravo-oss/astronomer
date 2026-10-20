@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
@@ -154,7 +156,7 @@ func failResourceOperation(ctx context.Context, queries ResourceOperationTaskQue
 	if !terminal {
 		_, err := queries.MarkResourceOperationRetrying(ctx, sqlc.MarkResourceOperationRetryingParams{
 			ID: operation.ID, Generation: operation.Generation, ErrorCode: code,
-			ObservedStatusCode: pgtype.Int4{Int32: int32(status), Valid: status > 0},
+			ObservedStatusCode: pgtype.Int4{Int32: safeconv.Int32(status), Valid: status > 0},
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return errors.New("persist resource operation retry failed")
@@ -163,7 +165,7 @@ func failResourceOperation(ctx context.Context, queries ResourceOperationTaskQue
 	}
 	_, err := queries.MarkResourceOperationFailed(ctx, sqlc.MarkResourceOperationFailedParams{
 		ID: operation.ID, Generation: operation.Generation, ErrorCode: code,
-		ObservedStatusCode: pgtype.Int4{Int32: int32(status), Valid: status > 0},
+		ObservedStatusCode: pgtype.Int4{Int32: safeconv.Int32(status), Valid: status > 0},
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return errors.New("persist resource operation failure failed")

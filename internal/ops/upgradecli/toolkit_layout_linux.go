@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 // InstalledToolchainDirectory locates the fixed sibling data directory produced
@@ -22,7 +24,7 @@ func InstalledToolchainDirectory(executable string) (string, error) {
 		return "", errors.New("private installed upgrade executable required")
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(os.Geteuid()) || stat.Nlink != 1 {
+	if !ok || stat.Uid != safeconv.Uint32(os.Geteuid()) || stat.Nlink != 1 {
 		return "", errors.New("installed upgrade executable ownership differs")
 	}
 	resolved, err := filepath.EvalSymlinks(executable)

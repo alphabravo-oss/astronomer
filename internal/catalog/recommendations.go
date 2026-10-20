@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -122,7 +124,7 @@ func RecomputeAggregate(ctx context.Context, q Querier, chartID uuid.UUID, polic
 			sum += int64(r.Stars)
 			count++
 		}
-		if int32(len(ratings)) < pageSize {
+		if safeconv.Int32(len(ratings)) < pageSize {
 			break
 		}
 		offset += pageSize

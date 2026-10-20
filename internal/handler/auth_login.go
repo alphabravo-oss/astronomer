@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -211,7 +213,7 @@ func (h *AuthHandler) handleFailedAttempt(ctx context.Context, r *http.Request, 
 		var mutationErr error
 		updated, mutationErr = q.RecordFailedLoginAttempt(ctx, sqlc.RecordFailedLoginAttemptParams{
 			ID: user.ID, FailedLoginAt: pgtype.Timestamptz{Time: now, Valid: true},
-			LockoutThreshold: int32(threshold), LockedUntil: pgtype.Timestamptz{Time: lockedUntil, Valid: true},
+			LockoutThreshold: safeconv.Int32(threshold), LockedUntil: pgtype.Timestamptz{Time: lockedUntil, Valid: true},
 			LockedReason: auth.LockoutReasonTooManyFailedAttempts,
 		})
 		if mutationErr != nil {

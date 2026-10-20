@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -184,7 +186,7 @@ func (s *SessionAccessService) ListAccessible(ctx context.Context, actorID uuid.
 				break
 			}
 		}
-		candidateOffset += int32(len(rows))
+		candidateOffset += safeconv.Int32(len(rows))
 		if len(rows) < int(candidatePageSize) {
 			break
 		}

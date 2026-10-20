@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -164,7 +166,7 @@ func (h *ToolHandler) processPendingOperations(ctx context.Context) {
 func (h *ToolHandler) claimPendingToolOperations(ctx context.Context) []claimedOp {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	ops, err := h.queries.ListPendingToolOperations(ctx, int32(effectiveHelmConcurrency(h.helmConcurrency)))
+	ops, err := h.queries.ListPendingToolOperations(ctx, safeconv.Int32(effectiveHelmConcurrency(h.helmConcurrency)))
 	if err != nil {
 		return nil
 	}

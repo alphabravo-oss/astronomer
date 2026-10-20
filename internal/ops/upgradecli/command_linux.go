@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 )
 
@@ -231,7 +233,7 @@ func toolIdentity(tool Tool) (os.FileInfo, error) {
 	file := os.NewFile(uintptr(fd), "bound-tool")
 	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
-	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Size() > 512<<20 || opened.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Size() > 512<<20 || opened.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return nil, errors.New("bound tool owner or identity differs")
 	}
 	hash := sha256.New()
@@ -246,7 +248,7 @@ func toolIdentity(tool Tool) (os.FileInfo, error) {
 
 func readCapture(directory, name string, maximum int64, expected string) ([]byte, error) {
 	parent, err := os.Lstat(directory)
-	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !parent.IsDir() || parent.Mode().Perm() != 0o700 || parent.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return nil, errors.New("private capture parent differs")
 	}
 	root, err := os.OpenRoot(directory)
@@ -268,7 +270,7 @@ func readCapture(directory, name string, maximum int64, expected string) ([]byte
 	}
 	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
-	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Mode().Perm() != 0o600 || opened.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Mode().Perm() != 0o600 || opened.Sys().(*syscall.Stat_t).Uid != safeconv.Uint32(os.Getuid()) {
 		return nil, errors.New("private capture identity differs")
 	}
 	raw, err := io.ReadAll(io.LimitReader(file, maximum+1))

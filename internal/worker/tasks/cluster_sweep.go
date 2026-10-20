@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"golang.org/x/sync/errgroup"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -48,7 +50,7 @@ func listAllClustersPaged(ctx context.Context, list func(context.Context, sqlc.L
 			return nil, err
 		}
 		all = append(all, page...)
-		if int32(len(page)) < clusterSweepPageSize {
+		if safeconv.Int32(len(page)) < clusterSweepPageSize {
 			return all, nil
 		}
 	}

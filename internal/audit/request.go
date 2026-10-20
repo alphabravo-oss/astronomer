@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/netip"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -38,7 +40,7 @@ func NewHTTPRequestEvent(input HTTPRequestEvent) Event {
 		ResourceType:    input.ResourceType,
 		ResourceID:      input.ResourceID,
 		ResourceName:    input.ResourceName,
-		StatusCode:      int32(input.StatusCode),
+		StatusCode:      safeconv.Int32(input.StatusCode),
 		DurationMs:      input.DurationMs,
 		RequestID:       input.RequestID,
 		IPAddress:       input.IPAddress,

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 
@@ -174,7 +176,7 @@ func parsePagination(r *http.Request) (limit, offset int32, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	return int32(limitValue), int32(offsetValue), nil
+	return safeconv.Int32(limitValue), safeconv.Int32(offsetValue), nil
 }
 
 func boundedQueryInteger(values url.Values, name string, fallback, minimum, maximum int) (int, error) {

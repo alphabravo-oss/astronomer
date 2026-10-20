@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/go-chi/chi/v5"
@@ -691,7 +693,7 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
-		Limit:  int32(limit),
+		Limit:  safeconv.Int32(limit),
 		Offset: 0,
 	})
 	if err != nil {

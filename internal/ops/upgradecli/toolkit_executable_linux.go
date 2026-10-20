@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"syscall"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
 )
 
 // toolkitExecutableInput is separate from the public metadata reader. Only
@@ -30,7 +32,7 @@ func sameToolkitExecutable(before, after os.FileInfo) bool {
 		return false
 	}
 	mode := before.Mode().Perm()
-	return (mode == 0700 || mode == 0755) && before.Mode().IsRegular() && after.Mode().IsRegular() && before.Mode() == after.Mode() && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && before.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && before.Sys().(*syscall.Stat_t).Nlink == 1 && after.Sys().(*syscall.Stat_t).Nlink == 1
+	return (mode == 0700 || mode == 0755) && before.Mode().IsRegular() && after.Mode().IsRegular() && before.Mode() == after.Mode() && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && before.Sys().(*syscall.Stat_t).Uid == safeconv.Uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Uid == safeconv.Uint32(os.Getuid()) && before.Sys().(*syscall.Stat_t).Nlink == 1 && after.Sys().(*syscall.Stat_t).Nlink == 1
 }
 
 func readToolkitExecutable(ctx context.Context, path string, maximum int64) ([]byte, toolkitExecutableInput, error) {

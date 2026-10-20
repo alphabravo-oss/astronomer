@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
@@ -544,7 +546,7 @@ func gcPagedOrphans(pageSize int32, page func(limit, offset int32) (pageLen int,
 			// will fill into this page on the next query.
 			continue
 		}
-		if int32(pageLen) < pageSize {
+		if safeconv.Int32(pageLen) < pageSize {
 			return nil
 		}
 		// Full page of keepers only — skip past them.

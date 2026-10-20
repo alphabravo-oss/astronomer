@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -430,7 +432,7 @@ func (a *OperationalCapabilityAdapter) alert(ctx context.Context, arguments map[
 }
 
 func (a *OperationalCapabilityAdapter) audit(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
-	limit := int32(int64Argument(arguments, "limit", 50))
+	limit := safeconv.Int32(int64Argument(arguments, "limit", 50))
 	filter := sqlc.AuditLogFilterParams{ResourceType: stringArgument(arguments, "resource_type"), ResourceID: stringArgument(arguments, "resource_id"), From: sinceArgument(arguments, 24*time.Hour), HasFrom: true, Limit: limit}
 	rows, err := a.config.Queries.ListAuditLogV1Filtered(ctx, filter)
 	if err != nil {

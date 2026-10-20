@@ -39,6 +39,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -511,7 +513,7 @@ func WriteClusterInventoryCSV(ctx context.Context, w io.Writer, q ClusterInvento
 		if len(rows) < pageSize {
 			break
 		}
-		offset += int32(len(rows))
+		offset += safeconv.Int32(len(rows))
 	}
 	return total, nil
 }

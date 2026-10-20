@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
@@ -62,12 +64,12 @@ func NewHelmStateObservation(release *HelmRelease, readiness *Readiness, source 
 	}
 	if source != nil {
 		pg := manifest.Compatibility.PostgreSQL
-		if uint64(source.options.MinimumSchema) != uint64(pg.MinimumUpgradeSchema) || uint64(source.options.TargetSchema) != uint64(pg.TargetSchema) {
+		if uint64(source.options.MinimumSchema) != safeconv.Uint64(pg.MinimumUpgradeSchema) || uint64(source.options.TargetSchema) != safeconv.Uint64(pg.TargetSchema) {
 			return nil, errors.New("database schema bounds differ from the exact target manifest")
 		}
 		supported := false
 		for _, major := range pg.SupportedMajors {
-			if uint64(major) == uint64(source.options.ExpectedMajor) {
+			if safeconv.Uint64(major) == uint64(source.options.ExpectedMajor) {
 				supported = true
 			}
 		}

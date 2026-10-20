@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -398,7 +400,7 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 			ActorAuthMethod: authMethod(r.Context()),
 			Action:          "charlie.http.read",
 			ResourceType:    "charlie_http_request",
-			StatusCode:      int32(status),
+			StatusCode:      safeconv.Int32(status),
 			RequestID:       reqctx.RequestID(r.Context()),
 			Detail:          detail,
 			ActionClass:     "read",
@@ -426,7 +428,7 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 		ResourceName:    "",
 		HTTPMethod:      r.Method,
 		Path:            r.URL.Path,
-		StatusCode:      int32(status),
+		StatusCode:      safeconv.Int32(status),
 		DurationMs:      0,
 		RequestID:       reqctx.RequestID(r.Context()),
 		IpAddress:       reqctx.ClientIP(r),

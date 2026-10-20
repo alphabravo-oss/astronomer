@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 
@@ -563,5 +565,5 @@ func workerDBMaxConns(configured int32, concurrency int) int32 {
 	if concurrency <= int(minimum-headroom) {
 		return minimum
 	}
-	return int32(concurrency) + headroom
+	return safeconv.Int32(concurrency) + headroom
 }

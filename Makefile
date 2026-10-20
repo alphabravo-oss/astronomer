@@ -145,8 +145,7 @@ gosec: ## gosec SARIF, fails on HIGH severity findings
 	# tools/gosec/go.mod pins gosec v2.29.0 plus a golang.org/x/tools new enough to
 	# read the Go 1.27 export-data format (the release pin alone cannot type-check).
 	go run -modfile=tools/gosec/go.mod github.com/securego/gosec/v2/cmd/gosec -fmt sarif -out $(TEST_RESULTS_DIR)/gosec.sarif \
-		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient \
-		-exclude=G115 ./...  # G115: written exception in docs/security-exceptions.md (Phase 1 sweep)
+		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient ./...
 
 govulncheck: ## govulncheck SARIF on the shipping Go toolchain
 	@mkdir -p $(TEST_RESULTS_DIR)

@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -208,8 +210,8 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 	// offset → >=0. Previously an int32(queryInt(...)) with no upper bound, so
 	// e.g. limit=3e9 overflowed the int32 param to a negative value.
 	limitInt, offsetInt := queryLimitOffset(r, 20)
-	limit := int32(limitInt)
-	offset := int32(offsetInt)
+	limit := safeconv.Int32(limitInt)
+	offset := safeconv.Int32(offsetInt)
 	filterStatus := strings.TrimSpace(r.URL.Query().Get("status"))
 	filterProvider := strings.TrimSpace(r.URL.Query().Get("provider"))
 	filterEnvironment := strings.TrimSpace(r.URL.Query().Get("environment"))

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/safeconv"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
@@ -38,7 +40,7 @@ func (h *CharlieContextHandler) Search(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Charlie context query must be empty or between 2 and 128 characters")
 		return
 	}
-	items, err := h.searcher.Search(r.Context(), mustUserID(actor), query, int32(limit))
+	items, err := h.searcher.Search(r.Context(), mustUserID(actor), query, safeconv.Int32(limit))
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Charlie context search is denied")
 		return
