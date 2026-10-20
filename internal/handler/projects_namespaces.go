@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -28,7 +28,7 @@ type ProjectNamespaceRequest struct {
 func (h *ProjectHandler) rejectReservedNamespaces(w http.ResponseWriter, r *http.Request, candidates ...string) bool {
 	for _, ns := range candidates {
 		if projectdomain.IsReservedNamespace(ns) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+			apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 				"Namespace '"+ns+"' is reserved by the platform and cannot be assigned to a project.")
 			return false
 		}
@@ -67,17 +67,17 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	var req ProjectNamespaceRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Namespace = strings.TrimSpace(req.Namespace)
 	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "namespace is required")
 		return
 	}
 	if !h.rejectReservedNamespaces(w, r, req.Namespace) {
@@ -86,7 +86,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	// Authority over the NAMESPACE (via its cluster), not over the project —
@@ -97,10 +97,10 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 
 	if err := projectdomain.ValidateNamespaceAddition(project, req.Namespace); err != nil {
 		if strings.Contains(err.Error(), "already in this project") {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
 			return
 		}
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, ns := range projectdomain.Namespaces(other.Namespaces) {
 				if ns == req.Namespace {
-					RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already assigned to project '"+other.Name+"'.")
+					apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Namespace '"+req.Namespace+"' is already assigned to project '"+other.Name+"'.")
 					return
 				}
 			}
@@ -139,17 +139,17 @@ func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
 	if txErr != nil {
 		switch {
 		case errors.Is(txErr, audit.ErrOutboxUnavailable):
-			respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project")
 		case errors.Is(txErr, projectdomain.ErrNamespaceAlreadyAssigned):
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
 		case errors.Is(txErr, projectdomain.ErrNamespaceOwnedElsewhere):
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already assigned to another project on this cluster.")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Namespace '"+req.Namespace+"' is already assigned to another project on this cluster.")
 		case errors.Is(txErr, projectdomain.ErrResourceCapAllocation):
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Project resource cap cannot allocate a bounded share to every namespace.")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Project resource cap cannot allocate a bounded share to every namespace.")
 		case errors.Is(txErr, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project")
 		}
 		return
 	}
@@ -169,23 +169,23 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	var req ProjectNamespaceRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Namespace = strings.TrimSpace(req.Namespace)
 	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "namespace is required")
 		return
 	}
 
 	project, err := h.queries.GetProjectByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if !found {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
 		return
 	}
 
@@ -217,13 +217,13 @@ func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request)
 	if txErr != nil {
 		switch {
 		case errors.Is(txErr, audit.ErrOutboxUnavailable):
-			respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project")
 		case errors.Is(txErr, projectdomain.ErrNamespaceNotAssigned):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
 		case errors.Is(txErr, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update project")
 		}
 		return
 	}

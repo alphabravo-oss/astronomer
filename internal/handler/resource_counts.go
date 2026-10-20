@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -63,17 +63,17 @@ func (h *ResourceHandler) CountResources(w http.ResponseWriter, r *http.Request)
 	}
 	resourceTypes, err := parseResourceCountTypes(r.URL.Query().Get("resources"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "tunnel requester not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, "tunnel requester not configured")
 		return
 	}
 
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	requestedNamespaces := canonicalCountNamespaces(r.URL.Query()["namespace"])

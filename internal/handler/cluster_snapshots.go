@@ -43,10 +43,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -435,7 +435,7 @@ func parseClusterAndSnapshotIDs(w http.ResponseWriter, r *http.Request) (uuid.UU
 	}
 	snapshotID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid snapshot ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid snapshot ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, snapshotID, true
@@ -448,7 +448,7 @@ func parseClusterAndScheduleIDs(w http.ResponseWriter, r *http.Request) (uuid.UU
 	}
 	scheduleID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid schedule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid schedule ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, scheduleID, true

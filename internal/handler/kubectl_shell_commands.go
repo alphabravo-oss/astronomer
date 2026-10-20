@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -25,7 +25,7 @@ func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.Queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ShellUnavailable, "Kubectl shell is not configured")
 		return
 	}
 	row, ok := h.loadSessionForCluster(w, r)
@@ -49,7 +49,7 @@ func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
 		Offset:    int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	total, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)
@@ -77,16 +77,16 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 	idStr := chi.URLParam(r, "id")
 	sessionID, err := uuid.Parse(idStr)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid session id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid session id")
 		return
 	}
 	row, err := h.Queries.GetKubectlSessionByID(r.Context(), sessionID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Session not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Session not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	limit := queryLimitMax(r, 100, 1000)
@@ -98,7 +98,7 @@ func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Reque
 		SessionID: row.ID, Limit: int32(limit), Offset: int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	total, _ := h.Queries.CountKubectlSessionCommands(r.Context(), row.ID)

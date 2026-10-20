@@ -17,9 +17,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -120,7 +120,7 @@ func guardDownstreamImpersonationAnnotation(
 			// spliced into it, and letting it through would silently CLEAR a
 			// superuser-set mode. Fail closed instead. Unreachable while the
 			// flag is off everywhere, which is why it costs nothing.
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 				"annotations must be a JSON object while "+callerid.ModeAnnotation+" is set")
 			return nil, false
 		}
@@ -132,13 +132,13 @@ func guardDownstreamImpersonationAnnotation(
 		// The key is present but is not a JSON string. Rejecting is the same
 		// fail-closed posture as an unrecognized string value below; coercing
 		// or ignoring it would let a caller smuggle the key past the gate.
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 			"Invalid "+callerid.ModeAnnotation+" value; expected off, attribute, or enforce")
 		return nil, false
 	}
 	mode, ok := callerid.ParseMode(rawValue)
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError,
 			"Invalid "+callerid.ModeAnnotation+" value; expected off, attribute, or enforce")
 		return nil, false
 	}
@@ -153,7 +153,7 @@ func guardDownstreamImpersonationAnnotation(
 		return nil, false
 	}
 	if mode.RequiresAgentCapability() && !agentAdvertisedImpersonation(r.Context(), q, clusterID) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"The cluster agent has not advertised the impersonation capability; it cannot be moved to enforce")
 		return nil, false
 	}

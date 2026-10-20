@@ -25,8 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 const (
@@ -153,7 +153,7 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if h.queries != nil {
 		rows, err := h.queries.ListManagementBackupDestinations(ctx)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 			return
 		}
 		for _, row := range rows {
@@ -176,7 +176,7 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	if h.k8s != nil && h.namespace != "" {
 		helmCJ, err := h.findHelmBackupCronJob(ctx)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, err.Error())
 			return
 		}
 		if helmCJ != nil {
@@ -208,7 +208,7 @@ func (h *AdminDrillHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if drillCJ, err := h.findCronJob(ctx, restoreDrillComponent); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, err.Error())
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, err.Error())
 			return
 		} else if drillCJ != nil {
 			out.Drill = cronJobStatus(drillCJ)

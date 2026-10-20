@@ -10,10 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // SetEncryptor wires the Fernet encryptor used for chart-repository
@@ -52,7 +52,7 @@ func (h *CatalogHandler) respondRepoConnectionResult(w http.ResponseWriter, r *h
 		detail["upstream_status"] = upstreamStatus
 	}
 	if err := recordMandatoryAudit(r, h.queries, "catalog.repo.test_connection", "helm_repository", repo.ID.String(), repo.Name, detail); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 			"Mandatory audit storage is unavailable; the connection result was not returned")
 		return
 	}
@@ -62,12 +62,12 @@ func (h *CatalogHandler) respondRepoConnectionResult(w http.ResponseWriter, r *h
 func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid repository ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid repository ID")
 		return
 	}
 	repo, err := h.queries.GetHelmRepositoryByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Repository not found")
 		return
 	}
 	if isOCIRepoSpec(repo) {
@@ -85,13 +85,13 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 		// loopback / RFC-1918 / link-local (incl. the 169.254.169.254 metadata
 		// endpoint) before any request leaves the process.
 		if err := h.guardCatalogURL(r.Context(), pingURL); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidURL, "repository host is not permitted")
 			return
 		}
 		client := h.catalogClient(10*time.Second, catalog.MaxIndexBytes)
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, pingURL, nil)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidURL, err.Error())
 			return
 		}
 		// Test-connection is the one place an operator is explicitly asking
@@ -127,13 +127,13 @@ func (h *CatalogHandler) TestRepoConnection(w http.ResponseWriter, r *http.Reque
 	// SSRF backstop (see the OCI branch above): block probes at non-public
 	// hosts before dialing.
 	if err := h.guardCatalogURL(r.Context(), url); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, "repository host is not permitted")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidURL, "repository host is not permitted")
 		return
 	}
 	client := h.catalogClient(10*time.Second, catalog.MaxIndexBytes)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidURL, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidURL, err.Error())
 		return
 	}
 	// Same rule as the OCI branch above: test-connection is the one endpoint

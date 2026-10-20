@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -38,9 +38,9 @@ type idempotentToolOperationCreator interface {
 
 var errToolOperationIdempotencyConflict = errors.New("tool operation idempotency key identifies a different operation")
 
-func respondToolMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode, fallbackMessage string) {
+func respondToolMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, errToolOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different tool operation")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different tool operation")
 		return
 	}
 	respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, fallbackCode, fallbackMessage)

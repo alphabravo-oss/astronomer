@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -191,19 +191,19 @@ type searchClusterResult struct {
 func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	if h == nil || h.queries == nil || h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SearchUnavailable, "Cross-cluster search is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.SearchUnavailable, "Cross-cluster search is not configured")
 		return
 	}
 
 	q := r.URL.Query()
 	resourceType := strings.ToLower(strings.TrimSpace(q.Get("type")))
 	if resourceType == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "type query parameter is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "type query parameter is required")
 		return
 	}
 	def, ok := searchResourceDefs[resourceType]
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.UnsupportedType, fmt.Sprintf("unsupported resource type %q", resourceType))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.UnsupportedType, fmt.Sprintf("unsupported resource type %q", resourceType))
 		return
 	}
 
@@ -231,16 +231,16 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	// order.
 	clusters, err := h.listActiveClusters(searchCtx)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListClustersFailed, "Failed to list active clusters")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListClustersFailed, "Failed to list active clusters")
 		return
 	}
 	clusters, authErr := h.authorizedSearchClusters(searchCtx, clusters, def.rbacResource)
 	if authErr != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	if len(clusters) == 0 {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to search this resource type")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to search this resource type")
 		return
 	}
 

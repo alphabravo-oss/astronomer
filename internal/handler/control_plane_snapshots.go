@@ -43,9 +43,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -233,13 +233,13 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
 	family, ok := controlPlaneSnapshotDistro(cluster.Distribution)
 	if !ok {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			fmt.Sprintf("Control-plane (etcd) snapshots are only supported on self-managed distributions (k3s, RKE2, kubeadm). Cluster distribution %q is a managed or unsupported control plane with no reachable etcd.", cluster.Distribution))
 		return
 	}
@@ -248,7 +248,7 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 	// Body is optional — an empty POST triggers a snapshot with defaults.
 	if r.Body != nil {
 		if err := decodeV1JSONBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
@@ -258,7 +258,7 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		name = newControlPlaneSnapshotName(cluster.Name)
 	}
 	if !validVeleroResourceName(name) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "name must be a valid RFC 1123 subdomain (1-253 chars)")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "name must be a valid RFC 1123 subdomain (1-253 chars)")
 		return
 	}
 	location := strings.ToLower(strings.TrimSpace(req.Location))
@@ -266,7 +266,7 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		location = "local"
 	}
 	if location != "local" && location != "s3" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "location must be 'local' or 's3'")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "location must be 'local' or 's3'")
 		return
 	}
 
@@ -282,7 +282,7 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		"name": name, "location": location,
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "control-plane snapshot transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "control-plane snapshot transaction runner is not configured")
 		return
 	}
 	var row sqlc.ControlPlaneSnapshot
@@ -314,10 +314,10 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 	})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, err.Error())
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create control-plane snapshot intent")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create control-plane snapshot intent")
 		return
 	}
 	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
@@ -340,7 +340,7 @@ func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *ht
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 
@@ -352,12 +352,12 @@ func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *ht
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list snapshots")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list snapshots")
 		return
 	}
 	total, err := h.queries.CountControlPlaneSnapshotsByCluster(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count snapshots")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to count snapshots")
 		return
 	}
 	out := make([]ControlPlaneSnapshotResponse, 0, len(rows))
@@ -375,7 +375,7 @@ func (h *ControlPlaneSnapshotHandler) GetSnapshot(w http.ResponseWriter, r *http
 	}
 	row, err := h.queries.GetControlPlaneSnapshotByID(r.Context(), snapshotID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Snapshot not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, controlPlaneSnapshotToResponse(row))
@@ -408,12 +408,12 @@ func (h *ControlPlaneSnapshotHandler) Restore(w http.ResponseWriter, r *http.Req
 	}
 	row, err := h.queries.GetControlPlaneSnapshotByID(r.Context(), snapshotID)
 	if err != nil || row.ClusterID != clusterID {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Snapshot not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Snapshot not found")
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	family, _ := controlPlaneSnapshotDistro(cluster.Distribution)
@@ -703,7 +703,7 @@ func parseControlPlaneSnapshotIDs(w http.ResponseWriter, r *http.Request) (uuid.
 	}
 	snapshotID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid snapshot ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid snapshot ID")
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, snapshotID, true

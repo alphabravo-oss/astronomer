@@ -16,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -69,13 +69,13 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "anomaly baseline querier not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "anomaly baseline querier not configured")
 		return
 	}
 	if clusterIDRaw := r.URL.Query().Get("clusterId"); clusterIDRaw != "" {
 		clusterID, err := uuid.Parse(clusterIDRaw)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidClusterID, "Invalid clusterId")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidClusterID, "Invalid clusterId")
 			return
 		}
 		// Scoped listing: gate on the requested cluster so a caller without
@@ -85,7 +85,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		rows, err := h.queries.ListAnomalyBaselinesByCluster(r.Context(), clusterID)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list anomaly baselines")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list anomaly baselines")
 			return
 		}
 		items := make([]map[string]any, 0, len(rows))
@@ -106,7 +106,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	// consume a scoped caller's page.
 	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceMonitoring, rbac.VerbRead, rbac.NarrowedClustersWiden)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 		return
 	}
 	limit := queryLimit(r, 50)
@@ -121,7 +121,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	} else {
 		pager, ok := h.queries.(anomalyScopedPager)
 		if !ok {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Scoped anomaly pagination is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Scoped anomaly pagination is unavailable")
 			return
 		}
 		rows, err = pager.ListAnomalyBaselinesForScopes(r.Context(), sqlc.ListAnomalyBaselinesForScopesParams{
@@ -132,7 +132,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list anomaly baselines")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list anomaly baselines")
 		return
 	}
 	items := make([]map[string]any, 0, len(rows))
@@ -145,17 +145,17 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/anomaly-baselines/{id}/.
 func (h *AnomalyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "anomaly baseline querier not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "anomaly baseline querier not configured")
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid baseline ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid baseline ID")
 		return
 	}
 	row, err := h.queries.GetAnomalyBaselineByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Anomaly baseline not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Anomaly baseline not found")
 		return
 	}
 	// Resolve the baseline's own cluster and gate on it so UUID iteration

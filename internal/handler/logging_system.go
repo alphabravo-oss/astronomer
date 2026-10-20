@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 const systemLoggingOutputName = "Astronomer logs"
@@ -147,7 +147,7 @@ func rejectSystemOutputMutation(w http.ResponseWriter, r *http.Request, output s
 	if !output.IsSystem {
 		return false
 	}
-	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden,
 		fmt.Sprintf("System logging destinations cannot be %s", action))
 	return true
 }

@@ -1,33 +1,32 @@
-// Package apierror defines the canonical catalog of machine-readable error
-// codes returned by the Astronomer REST API.
+// Package apiutil is the single error contract of the Astronomer API
+// (guide ch.03, ADR-0012).
 //
-// Every error response produced by handler.RespondRequestError /
-// handler.RespondError carries a stable `code` string in its body:
+// It owns three things and nothing else:
 //
-//	{"error": {"code": "<code>", "message": "<message>", "request_id": "..."}}
+//   - the closed catalog of machine-readable error codes (this file). Code is a
+//     defined type, so a handler cannot invent a code at a call site: every
+//     value must be a constant declared here, and catalog.go maps each one to
+//     exactly one connect.Code and one canonical HTTP status;
 //
-// Historically these codes were inline string literals scattered across ~2,000
-// call sites and ~260 distinct spellings, with many near-duplicates
-// (list_error vs list_failed, not_found vs cluster_not_found, etc.). This
-// package seeds a typed catalog so that, going forward, handlers reference a
-// single canonical constant per concept and the set of codes a client may
-// observe is enumerable and documentable.
+//   - FromError, which translates domain errors (sentinels, pgx/pgconn errors,
+//     context errors, *Error) into that catalog and defaults everything else to
+//     Internal with the original error preserved as the log-only cause;
 //
-// The Code type is a defined string, so a constant of this type can be passed
-// directly as the `code` argument to RespondRequestError without a conversion:
+//   - the one HTTP writer (WriteError / Respond), which emits
 //
-//	RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+//     {"error": {"code": "<code>", "message": "<message>", "request_id": "..."}}
 //
-// Codes are grouped below by the HTTP status family they typically accompany.
-// A handful of codes (e.g. InvalidToken) legitimately appear under more than
-// one status depending on context; the grouping reflects the dominant usage,
-// not an exhaustive contract.
-package apierror
+//     scrubs every 5xx message, and records
+//     astronomer_request_errors_total{route,reason}.
+//
+// Phase 2 mounts Connect handlers; they translate through the same catalog via
+// ConnectError, so REST and RPC report one vocabulary.
+package apiutil
 
 // Code is a stable, machine-readable API error identifier. It is a defined
-// string type so catalog constants can be passed wherever a `code string`
-// argument is expected.
-type Code = string
+// type (not an alias) so the set of codes a client can observe is closed at
+// compile time: only the constants below exist.
+type Code string
 
 // --- Validation / bad client input (typically HTTP 400) ---
 
@@ -166,9 +165,6 @@ const (
 	// Collapses legacy literal(s): "invalid_component".
 	ComponentInvalid Code = "component_invalid"
 
-	// ComponentRequired indicates a component required condition.
-	ComponentRequired Code = "component_required"
-
 	// ImmutableName indicates a immutable name condition.
 	ImmutableName Code = "immutable_name"
 
@@ -203,14 +199,8 @@ const (
 	// InvalidContext indicates a invalid context condition.
 	InvalidContext Code = "invalid_context"
 
-	// InvalidDecision indicates a invalid decision condition.
-	InvalidDecision Code = "invalid_decision"
-
 	// InvalidEmail indicates a invalid email condition.
 	InvalidEmail Code = "invalid_email"
-
-	// InvalidExpiresAt indicates a invalid expires at condition.
-	InvalidExpiresAt Code = "invalid_expires_at"
 
 	// InvalidField indicates a invalid field condition.
 	InvalidField Code = "invalid_field"
@@ -325,9 +315,6 @@ const (
 	// QueueRequired indicates a queue required condition.
 	QueueRequired Code = "queue_required"
 
-	// ReasonRequired indicates a reason required condition.
-	ReasonRequired Code = "reason_required"
-
 	// SMTPDisabled indicates a smtp disabled condition.
 	SMTPDisabled Code = "smtp_disabled"
 
@@ -343,8 +330,6 @@ const (
 	// UnknownKey indicates a unknown key condition.
 	UnknownKey Code = "unknown_key"
 
-	// UnsafeReplacementBlocked indicates a unsafe replacement blocked condition.
-	UnsafeReplacementBlocked Code = "unsafe_replacement_blocked"
 	// UnsupportedProvider indicates a unsupported provider condition.
 	UnsupportedProvider Code = "unsupported_provider"
 
@@ -428,9 +413,6 @@ const (
 
 	// DiffUnavailable indicates a diff unavailable condition.
 	DiffUnavailable Code = "diff_unavailable"
-
-	// DispatcherUnavailable indicates a dispatcher unavailable condition.
-	DispatcherUnavailable Code = "dispatcher_unavailable"
 
 	// EncryptUnavailable indicates a encrypt unavailable condition.
 	EncryptUnavailable Code = "encrypt_unavailable"
@@ -571,14 +553,8 @@ const (
 	// AsynqError indicates a asynq error condition.
 	AsynqError Code = "asynq_error"
 
-	// AttachError indicates a attach error condition.
-	AttachError Code = "attach_error"
-
 	// AuditError indicates a audit error condition.
 	AuditError Code = "audit_error"
-
-	// BuildError indicates a build error condition.
-	BuildError Code = "build_error"
 
 	// CRCreateError indicates a cr create error condition.
 	CRCreateError Code = "cr_create_error"
@@ -598,9 +574,6 @@ const (
 	// CryptoError indicates a crypto error condition.
 	CryptoError Code = "crypto_error"
 
-	// DecisionError indicates a decision error condition.
-	DecisionError Code = "decision_error"
-
 	// DecryptError indicates a decrypt error condition.
 	DecryptError Code = "decrypt_error"
 
@@ -618,9 +591,6 @@ const (
 
 	// EncryptError indicates a encrypt error condition.
 	EncryptError Code = "encrypt_error"
-
-	// EncryptionError indicates a encryption error condition.
-	EncryptionError Code = "encryption_error"
 
 	// EnqueueError indicates a enqueue error condition.
 	EnqueueError Code = "enqueue_error"
@@ -680,12 +650,6 @@ const (
 	// MonitoringError indicates a monitoring error condition.
 	MonitoringError Code = "monitoring_error"
 
-	// OwnershipError indicates a ownership error condition.
-	OwnershipError Code = "ownership_error"
-
-	// PersistError indicates a persist error condition.
-	PersistError Code = "persist_failed"
-
 	// PolicyError indicates a policy error condition.
 	PolicyError Code = "policy_error"
 
@@ -694,9 +658,6 @@ const (
 
 	// PreviewError indicates a preview error condition.
 	PreviewError Code = "preview_error"
-
-	// ProjectLookupError indicates a project lookup error condition.
-	ProjectLookupError Code = "project_lookup_error"
 
 	// ProxyError indicates a proxy error condition.
 	ProxyError Code = "proxy_error"
@@ -719,9 +680,6 @@ const (
 	// ResolveError indicates a resolve error condition.
 	ResolveError Code = "resolve_error"
 
-	// RestartError indicates a restart error condition.
-	RestartError Code = "restart_error"
-
 	// RetryError indicates a retry error condition.
 	// Collapses legacy literal(s): "retry_failed".
 	RetryError Code = "retry_error"
@@ -731,9 +689,6 @@ const (
 
 	// RevokeError indicates a revoke error condition.
 	RevokeError Code = "revoke_error"
-
-	// RollbackError indicates a rollback error condition.
-	RollbackError Code = "rollback_error"
 
 	// SaveError indicates a save error condition.
 	SaveError Code = "save_error"
@@ -790,6 +745,200 @@ const (
 	// WorkloadError indicates a workload error condition.
 	WorkloadError Code = "workload_error"
 
-	// WriteError indicates a write error condition.
-	WriteError Code = "write_error"
+	// WriteFailure indicates a write error condition.
+	WriteFailure Code = "write_error"
+)
+
+// ===========================================================================
+// Codes folded in from the former second writers (ADR-0012): the delivery
+// package's respondError, the route/middleware inline JSON writers, the
+// delivery rollout engine's typed error codes, and the codes FromError
+// produces for domain and database errors.
+// ===========================================================================
+
+// --- Validation / bad client input ---
+
+const (
+	// InvalidProjectScope indicates the project scope of a delivery request
+	// could not be resolved from the route.
+	InvalidProjectScope Code = "invalid_project_scope"
+
+	// InvalidResourceID indicates a delivery resource id failed to parse.
+	InvalidResourceID Code = "invalid_resource_id"
+
+	// InvalidPagination indicates malformed limit/cursor parameters.
+	InvalidPagination Code = "invalid_pagination"
+
+	// InvalidIdempotencyKey indicates a malformed Idempotency-Key header.
+	InvalidIdempotencyKey Code = "invalid_idempotency_key"
+
+	// InvalidK8sPath indicates a Kubernetes proxy path that is not canonical.
+	InvalidK8sPath Code = "invalid_k8s_path"
+
+	// InvalidNamespaceSelection indicates a malformed multi-namespace selection.
+	InvalidNamespaceSelection Code = "invalid_namespace_selection"
+
+	// InvalidReference indicates a write referenced a row that does not exist
+	// (foreign-key violation on insert/update).
+	InvalidReference Code = "invalid_reference"
+
+	// SecretNotAllowed indicates inline secret material where only Kubernetes
+	// Secret references are accepted.
+	SecretNotAllowed Code = "secret_not_allowed"
+
+	// EstateLimitExceeded indicates a delivery estate exceeds its bounded size.
+	EstateLimitExceeded Code = "estate_limit_exceeded"
+
+	// RequestTooLarge indicates a request body exceeded a route's limit.
+	RequestTooLarge Code = "request_too_large"
+
+	// RequestBodyTooLarge indicates a request body exceeded the global limit.
+	RequestBodyTooLarge Code = "request_body_too_large"
+
+	// RolloutInvalidInput indicates a rollout request failed validation.
+	RolloutInvalidInput Code = "invalid_input"
+
+	// RolloutNoClusters indicates a rollout resolved to no target clusters.
+	RolloutNoClusters Code = "no_clusters"
+
+	// RolloutInvalidCohorts indicates a rollout cohort plan is invalid.
+	RolloutInvalidCohorts Code = "invalid_cohorts"
+)
+
+// --- Authentication / authorization ---
+
+const (
+	// PermissionDenied indicates the RBAC authorizer refused the request.
+	PermissionDenied Code = "permission_denied"
+
+	// IPNotAllowlisted indicates an API token used outside its IP allowlist.
+	IPNotAllowlisted Code = "ip_not_allowlisted"
+
+	// PlatformScopeForbidden indicates a project caller addressed a
+	// platform-scoped delivery resource.
+	PlatformScopeForbidden Code = "platform_scope_forbidden"
+)
+
+// --- Not found ---
+
+const (
+	// FeatureDisabled indicates the route belongs to a feature switched off in
+	// platform settings (reported as 404).
+	FeatureDisabled Code = "feature_disabled"
+)
+
+// --- Conflict / precondition / concurrency ---
+
+const (
+	// AlreadyExists indicates a uniqueness violation: a resource with the same
+	// identity already exists.
+	AlreadyExists Code = "already_exists"
+
+	// ResourceInUse indicates a delete or update was refused because other
+	// rows still reference the resource.
+	ResourceInUse Code = "resource_in_use"
+
+	// FailedPrecondition indicates the resource is not in a state that admits
+	// the operation.
+	FailedPrecondition Code = "failed_precondition"
+
+	// ConcurrentModification indicates the operation lost a race with a
+	// concurrent writer (serialization failure / deadlock); retrying is safe.
+	ConcurrentModification Code = "concurrent_modification"
+
+	// IdempotencyConflict indicates an Idempotency-Key was reused for a
+	// different request.
+	IdempotencyConflict Code = "idempotency_conflict"
+
+	// StaleGeneration indicates a write against an outdated generation.
+	StaleGeneration Code = "stale_generation"
+
+	// StaleResourceVersion indicates an If-Match/ETag precondition failed.
+	StaleResourceVersion Code = "stale_resource_version"
+
+	// PreviewCursorStale indicates a preview cursor no longer matches state.
+	PreviewCursorStale Code = "preview_cursor_stale"
+
+	// IfMatchRequired indicates a mutating request lacked If-Match.
+	IfMatchRequired Code = "if_match_required"
+
+	// PreconditionRequired indicates a mutating request lacked a required
+	// generation precondition.
+	PreconditionRequired Code = "precondition_required"
+
+	// PreconditionFailed indicates a request precondition did not hold.
+	PreconditionFailed Code = "precondition_failed"
+
+	// InvalidTransition indicates an illegal lifecycle state transition.
+	InvalidTransition Code = "invalid_transition"
+
+	// SourceRevoked indicates a delivery source was revoked.
+	SourceRevoked Code = "source_revoked"
+
+	// BundleNotReady indicates a delivery bundle is not yet resolvable.
+	BundleNotReady Code = "bundle_not_ready"
+
+	// OverrideSetUnavailable indicates an override set is missing, disabled,
+	// or outside the project.
+	OverrideSetUnavailable Code = "override_set_unavailable"
+
+	// OverrideConflict indicates override patches conflict with each other.
+	OverrideConflict Code = "override_conflict"
+
+	// ConfigurationReferenceUnavailable indicates a referenced configuration
+	// template or override set cannot be used.
+	ConfigurationReferenceUnavailable Code = "configuration_reference_unavailable"
+
+	// RolloutPreviewStale indicates a rollout preview no longer matches state.
+	RolloutPreviewStale Code = "preview_stale"
+
+	// RolloutTargetChanged indicates the rollout target changed mid-flight.
+	RolloutTargetChanged Code = "target_changed"
+
+	// RolloutLeaseLost indicates the rollout lease moved to another worker.
+	RolloutLeaseLost Code = "lease_lost"
+
+	// RolloutStaleFence indicates a fenced write lost to a newer fence token.
+	RolloutStaleFence Code = "stale_fence"
+
+	// RolloutInvariant indicates a rollout invariant was violated.
+	RolloutInvariant Code = "invariant_violation"
+)
+
+// --- Rate limiting, cancellation, deadlines ---
+
+const (
+	// RateLimited indicates the caller exceeded a request budget.
+	RateLimited Code = "rate_limited"
+
+	// CharlieRateLimited indicates Charlie request capacity is exhausted.
+	CharlieRateLimited Code = "charlie_rate_limited"
+
+	// RequestCanceled indicates the operation was canceled before completion.
+	RequestCanceled Code = "request_canceled"
+
+	// DeadlineExceeded indicates the operation ran past its deadline.
+	DeadlineExceeded Code = "deadline_exceeded"
+)
+
+// --- Server / dependency failures ---
+
+const (
+	// ServiceUnavailable indicates a required backing service is unavailable.
+	ServiceUnavailable Code = "service_unavailable"
+
+	// SecurityDependencyUnavailable indicates authentication or authorization
+	// wiring is missing, so the route fails closed.
+	SecurityDependencyUnavailable Code = "security_dependency_unavailable"
+
+	// CredentialEncryptionUnavailable indicates the credential encryptor is
+	// not wired.
+	CredentialEncryptionUnavailable Code = "credential_encryption_unavailable"
+
+	// InvalidPersistedState indicates stored state failed to decode.
+	InvalidPersistedState Code = "invalid_persisted_state"
+
+	// ResolutionEnqueueFailed indicates a source resolution job could not be
+	// enqueued.
+	ResolutionEnqueueFailed Code = "resolution_enqueue_failed"
 )

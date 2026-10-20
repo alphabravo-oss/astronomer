@@ -27,9 +27,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -107,7 +107,7 @@ func toSCIMTokenListMeta(t sqlc.ListSCIMTokenMetadataRow) scimTokenMeta {
 
 func (h *SCIMTokenAdminHandler) superuser(w http.ResponseWriter, r *http.Request) bool {
 	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "SCIM token store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "SCIM token store not configured")
 		return false
 	}
 	_, ok := RequireSuperuser(w, r, h.queries, SuperuserGateConfig{
@@ -131,25 +131,25 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req createSCIMTokenRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "name is required")
 		return
 	}
 	if req.ExpiresInDays == 0 {
 		req.ExpiresInDays = 90
 	}
 	if req.ExpiresInDays < 1 || req.ExpiresInDays > 365 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "expires_in_days must be between 1 and 365")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "expires_in_days must be between 1 and 365")
 		return
 	}
 
 	token, err := auth.GenerateSCIMToken()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to generate token")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to generate token")
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: time.Now().UTC().AddDate(0, 0, req.ExpiresInDays),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 
@@ -192,7 +192,7 @@ func (h *SCIMTokenAdminHandler) List(w http.ResponseWriter, r *http.Request) {
 		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := make([]scimTokenMeta, 0, len(rows))
@@ -201,7 +201,7 @@ func (h *SCIMTokenAdminHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	total, err := h.queries.CountSCIMTokens(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, struct {
@@ -218,16 +218,16 @@ func (h *SCIMTokenAdminHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid token id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid token id")
 		return
 	}
 	changed, err := h.queries.RevokeSCIMToken(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	if changed == 0 {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SCIM token not found or already revoked")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SCIM token not found or already revoked")
 		return
 	}
 

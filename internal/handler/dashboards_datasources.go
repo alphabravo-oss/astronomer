@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/dashboards"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -29,7 +29,7 @@ func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.R
 		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	out := make([]DatasourceResponse, 0, len(rows))
@@ -38,7 +38,7 @@ func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.R
 	}
 	total, err := h.queries.CountPrometheusDatasources(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
@@ -51,16 +51,16 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 	}
 	var req DatasourceRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	if err := validateDatasourceRequest(req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	encrypted, err := h.sealAuth(req)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, err.Error())
 		return
 	}
 	enabled := true
@@ -86,7 +86,7 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/prometheus-datasources/"+row.ID.String()+"/")
@@ -100,16 +100,16 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid datasource ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid datasource ID")
 		return
 	}
 	var req DatasourceRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	if err := validateDatasourceRequest(req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	// Seal replacement credentials before opening a database transaction; no
@@ -120,7 +120,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 	if replaceAuth {
 		enc, err := h.sealAuth(req)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, err.Error())
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, err.Error())
 			return
 		}
 		replacementCiphertext = enc
@@ -154,10 +154,10 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Datasource not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Datasource not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, datasourceToResponse(row))
@@ -170,7 +170,7 @@ func (h *DashboardHandler) AdminDeleteDatasource(w http.ResponseWriter, r *http.
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid datasource ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid datasource ID")
 		return
 	}
 	deleteDatasource := func(q DashboardQuerier) (sqlc.PrometheusDatasource, error) {
@@ -193,10 +193,10 @@ func (h *DashboardHandler) AdminDeleteDatasource(w http.ResponseWriter, r *http.
 		})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Datasource not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Datasource not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -213,21 +213,21 @@ func (h *DashboardHandler) AdminTestDatasource(w http.ResponseWriter, r *http.Re
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid datasource ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid datasource ID")
 		return
 	}
 	row, err := h.queries.GetPrometheusDatasourceByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Datasource not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Datasource not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, err.Error())
 		return
 	}
 	ds, err := h.resolveDatasource(row)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, err.Error())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)

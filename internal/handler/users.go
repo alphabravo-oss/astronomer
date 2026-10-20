@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -52,11 +52,11 @@ var _ UserMutationTx = (*sqlc.Queries)(nil)
 
 func (h *ResourceHandler) requireUserMutationRunner(w http.ResponseWriter, r *http.Request) bool {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.UsersError, "user store not configured")
 		return false
 	}
 	if h.userRunTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "user administration transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "user administration transaction runner is not configured")
 		return false
 	}
 	return true
@@ -66,7 +66,7 @@ func (h *ResourceHandler) mutateUser(
 	w http.ResponseWriter,
 	r *http.Request,
 	status int,
-	code string,
+	code apiutil.Code,
 	message string,
 	fn func(UserMutationTx) error,
 ) bool {
@@ -130,20 +130,20 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	var req CreateUserRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Email is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Email is required")
 		return
 	}
 	if req.Username == "" {
 		req.Username = req.Email
 	}
 	if req.Password == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Password is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Password is required")
 		return
 	}
 	if err := validatorInstance().Struct(req); err != nil {
@@ -153,12 +153,12 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// DIR-04 / AUTH-R01: enforce live platform password policy when settings
 	// are wired; fall back to DefaultPasswordPolicy.
 	if err := auth.ValidatePassword(req.Password, h.passwordPolicy(r.Context())); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HashError, "Failed to hash password")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.HashError, "Failed to hash password")
 		return
 	}
 	// Default to active when not specified.
@@ -177,7 +177,7 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		IsSuperuser: req.IsSuperuser,
 	}
 	var user sqlc.User
-	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create user", func(q UserMutationTx) error {
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create user", func(q UserMutationTx) error {
 		var createErr error
 		user, createErr = q.CreateUser(r.Context(), params)
 		if createErr != nil {
@@ -200,17 +200,17 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	current, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
 	var req UpdateUserRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
@@ -250,7 +250,7 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	var revokedSessions []sqlc.SsoSession
 	sessionsRevoked := false
 	revokedAt := time.Now()
-	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update user", func(q UserMutationTx) error {
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update user", func(q UserMutationTx) error {
 		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
 		if lockErr != nil {
 			return lockErr
@@ -305,17 +305,17 @@ func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
 	var revokedSessions []sqlc.SsoSession
 	revokedAt := time.Now()
-	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete user", func(q UserMutationTx) error {
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete user", func(q UserMutationTx) error {
 		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
 		if lockErr != nil {
 			return lockErr
@@ -352,12 +352,12 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
 	// Body is optional: if empty / no `password` field, we generate a random
@@ -370,25 +370,25 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 	)
 	if r.Body != nil {
 		if err := decodeV1JSONBody(r, &req); err != nil && err != io.EOF {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
 	if req.Password == "" {
 		tmp, err := generateTempPassword()
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.GenerateError, "Failed to generate temporary password")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.GenerateError, "Failed to generate temporary password")
 			return
 		}
 		req.Password = tmp
 		generated = true
 	} else if err := auth.ValidatePassword(req.Password, h.passwordPolicy(r.Context())); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, err.Error())
 		return
 	}
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HashError, "Failed to hash password")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.HashError, "Failed to hash password")
 		return
 	}
 	passwordParams := sqlc.UpdateUserPasswordParams{
@@ -397,7 +397,7 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 	}
 	var revokedSessions []sqlc.SsoSession
 	revokedAt := time.Now()
-	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset password and invalidate sessions", func(q UserMutationTx) error {
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to reset password and invalidate sessions", func(q UserMutationTx) error {
 		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
 		if lockErr != nil {
 			return lockErr
@@ -442,20 +442,20 @@ func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
-	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to unlock user", func(q UserMutationTx) error {
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to unlock user", func(q UserMutationTx) error {
 		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
 		if lockErr != nil {
 			return lockErr
@@ -495,22 +495,22 @@ func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	existing, err := h.queries.GetUserByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "User not found")
 		return
 	}
 	now := time.Now()
 	var sessions []sqlc.SsoSession
-	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to invalidate sessions", func(q UserMutationTx) error {
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to invalidate sessions", func(q UserMutationTx) error {
 		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
 		if lockErr != nil {
 			return lockErr

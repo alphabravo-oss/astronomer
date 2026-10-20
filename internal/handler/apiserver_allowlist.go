@@ -46,12 +46,12 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -277,7 +277,7 @@ func (h *ApiserverAllowlistHandler) Get(w http.ResponseWriter, r *http.Request) 
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	row, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)
@@ -299,7 +299,7 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	var req AllowlistUpdateRequest
@@ -310,18 +310,18 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		req.Mode = "monitor"
 	}
 	if _, ok := validModes[req.Mode]; !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidMode, fmt.Sprintf("mode must be one of monitor|enforce|disabled, got %q", req.Mode))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidMode, fmt.Sprintf("mode must be one of monitor|enforce|disabled, got %q", req.Mode))
 		return
 	}
 	capability := providers.DeclaredCapability(providers.ClusterFromSQLC(cluster))
 	if req.Mode == "enforce" && !capability.CanEnforce {
-		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.UnsupportedProvider,
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.UnsupportedProvider,
 			fmt.Sprintf("Provider %q cannot enforce API-server allow-lists: %s", capability.Provider, capability.Reason))
 		return
 	}
 	canonical, err := allowlist.ValidateCIDRs(req.CIDRs)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidCIDR, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidCIDR, err.Error())
 		return
 	}
 
@@ -332,7 +332,7 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		Mode:      req.Mode,
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Allow-list transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "Allow-list transaction runner is not configured")
 		return
 	}
 	var existing, row sqlc.ApiserverAllowlist
@@ -359,12 +359,12 @@ func (h *ApiserverAllowlistHandler) Update(w http.ResponseWriter, r *http.Reques
 		})
 	})
 	if errors.Is(err, errAllowlistModeChangeRequiresForce) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.ModeChangeRequiresForce,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.ModeChangeRequiresForce,
 			"Switching to enforce while drift exists requires force_apply=true; the apiserver allow-list would change on the next reconcile.")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update apiserver allow-list")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update apiserver allow-list")
 		return
 	}
 	h.publishNetworkAccessChanged(clusterID)
@@ -381,11 +381,11 @@ func (h *ApiserverAllowlistHandler) Reconcile(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "allow-list transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "allow-list transaction runner is not configured")
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "apiserver_allowlist_reconcile"))
@@ -393,7 +393,7 @@ func (h *ApiserverAllowlistHandler) Reconcile(w http.ResponseWriter, r *http.Req
 		ClusterID string `json:"cluster_id"`
 	}{ClusterID: clusterID.String()})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode allow-list reconcile request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode allow-list reconcile request")
 		return
 	}
 	receipt := ApiserverAllowlistReconcileReceipt{ClusterID: clusterID.String(), Status: "accepted"}
@@ -422,15 +422,15 @@ func (h *ApiserverAllowlistHandler) Reconcile(w http.ResponseWriter, r *http.Req
 		return attachOperationReceipt(r.Context(), idemQ, "apiserver_allowlist_reconciles", clusterID, digest, receipt)
 	})
 	if errors.Is(err, errOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different allow-list reconcile")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different allow-list reconcile")
 		return
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "No allow-list policy on this cluster")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "No allow-list policy on this cluster")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to queue allow-list reconcile")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to queue allow-list reconcile")
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/apiserver-allowlist/", receipt)
@@ -478,7 +478,7 @@ func (h *ApiserverAllowlistHandler) Snapshots(w http.ResponseWriter, r *http.Req
 		Offset:    int32(offset),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list snapshots")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list snapshots")
 		return
 	}
 	hasMore := len(rows) > limit
@@ -509,7 +509,7 @@ func (h *ApiserverAllowlistHandler) Preview(w http.ResponseWriter, r *http.Reque
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	row, err := h.queries.GetApiserverAllowlistByClusterID(r.Context(), clusterID)

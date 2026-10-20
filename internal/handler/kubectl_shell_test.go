@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -645,9 +645,9 @@ func TestKubectlHandler_RequiresClusterUpdate(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown cluster: want 404, got %d body=%s", w.Code, w.Body.String())
 	}
-	// "cluster_not_found" was canonicalized to apierror.NotFound ("not_found").
-	if !strings.Contains(w.Body.String(), apierror.NotFound) {
-		t.Fatalf("body should include %s; got %s", apierror.NotFound, w.Body.String())
+	// "cluster_not_found" was canonicalized to apiutil.NotFound ("not_found").
+	if !strings.Contains(w.Body.String(), string(apiutil.NotFound)) {
+		t.Fatalf("body should include %s; got %s", apiutil.NotFound, w.Body.String())
 	}
 
 	// Unauthenticated → 401.

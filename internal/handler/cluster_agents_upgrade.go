@@ -11,14 +11,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 func (h *ClusterAgentHandler) UpgradePlan(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -39,7 +39,7 @@ func (h *ClusterAgentHandler) UpgradePlan(w http.ResponseWriter, r *http.Request
 
 func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -66,7 +66,7 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "agent lifecycle transaction runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "agent lifecycle transaction runner is not configured")
 		return
 	}
 	spec, err := json.Marshal(map[string]any{
@@ -76,7 +76,7 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		"cluster_name": firstNonEmptyAgentValue(cluster.DisplayName, cluster.Name),
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode lifecycle operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode lifecycle operation")
 		return
 	}
 	params := sqlc.CreateAgentLifecycleOperationParams{
@@ -96,7 +96,7 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		PlanDigest string                  `json:"plan_digest"`
 	}{ClusterID: cluster.ID.String(), Request: req, PlanDigest: plan.PlanDigest})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode lifecycle request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode lifecycle request")
 		return
 	}
 	receipt := agentUpgradeOperationResponse{Operation: agentLifecycleOperationDTO(sqlc.AgentLifecycleOperation{}), Plan: plan}
@@ -135,11 +135,11 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return attachOperationReceipt(r.Context(), idemQ, "agent_lifecycle_operations", op.ID, digest, receipt)
 	})
 	if errors.Is(err, errOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different agent upgrade")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different agent upgrade")
 		return
 	}
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to queue agent upgrade operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to queue agent upgrade operation")
 		return
 	}
 	if !replayed {
@@ -177,7 +177,7 @@ func (h *ClusterAgentHandler) Operations(w http.ResponseWriter, r *http.Request)
 	}
 
 	if h == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 	clusterID, ok := parseClusterID(w, r)
@@ -185,7 +185,7 @@ func (h *ClusterAgentHandler) Operations(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Cluster not found")
 		return
 	}
 	limit := queryLimit32(r, 20)
@@ -202,7 +202,7 @@ func (h *ClusterAgentHandler) Operations(w http.ResponseWriter, r *http.Request)
 		Offset:    offset,
 	})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list agent lifecycle operations")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list agent lifecycle operations")
 		return
 	}
 	items := make([]agentLifecycleOperationResponse, 0, len(ops))
@@ -244,7 +244,7 @@ func (h *ClusterAgentHandler) buildUpgradePlanForCluster(ctx context.Context, cl
 	currentImage := lastSucceededAgentImage(operations, agent.AgentVersion)
 	plan, err := h.buildUpgradePlan(cluster, agent, currentImage, req)
 	if err != nil {
-		return sqlc.Cluster{}, agentUpgradePlanResponse{}, &clusterAgentHandlerError{status: http.StatusInternalServerError, code: apierror.InternalError, message: "Failed to render agent configuration"}
+		return sqlc.Cluster{}, agentUpgradePlanResponse{}, &clusterAgentHandlerError{status: http.StatusInternalServerError, code: apiutil.InternalError, message: "Failed to render agent configuration"}
 	}
 	return cluster, plan, nil
 }

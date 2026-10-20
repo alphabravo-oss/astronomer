@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 // respondClusterAccessError maps tunnel/circuit-breaker failures to stable
@@ -14,7 +14,7 @@ import (
 // cluster is selected; the previous proxy_error message was opaque.
 func respondClusterAccessError(w http.ResponseWriter, r *http.Request, err error) {
 	if err == nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "unexpected empty cluster access error")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "unexpected empty cluster access error")
 		return
 	}
 	var upstream *kubernetesResponseError
@@ -23,15 +23,15 @@ func respondClusterAccessError(w http.ResponseWriter, r *http.Request, err error
 		if retryAfter := upstream.Headers["Retry-After"]; retryAfter != "" {
 			w.Header().Set("Retry-After", retryAfter)
 		}
-		RespondRequestError(w, r, http.StatusTooManyRequests, apierror.AgentOverloaded,
+		apiutil.WriteError(w, r, http.StatusTooManyRequests, apiutil.AgentOverloaded,
 			"The cluster agent is busy. Retry the request shortly.")
 	case errors.Is(err, ErrCircuitOpen):
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.TunnelUnavailable,
 			"Cluster agent is temporarily unavailable (circuit breaker open). Reconnect the agent or wait for automatic recovery.")
 	case strings.Contains(err.Error(), "cluster agent not connected"):
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AgentConnectionError,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AgentConnectionError,
 			"Cluster agent is not connected. Install or reconnect the agent, then retry.")
 	default:
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 	}
 }

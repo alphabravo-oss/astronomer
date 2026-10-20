@@ -34,8 +34,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // ManagementLogsQuerier is the slice of sqlc.Queries the handler reads
@@ -153,7 +153,7 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.k8s == nil || h.namespace == "" {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.LogsUnavailable,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.LogsUnavailable,
 			"management log tail is unavailable: the server has no in-cluster Kubernetes client")
 
 		return
@@ -166,7 +166,7 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 		component = "server"
 	}
 	if !allowedComponents[component] {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ComponentInvalid,
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ComponentInvalid,
 			fmt.Sprintf("component must be one of: server, worker, agent (got %q)", component))
 
 		return
@@ -180,7 +180,7 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 			if t2, err2 := time.Parse(time.RFC3339Nano, s); err2 == nil {
 				t = t2
 			} else {
-				RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince,
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidSince,
 					"the since query parameter must be an RFC3339 timestamp")
 
 				return
@@ -204,7 +204,7 @@ func (h *ManagementLogsHandler) Tail(w http.ResponseWriter, r *http.Request) {
 
 	pods, err := h.listComponentPods(ctx, component)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.K8sError,
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.K8sError,
 			fmt.Sprintf("failed to list pods for component %q: %v", component, err))
 
 		return

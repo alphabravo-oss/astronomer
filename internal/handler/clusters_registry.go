@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func (h *ClusterHandler) encryptLegacyRegistryPassword(password string) (string, string, error) {
@@ -37,7 +37,7 @@ func (h *ClusterHandler) GetRegistryConfig(w http.ResponseWriter, r *http.Reques
 
 	config, err := h.queries.GetClusterRegistryConfig(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Registry config not found for cluster")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Registry config not found for cluster")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 	}
 	registryPassword, registryPasswordEncrypted, err := h.encryptLegacyRegistryPassword(req.RegistryPassword)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CryptoError, "Failed to encrypt registry password")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CryptoError, "Failed to encrypt registry password")
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *ClusterHandler) UpdateRegistryConfig(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update registry config")
 		return
 	}
 
@@ -117,7 +117,7 @@ func (h *ClusterHandler) DeleteRegistryConfig(w http.ResponseWriter, r *http.Req
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete registry config")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete registry config")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 )
 
 // resourcePolicyMetadata is Astronomer's management-plane policy layered on
@@ -53,7 +53,7 @@ func (h *ResourceHandler) GetResourceDiscovery(w http.ResponseWriter, r *http.Re
 	clusterID := clusterUUID.String()
 	options, err := parseCRDDiscoveryPage(r)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, err.Error())
 		return
 	}
 	entries := []resourceDiscoveryEntry{}
@@ -64,7 +64,7 @@ func (h *ResourceHandler) GetResourceDiscovery(w http.ResponseWriter, r *http.Re
 	crds, next, err := h.discoverCRDPage(r, clusterID, options)
 	if err != nil {
 		if options.continueToken != "" {
-			RespondRequestError(w, r, discoveryErrorStatus(err), apierror.ProxyError, err.Error())
+			apiutil.WriteError(w, r, discoveryErrorStatus(err), apiutil.ProxyError, err.Error())
 			return
 		}
 		errorsBySource["custom_resource_definitions"] = err.Error()
@@ -88,12 +88,12 @@ func (h *ResourceHandler) GetResourceSchema(w http.ResponseWriter, r *http.Reque
 	resourceType := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("resource_type")))
 	def, ok := resourceDefs[resourceType]
 	if resourceType == "" || !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, "a supported resource_type is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidResource, "a supported resource_type is required")
 		return
 	}
 	entry, err := h.discoverResource(r, clusterID, resourceType)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadGateway, apiutil.ProxyError, err.Error())
 		return
 	}
 	result := map[string]any{"resource": entry, "schema": map[string]any{}, "schema_available": false}

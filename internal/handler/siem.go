@@ -27,11 +27,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 )
 
@@ -189,12 +189,12 @@ type siemForwarderRequest struct {
 // List handles GET /api/v1/admin/siem-forwarders/.
 func (h *SIEMHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	rows, err := h.queries.ListSIEMForwarders(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to list SIEM forwarders")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to list SIEM forwarders")
 		return
 	}
 	items := make([]siemForwarderResponse, 0, len(rows))
@@ -210,46 +210,46 @@ func (h *SIEMHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/admin/siem-forwarders/.
 func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	var req siemForwarderRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "name is required")
 		return
 	}
 	if req.Transport == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "transport is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "transport is required")
 		return
 	}
 	if req.Endpoint == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "endpoint is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "endpoint is required")
 		return
 	}
 	merged, vErr := h.mergeSIEMForCreate(req)
 	if vErr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, vErr)
 		return
 	}
 	// Uniqueness check (the unique index would catch this too).
 	if existing, err := h.queries.GetSIEMForwarderByName(r.Context(), merged.Name); err == nil && existing.ID != uuid.Nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A SIEM forwarder with this name already exists")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A SIEM forwarder with this name already exists")
 		return
 	}
 
 	authEnc := ""
 	if req.Auth != nil && strings.TrimSpace(*req.Auth) != "" && *req.Auth != SIEMAuthSentinel {
 		if h.encryptor == nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor is not configured; cannot store SIEM auth blob")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor is not configured; cannot store SIEM auth blob")
 			return
 		}
 		enc, err := h.encryptor.Encrypt(*req.Auth)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt SIEM auth blob")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt SIEM auth blob")
 			return
 		}
 		authEnc = enc
@@ -281,7 +281,7 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to create SIEM forwarder")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to create SIEM forwarder")
 		return
 	}
 	if h.tap != nil {
@@ -298,21 +298,21 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/admin/siem-forwarders/{id}/.
 func (h *SIEMHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid forwarder id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid forwarder id")
 		return
 	}
 	row, err := h.queries.GetSIEMForwarder(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SIEM forwarder not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SIEM forwarder not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM forwarder")
 		return
 	}
 	RespondJSON(w, http.StatusOK, toSIEMForwarderResponse(row))
@@ -321,31 +321,31 @@ func (h *SIEMHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Update handles PUT /api/v1/admin/siem-forwarders/{id}/.
 func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid forwarder id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid forwarder id")
 		return
 	}
 	existing, err := h.queries.GetSIEMForwarder(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SIEM forwarder not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SIEM forwarder not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM forwarder")
 		return
 	}
 	var req siemForwarderRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	merged, vErr := h.mergeSIEMForUpdate(existing, req)
 	if vErr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, vErr)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, vErr)
 		return
 	}
 	// Auth handling: SIEMAuthSentinel means "keep existing". Any other
@@ -357,12 +357,12 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 			encryptedAuth = ""
 		} else {
 			if h.encryptor == nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor unavailable")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryptor unavailable")
 				return
 			}
 			enc, encErr := h.encryptor.Encrypt(*req.Auth)
 			if encErr != nil {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt SIEM auth blob")
+				apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt SIEM auth blob")
 				return
 			}
 			encryptedAuth = enc
@@ -395,7 +395,7 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to update SIEM forwarder")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to update SIEM forwarder")
 		return
 	}
 	if h.tap != nil {
@@ -414,21 +414,21 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 // row automatically.
 func (h *SIEMHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid forwarder id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid forwarder id")
 		return
 	}
 	existing, err := h.queries.GetSIEMForwarder(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SIEM forwarder not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SIEM forwarder not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM forwarder")
 		return
 	}
 	_, err = executeMutation(r, h.runTx,
@@ -442,7 +442,7 @@ func (h *SIEMHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete SIEM forwarder")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to delete SIEM forwarder")
 		return
 	}
 	if h.tap != nil {
@@ -458,7 +458,7 @@ func (h *SIEMHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // tick (within 2s).
 func (h *SIEMHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
@@ -466,21 +466,21 @@ func (h *SIEMHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid forwarder id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid forwarder id")
 		return
 	}
 	fwd, err := h.queries.GetSIEMForwarder(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SIEM forwarder not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SIEM forwarder not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM forwarder")
 		return
 	}
 	actor := currentUserUUID(r)
 	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil || h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Durable SIEM test operations are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Durable SIEM test operations are unavailable")
 		return
 	}
 	actorID := uuid.UUID(actor.Bytes)
@@ -518,10 +518,10 @@ func (h *SIEMHandler) Test(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different SIEM test")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different SIEM test")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to enqueue test event")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to enqueue test event")
 		return
 	}
 	statusURL := "/api/v1/admin/siem-forwarders/" + fwd.ID.String() + "/test-operations/" + operation.ID.String() + "/"
@@ -551,31 +551,31 @@ func makeSIEMTestOperationResponse(row sqlc.SIEMTestOperation, statusURL string)
 
 func (h *SIEMHandler) GetTestOperation(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	forwarderID, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid forwarder id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid forwarder id")
 		return
 	}
 	operationID, ok := parseUUIDParam(r, "operation_id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid SIEM test operation id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid SIEM test operation id")
 		return
 	}
 	queries, ok := h.queries.(siemTestOperationQueries)
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Durable SIEM test operations are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Durable SIEM test operations are unavailable")
 		return
 	}
 	row, err := queries.GetSIEMTestOperation(r.Context(), sqlc.GetSIEMTestOperationParams{ID: operationID, ForwarderID: forwarderID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SIEM test operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SIEM test operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM test operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM test operation")
 		return
 	}
 	statusURL := "/api/v1/admin/siem-forwarders/" + forwarderID.String() + "/test-operations/" + operationID.String() + "/"
@@ -599,25 +599,25 @@ type siemStatusResponse struct {
 // to call two endpoints to render the per-forwarder health card.
 func (h *SIEMHandler) Status(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	id, ok := parseUUIDParam(r, "id")
 	if !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid forwarder id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid forwarder id")
 		return
 	}
 	if _, err := h.queries.GetSIEMForwarder(r.Context(), id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SIEM forwarder not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "SIEM forwarder not found")
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM forwarder")
 		return
 	}
 	status, err := h.queries.GetSIEMForwarderStatus(r.Context(), id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder status")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read SIEM forwarder status")
 		return
 	}
 	depth, _ := h.queries.CountSIEMQueueByForwarder(r.Context(), id)

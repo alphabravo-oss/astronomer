@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 )
@@ -26,12 +26,12 @@ func (h *CloudCredentialHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	rows, err := h.queries.ListCloudCredentialsForProject(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cloud credentials")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cloud credentials")
 		return
 	}
 	out := make([]CloudCredentialResponse, 0, len(rows))
@@ -56,7 +56,7 @@ func (h *CloudCredentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.rowToResponse(r.Context(), row, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to decode credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidBody, "Failed to decode credential")
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)
@@ -70,55 +70,55 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 	}
 	project, err := h.queries.GetProjectByID(r.Context(), projectID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Project not found")
 		return
 	}
 	var req CloudCredentialRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if err := validateCredentialName(req.Name); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, err.Error())
 		return
 	}
 	if _, ok := cloudcreds.LookupProvider(req.Provider); !ok {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidProvider, fmt.Sprintf("Unknown provider %q", req.Provider))
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidProvider, fmt.Sprintf("Unknown provider %q", req.Provider))
 		return
 	}
 	// Reject sentinel values on create — there's nothing to preserve.
 	for k, v := range req.Data {
 		if s, isStr := v.(string); isStr && s == cloudcreds.SecretSentinel {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, fmt.Sprintf("Cannot use sentinel value on create for key %q", k))
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, fmt.Sprintf("Cannot use sentinel value on create for key %q", k))
 			return
 		}
 	}
 	if err := cloudcreds.Validate(req.Provider, req.Data); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryption key not configured; cannot store credentials")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryption key not configured; cannot store credentials")
 		return
 	}
 	plain, err := cloudcreds.EncodeBlob(req.Data)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	ciphertext, err := h.encryptor.Encrypt(string(plain))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt credential")
 		return
 	}
 	targetRefs, err := h.canonicaliseTargetRefs(r.Context(), projectID, req.TargetRefs, req.Name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTargetRefs, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidTargetRefs, err.Error())
 		return
 	}
 	refsJSON, err := json.Marshal(targetRefs)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode target refs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode target refs")
 		return
 	}
 	// Uniqueness (project_id, name) is enforced by the DB; we check
@@ -127,7 +127,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		ProjectID: projectID,
 		Name:      req.Name,
 	}); err == nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A credential with that name already exists in this project")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A credential with that name already exists in this project")
 		return
 	}
 	createParams := sqlc.CreateCloudCredentialParams{
@@ -158,12 +158,12 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CreateError, "Failed to create credential")
 		return
 	}
 	resp, err := h.rowToResponse(r.Context(), created, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render created credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidBody, "Failed to render created credential")
 		return
 	}
 	w.Header().Set("Location", fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/%s/", projectID.String(), created.ID.String()))
@@ -179,7 +179,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	}
 	var req CloudCredentialRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Name + provider are immutable post-create — operators delete +
@@ -187,17 +187,17 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	// keeps the materialization story simple (no provider-switch
 	// midflight where the rendered Secret shape would change).
 	if req.Name != "" && req.Name != existing.Name {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ImmutableName, "Credential name cannot be changed")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ImmutableName, "Credential name cannot be changed")
 		return
 	}
 	if req.Provider != "" && !strings.EqualFold(req.Provider, existing.Provider) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ImmutableProvider, "Credential provider cannot be changed")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ImmutableProvider, "Credential provider cannot be changed")
 		return
 	}
 	// Decrypt existing for the merge step (sentinel-preserves-stored).
 	priorBlob, err := h.decryptToMap(existing.DataEncrypted)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DecryptError, "Failed to decrypt stored credential")
 		return
 	}
 	// Validate the incoming patch first (which uses raw map[string]any).
@@ -207,7 +207,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		// validation that only rejects unknown keys + non-string
 		// values + non-sentinel empty strings.
 		if err := validatePatchData(existing.Provider, req.Data); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 			return
 		}
 	}
@@ -229,21 +229,21 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		mergedAny[k] = v
 	}
 	if err := cloudcreds.Validate(existing.Provider, mergedAny); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, err.Error())
 		return
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryption key not configured; cannot store credentials")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Encryption key not configured; cannot store credentials")
 		return
 	}
 	plain, err := cloudcreds.EncodeBlob(mergedAny)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode credential")
 		return
 	}
 	ciphertext, err := h.encryptor.Encrypt(string(plain))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt credential")
 		return
 	}
 	// Target refs: omitted in the request body → preserve stored.
@@ -261,14 +261,14 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 	if req.TargetRefs != nil {
 		canon, err := h.canonicaliseTargetRefs(r.Context(), existing.ProjectID, req.TargetRefs, existing.Name)
 		if err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidTargetRefs, err.Error())
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidTargetRefs, err.Error())
 			return
 		}
 		refsCanonical = canon
 	}
 	refsJSON, err := json.Marshal(refsCanonical)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode target refs")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "Failed to encode target refs")
 		return
 	}
 	description := existing.Description
@@ -312,12 +312,12 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update credential")
 		return
 	}
 	resp, err := h.rowToResponse(r.Context(), updated, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidBody, "Failed to render updated credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InvalidBody, "Failed to render updated credential")
 		return
 	}
 	RespondJSON(w, http.StatusOK, resp)
@@ -348,7 +348,7 @@ func (h *CloudCredentialHandler) Delete(w http.ResponseWriter, r *http.Request) 
 			}
 		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete credential")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -365,13 +365,13 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	blob, err := h.decryptToMap(row.DataEncrypted)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored credential")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DecryptError, "Failed to decrypt stored credential")
 		return
 	}
 	if h.tester == nil {
 		cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues(row.Provider, "unsupported")...).Inc()
 		if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 			return
 		}
 		RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: "no test available (tester not configured)"})
@@ -393,7 +393,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 		if !supported {
 			cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues("digitalocean", "unsupported")...).Inc()
 			if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
-				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+				apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 				return
 			}
 			RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: "DigitalOcean credential testing is not configured"})
@@ -404,7 +404,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 		// Generic has no SDK to call; surface a clear "no-op" answer.
 		cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues("generic", "unsupported")...).Inc()
 		if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 			return
 		}
 		RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: "no test available for generic provider"})
@@ -412,7 +412,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 	default:
 		cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues(row.Provider, "unsupported")...).Inc()
 		if err := h.requireTestAudit(r, row, "unsupported"); err != nil {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 			return
 		}
 		RespondJSON(w, http.StatusOK, CloudTestResult{OK: false, Message: fmt.Sprintf("no test available for provider %q", row.Provider)})
@@ -426,7 +426,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 	}
 	cloudCredentialTestsTotal.WithLabelValues(observability.MetricValues(strings.ToLower(row.Provider), outcome)...).Inc()
 	if err := h.requireTestAudit(r, row, outcome); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 		return
 	}
 	RespondJSON(w, http.StatusOK, result)

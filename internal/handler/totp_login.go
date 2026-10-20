@@ -5,9 +5,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // handleLoginTOTP reads enrollment once after password authentication. An
@@ -19,7 +19,7 @@ func (h *AuthHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request, us
 	}
 	enrolled, err := h.totpGate.IsEnrolled(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "MFA enrollment status is temporarily unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "MFA enrollment status is temporarily unavailable")
 		return true
 	}
 	if enrolled {
@@ -40,7 +40,7 @@ func (h *AuthHandler) handleRefreshTOTP(w http.ResponseWriter, r *http.Request, 
 	}
 	enrolled, err := h.totpGate.IsEnrolled(r.Context(), user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "MFA enrollment status is temporarily unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.StatusError, "MFA enrollment status is temporarily unavailable")
 		return true
 	}
 	if !enrolled {
@@ -53,7 +53,7 @@ func (h *AuthHandler) handleRefreshTOTP(w http.ResponseWriter, r *http.Request, 
 func (h *AuthHandler) issueTOTPLoginChallenge(w http.ResponseWriter, r *http.Request, user sqlc.User, purpose, action, code string) {
 	challenge, err := h.jwt.GeneratePurposeToken(user.ID, purpose, auth.TOTPChallengeTTL)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to mint TOTP challenge")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenError, "Failed to mint TOTP challenge")
 		return
 	}
 	detail := map[string]any(nil)
@@ -62,7 +62,7 @@ func (h *AuthHandler) issueTOTPLoginChallenge(w http.ResponseWriter, r *http.Req
 	}
 	if err := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
 		action, "user", user.ID.String(), user.Username, detail); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable,
 			"Mandatory audit storage is unavailable; the authentication challenge was not issued")
 		return
 	}

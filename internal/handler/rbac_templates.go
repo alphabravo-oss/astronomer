@@ -27,8 +27,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -58,7 +58,7 @@ func (h *RBACHandler) SetTemplateCatalog(c *rbac.Catalog) {
 // consumes this on the /dashboard/admin/templates page.
 func (h *RBACHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	if h.templates == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CatalogUnavailable, "RBAC template catalog not loaded")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CatalogUnavailable, "RBAC template catalog not loaded")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
@@ -71,17 +71,17 @@ func (h *RBACHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 // the name doesn't exist in the catalog.
 func (h *RBACHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	if h.templates == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CatalogUnavailable, "RBAC template catalog not loaded")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CatalogUnavailable, "RBAC template catalog not loaded")
 		return
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "template name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "template name is required")
 		return
 	}
 	t, ok := h.templates.Get(name)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "template not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, t)
@@ -95,16 +95,16 @@ func (h *RBACHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 // implied here; SSO identities become searchable after their first login.
 func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.templates == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.CatalogUnavailable, "RBAC template catalog not loaded")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.CatalogUnavailable, "RBAC template catalog not loaded")
 		return
 	}
 	if h.runTx == nil || h.engine == nil || h.bindings == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RBACUnavailable, "RBAC authorization or transactional audit is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RBACUnavailable, "RBAC authorization or transactional audit is not configured")
 		return
 	}
 	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid project ID")
 		return
 	}
 	var req applyProjectTemplateRequest
@@ -113,21 +113,21 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 	}
 	userID, err := uuid.Parse(req.UserID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid user ID")
 		return
 	}
 	template, ok := h.templates.Get(req.TemplateName)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "template not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "template not found")
 		return
 	}
 	if template.Scope != rbac.ScopeProject {
-		RespondRequestError(w, r, http.StatusConflict, apierror.InvalidScope, "template is not valid for project scope")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.InvalidScope, "template is not valid for project scope")
 		return
 	}
 	rules, err := json.Marshal(template.EffectiveRules())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode template rules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to encode template rules")
 		return
 	}
 	if !h.enforceNoEscalation(w, r, rules, uuid.UUID{}, projectID, "") {
@@ -147,7 +147,7 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 		case errors.Is(lookupErr, pgx.ErrNoRows):
 			// A new binding follows; quota checks below apply.
 		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.RBACUnavailable, "Failed to check existing template binding")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.RBACUnavailable, "Failed to check existing template binding")
 			return
 		}
 	}
@@ -161,7 +161,7 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 				WriteQuotaExceeded(w, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate project member quota")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate project member quota")
 			return
 		}
 		if err := h.enforcer.CheckUserProjectAdd(r.Context(), userID); err != nil {
@@ -169,7 +169,7 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 				WriteQuotaExceeded(w, qe)
 				return
 			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate user project quota")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.QuotaCheckError, "Failed to evaluate user project quota")
 			return
 		}
 	}
@@ -198,7 +198,7 @@ func (h *RBACHandler) ApplyProjectTemplate(w http.ResponseWriter, r *http.Reques
 		)
 	})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to apply project role template")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to apply project role template")
 		return
 	}
 	h.invalidateUser(userID.String())

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -42,20 +42,20 @@ var (
 
 type superuserGateConfig struct {
 	StoreUnavailableStatus  int
-	StoreUnavailableCode    string
+	StoreUnavailableCode    apiutil.Code
 	StoreUnavailableMessage string
 	InvalidUserStatus       int
-	InvalidUserCode         string
+	InvalidUserCode         apiutil.Code
 	InvalidUserMessage      string
 	ForbiddenMessage        string
 }
 
 type SuperuserGateConfig struct {
 	StoreUnavailableStatus  int
-	StoreUnavailableCode    string
+	StoreUnavailableCode    apiutil.Code
 	StoreUnavailableMessage string
 	InvalidUserStatus       int
-	InvalidUserCode         string
+	InvalidUserCode         apiutil.Code
 	InvalidUserMessage      string
 	ForbiddenMessage        string
 }
@@ -92,7 +92,7 @@ func requireSuperuser(w http.ResponseWriter, r *http.Request, querier userByIDQu
 	switch {
 	case err == nil:
 	case errors.Is(err, errAuthenticatedUserMissing):
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return sqlc.User{}, false
 	case errors.Is(err, errAuthenticatedUserInvalid):
 		status := cfg.InvalidUserStatus
@@ -107,7 +107,7 @@ func requireSuperuser(w http.ResponseWriter, r *http.Request, querier userByIDQu
 		if message == "" {
 			message = "Invalid user ID"
 		}
-		RespondRequestError(w, r, status, code, message)
+		apiutil.WriteError(w, r, status, code, message)
 		return sqlc.User{}, false
 	case errors.Is(err, errAuthenticatedUserStoreMissing):
 		status := cfg.StoreUnavailableStatus
@@ -122,10 +122,10 @@ func requireSuperuser(w http.ResponseWriter, r *http.Request, querier userByIDQu
 		if message == "" {
 			message = "Admin store not configured"
 		}
-		RespondRequestError(w, r, status, code, message)
+		apiutil.WriteError(w, r, status, code, message)
 		return sqlc.User{}, false
 	default:
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Caller not found")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "Caller not found")
 		return sqlc.User{}, false
 	}
 	if !user.IsSuperuser {
@@ -133,7 +133,7 @@ func requireSuperuser(w http.ResponseWriter, r *http.Request, querier userByIDQu
 		if message == "" {
 			message = "Superuser required"
 		}
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, message)
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, message)
 		return sqlc.User{}, false
 	}
 	return user, true
@@ -236,7 +236,7 @@ func (a *authorizationSupport) authorizeClusterAction(w http.ResponseWriter, r *
 func (a *authorizationSupport) authorizeProjectAction(w http.ResponseWriter, r *http.Request, projectID uuid.UUID, resource rbac.Resource, verb rbac.Verb) bool {
 	bindings, restricted, err := a.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
@@ -245,7 +245,7 @@ func (a *authorizationSupport) authorizeProjectAction(w http.ResponseWriter, r *
 	if a.engine != nil && a.engine.CheckPermission(bindings, resource, verb, uuid.Nil, projectID) {
 		return true
 	}
-	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 	return false
 }
 
@@ -266,7 +266,7 @@ type clusterPermission struct {
 func (a *authorizationSupport) authorizeClusterActionAny(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID, perms ...clusterPermission) bool {
 	bindings, restricted, err := a.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
@@ -277,7 +277,7 @@ func (a *authorizationSupport) authorizeClusterActionAny(w http.ResponseWriter, 
 			return true
 		}
 	}
-	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 	return false
 }
 
@@ -290,7 +290,7 @@ func (a *authorizationSupport) authorizeClusterActionAny(w http.ResponseWriter, 
 func (a *authorizationSupport) resourceScopeFilter(w http.ResponseWriter, r *http.Request, resource rbac.Resource, verb rbac.Verb) (allow func(clusterID uuid.UUID, valid bool) bool, restricted bool, ok bool) {
 	bindings, restricted, err := a.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return nil, false, false
 	}
 	if !restricted {
@@ -332,14 +332,14 @@ func (a *authorizationSupport) allowsCluster(bindings []rbac.RoleBinding, cluste
 func (a *authorizationSupport) authorizeGlobalAction(w http.ResponseWriter, r *http.Request, resource rbac.Resource, verb rbac.Verb) bool {
 	bindings, restricted, err := a.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
 		return true
 	}
 	if !a.allowsGlobal(bindings, resource, verb) {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 		return false
 	}
 	return true
@@ -358,7 +358,7 @@ func (a *authorizationSupport) allowsGlobal(bindings []rbac.RoleBinding, resourc
 func (a *authorizationSupport) authorizeAnyScope(w http.ResponseWriter, r *http.Request, resource rbac.Resource, verb rbac.Verb) bool {
 	bindings, restricted, err := a.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return false
 	}
 	if !restricted {
@@ -367,6 +367,6 @@ func (a *authorizationSupport) authorizeAnyScope(w http.ResponseWriter, r *http.
 	if a.engine != nil && a.engine.HasAnyScopedAccess(bindings, resource, verb) {
 		return true
 	}
-	RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to perform this action")
+	apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "You do not have permission to perform this action")
 	return false
 }

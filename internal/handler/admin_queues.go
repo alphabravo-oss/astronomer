@@ -26,10 +26,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -109,7 +109,7 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
 	if !adminQueueRequestActive(w, r) {
@@ -117,11 +117,11 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	queues, err := h.inspector.Queues()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InspectorUnavailable, "queue inspection unavailable")
 		return
 	}
 	if len(queues) > maxInspectedAdminQueues {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection exceeds the supported bound")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InspectorUnavailable, "queue inspection exceeds the supported bound")
 		return
 	}
 	now := time.Now().UTC()
@@ -135,7 +135,7 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ierr != nil || !validAdminQueueInfo(info) {
-			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection unavailable")
+			apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InspectorUnavailable, "queue inspection unavailable")
 			return
 		}
 		out = append(out, QueueSummary{
@@ -172,12 +172,12 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.inspector == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
 	queueName := chi.URLParam(r, "queue")
 	if queueName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.QueueRequired, "queue name is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.QueueRequired, "queue name is required")
 		return
 	}
 	page, supplied, ok := readAdminDLQPage(w, r)
@@ -194,7 +194,7 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AsynqError, err.Error())
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AsynqError, err.Error())
 		return
 	}
 	out := make([]DLQEntry, 0, len(archived))
@@ -242,16 +242,16 @@ func (h *AdminQueuesHandler) GetOperation(w http.ResponseWriter, r *http.Request
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "invalid admin queue operation ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "invalid admin queue operation ID")
 		return
 	}
 	row, err := h.queries.GetAdminQueueOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "admin queue operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "admin queue operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "failed to load admin queue operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.DBError, "failed to load admin queue operation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, adminQueueOperationToWire(row))
@@ -264,19 +264,19 @@ func (h *AdminQueuesHandler) createOperation(w http.ResponseWriter, r *http.Requ
 	queue := chi.URLParam(r, "queue")
 	taskID := chi.URLParam(r, "id")
 	if queue == "" || taskID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingParams, "queue and id are required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MissingParams, "queue and id are required")
 		return
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	if h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "admin queue mutation runner is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.RunnerUnwired, "admin queue mutation runner is not configured")
 		return
 	}
 	caller := currentUserUUID(r)
 	if !caller.Valid || caller.Bytes == uuid.Nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "invalid caller")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, "invalid caller")
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "admin_queue_dlq"))
@@ -286,7 +286,7 @@ func (h *AdminQueuesHandler) createOperation(w http.ResponseWriter, r *http.Requ
 		TaskID string `json:"task_id"`
 	}{Action: action, Queue: queue, TaskID: taskID})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "failed to encode admin queue request")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncodeError, "failed to encode admin queue request")
 		return
 	}
 
@@ -336,14 +336,14 @@ func (h *AdminQueuesHandler) createOperation(w http.ResponseWriter, r *http.Requ
 	})
 	if err != nil {
 		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different admin queue operation")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key already identifies a different admin queue operation")
 			return
 		}
 		if errors.Is(err, errAdminQueueConflictingOperation) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "a conflicting operation is already active for this queue task")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "a conflicting operation is already active for this queue task")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "failed to persist admin queue operation")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DBError, "failed to persist admin queue operation")
 		return
 	}
 	if !replayed {

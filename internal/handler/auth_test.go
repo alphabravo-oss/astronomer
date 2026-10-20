@@ -19,9 +19,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type recordingAuthAuditWriter struct {
@@ -297,7 +297,7 @@ func TestLogin(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			// A 400 "Email is required" is field validation, not an auth
 			// challenge: legacy "missing_credentials" maps to ValidationError.
-			wantError: apierror.ValidationError,
+			wantError: string(apiutil.ValidationError),
 		},
 		{
 			name:       "rejects malformed email",
@@ -311,16 +311,16 @@ func TestLogin(t *testing.T) {
 			body:       LoginRequest{Email: "test@example.com", Password: "wrongpassword"},
 			users:      []sqlc.User{makeTestUser(t, true)},
 			wantStatus: http.StatusUnauthorized,
-			// "invalid_credentials" was canonicalized to apierror.AuthenticationRequired.
-			wantError: apierror.AuthenticationRequired,
+			// "invalid_credentials" was canonicalized to apiutil.AuthenticationRequired.
+			wantError: string(apiutil.AuthenticationRequired),
 		},
 		{
 			name:       "user not found",
 			body:       LoginRequest{Email: "nobody@example.com", Password: "testpassword"},
 			users:      []sqlc.User{},
 			wantStatus: http.StatusUnauthorized,
-			// "invalid_credentials" was canonicalized to apierror.AuthenticationRequired.
-			wantError: apierror.AuthenticationRequired,
+			// "invalid_credentials" was canonicalized to apiutil.AuthenticationRequired.
+			wantError: string(apiutil.AuthenticationRequired),
 		},
 		{
 			name:       "inactive user",
@@ -336,7 +336,7 @@ func TestLogin(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			// A 400 "Email is required" is field validation, not an auth
 			// challenge: legacy "missing_credentials" maps to ValidationError.
-			wantError: apierror.ValidationError,
+			wantError: string(apiutil.ValidationError),
 		},
 		{
 			name:       "invalid JSON body",

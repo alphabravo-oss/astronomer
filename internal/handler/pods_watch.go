@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -79,12 +79,12 @@ func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
 	clusterID := clusterUUID.String()
 	namespace := r.URL.Query().Get("namespace")
 	if h == nil || h.podWatcher == nil {
-		RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "pod watch streaming not configured")
+		apiutil.WriteError(w, r, http.StatusNotImplemented, apiutil.NotImplemented, "pod watch streaming not configured")
 		return
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "streaming unsupported")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "streaming unsupported")
 		return
 	}
 
@@ -98,13 +98,13 @@ func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
 	// fail-closed allow-list.
 	all, allowed, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourcePods, rbac.VerbRead)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 
 	events, err := h.podWatcher.WatchPods(r.Context(), clusterID, namespace)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.ProxyError, err.Error())
 		return
 	}
 

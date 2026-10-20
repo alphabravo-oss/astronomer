@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -64,30 +64,30 @@ type extTokenResponse struct {
 // IssueTicket mints a Tier-2 bridge data ticket, failing closed at each gate.
 func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil || h.engine == nil || h.bindings == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension bridge is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension bridge is not configured")
 		return
 	}
 	if h.issuer == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Extension tickets are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.NotConfigured, "Extension tickets are not configured")
 		return
 	}
 
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 	if !extensionNameRE.MatchString(name) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidName, "Invalid extension name")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidName, "Invalid extension name")
 		return
 	}
 
 	var req extTokenRequest
 	if r.Body != nil {
 		if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
 	dataSourceID := strings.TrimSpace(req.DataSource)
 	if dataSourceID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "dataSource is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "dataSource is required")
 		return
 	}
 
@@ -97,12 +97,12 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	// the iframe sees.
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil || user.ID == "" {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication required")
 		return
 	}
 	userID, err := uuid.Parse(user.ID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid user identity")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Invalid user identity")
 		return
 	}
 
@@ -110,22 +110,22 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	// step 1). A disabled/incompatible extension issues no tickets.
 	row, err := h.findExtension(r.Context(), name)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Extension not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Extension not found")
 		return
 	}
 	if !row.Enabled || row.CompatibilityStatus != "compatible" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Extension is not enabled or compatible")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IncompatibleExtension, "Extension is not enabled or compatible")
 		return
 	}
 	// A Tier-2 ticket only makes sense for a verified bundle — the loader never
 	// mounts an unverified bundle, so it can never legitimately ask for a ticket.
 	if !row.BundleVerified {
-		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Extension bundle is not verified")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IncompatibleExtension, "Extension bundle is not verified")
 		return
 	}
 	var manifest ExtensionManifest
 	if json.Unmarshal(row.Manifest, &manifest) != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.IncompatibleExtension, "Extension manifest is unreadable")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.IncompatibleExtension, "Extension manifest is unreadable")
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	// so a ticket can never be minted for a Tier-1 (browser-session) source.
 	ds, _, found := findDataSource(manifest, dataSourceID, true)
 	if !found {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown data source")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown data source")
 		return
 	}
 
@@ -147,7 +147,7 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	// The ticket is issued only when the user could already make this call.
 	bindings, err := h.bindings.GetUserBindings(r.Context(), userID.String())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to read user permissions")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.LookupError, "Failed to read user permissions")
 		return
 	}
 	allowed := h.engine.CheckPermission(bindings, rbac.Resource(ds.RBAC.Resource), rbac.Verb(ds.RBAC.Verb), scopeCluster, scopeProject, namespace)
@@ -160,14 +160,14 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 			"dataSourceId": dataSourceID, "resource": ds.RBAC.Resource, "verb": ds.RBAC.Verb,
 			"clusterId": clusterID.String(), "allowed": false, "phase": "token",
 		})
-		RespondRequestError(w, r, http.StatusForbidden, apierror.ExtensionRBACDenied, "Your permissions do not allow this extension data source")
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.ExtensionRBACDenied, "Your permissions do not allow this extension data source")
 		return
 	}
 
 	// Mint the scoped, single-use, ≤60s ticket bound to exactly this call.
 	token, expiresAt, err := h.issuer.IssueToken(userID, name, dataSourceID, clusterID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TicketError, "Failed to issue extension ticket")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TicketError, "Failed to issue extension ticket")
 		return
 	}
 

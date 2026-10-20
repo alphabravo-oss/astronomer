@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -33,7 +33,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if page.provided && page.cursor.Version != 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid alert cursor position")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid alert cursor position")
 		return
 	}
 	arg := sqlc.ListControlPlaneAlertsParams{Limit: page.queryLimit(), Offset: page.offset}
@@ -55,7 +55,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 		rows, err = h.queries.ListControlPlaneAlerts(r.Context(), arg)
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AlertError, "Failed to list control plane alerts")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.AlertError, "Failed to list control plane alerts")
 		return
 	}
 	rows, more := trimCursorRows(rows, page)
@@ -89,7 +89,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if page.provided && page.cursor.Version != 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid silence cursor position")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Invalid silence cursor position")
 		return
 	}
 	var rows []sqlc.ControlPlaneSilence
@@ -100,7 +100,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 		rows, err = h.queries.ListControlPlaneSilences(r.Context(), sqlc.ListControlPlaneSilencesParams{Limit: page.queryLimit(), Offset: page.offset})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to list control plane silences")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.SilenceError, "Failed to list control plane silences")
 		return
 	}
 	rows, more := trimCursorRows(rows, page)

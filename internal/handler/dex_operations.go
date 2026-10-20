@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 const dexOperationTaskType = "dex:apply_operation"
@@ -150,31 +150,31 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	}
 	settings, err := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
 	if err != nil || settings.IssuerUrl == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoSettings, "Dex settings have not been configured yet; PUT /settings first")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.NoSettings, "Dex settings have not been configured yet; PUT /settings first")
 		return
 	}
 	if !settings.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingCluster, "Dex settings have no cluster_id; PUT /settings first")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MissingCluster, "Dex settings have no cluster_id; PUT /settings first")
 		return
 	}
 	settings, err = h.normalizeRuntimeIdentity(settings)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SettingsError, "Dex runtime identity does not match the installed chart")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.SettingsError, "Dex runtime identity does not match the installed chart")
 		return
 	}
 	connectors, err := h.queries.ListEnabledDexConnectors(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list Dex connectors")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list Dex connectors")
 		return
 	}
 	clients, settings, err := h.loadPublicClients(r.Context(), settings)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Dex static-client secrets are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Dex static-client secrets are unavailable")
 		return
 	}
 	config, err := h.renderDexConfig(settings, clients, connectors)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.RenderError, "Dex runtime candidate is invalid")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.RenderError, "Dex runtime candidate is invalid")
 		return
 	}
 	digest, _ := dexRequestDigest(struct {
@@ -185,10 +185,10 @@ func (h *DexHandler) Apply(w http.ResponseWriter, r *http.Request) {
 	operation, err := h.reserveAndQueueDexOperation(r, "apply", digest, "", settings.RuntimeGeneration)
 	if err != nil {
 		if dexOperationConflict(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key identifies different Dex input")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key identifies different Dex input")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apierror.WriteError, "Failed to queue Dex apply")
+		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apiutil.WriteFailure, "Failed to queue Dex apply")
 		return
 	}
 	writeDexOperationAccepted(w, operation)
@@ -203,31 +203,31 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	var req dexRegisterSSORequest
 	if r.Body != http.NoBody {
 		if err := decodeDexRequest(r.Body, &req, true); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 			return
 		}
 	}
 	settings, err := h.queries.GetDexSettings(r.Context(), dexSettingsSingletonID)
 	if err != nil || settings.IssuerUrl == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoSettings, "Dex settings have not been configured yet")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.NoSettings, "Dex settings have not been configured yet")
 		return
 	}
 	if !settings.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.MissingCluster, "Dex settings require a target cluster before SSO registration")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.MissingCluster, "Dex settings require a target cluster before SSO registration")
 		return
 	}
 	settings, err = h.normalizeRuntimeIdentity(settings)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.SettingsError, "Dex runtime identity does not match the installed chart")
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.SettingsError, "Dex runtime identity does not match the installed chart")
 		return
 	}
 	connectors, err := h.queries.ListEnabledDexConnectors(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list enabled Dex connectors")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list enabled Dex connectors")
 		return
 	}
 	if len(connectors) == 0 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "At least one enabled Dex connector is required before SSO registration")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "At least one enabled Dex connector is required before SSO registration")
 		return
 	}
 	if req.ClientID == "" {
@@ -237,7 +237,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		req.DisplayName = "Sign in with Dex"
 	}
 	if h.encryptor == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Encryptor is not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Encryptor is not configured")
 		return
 	}
 	existing, existingErr := h.queries.GetSSOConfigurationByProvider(r.Context(), "dex")
@@ -246,7 +246,7 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		encryptedSecret, err = h.encryptor.Encrypt(req.ClientSecret)
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt client secret")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt client secret")
 		return
 	}
 	if existingErr == nil && plainSecret == "" {
@@ -256,21 +256,21 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Existing Dex client secret is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Existing Dex client secret is unavailable")
 		return
 	}
 	if plainSecret == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "client_secret is required when registering Dex SSO")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "client_secret is required when registering Dex SSO")
 		return
 	}
 	clients, settings, err := h.astronomerPublicClients(r.Context(), settings, req.ClientID, plainSecret)
 	if err != nil || validatePublicClients(clients) != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Dex SSO static client is invalid")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "Dex SSO static client is invalid")
 		return
 	}
 	encryptedClients, err := h.encryptPublicClients(clients)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Failed to encrypt Dex public clients")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.EncryptUnavailable, "Failed to encrypt Dex public clients")
 		return
 	}
 	candidate := settings
@@ -278,19 +278,19 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	candidate.PublicClientsEncrypted = encryptedClients
 	config, err := h.renderDexConfig(candidate, clients, connectors)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.RenderError, "Dex runtime candidate is invalid")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.RenderError, "Dex runtime candidate is invalid")
 		return
 	}
 	payloadBytes, _ := json.Marshal(dexRegisterPayload{ClientID: req.ClientID, DisplayName: req.DisplayName, ClientSecretEncrypted: encryptedSecret})
 	payload, err := h.encryptor.Encrypt(string(payloadBytes))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt Dex operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.EncryptError, "Failed to encrypt Dex operation")
 		return
 	}
 	digest, _ := dexRequestDigest(struct{ Action, ClientID, DisplayName, Config string }{"register_sso", req.ClientID, req.DisplayName, string(config)})
 	actor := currentUserUUID(r)
 	if !actor.Valid || h.runTx == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Durable Dex operations are unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Durable Dex operations are unavailable")
 		return
 	}
 	actorID := uuid.UUID(actor.Bytes)
@@ -328,10 +328,10 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if dexOperationConflict(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key identifies different Dex input or another Dex operation is active")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "Idempotency-Key identifies different Dex input or another Dex operation is active")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apierror.WriteError, "Failed to queue Dex SSO registration")
+		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apiutil.WriteFailure, "Failed to queue Dex SSO registration")
 		return
 	}
 	writeDexOperationAccepted(w, operation)
@@ -340,23 +340,23 @@ func (h *DexHandler) RegisterAsSSO(w http.ResponseWriter, r *http.Request) {
 func (h *DexHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "operation_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid Dex operation id")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid Dex operation id")
 		return
 	}
 	store, ok := h.queries.(interface {
 		GetDexOperation(context.Context, uuid.UUID) (sqlc.DexOperation, error)
 	})
 	if !ok {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InternalError, "Dex operation persistence is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.InternalError, "Dex operation persistence is unavailable")
 		return
 	}
 	operation, err := store.GetDexOperation(r.Context(), id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Dex operation not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Dex operation not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read Dex operation")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read Dex operation")
 		return
 	}
 	RespondJSON(w, http.StatusOK, makeDexOperationResponse(operation))

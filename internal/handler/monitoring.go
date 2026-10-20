@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -73,9 +73,9 @@ func (h *MonitoringHandler) SetRunTx(runTx monitoringRunTxFunc) {
 
 func (h *MonitoringHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func respondMonitoringMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode, fallbackMessage string) {
+func respondMonitoringMutationError(w http.ResponseWriter, r *http.Request, err error, fallbackStatus int, fallbackCode apiutil.Code, fallbackMessage string) {
 	if errors.Is(err, errMonitoringOperationIdempotencyConflict) {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict,
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict,
 			"Idempotency-Key already identifies a different monitoring operation")
 		return
 	}

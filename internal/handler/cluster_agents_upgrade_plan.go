@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 func upgradeRecommendation(agent clusterAgentItem) agentUpgradeRecommendation {
@@ -201,10 +201,10 @@ func sanitizeUpgradeCanaryIDs(values []string) []string {
 func respondClusterAgentError(w http.ResponseWriter, r *http.Request, err error) {
 	var handlerErr *clusterAgentHandlerError
 	if errors.As(err, &handlerErr) {
-		RespondRequestError(w, r, handlerErr.status, handlerErr.code, handlerErr.message)
+		apiutil.WriteError(w, r, handlerErr.status, handlerErr.code, handlerErr.message)
 		return
 	}
-	RespondRequestError(w, r, http.StatusInternalServerError, apierror.ClusterAgentError, "Cluster agent request failed")
+	apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ClusterAgentError, "Cluster agent request failed")
 }
 
 func agentLifecycleOperationDTO(op sqlc.AgentLifecycleOperation) agentLifecycleOperationResponse {

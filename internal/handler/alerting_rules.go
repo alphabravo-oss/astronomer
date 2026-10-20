@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
@@ -51,7 +51,7 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list alert rules")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list alert rules")
 		return
 	}
 	if clusterID.Valid {
@@ -71,7 +71,7 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if msg := validateAnomalyRuleRequest(req); msg != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, msg)
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, msg)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create alert rule or associate notification channels")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create alert rule or associate notification channels")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -130,13 +130,13 @@ func (h *AlertingHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) GetRule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid rule ID")
 		return
 	}
 
 	rule, err := h.queries.GetAlertRuleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert rule not found")
 		return
 	}
 
@@ -147,19 +147,19 @@ func (h *AlertingHandler) GetRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid rule ID")
 		return
 	}
 
 	current, err := h.queries.GetAlertRuleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert rule not found")
 		return
 	}
 
 	var req CreateAlertRuleRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if req.Name == "" {
@@ -209,7 +209,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule or notification channels")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update alert rule or notification channels")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -223,7 +223,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid rule ID")
 		return
 	}
 
@@ -244,7 +244,7 @@ func (h *AlertingHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
+		respondTransactionalMutationError(w, r, err, http.StatusNotFound, apiutil.NotFound, "Alert rule not found")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())
@@ -267,12 +267,12 @@ func (h *AlertingHandler) DisableRule(w http.ResponseWriter, r *http.Request) {
 func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid rule ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid rule ID")
 		return
 	}
 	current, err := h.queries.GetAlertRuleByID(r.Context(), id)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Alert rule not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Alert rule not found")
 		return
 	}
 	params := sqlc.UpdateAlertRuleParams{
@@ -299,7 +299,7 @@ func (h *AlertingHandler) setRuleEnabled(w http.ResponseWriter, r *http.Request,
 			}
 		})
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update alert rule")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update alert rule")
 		return
 	}
 	_ = h.syncSharedAlertingAssets(r.Context())

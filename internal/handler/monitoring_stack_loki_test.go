@@ -15,8 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -62,8 +62,8 @@ func TestSharedLokiInstall412SingleNodeSmall(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
 		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
 	}
-	if wrap.Error.Code != apierror.SizerFailed {
-		t.Fatalf("code = %q, want %q", wrap.Error.Code, apierror.SizerFailed)
+	if wrap.Error.Code != string(apiutil.SizerFailed) {
+		t.Fatalf("code = %q, want %q", wrap.Error.Code, apiutil.SizerFailed)
 	}
 	if !strings.Contains(wrap.Error.Message, "single_node_small") {
 		t.Fatalf("message = %q, want single_node_small", wrap.Error.Message)

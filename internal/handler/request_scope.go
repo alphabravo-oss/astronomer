@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
@@ -35,7 +35,7 @@ func parseOptionalClusterID(w http.ResponseWriter, r *http.Request) (id uuid.UUI
 		return uuid.Nil, false, true
 	}
 	if hasQuery && len(queryValues) != 1 {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return uuid.Nil, true, false
 	}
 	raw := rawRoute
@@ -47,13 +47,13 @@ func parseOptionalClusterID(w http.ResponseWriter, r *http.Request) (id uuid.UUI
 		if hasQuery {
 			queryID, queryErr := uuid.Parse(queryValues[0])
 			if queryErr != nil || queryID == uuid.Nil || queryID != parsed {
-				RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+				apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 				return uuid.Nil, true, false
 			}
 		}
 		return parsed, true, true
 	}
-	RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 	return uuid.Nil, true, false
 }
 
@@ -64,7 +64,7 @@ func parseProjectID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 func parseScopeID(w http.ResponseWriter, r *http.Request, param, label string) (uuid.UUID, bool) {
 	id, err := reqctx.RouteUUID(r, param)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid "+label+" ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid "+label+" ID")
 		return uuid.Nil, false
 	}
 	return id, true

@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -35,23 +35,23 @@ func (h *ClusterSnapshotsHandler) ListRestores(w http.ResponseWriter, r *http.Re
 	}
 	pager, ok := h.queries.(clusterRestorePager)
 	if !ok {
-		RespondRequestError(w, r, 503, apierror.InternalError, "Restore history store unavailable")
+		apiutil.WriteError(w, r, 503, apiutil.InternalError, "Restore history store unavailable")
 		return
 	}
 	all, sources, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceClusters, rbac.VerbRead, rbac.NarrowedClustersExcluded)
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
 	rows, err := pager.ListClusterRestoresPage(r.Context(), sqlc.ListClusterRestoresPageParams{TargetClusterID: clusterID, AllSources: all, SourceClusterIds: sources, QueryLimit: queryLimit32(r, 50), QueryOffset: queryOffset32(r)})
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.ListError, "Failed to list restores")
+		apiutil.WriteError(w, r, 500, apiutil.ListError, "Failed to list restores")
 		return
 	}
 	total, err := pager.CountClusterRestores(r.Context(), sqlc.CountClusterRestoresParams{TargetClusterID: clusterID, AllSources: all, SourceClusterIds: sources})
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.CountError, "Failed to count restores")
+		apiutil.WriteError(w, r, 500, apiutil.CountError, "Failed to count restores")
 		return
 	}
 	out := make([]RestoreResponse, 0, len(rows))
@@ -71,21 +71,21 @@ func (h *ClusterSnapshotsHandler) GetRestore(w http.ResponseWriter, r *http.Requ
 	}
 	row, err := h.queries.GetClusterRestoreByID(r.Context(), id)
 	if err != nil || row.TargetClusterID != clusterID {
-		RespondRequestError(w, r, 404, apierror.NotFound, "Restore not found")
+		apiutil.WriteError(w, r, 404, apiutil.NotFound, "Restore not found")
 		return
 	}
 	snapshot, err := h.queries.GetClusterSnapshotByID(r.Context(), row.SnapshotID)
 	if err != nil {
-		RespondRequestError(w, r, 404, apierror.NotFound, "Restore not found")
+		apiutil.WriteError(w, r, 404, apiutil.NotFound, "Restore not found")
 		return
 	}
 	bindings, restricted, err := h.authz.bindingsForContext(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, 500, apierror.InternalError, "Failed to retrieve user permissions")
+		apiutil.WriteError(w, r, 500, apiutil.InternalError, "Failed to retrieve user permissions")
 		return
 	}
 	if restricted && !h.authz.allowsCluster(bindings, snapshot.ClusterID, rbac.ResourceClusters, rbac.VerbRead) {
-		RespondRequestError(w, r, 404, apierror.NotFound, "Restore not found")
+		apiutil.WriteError(w, r, 404, apiutil.NotFound, "Restore not found")
 		return
 	}
 	out := restoreToResponse(row)

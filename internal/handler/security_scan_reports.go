@@ -13,8 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
 )
 
@@ -121,16 +121,16 @@ func (h *SecurityHandler) findClusterScanReportNameByOwner(ctx context.Context, 
 func (h *SecurityHandler) GetScanFull(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid scan ID")
 		return
 	}
 	scan, err := h.loadVisibleEstateScan(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, errAuthorizationNotConfigured) {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 			return
 		}
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security scan not found")
 		return
 	}
 	RespondJSON(w, http.StatusOK, scanWithFindings(scan))
@@ -142,16 +142,16 @@ func (h *SecurityHandler) GetScanFull(w http.ResponseWriter, r *http.Request) {
 func (h *SecurityHandler) ExportScanCSV(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid scan ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid scan ID")
 		return
 	}
 	scan, err := h.loadVisibleEstateScan(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, errAuthorizationNotConfigured) {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")
+			apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.Forbidden, "Failed to retrieve user permissions")
 			return
 		}
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Security scan not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Security scan not found")
 		return
 	}
 	findings, _ := parseCISFindings(scan.Findings)
@@ -159,7 +159,7 @@ func (h *SecurityHandler) ExportScanCSV(w http.ResponseWriter, r *http.Request) 
 		"cluster_id": scan.ClusterID.String(),
 		"scan_type":  scan.ScanType,
 	}); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable, "Mandatory audit storage is unavailable")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.AuditUnavailable, "Mandatory audit storage is unavailable")
 		return
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")

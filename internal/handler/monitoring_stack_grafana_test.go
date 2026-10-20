@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -45,8 +45,8 @@ func TestSharedGrafanaInstallPrecheck412BelowFloor(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
 		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
 	}
-	if wrap.Error.Code != apierror.SizerFailed {
-		t.Fatalf("code = %q, want %q", wrap.Error.Code, apierror.SizerFailed)
+	if wrap.Error.Code != string(apiutil.SizerFailed) {
+		t.Fatalf("code = %q, want %q", wrap.Error.Code, apiutil.SizerFailed)
 	}
 	if !strings.Contains(wrap.Error.Message, "below_grafana_floor") {
 		t.Fatalf("message = %q, want below_grafana_floor", wrap.Error.Message)
@@ -98,7 +98,7 @@ func TestSharedGrafanaReplacePrecheck412BelowFloor(t *testing.T) {
 	if rec.Code != http.StatusPreconditionFailed {
 		t.Fatalf("status = %d, want 412: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), apierror.SizerFailed) {
+	if !strings.Contains(rec.Body.String(), string(apiutil.SizerFailed)) {
 		t.Fatalf("body = %s, want sizer_failed", rec.Body.String())
 	}
 }

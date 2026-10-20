@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/yaml"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -22,12 +22,12 @@ import (
 func (h *ToolHandler) Configuration(w http.ResponseWriter, r *http.Request) {
 	tool, err := h.queries.GetToolBySlug(r.Context(), chi.URLParam(r, "slug"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Tool not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Tool not found")
 		return
 	}
 	clusterID, err := uuid.Parse(r.URL.Query().Get("cluster_id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
@@ -35,16 +35,16 @@ func (h *ToolHandler) Configuration(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.installedToolReleases(r, clusterID, tool.Slug)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load installed tool configuration")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to load installed tool configuration")
 		return
 	}
 	valuesYAML, preset, releases, err := combineInstalledToolValues(tool, rows)
 	if errors.Is(err, pgx.ErrNoRows) {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed tool not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Installed tool not found")
 		return
 	}
 	if err != nil {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
+		apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, err.Error())
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{

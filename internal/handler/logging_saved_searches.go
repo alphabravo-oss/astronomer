@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -148,7 +148,7 @@ func decodeLoggingSavedSearchJSON(r *http.Request, destination any) error {
 func (h *LoggingHandler) savedSearchQueries(w http.ResponseWriter, r *http.Request) (loggingSavedSearchQuerier, bool) {
 	queries, ok := h.queries.(loggingSavedSearchQuerier)
 	if !ok || queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Logging saved searches are not configured")
+		apiutil.WriteError(w, r, http.StatusServiceUnavailable, apiutil.Unavailable, "Logging saved searches are not configured")
 		return nil, false
 	}
 	return queries, true
@@ -157,7 +157,7 @@ func (h *LoggingHandler) savedSearchQueries(w http.ResponseWriter, r *http.Reque
 func loggingSavedSearchOwner(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 	current := currentUserUUID(r)
 	if !current.Valid || current.Bytes == uuid.Nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication is required")
+		apiutil.WriteError(w, r, http.StatusUnauthorized, apiutil.AuthenticationRequired, "Authentication is required")
 		return uuid.Nil, false
 	}
 	return current.Bytes, true
@@ -166,11 +166,11 @@ func loggingSavedSearchOwner(w http.ResponseWriter, r *http.Request) (uuid.UUID,
 func (h *LoggingHandler) authorizeSavedSearchOutput(w http.ResponseWriter, r *http.Request, outputID uuid.UUID) (sqlc.LoggingOutput, bool) {
 	output, err := h.queries.GetLoggingOutputByID(r.Context(), outputID)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging output not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging output not found")
 		return sqlc.LoggingOutput{}, false
 	}
 	if !output.ClusterID.Valid {
-		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.InvalidRequest, "Saved searches require a cluster-owned logging output")
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.InvalidRequest, "Saved searches require a cluster-owned logging output")
 		return sqlc.LoggingOutput{}, false
 	}
 	if !h.authz.authorizeClusterAction(w, r, output.ClusterID.Bytes, rbac.ResourceLogging, rbac.VerbRead) {
@@ -193,7 +193,7 @@ func (h *LoggingHandler) ListSavedSearches(w http.ResponseWriter, r *http.Reques
 	}
 	outputID, err := uuid.Parse(strings.TrimSpace(r.URL.Query().Get("output_id")))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid output_id is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "A valid output_id is required")
 		return
 	}
 	if _, ok := h.authorizeSavedSearchOutput(w, r, outputID); !ok {
@@ -201,7 +201,7 @@ func (h *LoggingHandler) ListSavedSearches(w http.ResponseWriter, r *http.Reques
 	}
 	rows, err := queries.ListLoggingSavedSearches(r.Context(), sqlc.ListLoggingSavedSearchesParams{OwnerUserID: ownerID, OutputID: outputID})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list logging saved searches")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list logging saved searches")
 		return
 	}
 	RespondJSON(w, http.StatusOK, loggingSavedSearchDTOs(rows))
@@ -218,17 +218,17 @@ func (h *LoggingHandler) CreateSavedSearch(w http.ResponseWriter, r *http.Reques
 	}
 	var wire createLoggingSavedSearchRequest
 	if err := decodeLoggingSavedSearchJSON(r, &wire); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req, err := normalizeLoggingSavedSearch(wire.input())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	outputID, err := uuid.Parse(strings.TrimSpace(wire.OutputID))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid output_id is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "A valid output_id is required")
 		return
 	}
 	output, ok := h.authorizeSavedSearchOutput(w, r, outputID)
@@ -236,7 +236,7 @@ func (h *LoggingHandler) CreateSavedSearch(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if req.LiveTail && !loggingCapabilitiesFor(output).Tail {
-		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.InvalidRequest, "This logging output does not support live tail")
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.InvalidRequest, "This logging output does not support live tail")
 		return
 	}
 	params := sqlc.CreateLoggingSavedSearchParams{
@@ -251,10 +251,10 @@ func (h *LoggingHandler) CreateSavedSearch(w http.ResponseWriter, r *http.Reques
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A saved search with this name already exists for the output")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A saved search with this name already exists for the output")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create logging saved search")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.CreateError, "Failed to create logging saved search")
 		return
 	}
 	RespondJSON(w, http.StatusCreated, loggingSavedSearchDTO(row))
@@ -271,12 +271,12 @@ func (h *LoggingHandler) UpdateSavedSearch(w http.ResponseWriter, r *http.Reques
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid saved search ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid saved search ID")
 		return
 	}
 	existing, err := queries.GetLoggingSavedSearchForOwner(r.Context(), sqlc.GetLoggingSavedSearchForOwnerParams{ID: id, OwnerUserID: ownerID})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging saved search not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging saved search not found")
 		return
 	}
 	output, ok := h.authorizeSavedSearchOutput(w, r, existing.OutputID)
@@ -285,16 +285,16 @@ func (h *LoggingHandler) UpdateSavedSearch(w http.ResponseWriter, r *http.Reques
 	}
 	var wire updateLoggingSavedSearchRequest
 	if err := decodeLoggingSavedSearchJSON(r, &wire); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	req, err := normalizeLoggingSavedSearch(wire.input())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
 	if req.LiveTail && !loggingCapabilitiesFor(output).Tail {
-		RespondRequestError(w, r, http.StatusUnprocessableEntity, apierror.InvalidRequest, "This logging output does not support live tail")
+		apiutil.WriteError(w, r, http.StatusUnprocessableEntity, apiutil.InvalidRequest, "This logging output does not support live tail")
 		return
 	}
 	params := sqlc.UpdateLoggingSavedSearchParams{
@@ -309,14 +309,14 @@ func (h *LoggingHandler) UpdateSavedSearch(w http.ResponseWriter, r *http.Reques
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging saved search not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging saved search not found")
 			return
 		}
 		if isUniqueViolation(err) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "A saved search with this name already exists for the output")
+			apiutil.WriteError(w, r, http.StatusConflict, apiutil.Conflict, "A saved search with this name already exists for the output")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update logging saved search")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.UpdateError, "Failed to update logging saved search")
 		return
 	}
 	RespondJSON(w, http.StatusOK, loggingSavedSearchDTO(row))
@@ -333,12 +333,12 @@ func (h *LoggingHandler) DeleteSavedSearch(w http.ResponseWriter, r *http.Reques
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid saved search ID")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid saved search ID")
 		return
 	}
 	existing, err := queries.GetLoggingSavedSearchForOwner(r.Context(), sqlc.GetLoggingSavedSearchForOwnerParams{ID: id, OwnerUserID: ownerID})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging saved search not found")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging saved search not found")
 		return
 	}
 	if _, ok := h.authorizeSavedSearchOutput(w, r, existing.OutputID); !ok {
@@ -361,10 +361,10 @@ func (h *LoggingHandler) DeleteSavedSearch(w http.ResponseWriter, r *http.Reques
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Logging saved search not found")
+			apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Logging saved search not found")
 			return
 		}
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete logging saved search")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.DeleteError, "Failed to delete logging saved search")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

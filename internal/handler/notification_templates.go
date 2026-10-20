@@ -31,9 +31,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 )
 
@@ -103,13 +103,13 @@ type templateListItem struct {
 // List handles GET /api/v1/admin/notification-templates/.
 func (h *NotificationTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	registry := notify.Registry()
 	rows, err := h.queries.ListNotificationTemplates(r.Context())
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to list notification templates")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to list notification templates")
 		return
 	}
 	overrideByKey := map[string]sqlc.NotificationTemplate{}
@@ -158,13 +158,13 @@ type templateDetail struct {
 // Get handles GET /api/v1/admin/notification-templates/{key}/.
 func (h *NotificationTemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	key := chi.URLParam(r, "key")
 	def, ok := notify.Lookup(key)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown template key")
 		return
 	}
 	resp := templateDetail{
@@ -184,7 +184,7 @@ func (h *NotificationTemplateHandler) Get(w http.ResponseWriter, r *http.Request
 	case errors.Is(err, pgx.ErrNoRows):
 		// No override — defaults are the merged view.
 	case err != nil:
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read template override")
+		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ReadError, "Failed to read template override")
 		return
 	default:
 		resp.HasOverride = true
@@ -218,24 +218,24 @@ type templateUpsert struct {
 // Update handles PUT /api/v1/admin/notification-templates/{key}/.
 func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	key := chi.URLParam(r, "key")
 	def, ok := notify.Lookup(key)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown template key")
 		return
 	}
 	var req templateUpsert
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	// Body is required on create — there's no point upserting a row
 	// with the default body verbatim.
 	if req.Body == nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "body is required")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "body is required")
 		return
 	}
 	subject := ""
@@ -246,7 +246,7 @@ func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Requ
 	if req.BodyFormat != nil && *req.BodyFormat != "" {
 		bodyFormat = *req.BodyFormat
 		if !validBodyFormat(bodyFormat) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "body_format must be one of text|markdown|html|json")
+			apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "body_format must be one of text|markdown|html|json")
 			return
 		}
 	}
@@ -272,7 +272,7 @@ func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Requ
 		},
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to save template override")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to save template override")
 		return
 	}
 	RespondJSON(w, http.StatusOK, templateRowToDetail(def, row))
@@ -281,12 +281,12 @@ func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Requ
 // Delete handles DELETE /api/v1/admin/notification-templates/{key}/.
 func (h *NotificationTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	key := chi.URLParam(r, "key")
 	if _, ok := notify.Lookup(key); !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown template key")
 		return
 	}
 	_, err := executeMutation(r, h.runTx,
@@ -301,7 +301,7 @@ func (h *NotificationTemplateHandler) Delete(w http.ResponseWriter, r *http.Requ
 		},
 	)
 	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to delete template override")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apiutil.WriteFailure, "Failed to delete template override")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -332,18 +332,18 @@ type previewResponse struct {
 // with the list of missing names lets the UI highlight them.
 func (h *NotificationTemplateHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	key := chi.URLParam(r, "key")
 	def, ok := notify.Lookup(key)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown template key")
 		return
 	}
 	var req previewRequest
 	if err := decodeV1JSONBody(r, &req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidBody, "Invalid JSON body")
 		return
 	}
 	if strings.TrimSpace(req.Body) == "" {
@@ -359,7 +359,7 @@ func (h *NotificationTemplateHandler) Preview(w http.ResponseWriter, r *http.Req
 		req.BodyFormat = def.BodyFormat
 	}
 	if !validBodyFormat(req.BodyFormat) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "body_format must be one of text|markdown|html|json")
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.ValidationError, "body_format must be one of text|markdown|html|json")
 		return
 	}
 	if missing := notify.CheckRequiredVariables(def, req.Variables); len(missing) > 0 {
@@ -378,7 +378,7 @@ func (h *NotificationTemplateHandler) Preview(w http.ResponseWriter, r *http.Req
 		BodyFormat: req.BodyFormat,
 	}, req.Variables)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.RenderError, err.Error())
+		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.RenderError, err.Error())
 		return
 	}
 	recordAudit(r, h.audit, "admin.notification_template.previewed", "notification_template", "", key, map[string]any{
@@ -390,13 +390,13 @@ func (h *NotificationTemplateHandler) Preview(w http.ResponseWriter, r *http.Req
 // Variables handles GET /api/v1/admin/notification-templates/{key}/variables/.
 func (h *NotificationTemplateHandler) Variables(w http.ResponseWriter, r *http.Request) {
 	if err := h.requireSuperuser(r); err != nil {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
+		apiutil.WriteError(w, r, http.StatusForbidden, apiutil.Forbidden, err.Error())
 		return
 	}
 	key := chi.URLParam(r, "key")
 	def, ok := notify.Lookup(key)
 	if !ok {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
+		apiutil.WriteError(w, r, http.StatusNotFound, apiutil.NotFound, "Unknown template key")
 		return
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
