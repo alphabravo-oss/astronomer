@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { ADMIN_EMAIL } from "./live.helpers";
+
 // Platform settings page gated by the admin role (real RBAC decision) and the
 // identity endpoint behind it.
 test("settings page loads for the bootstrap admin", async ({ page, context }) => {
@@ -10,6 +12,6 @@ test("settings page loads for the bootstrap admin", async ({ page, context }) =>
   const me = await context.request.get("/api/v1/auth/me/");
   expect(me.status()).toBe(200);
   const body = (await me.json()) as { data?: { email?: string; is_superuser?: boolean } };
-  expect(body.data?.email).toBe("admin@astronomer.local");
+  expect(body.data?.email).toBe(ADMIN_EMAIL);
   expect(body.data?.is_superuser).toBe(true);
 });

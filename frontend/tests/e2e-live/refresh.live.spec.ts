@@ -5,6 +5,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 import {
   CSRF_HEADER,
+  REFRESH_COOKIE,
   SESSION_COOKIE,
   csrfToken,
   loginViaForm,
@@ -18,7 +19,7 @@ test("real browser refresh rotates HttpOnly credentials and rejects reuse", asyn
   await loginViaForm(page);
   const previous = await context.cookies();
   const previousRefresh = previous.find(
-    (cookie) => cookie.name === "astronomer_refresh",
+    (cookie) => cookie.name === REFRESH_COOKIE,
   );
   expect(Boolean(previousRefresh?.httpOnly)).toBe(true);
   const oldCSRF = await csrfToken(context);
@@ -28,7 +29,7 @@ test("real browser refresh rotates HttpOnly credentials and rejects reuse", asyn
   expect(rotated.status()).toBe(200);
   const current = await context.cookies();
   const currentRefresh = current.find(
-    (cookie) => cookie.name === "astronomer_refresh",
+    (cookie) => cookie.name === REFRESH_COOKIE,
   );
   const currentAccess = current.find(
     (cookie) => cookie.name === SESSION_COOKIE,
