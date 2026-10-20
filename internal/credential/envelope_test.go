@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // This package exists for one reason, stated in its own header: two tables
@@ -21,7 +23,8 @@ import (
 // their anchor entirely. A shared invariant with no test of its own is not an
 // invariant. These tests pin the three answers directly.
 
-const testCiphertext = "gAAAAA-fernet-token"
+var testCiphertext = crypto.Sealed{KeyID: "k1", Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: []byte("age-ciphertext")}
+
 const testPlaintextDoc = `{"password":"hunter2","username":"ops"}`
 
 type fakeCipher struct {
@@ -33,18 +36,18 @@ type fakeCipher struct {
 	sealed string
 }
 
-func (f *fakeCipher) Decrypt(string) (string, error) {
+func (f *fakeCipher) Decrypt(crypto.Sealed) ([]byte, error) {
 	if f.decryptErr != nil {
-		return "", f.decryptErr
+		return nil, f.decryptErr
 	}
-	return f.decrypted, nil
+	return []byte(f.decrypted), nil
 }
 
-func (f *fakeCipher) Encrypt(plaintext string) (string, error) {
+func (f *fakeCipher) Encrypt(plaintext []byte) (crypto.Sealed, error) {
 	if f.encryptErr != nil {
-		return "", f.encryptErr
+		return crypto.Sealed{}, f.encryptErr
 	}
-	f.sealed = plaintext
+	f.sealed = string(plaintext)
 	return testCiphertext, nil
 }
 
@@ -61,11 +64,9 @@ func (f *fakeCipher) Encrypt(plaintext string) (string, error) {
 // than "", and treating that as a sealed row would send every legacy install
 // down the decrypt path.
 func TestResolveEmptyCiphertextMeansThePlaintextColumnIsTheWholeDocument(t *testing.T) {
-	for name, sealed := range map[string]string{
-		"empty":           "",
-		"whitespace":      "   ",
-		"newline":         "\n",
-		"tabs and spaces": "\t \t",
+	for name, sealed := range map[string]crypto.Sealed{
+		"zero":          {},
+		"nil and empty": {Ciphertext: []byte{}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			// A decryptor that would fail loudly if this branch used it.
@@ -99,7 +100,7 @@ func TestResolveNonEmptyCiphertextWinsOverTheJSONBColumn(t *testing.T) {
 // ANSWER 2: what a failed decrypt may return — NOTHING, ever.
 //
 // The forbidden shape is a fallback to the stored blob (decryptGitAuth in
-// internal/worker/tasks/gitops_sync.go still has it): sending a Fernet token
+// internal/worker/tasks/gitops_sync.go still has it): sending ciphertext
 // as a password produces an upstream 401, which reads to the operator as "the
 // backend rejected my credential" when what actually happened is that
 // ASTRONOMER_ENCRYPTION_KEY is wrong. Every failure path must return a nil
@@ -110,7 +111,7 @@ func TestResolveFailureReturnsNoDocumentAndNeverTheCiphertext(t *testing.T) {
 		// No key configured at all for a row that is sealed.
 		"nil decryptor": nil,
 		// Wrong key, or a rotation that retired the old key too early.
-		"decrypt error": &fakeCipher{decryptErr: errors.New("fernet: invalid token")},
+		"decrypt error": &fakeCipher{decryptErr: errors.New("crypto: decrypt failed")},
 	}
 	for name, dec := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -124,7 +125,7 @@ func TestResolveFailureReturnsNoDocumentAndNeverTheCiphertext(t *testing.T) {
 			if got != nil {
 				t.Fatalf("Resolve returned a document (%s) alongside an error; a caller that ignores err would send it", got)
 			}
-			if strings.Contains(string(got), testCiphertext) {
+			if strings.Contains(string(got), string(testCiphertext.Ciphertext)) {
 				t.Fatalf("Resolve leaked the ciphertext as a document: %s", got)
 			}
 			// The log line an operator has to act on must name the row and the
@@ -186,8 +187,8 @@ func TestSealEncryptsTheCompleteDocumentBeforeProjecting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	if ciphertext != testCiphertext {
-		t.Fatalf("ciphertext = %q, want the encryptor's output", ciphertext)
+	if ciphertext.KeyID != testCiphertext.KeyID {
+		t.Fatalf("ciphertext = %+v, want the encryptor's output", ciphertext)
 	}
 	if !strings.Contains(enc.sealed, `"password":"hunter2"`) {
 		t.Fatalf("Seal encrypted %q, which does not carry the credential: the envelope is credential-free", enc.sealed)
@@ -219,8 +220,8 @@ func TestSealWithNoEncryptorProducesThePreMigrationRowShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	if ciphertext != "" {
-		t.Fatalf("ciphertext = %q, want empty with no encryptor", ciphertext)
+	if !ciphertext.IsZero() {
+		t.Fatalf("ciphertext = %+v, want empty with no encryptor", ciphertext)
 	}
 	if string(public) != testPlaintextDoc {
 		t.Fatalf("public = %s, want the document unchanged", public)
@@ -244,8 +245,8 @@ func TestSealLeavesANonSecretDocumentInTheClear(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	if ciphertext != "" {
-		t.Fatalf("ciphertext = %q, want empty for a document with nothing to protect", ciphertext)
+	if !ciphertext.IsZero() {
+		t.Fatalf("ciphertext = %+v, want empty for a document with nothing to protect", ciphertext)
 	}
 	if string(public) != `{"charts":["a","b"]}` {
 		t.Fatalf("public = %s, want the document unchanged", public)
@@ -270,8 +271,8 @@ func TestSealNormalisesUnusableInputToEmptyObject(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Seal: %v", err)
 			}
-			if ciphertext != "" {
-				t.Fatalf("ciphertext = %q, want empty", ciphertext)
+			if !ciphertext.IsZero() {
+				t.Fatalf("ciphertext = %+v, want empty", ciphertext)
 			}
 			if string(public) != `{}` {
 				t.Fatalf("public = %s, want `{}`", public)
@@ -292,8 +293,8 @@ func TestSealNormalisesUnusableInputToEmptyObject(t *testing.T) {
 		if string(public) != `{}` {
 			t.Fatalf("public = %s, want `{}`", public)
 		}
-		if ciphertext != testCiphertext || enc.sealed != `{}` {
-			t.Fatalf("Seal(nil) sealed %q as %q, want the normalised `{}`", enc.sealed, ciphertext)
+		if ciphertext.KeyID != testCiphertext.KeyID || enc.sealed != `{}` {
+			t.Fatalf("Seal(nil) sealed %q as %+v, want the normalised `{}`", enc.sealed, ciphertext)
 		}
 	})
 }
@@ -307,8 +308,8 @@ func TestSealEncryptFailureReturnsNoColumns(t *testing.T) {
 	if err == nil {
 		t.Fatal("Seal succeeded despite the encryptor failing")
 	}
-	if ciphertext != "" || public != nil {
-		t.Fatalf("Seal returned columns (%q, %s) alongside an error; a caller that ignores err would write a credential-free row", ciphertext, public)
+	if !ciphertext.IsZero() || public != nil {
+		t.Fatalf("Seal returned columns (%+v, %s) alongside an error; a caller that ignores err would write a credential-free row", ciphertext, public)
 	}
 	if !strings.Contains(err.Error(), "the subject") {
 		t.Fatalf("error %q does not name the subject", err)
@@ -323,7 +324,7 @@ func TestSealResolveRoundTripRecoversTheCompleteDocument(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	// The fake returns whatever it was handed, which is what a real Fernet
+	// The fake returns whatever it was handed, which is what a real age
 	// round-trip does.
 	got, err := Resolve(ciphertext, public, &fakeCipher{decrypted: enc.sealed}, "subject")
 	if err != nil {
@@ -335,5 +336,31 @@ func TestSealResolveRoundTripRecoversTheCompleteDocument(t *testing.T) {
 	}
 	if doc["password"] != "hunter2" || doc["username"] != "ops" {
 		t.Fatalf("round-trip did not recover the complete document: %v", doc)
+	}
+}
+
+// The real encryptor, end to end: Seal with key A, Resolve with a keyring that
+// only has key B fails closed; with A loaded it recovers the whole document.
+func TestSealResolveWithRealKeys(t *testing.T) {
+	keyA, _ := crypto.GenerateKey()
+	keyB, _ := crypto.GenerateKey()
+	a, err := crypto.NewEncryptor("a:" + keyA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := crypto.NewEncryptor("b:" + keyB)
+	sealed, public, err := Seal(json.RawMessage(testPlaintextDoc), a, alwaysSealable, projectDropPassword, "subject")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(sealed.Ciphertext), "hunter2") || strings.Contains(string(public), "hunter2") {
+		t.Fatal("secret leaked into stored columns")
+	}
+	if _, err := Resolve(sealed, public, b, "subject"); !errors.Is(err, ErrUnavailable) || !errors.Is(err, crypto.ErrUnknownKey) {
+		t.Fatalf("wrong keyring: %v", err)
+	}
+	got, err := Resolve(sealed, public, a, "subject")
+	if err != nil || !strings.Contains(string(got), "hunter2") {
+		t.Fatalf("Resolve = %s, %v", got, err)
 	}
 }

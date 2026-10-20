@@ -2218,29 +2218,29 @@
           "count": 1,
           "kind": "regex",
           "path": "go.mod",
-          "selector": "^\\s+github\\.com/fernet/fernet\\-go (\\S+)(?: // indirect)?$",
+          "selector": "^\\s+filippo\\.io/age (\\S+)(?: // indirect)?$",
           "value": "{version}"
         }
       ],
       "discovery": {
-        "observedAt": "2026-10-09T18:55:59.772731Z",
-        "provenance": "sha256:ce2d1d8820203e4631c48ca02dddaca9ed12f2a6d3d9f6118f57cf2ee33484bb",
-        "releasedAt": "2024-01-19T01:11:08Z",
+        "observedAt": "2026-10-20T06:30:00.000000Z",
+        "provenance": "sha256:d268e01da6cd075a67c3d8a367e1bbf93fabd87e6f4aeb0df935c124db3cbab7",
+        "releasedAt": "2026-08-29T17:40:19Z",
         "stable": true,
-        "version": "v0.0.0-20240119011108-303da6aec611"
+        "version": "v1.3.2"
       },
       "ecosystem": "gomod",
-      "id": "gomod:github.com/fernet/fernet-go",
+      "id": "gomod:filippo.io/age",
       "owner": "platform/backend",
       "platforms": [
         "linux/amd64",
         "linux/arm64"
       ],
       "qualification": "Application build and focused integration gates",
-      "selected": "v0.0.0-20240119011108-303da6aec611",
+      "selected": "v1.3.2",
       "upstream": {
         "kind": "gomod",
-        "url": "https://proxy.golang.org/github.com/fernet/fernet-go/@latest"
+        "url": "https://proxy.golang.org/filippo.io/age/@latest"
       }
     },
     {

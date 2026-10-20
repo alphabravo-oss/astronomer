@@ -7,16 +7,18 @@ import (
 	"testing"
 
 	"golang.org/x/oauth2"
+
+	agecrypto "github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // helper to create an SSOManager with a real Encryptor for tests.
-func newTestSSOManager(t *testing.T) (*SSOManager, *Encryptor) {
+func newTestSSOManager(t *testing.T) (*SSOManager, *agecrypto.Encryptor) {
 	t.Helper()
-	key, err := GenerateKey()
+	key, err := agecrypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	enc, err := NewEncryptor(key)
+	enc, err := agecrypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
@@ -28,7 +30,7 @@ func newTestSSOManager(t *testing.T) (*SSOManager, *Encryptor) {
 func TestSSORegisterProviderSuccess(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
 
-	secret, err := enc.Encrypt("my-github-secret")
+	secret, err := enc.EncryptString("my-github-secret")
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -69,7 +71,7 @@ func TestSSORegisterProviderWithEncryptedSecret(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
 
 	plainSecret := "super-secret-google-client"
-	encrypted, err := enc.Encrypt(plainSecret)
+	encrypted, err := enc.EncryptString(plainSecret)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -94,7 +96,7 @@ func TestSSORegisterProviderWithEncryptedSecret(t *testing.T) {
 func TestSSORegisterProviderInvalidSecret(t *testing.T) {
 	mgr, _ := newTestSSOManager(t)
 
-	err := mgr.RegisterProvider("github", "client-id", "not-a-valid-fernet-token", "", nil)
+	err := mgr.RegisterProvider("github", "client-id", agecrypto.Sealed{KeyID: "missing", Algorithm: agecrypto.AlgorithmAgeX25519, Ciphertext: []byte("garbage")}, "", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid encrypted secret, got nil")
 	}
@@ -102,7 +104,7 @@ func TestSSORegisterProviderInvalidSecret(t *testing.T) {
 
 func TestSSORegisterProviderEmptyName(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
-	secret, _ := enc.Encrypt("secret")
+	secret, _ := enc.EncryptString("secret")
 
 	err := mgr.RegisterProvider("", "client-id", secret, "", nil)
 	if err == nil {
@@ -112,7 +114,7 @@ func TestSSORegisterProviderEmptyName(t *testing.T) {
 
 func TestSSORegisterProviderEmptyClientID(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
-	secret, _ := enc.Encrypt("secret")
+	secret, _ := enc.EncryptString("secret")
 
 	err := mgr.RegisterProvider("github", "", secret, "", nil)
 	if err == nil {
@@ -123,7 +125,7 @@ func TestSSORegisterProviderEmptyClientID(t *testing.T) {
 func TestSSOGetAuthorizationURL(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
 
-	secret, _ := enc.Encrypt("secret")
+	secret, _ := enc.EncryptString("secret")
 	if err := mgr.RegisterProvider("github", "client-id", secret, "", nil); err != nil {
 		t.Fatalf("RegisterProvider: %v", err)
 	}
@@ -163,7 +165,7 @@ func TestSSOGetAuthorizationURLUnknownProvider(t *testing.T) {
 func TestSSOStateUniqueness(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
 
-	secret, _ := enc.Encrypt("secret")
+	secret, _ := enc.EncryptString("secret")
 	if err := mgr.RegisterProvider("github", "client-id", secret, "", nil); err != nil {
 		t.Fatalf("RegisterProvider: %v", err)
 	}
@@ -219,7 +221,7 @@ func TestSSODefaultScopes(t *testing.T) {
 
 func TestSSORegisterProviderUnknown(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
-	secret, _ := enc.Encrypt("secret")
+	secret, _ := enc.EncryptString("secret")
 
 	err := mgr.RegisterProvider("bitbucket", "client-id", secret, "", nil)
 	if err == nil {

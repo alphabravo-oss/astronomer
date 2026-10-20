@@ -279,7 +279,7 @@ func TestRegisterOIDCProviderEndToEnd(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
 	mgr.SetDiscoveryClient(NewOIDCDiscoveryClient(idp.srv.Client()))
 
-	encrypted, err := enc.Encrypt("client-secret-xyz")
+	encrypted, err := enc.EncryptString("client-secret-xyz")
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -325,7 +325,7 @@ func TestRegisterOIDCProviderEndToEnd(t *testing.T) {
 
 func TestRegisterOIDCProviderRejectsEmptyIssuer(t *testing.T) {
 	mgr, enc := newTestSSOManager(t)
-	encrypted, _ := enc.Encrypt("secret")
+	encrypted, _ := enc.EncryptString("secret")
 
 	err := mgr.RegisterOIDCProvider(context.Background(), "keycloak", "", "client", encrypted, "", nil)
 	if err == nil {

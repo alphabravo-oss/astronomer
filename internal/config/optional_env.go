@@ -9,6 +9,7 @@ import (
 func bindOptionalEnvironment(v *viper.Viper) error {
 	return envconfig.BindEnv(v,
 		"astronomer_encryption_key",
+		"astronomer_encryption_key_file",
 		"astronomer_internal_psk",
 		"astronomer_internal_psk_previous",
 		"github_client_id",
