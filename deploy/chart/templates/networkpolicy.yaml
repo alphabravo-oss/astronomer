@@ -7,6 +7,10 @@
 {{- $identityProviderEgressCIDRs := .Values.networkPolicy.identityProviderEgressCIDRs | default (list) -}}
 {{- $objectStoreEgressCIDRs := .Values.networkPolicy.objectStoreEgressCIDRs | default (list) -}}
 {{- $loggingSinkEgressCIDRs := .Values.networkPolicy.loggingSinkEgressCIDRs | default (list) -}}
+{{- $objectStoreEgressPorts := .Values.networkPolicy.objectStoreEgressPorts | default (list 443 80) -}}
+{{- $walArchiveEgressCIDRs := .Values.networkPolicy.walArchiveEgressCIDRs | default (list) -}}
+{{- $walArchiveEgressPorts := .Values.networkPolicy.walArchiveEgressPorts | default (list 443) -}}
+{{- $cnpgSystemNamespace := .Values.networkPolicy.cnpgSystemNamespace | default "cnpg-system" -}}
 {{- if .Values.networkPolicy.defaultDeny }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -500,7 +504,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: cnpg-system
+              kubernetes.io/metadata.name: {{ $cnpgSystemNamespace | quote }}
           podSelector:
             matchLabels:
               app.kubernetes.io/name: cloudnative-pg
@@ -522,7 +526,10 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.postgres.port }}
-    {{- range $cidr := $kubernetesAPIEgressCIDRs }}
+    # The CNPG instance manager watches its Cluster through the kube-apiserver;
+    # without this a restarted instance never passes its startup probe. The
+    # legacy externalEgressCIDRs bucket opens only the API ports here.
+    {{- range $cidr := concat $kubernetesAPIEgressCIDRs $externalCIDRs | uniq }}
     - to:
         - ipBlock:
             cidr: {{ $cidr | quote }}
@@ -531,6 +538,28 @@ spec:
           port: 443
         - protocol: TCP
           port: 6443
+    {{- end }}
+    {{- if .Values.postgres.cloudNativePG.barmanCloud.enabled }}
+    # CNPG-I: the instance manager talks to the Barman Cloud plugin Service in
+    # the operator namespace; the plugin sidecar then ships WAL and base backups
+    # to the object store named by walArchiveEgressCIDRs/Ports.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $cnpgSystemNamespace | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.barmanCloudPluginPort | default 9090 }}
+    {{- range $cidr := $walArchiveEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        {{- range $port := $walArchiveEgressPorts }}
+        - protocol: TCP
+          port: {{ $port }}
+        {{- end }}
+    {{- end }}
     {{- end }}
   {{- else }}
   egress: []
@@ -654,11 +683,15 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.postgresMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
+              {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+              {{- else }}
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+              {{- end }}
       ports:
         - protocol: TCP
           port: {{ $.Values.postgres.port }}
@@ -676,10 +709,10 @@ spec:
         - ipBlock:
             cidr: {{ $cidr | quote }}
       ports:
+        {{- range $port := $objectStoreEgressPorts }}
         - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 80
+          port: {{ $port }}
+        {{- end }}
 {{- end }}
 {{- end }}
 {{- if and .Values.managementBackup.enabled .Values.managementBackup.retention.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.retention.credentialsSecretRef.name }}
@@ -707,10 +740,10 @@ spec:
         - ipBlock:
             cidr: {{ $cidr | quote }}
       ports:
+        {{- range $port := $objectStoreEgressPorts }}
         - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 80
+          port: {{ $port }}
+        {{- end }}
     {{- end }}
 {{- end }}
 {{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name }}
@@ -733,11 +766,15 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.postgresMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
+              {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+              {{- else }}
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+              {{- end }}
       ports:
         - protocol: TCP
           port: {{ $.Values.postgres.port }}
@@ -755,10 +792,10 @@ spec:
         - ipBlock:
             cidr: {{ $cidr | quote }}
       ports:
+        {{- range $port := $objectStoreEgressPorts }}
         - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 80
+          port: {{ $port }}
+        {{- end }}
     {{- end }}
 {{- end }}
 {{- if .Values.managementLogging.enabled }}

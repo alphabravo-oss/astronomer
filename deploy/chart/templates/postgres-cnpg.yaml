@@ -9,6 +9,12 @@ spec:
   instances: {{ .Values.postgres.cloudNativePG.instances }}
   imageName: {{ .Values.postgres.cloudNativePG.imageName | quote }}
   primaryUpdateStrategy: unsupervised
+  {{- with .Values.postgres.cloudNativePG.stopDelay }}
+  stopDelay: {{ . }}
+  {{- end }}
+  {{- with .Values.postgres.cloudNativePG.smartShutdownTimeout }}
+  smartShutdownTimeout: {{ . }}
+  {{- end }}
   enableSuperuserAccess: false
   resources:
     {{- toYaml .Values.postgres.cloudNativePG.resources | nindent 4 }}

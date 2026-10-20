@@ -8,6 +8,7 @@ metadata:
 spec:
   schedule: {{ .Values.postgres.cloudNativePG.barmanCloud.scheduledBackup.schedule | quote }}
   backupOwnerReference: {{ .Values.postgres.cloudNativePG.barmanCloud.scheduledBackup.backupOwnerReference }}
+  immediate: {{ .Values.postgres.cloudNativePG.barmanCloud.scheduledBackup.immediate | default false }}
   cluster:
     name: {{ include "astronomer.cnpgClusterName" . }}
   method: plugin

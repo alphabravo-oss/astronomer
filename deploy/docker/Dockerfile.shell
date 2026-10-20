@@ -31,7 +31,9 @@
 # syntax=docker/dockerfile:1.7
 
 ARG GO_VERSION
-FROM golang:${GO_VERSION}-alpine AS dex-validator
+# GO_IMAGE_DIGEST comes from deploy/docker/go-image.lock (no default: fail closed).
+ARG GO_IMAGE_DIGEST
+FROM golang:${GO_VERSION}-alpine@${GO_IMAGE_DIGEST} AS dex-validator
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

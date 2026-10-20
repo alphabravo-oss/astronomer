@@ -137,6 +137,94 @@ OIDC identity and pass.
 
 ---
 
+## Admission enforcement (Sigstore policy-controller)
+
+Verification at pull time is not enough: a namespace should only run images
+whose signatures the cluster itself checks. `deploy/policy-controller/` ships
+the install for [sigstore policy-controller](https://docs.sigstore.dev/policy-controller/overview/):
+
+| File | Content |
+|------|---------|
+| `values.yaml` | Helm values for chart `policy-controller` 0.10.8 (app 0.13.1): `failurePolicy: Fail`, `webhook.configData.no-match-policy: deny` (chart-managed, not a hand edit of `config-policy-controller`), bounded resources. |
+| `cip-astronomer.yaml` | `ClusterImagePolicy` objects, all `mode: enforce`. |
+
+```bash
+helm upgrade --install policy-controller policy-controller \
+  --repo https://sigstore.github.io/helm-charts --version 0.10.8 \
+  -n cosign-system --create-namespace -f deploy/policy-controller/values.yaml
+kubectl apply -f deploy/policy-controller/cip-astronomer.yaml
+# Opt the Astronomer namespace in only after the dry-runs below pass.
+kubectl label ns astronomer policy.sigstore.dev/include=true
+```
+
+With `no-match-policy: deny` every image in an opted-in namespace must match a
+policy; an image that matches a policy must satisfy one of its authorities.
+The authorities, each proven with cosign 3.1.3 against the digests the chart
+pins (2026-10-20):
+
+| Images (glob) | Authority |
+|---------------|-----------|
+| `ghcr.io/alphabravo-oss/astronomer-**` | keyless, issuer `https://token.actions.githubusercontent.com`, subject `^https://github\.com/alphabravo-oss/astronomer/\.github/workflows/release\.yaml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$` |
+| `ghcr.io/cloudnative-pg/cloudnative-pg**` (operator; bootstrap init container of every instance pod) | keyless, `cloudnative-pg/cloudnative-pg` `release-publish.yml@refs/tags/v*` |
+| `ghcr.io/cloudnative-pg/postgresql**` | keyless, `cloudnative-pg/postgres-containers` workflows |
+| `ghcr.io/dexidp/dex**` | keyless, `dexidp/dex` workflows at release tags. The chart now defaults Dex to `ghcr.io/dexidp/dex` (same digest as Docker Hub, which carries no signature). |
+| `index.docker.io/fluent/fluent-bit**` | keyless, `fluent/fluent-bit` workflows on `master` (`Release from staging`) |
+| `quay.io/jetstack/cert-manager-**` (HTTP-01 solver pods) | cert-manager's long-lived key `cert-manager-pubkey-2021-09-20.pem`, `hashAlgorithm: sha512`, no Rekor entry (cert-manager does **not** sign keyless) |
+| `index.docker.io/library/{busybox,postgres}**`, `index.docker.io/valkey/valkey**`, `ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar**` | `static: pass` — these upstreams publish no cosign signature at all, so no authority can verify them. The chart pins them by digest (`image.requireDigest`); to close the gap mirror them into a registry you sign and replace the pass with a key authority. |
+| `localhost/**`, `127.0.0.1/**` | `static: fail` (unsigned local builds) |
+
+`deploy/policy_controller_test.go` renders the chart (live astronomer-dev
+values, every optional component, bundled defaults) and fails when any image
+the chart can produce matches no policy, so a new third-party image must be
+added here in the same change.
+
+Dry-run before opting a namespace in (no object is created):
+
+```bash
+kubectl -n astronomer run sig-ok --image=ghcr.io/alphabravo-oss/astronomer-go-server@sha256:<release digest> --dry-run=server   # allowed
+kubectl -n astronomer run sig-deny --image=docker.io/library/nginx:1.27 --dry-run=server                                     # denied: no matching policies
+```
+
+### CloudNativePG operator and Barman Cloud plugin images must be tag@digest
+
+policy-controller mutates every admitted image reference from tag to digest.
+The CNPG operator compares the running instance pods' bootstrap image with
+`OPERATOR_IMAGE_NAME` (and the plugin sidecar with `SIDECAR_IMAGE`); when those
+are bare tags the comparison never matches the mutated pod spec and every
+reconcile restarts the instances ("old bootstrap container image"). Install
+both with digest-pinned strings, e.g.
+
+```bash
+kubectl -n cnpg-system set env deploy/cnpg-controller-manager \
+  OPERATOR_IMAGE_NAME=ghcr.io/cloudnative-pg/cloudnative-pg:1.30.1@sha256:923c267ec29636db3bee20f993d0ec4973fa22998e1adad37da79e4d32b5bc07
+kubectl -n cnpg-system set env deploy/barman-cloud \
+  SIDECAR_IMAGE=ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.15.1@sha256:2287a793a804db751edd0d07d44cd549e357677e98a800eb12e2cf7c0d53f9b0
+```
+
+(or set the same values in the operator/plugin Helm values or manifests). The
+astronomer chart's own CNPG string, `postgres.cloudNativePG.imageName`, is
+already `tag@digest` and a render test keeps it that way.
+
+---
+
+## Delivery trust root (in-process verification)
+
+The server and resolver workers verify keyless-signed release artifacts
+in-process (`internal/delivery/resolver/verifier.go`); they never contact TUF,
+so they need the Sigstore trusted root on disk at
+`/etc/astronomer/delivery-trust/trusted_root.json`. The chart now renders
+Secret `<release>-delivery-trust` with that file by default
+(`delivery.sourceResolution.trustKeys.chartManagedTrustedRoot: true`), taken
+from `deploy/chart/files/sigstore/trusted_root.json`, which a test keeps
+byte-identical to the root compiled into the `astro` CLI
+(`internal/ops/upgradecli/toolchain/trust/trusted_root.json`). Setting
+`delivery.sourceResolution.trustKeys.existingSecret` replaces it with your own
+Secret (which must then also contain `trusted_root.json` for keyless policies,
+plus any `<keyRef>.pub` keys). Rotate the pinned root by updating the toolchain
+copy, copying it into the chart and releasing.
+
+---
+
 ## What's covered, what's not
 
 **Covered:**

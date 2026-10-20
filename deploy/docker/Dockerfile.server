@@ -3,7 +3,9 @@
 # GO_VERSION is derived from go.mod by the Makefile (make docker-build-server) and
 # has no default on purpose: an image can never drift from go.mod (guide ch.04).
 ARG GO_VERSION
-FROM golang:${GO_VERSION}-alpine AS builder
+# GO_IMAGE_DIGEST comes from deploy/docker/go-image.lock (no default: fail closed).
+ARG GO_IMAGE_DIGEST
+FROM golang:${GO_VERSION}-alpine@${GO_IMAGE_DIGEST} AS builder
 
 RUN apk add --no-cache git
 

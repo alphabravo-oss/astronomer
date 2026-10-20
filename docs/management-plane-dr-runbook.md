@@ -297,7 +297,7 @@ Start a temporary client Pod with `psql`:
 
 ```bash
 kubectl -n astronomer run psql-restore --rm -it --restart=Never \
-  --image=postgres:16-alpine \
+  --image=postgres:17-alpine \
   --env="PGURL=$(kubectl -n astronomer get secret <dsn-secret> \
         -o jsonpath='{.data.<dsn-key>}' | base64 -d)" \
   -- psql "$PGURL" -d postgres
@@ -542,6 +542,115 @@ When snapshots are from different points in time:
 After any mismatch recovery, run the drift/repair checks once they are
 available, then trigger an ad-hoc management backup so the new baseline is
 captured.
+
+---
+
+## CloudNativePG continuous backup (Barman Cloud plugin)
+
+In `postgres.mode: cloudNativePG` the chart wires WAL archiving and base
+backups through the upstream CNPG-I Barman Cloud plugin
+(`barman-cloud.cloudnative-pg.io`). This is the PITR layer; the
+`managementBackup` dumps above remain the encrypted, Object-Locked cold copy.
+
+For a single-node install with an off-host, non-AWS S3 store (RustFS/MinIO,
+Object Lock GOVERNANCE 30 days, retention in dry-run) start from
+`deploy/chart/values-single-node-backup.yaml`, layered after
+`values-single-node.yaml`.
+
+### Chart-managed ObjectStore
+
+Install the plugin (pinned `tag@digest`, see [verify-images](verify-images.md))
+and create the S3 credentials Secret yourself; then let the chart render the
+`barmancloud.cnpg.io/v1` ObjectStore:
+
+```yaml
+postgres:
+  cloudNativePG:
+    barmanCloud:
+      enabled: true
+      objectStoreName: offhost-archive
+      objectStore:
+        create: true
+        destinationPath: s3://astronomer-recovery-offhost/
+        endpointURL: http://rustfs.backup.example:9000   # empty = AWS S3
+        region: us-east-1
+        s3Credentials:
+          accessKeyId: {name: offhost-rustfs-credentials, key: ACCESS_KEY_ID}
+          secretAccessKey: {name: offhost-rustfs-credentials, key: SECRET_ACCESS_KEY}
+        wal: {compression: gzip, maxParallel: 2}
+        data: {compression: gzip, jobs: 2}
+        retentionPolicy: 14d
+      scheduledBackup:
+        enabled: true
+        schedule: "0 0 3 * * *"
+        immediate: true        # first base backup right after install
+networkPolicy:
+  walArchiveEgressCIDRs: [10.60.0.10/32]   # the endpointURL host
+  walArchiveEgressPorts: [9000]
+```
+
+The ObjectStore carries `helm.sh/resource-policy: keep`: uninstalling the
+release never stops archiving or deletes the bucket contents. To adopt an
+ObjectStore that was created by hand, label and annotate it before the
+upgrade:
+
+```bash
+kubectl -n astronomer label objectstore <name> app.kubernetes.io/managed-by=Helm
+kubectl -n astronomer annotate objectstore <name> \
+  meta.helm.sh/release-name=astronomer meta.helm.sh/release-namespace=astronomer
+```
+
+### NetworkPolicy for CNPG
+
+The `astronomer-postgres` policy selects the CNPG instance pods
+(`cnpg.io/cluster=<cluster>`) and opens, besides DNS and replication:
+
+| Flow | Values |
+|------|--------|
+| Instance manager -> kube-apiserver TCP 443/6443 | `networkPolicy.kubernetesAPIEgressCIDRs` (and the legacy `externalEgressCIDRs`). List the `kubernetes` Service ClusterIP **and** the API endpoint/node addresses; without it a restarted instance never passes its startup probe. |
+| Instance manager -> Barman Cloud plugin | `networkPolicy.cnpgSystemNamespace` (default `cnpg-system`), `networkPolicy.barmanCloudPluginPort` (default 9090); rendered only with `barmanCloud.enabled`. |
+| Plugin sidecar -> object store (WAL + base backups) | `networkPolicy.walArchiveEgressCIDRs` / `walArchiveEgressPorts` (default `[443]`). |
+| DR jobs (`management-backup`, `restore-drill`) -> Postgres 5432 | automatic; `management-backup-retention` only talks to S3 and is not admitted. |
+| DR jobs -> S3 | `networkPolicy.objectStoreEgressCIDRs` / `objectStoreEgressPorts` (default `[443, 80]`; add `9000` for RustFS/MinIO). |
+
+### Adding Barman Cloud to a live cluster (primary restart hazard)
+
+Enabling `barmanCloud.enabled` on a running Cluster makes the operator restart
+every instance to inject the plugin sidecar, **including the primary**. During
+that shutdown PostgreSQL runs a smart shutdown and its `archive_command` (now
+routed to the plugin) cannot reach a sidecar that does not exist yet, so the
+primary waits for the full `smartShutdownTimeout` (CNPG default 180 s) and then
+the `stopDelay` (default 1800 s) before it is killed. On astronomer-dev the
+resulting primary restart collided with a concurrent `--atomic` Helm upgrade,
+which then rolled back. Pick one:
+
+1. **Add the plugin before data is live** (preferred): enable `barmanCloud` in
+   the very first install, or on a fresh Cluster before the server starts.
+2. **Shorten the shutdown for the migration**: run the upgrade that adds the
+   plugin with
+   ```yaml
+   postgres:
+     cloudNativePG:
+       stopDelay: 60
+       smartShutdownTimeout: 15
+   ```
+   in a maintenance window (the server/worker lose the database for about a
+   minute), without `--atomic` and with `--timeout 15m`; confirm
+   `kubectl cnpg status <cluster>` shows `Continuous Backup status: OK` and a
+   recent `Last Archived WAL`, then drop the two values again (`0` = CNPG
+   defaults) in the next upgrade.
+
+After the switch, take a backup immediately
+(`kubectl cnpg backup <cluster> --method plugin --plugin-name barman-cloud.cloudnative-pg.io`)
+or set `scheduledBackup.immediate: true`.
+
+### Client tools for the DR jobs
+
+`pg_dump` refuses to dump a server with a newer major version. The
+`astronomer-dr` image therefore ships the PostgreSQL **17** client tools to
+match the chart's CNPG `postgresql:17.11` image, and the restore drill's
+sidecar defaults to `postgres:17-alpine` (tag@digest). Keep all three in
+lockstep when the CNPG image moves to a new major.
 
 ---
 
