@@ -2352,6 +2352,12 @@ type Querier interface {
 	ResolveComponentBundleVersion(ctx context.Context, arg ResolveComponentBundleVersionParams) (ComponentBundleVersion, error)
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
+	// The management-plane cluster (is_local) never joins a system rollout: it
+	// upgrades with the server. Its assignment is seeded once, so without this it
+	// keeps targeting the release that was current at enrollment and, once the
+	// embedded agent advances, sits in 'applying' forever. Move it to the
+	// released release before every observation.
+	RetargetLocalDeliverySystemAssignment(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	RetirePreviousSystemRolloutReleases(ctx context.Context, arg RetirePreviousSystemRolloutReleasesParams) error
 	RetryDeadCharlieTriggerEventWithOutbox(ctx context.Context, arg RetryDeadCharlieTriggerEventWithOutboxParams) (RetryDeadCharlieTriggerEventWithOutboxRow, error)
 	RetryDeliverySourceResolution(ctx context.Context, arg RetryDeliverySourceResolutionParams) (DeliverySourceResolution, error)
