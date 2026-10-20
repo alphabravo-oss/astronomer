@@ -1,482 +1,167 @@
-.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan data-governance-check sqlc sqlc-generate sqlc-check sqlc-extensions-generate sqlc-extensions-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
-	validate-image-version docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr docker-build-all \
-        migrate-up migrate-down migrate-create clean dev dev-reload dev-down dev-clean \
-        k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
-        validate-live-b6 validate-live-delivery validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
-
-# ── Variables ────────────────────────────────────────────────────────────────
-VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-GIT_COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_DATE  ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-MODULE       = github.com/alphabravocompany/astronomer-go
-LDFLAGS      = -s -w \
-               -X $(MODULE)/pkg/version.Version=$(VERSION) \
-               -X $(MODULE)/pkg/version.GitCommit=$(GIT_COMMIT) \
-               -X $(MODULE)/pkg/version.BuildDate=$(BUILD_DATE)
-
-DATABASE_URL ?= postgres://astronomer:astronomer@localhost:5433/astronomer?sslmode=disable
-SQLC_VERSION ?= v1.31.1
-SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
-
-# Pinned golangci-lint — mirrors the sqlc pinned-tool pattern. Kept in sync with
-# the default in scripts/check-go-lint.sh, which is what CI actually invokes.
-GOLANGCI_LINT_VERSION ?= v2.14.0
-GOVULNCHECK_VERSION   ?= v1.8.0
-
-# Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
-OAPI_CODEGEN_VERSION ?= v2.5.1
-OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
-
-# Local CI executes the real PR workflow with the official GitHub runner. The
-# npm package and runner base image are independently pinned under tools/ and
-# .github/ so this pre-push gate never executes a floating dependency.
-LOCAL_CI_BIN          = ./tools/local-ci/node_modules/.bin/local-ci
-LOCAL_CI_JOBS        ?= 2
-LOCAL_CI_PREWARM      = .github/workflows/pr-validation.yaml:frontend:install-dependencies
-LOCAL_CI_WORKING_DIR ?= $(CURDIR)/.local-ci
-
-# Image naming — override IMG_TAG=... to push semantic versions.
-# IMG_REGISTRY carries the first-party GHCR prefix so locally-built images match
-# the chart's default image refs (image.<x>.registry = ghcr.io/alphabravo-oss),
-# so `make k3d-import-all` + a default `helm install` line up with no overrides.
-IMG_TAG      ?= $(VERSION)
-IMG_REGISTRY ?= ghcr.io/alphabravo-oss
-IMG_SERVER   = $(IMG_REGISTRY)/astronomer-go-server:$(IMG_TAG)
-IMG_AGENT    = $(IMG_REGISTRY)/astronomer-go-agent:$(IMG_TAG)
-IMG_WORKER   = $(IMG_REGISTRY)/astronomer-go-worker:$(IMG_TAG)
-IMG_MIGRATE  = $(IMG_REGISTRY)/astronomer-go-migrate:$(IMG_TAG)
-# Frontend image name stays `astronomer-frontend` to match the Helm chart's default
-# (deploy/chart/values.yaml -> frontend.image.repository). Build context is
-# astronomer-go's own frontend/ directory.
-IMG_FRONTEND = $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG)
-# astronomer-shell is the in-browser kubectl shell pod image.
-# Owned end-to-end (alpine + kubectl from dl.k8s.io) so we don't depend
-# on a third-party registry whose tag schedule we can't control.
-IMG_SHELL    = $(IMG_REGISTRY)/astronomer-shell:$(IMG_TAG)
-IMG_DR       = $(IMG_REGISTRY)/astronomer-dr:$(IMG_TAG)
-
-# Key material for `make helm-install`. The chart ships NO defaults — it used to
-# ship a working JWT signing key and Fernet key, which made every default install
-# forgeable by anyone holding this repository. These are throwaway LOCAL-DEV
-# values, stable across runs so a re-install still decrypts what the last one
-# stored. They are published HERE, though, so they are in the sentinel set
-# (internal/config/production.go): an install standing on them logs an ERROR on
-# every boot and reports astronomer_insecure_dev_key_in_use=1. That is correct —
-# override (or use secrets.existingSecret) for anything that isn't a laptop:
-#   make helm-install HELM_SECRET_KEY=... HELM_ENCRYPTION_KEY=...
+# Astronomer — single orchestrator for build, test, lint, generate, dev loop,
+# security gates and container images (Technology Selection Guide ch.04/06/07).
 #
-# Upgrading a cluster that was installed BEFORE the chart defaults were removed:
-# it is holding the old chart-default Fernet key, and this one is different, so
-# every credential already stored (kubeconfigs, agent tokens, git PATs, SSO
-# client secrets) becomes undecryptable — silently, with the bundled Postgres
-# PVC still in place. The old value cannot be reused (the chart now rejects it).
-# Recreate the install instead — drop the namespace with its Postgres PVC, or
-# delete and re-bootstrap the k3d cluster.
-HELM_SECRET_KEY     ?= make-local-dev-jwt-signing-key-32-chars
-HELM_ENCRYPTION_KEY ?= 3b4GoQu4Ka-ZH7D28cqSUY8vzDmQDU4vLSbv8aoNWBo=
+# Every target is phony. VERSION/COMMIT/DATE use ?= so CI can override them.
 
-# k3d cluster name (override on the command line: `make k3d-bootstrap CLUSTER=foo`).
-CLUSTER     ?= astronomer-mgmt
+.PHONY: help dev dev-down dev-status dev-logs build test test-integration lint vet fmt \
+        generate sqlc migrate migrate-down check security gosec govulncheck secrets-scan \
+        fips-build updates docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
+        frontend-check clean $(BINARIES)
 
-DOCKER_BUILD_ARGS = \
-    --build-arg VERSION=$(VERSION) \
-    --build-arg GIT_COMMIT=$(GIT_COMMIT) \
-    --build-arg BUILD_DATE=$(BUILD_DATE)
+SHELL := /bin/bash
 
-# ── Targets ──────────────────────────────────────────────────────────────────
+# ── Build identity ───────────────────────────────────────────────────────────
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+MODULE      = github.com/alphabravocompany/astronomer-go
+# The Go toolchain version is derived from go.mod — the Dockerfiles declare
+# `ARG GO_VERSION` with no default so an image can never drift from go.mod.
+GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod)
+BINARIES   := server worker agent astro
+
+GO_LDFLAGS  = -s -w \
+              -X $(MODULE)/pkg/version.Version=$(VERSION) \
+              -X $(MODULE)/pkg/version.GitCommit=$(GIT_COMMIT) \
+              -X $(MODULE)/pkg/version.BuildDate=$(BUILD_DATE)
+FIPS_LDFLAGS = $(GO_LDFLAGS) -X $(MODULE)/pkg/version.FIPSMode=true
+
+# ── Pinned tools (go run keeps them lockfile-independent and reproducible) ──
+SQLC_VERSION        ?= v1.31.1
+GOSEC_VERSION       ?= v2.29.0
+GOVULNCHECK_VERSION ?= v1.9.0
+GOTESTSUM_VERSION   ?= v1.13.0
+GOLANGCI_LINT       ?= golangci-lint
+GOTESTSUM           ?= go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION)
+SQLC                ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+OAPI_CODEGEN        ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
+TEST_RESULTS_DIR    ?= test-results
+
+# ── Images ───────────────────────────────────────────────────────────────────
+IMG_REGISTRY ?= ghcr.io/alphabravo-oss
+IMG_TAG      ?= $(VERSION)
+IMAGES       := server worker agent migrate shell dr frontend
+DOCKER_BUILD_ARGS = --build-arg GO_VERSION=$(GO_VERSION) \
+                    --build-arg VERSION=$(VERSION) \
+                    --build-arg GIT_COMMIT=$(GIT_COMMIT) \
+                    --build-arg BUILD_DATE=$(BUILD_DATE)
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_%-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build all binaries to bin/
+# ── Dev loop ─────────────────────────────────────────────────────────────────
+dev: ## Start the full local stack (Postgres, Redis, telemetry, Air server/worker, Vite)
+	./scripts/dev.sh up
+
+dev-down: ## Stop the local stack
+	./scripts/dev.sh down
+
+dev-status: ## Show local stack status
+	./scripts/dev.sh status
+
+dev-logs: ## Tail local stack logs
+	./scripts/dev.sh logs
+
+# ── Build ────────────────────────────────────────────────────────────────────
+build: $(BINARIES) ## Build all production binaries under bin/
+
+$(BINARIES):
 	@mkdir -p bin
-	go build -ldflags '$(LDFLAGS)' -o bin/server   ./cmd/server
-	go build -ldflags '$(LDFLAGS)' -o bin/worker   ./cmd/worker
-	go build -ldflags '$(LDFLAGS)' -o bin/agent    ./cmd/agent
-	go build -ldflags '$(LDFLAGS)' -o bin/astro    ./cmd/astro
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/$@ ./cmd/$@
 
-test: ## Run tests with race detector
-	go test -race -count=1 ./...
+fips-build: ## Build FIPS-mode binaries (GOEXPERIMENT=boringcrypto, -tags fips) under bin/fips/
+	@mkdir -p bin/fips
+	@for b in $(BINARIES); do \
+		echo "fips-build $$b"; \
+		GOEXPERIMENT=boringcrypto CGO_ENABLED=1 go build -trimpath -tags fips -ldflags "$(FIPS_LDFLAGS)" -o bin/fips/$$b ./cmd/$$b || exit 1; \
+	done
 
-test-postgres-integration: ## Execute every PostgreSQL-gated integration contract; unexpected skips fail
-	./scripts/test-postgres-integration.sh
+# ── Test ─────────────────────────────────────────────────────────────────────
+test: ## Unit tests (no Docker) with race detector, JUnit XML in test-results/
+	@mkdir -p $(TEST_RESULTS_DIR)
+	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/unit.xml -- -race -count=1 ./...
 
-test-worker-runtime-integration: ## Exercise worker ownership and crash recovery with disposable PostgreSQL and Redis
-	./scripts/test-worker-runtime-integration.sh
+test-integration: ## Integration tests behind the `integration` build tag (real Postgres/Redis)
+	@mkdir -p $(TEST_RESULTS_DIR)
+	$(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration ./...
 
-test-redis-outage-recovery: ## Prove durable task/audit recovery across a disposable Redis outage
-	./scripts/test-redis-outage-recovery.sh
+e2e: e2e-live ## Alias for e2e-live
 
-test-process-restart-qualification: ## Prove server/worker restart convergence with disposable PostgreSQL and Redis
-	./scripts/test-process-restart-qualification.sh
+e2e-live: ## Playwright live suite against the running dev stack (scripts/dev.sh up first)
+	cd frontend && npx playwright test --config=playwright.live.config.ts
 
-test-postgres-outage-qualification: ## Prove high-risk mutations fail closed during a disposable PostgreSQL outage
-	./scripts/test-postgres-outage-qualification.sh
+# ── Quality gates ────────────────────────────────────────────────────────────
+lint: ## golangci-lint v2 (STANDARD preset + repo policy in .golangci.yml)
+	$(GOLANGCI_LINT) run ./...
 
-test-postgres-failover-certification: ## Measure PostgreSQL streaming failover RPO/RTO with retained evidence
-	./scripts/test-postgres-failover-certification.sh
-
-test-postgres-failover-static: ## Validate the PostgreSQL failover certification runner contract
-	./scripts/tests/postgres-failover-runner-test.sh
-
-test-live-browser: ## Run three browser engines against a fresh owned PostgreSQL/Valkey app stack per engine
-	./scripts/test-live-browser-matrix.sh
-
-test-live-browser-static: ## Validate the disposable live-browser runner without starting dependencies
-	./scripts/tests/live-browser-runner-test.sh
-
-lint: ## Run the pinned golangci-lint — the same gate scripts/verify-enterprise.sh backend runs
-	GOLANGCI_LINT_VERSION=$(GOLANGCI_LINT_VERSION) ./scripts/check-go-lint.sh
-
-check-migrations: ## Lint migrations for blocking DDL and expand/migrate/contract policy
-	./scripts/check-migrations.sh
-	./scripts/check-migrations-test.sh
-
-images.txt: ## Regenerate deploy/chart/images.txt — list of every image the chart pulls (T23)
-	./scripts/extract-images.sh > deploy/chart/images.txt
-	@echo ""
-	@echo "deploy/chart/images.txt updated. Commit alongside any chart values change that adds/removes an image."
-
-fmt: ## Format Go source files
-	go fmt ./...
-
-vet: ## Vet Go source files
+vet: ## go vet
 	go vet ./...
 
-vulncheck: ## Scan reachable Go code with the pinned govulncheck release
-	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+fmt: ## Verify gofmt (does not modify files)
+	@out="$$(gofmt -l $$(git ls-files '*.go' | grep -v '^internal/db/sqlc/' | grep -v '\.gen\.go$$'))"; \
+	if [ -n "$$out" ]; then echo "gofmt needed on:"; echo "$$out"; exit 1; fi
 
-openapi-embed: ## Sync the served spec asset from the source-of-truth docs/openapi.yaml
+frontend-check: ## Frontend type-check, lint, unit tests
+	cd frontend && npm run type-check && npm run lint && npm test
+
+frontend-build: ## Production frontend bundle
+	cd frontend && npm run build
+
+check: lint vet fmt build test ## Composite gate: lint vet fmt build test
+
+# ── Generation ───────────────────────────────────────────────────────────────
+sqlc: ## Regenerate sqlc output from internal/db/queries
+	$(SQLC) generate
+
+generate: sqlc ## Regenerate every checked-in artifact (sqlc, OpenAPI types/client, Go SDK)
 	cp docs/openapi.yaml internal/handler/assets/openapi.yaml
-
-openapi-generate: ## Deterministically sync routes, frontend operations/types, embedded spec, and Go SDK
-	node scripts/sync-openapi-routes.mjs --write
-	node scripts/openapi-quality.mjs
 	python3 scripts/categorical-contracts.py write
 	node scripts/generate-openapi-types.mjs --write
 	node scripts/generate-openapi-client.mjs --write
-	$(MAKE) openapi-embed
-	$(MAKE) sdk
-
-openapi-compatibility: ## Lint OpenAPI and compare it with OPENAPI_BASELINE (default HEAD)
-	node scripts/openapi-spectral.mjs
-	./scripts/openapi-breaking-change.sh
-
-verify: ## Run the focused API contract gate used by CI
-	./scripts/verify-enterprise.sh api-contract
-
-VERIFY_SCOPE ?= all
-verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
-	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
-
-verify-all: ## Run static, stateful, race, failover, and browser qualification lanes
-	$(MAKE) verify-enterprise VERIFY_SCOPE=all
-	$(MAKE) test-postgres-integration
-	POSTGRES_INTEGRATION_RACE=1 $(MAKE) test-postgres-integration
-	$(MAKE) test-worker-runtime-integration
-	WORKER_INTEGRATION_RACE=1 $(MAKE) test-worker-runtime-integration
-	$(MAKE) test-process-restart-qualification
-	PROCESS_RESTART_QUALIFICATION_RACE=1 $(MAKE) test-process-restart-qualification
-	$(MAKE) test-redis-outage-recovery
-	REDIS_OUTAGE_RECOVERY_RACE=1 $(MAKE) test-redis-outage-recovery
-	$(MAKE) test-postgres-outage-qualification
-	POSTGRES_OUTAGE_QUALIFICATION_RACE=1 $(MAKE) test-postgres-outage-qualification
-	./scripts/test-tunnel-queue-ha.sh
-	$(MAKE) test-postgres-failover-certification
-	cd frontend && npm run test:e2e && npm run test:e2e:smoke && npm run test:e2e:visual
-	$(MAKE) test-live-browser
-
-$(LOCAL_CI_BIN): tools/local-ci/package.json tools/local-ci/package-lock.json
-	npm ci --prefix tools/local-ci
-
-local-ci-install: $(LOCAL_CI_BIN) ## Install the lockfile-pinned Local CI runner
-	node tools/local-ci/apply-runner-patch.mjs
-	npm test --prefix tools/local-ci
-
-local-ci-pr: local-ci-install ## Run the complete pull-request workflow locally before pushing
-	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \
-		--workflow .github/workflows/pr-validation.yaml \
-		--jobs $(LOCAL_CI_JOBS) \
-		--prewarm-through $(LOCAL_CI_PREWARM)
-
-local-ci-pr-representative: local-ci-install ## Run one representative entry from each PR matrix locally
-	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \
-		--workflow .github/workflows/pr-validation.yaml \
-		--no-matrix \
-		--jobs $(LOCAL_CI_JOBS) \
-		--prewarm-through $(LOCAL_CI_PREWARM)
-
-docs-check: ## Validate current documentation links, classification, and terminology
-	node scripts/check-docs.mjs
-	node scripts/check-complexity-budget.mjs
-	node scripts/check-dependency-boundaries.mjs
-	node scripts/test-flake-report.mjs --validate
-	node scripts/security-wave-review.mjs
-
-check-build-capacity: ## Refuse build/release work when filesystem headroom is unsafe
-	./scripts/check-build-capacity.sh --path .
-
-release-contract-check: ## Verify deterministic release, Flux/bundle, image, and air-gap contracts
-	./scripts/check-build-capacity.sh --path .
-	./scripts/compatibility-contract.py check
-	python3 -m unittest scripts/tests/release_manifest_test.py scripts/tests/mirror_release_test.py scripts/tests/resolve_release_images_test.py scripts/tests/airgap_kit_test.py scripts/tests/validate_release_approval_test.py scripts/tests/validate_automated_release_test.py scripts/tests/verify_release_metadata_test.py scripts/tests/v201_manifest_recovery_test.py scripts/tests/qualify_release_runtime_images_test.py
-	./scripts/tests/release_artifacts_test.sh
-	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; ./scripts/extract-images.sh >"$$tmp"; diff -u deploy/chart/images.txt "$$tmp"
-	go test ./deploy/bundles ./internal/releasecontract ./deploy -run 'TestRelease|TestInterruptedRelease|TestExactRelease|TestSixImage|TestPromotion|TestV120' -count=1
-
-airgap-plan: ## Plan immutable release mirroring and exact Helm values (four variables required)
-	@test -n "$(MANIFEST)" -a -n "$(DESTINATION_REGISTRY)" -a -n "$(OUTPUT)" -a -n "$(VALUES_OUTPUT)" || \
-		{ echo 'MANIFEST, DESTINATION_REGISTRY, OUTPUT, and VALUES_OUTPUT are required' >&2; exit 2; }
-	./scripts/mirror-release.py plan --manifest "$(MANIFEST)" --destination-registry "$(DESTINATION_REGISTRY)" --output "$(OUTPUT)" --values-output "$(VALUES_OUTPUT)"
-
-verify-agent-identity-live: ## Run live credential SSA/RBAC acceptance (AGENT_IDENTITY_TEST_CONTEXT required)
-	./scripts/verify-agent-identity-rbac.sh
-
-run: ## Run the server locally
-	go run -ldflags '$(LDFLAGS)' ./cmd/server
-
-error-codes: ## Regenerate docs/error-codes.md from internal/handler/apierror/codes.go
-	node scripts/error-code-docs.mjs --write
-
-error-codes-check: ## Fail if docs/error-codes.md is stale vs the apierror catalog
-	node scripts/error-code-docs.mjs --check
-
-cli-docs: ## Regenerate the astro CLI reference from the Cobra command tree
-	node scripts/generate-cli-docs.mjs --write
-
-cli-docs-check: ## Fail if docs/cli.md is stale vs the Cobra command tree
-	node scripts/generate-cli-docs.mjs
-
-.PHONY: install-hooks
-install-hooks: ## Enable the index-aware frontend formatting pre-commit hook
-	git config core.hooksPath .githooks
-
-config-docs: ## Regenerate the configuration reference and environment example
-	node scripts/generate-config-docs.mjs --write
-
-config-docs-check: ## Check configuration docs, environment example and generator tests
-	node scripts/generate-config-docs.mjs
-	node --test scripts/generate-config-docs.test.mjs
-
-sqlc-generate: ## Generate sqlc code
-	$(SQLC) generate
-	python3 ./scripts/generate-sqlc-extensions.py write
-
-sqlc: sqlc-generate ## Alias for sqlc-generate
-
-sqlc-check: ## Regenerate sqlc and fail if generated files are stale
-	SQLC_VERSION=$(SQLC_VERSION) ./scripts/check-sqlc-generated.sh
-
-sqlc-extensions-generate: ## Generate isolated legacy sqlc extension adapters
-	python3 ./scripts/generate-sqlc-extensions.py write
-
-sqlc-extensions-check: ## Verify isolated legacy sqlc extension adapters
-	python3 ./scripts/generate-sqlc-extensions.py check
-
-data-governance-check: ## Verify JSON writer and destructive-delete ownership inventories
-	python3 ./scripts/check-data-governance.py
-
-.PHONY: versions-check versions-generate versions-release-check updates
-versions-check: ## Validate selected versions and all generated consumers offline
-	python3 scripts/toolchain.py --check
-	python3 -m unittest discover -s scripts/tests -p 'toolchain*test.py'
-
-versions-generate: ## Explicitly regenerate version consumers from reviewed authority
-	python3 scripts/toolchain.py --write
-
-versions-release-check: ## Reject missing or stale discovery and expired exceptions
-	test -n "$(TOOLCHAIN_RESOLUTION)" && test -n "$(TOOLCHAIN_RESOLUTION_BUNDLE)"
-	python3 scripts/toolchain-resolution.py --verify --record "$(TOOLCHAIN_RESOLUTION)" --bundle "$(TOOLCHAIN_RESOLUTION_BUNDLE)"
-
-updates: ## Discover final upstream releases without changing selected versions
-	python3 scripts/toolchain.py --discover --output .artifacts/toolchain-updates.json
-
-sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml
 
-sdk-check: ## Regenerate the Go SDK in a temporary directory and fail on drift
-	OAPI_CODEGEN_VERSION=$(OAPI_CODEGEN_VERSION) ./scripts/check-go-sdk-generated.sh
+# ── Migrations ───────────────────────────────────────────────────────────────
+DATABASE_URL ?= postgres://astronomer:astronomer@localhost:15432/astronomer?sslmode=disable
+migrate: ## Apply pending migrations (DATABASE_URL)
+	go run ./cmd/migrator -database "$(DATABASE_URL)" -path internal/db/migrations up
 
-charlie-contract-generate: ## Generate the pinned local Product Bridge client
-	cd internal/charlie/contract && go generate ./...
+migrate-down: ## Roll back one migration (DATABASE_URL)
+	go run ./cmd/migrator -database "$(DATABASE_URL)" -path internal/db/migrations down 1
 
-charlie-contract-check: ## Verify Charlie pins and fail on generated-client drift
-	./scripts/check-charlie-contract-generated.sh
+# ── Security gates (guide ch.06) ─────────────────────────────────────────────
+security: gosec govulncheck secrets-scan ## gosec (fail on HIGH) + govulncheck + gitleaks full history
 
-migrate-up: ## Run all migrations up
-	migrate -database "$(DATABASE_URL)" -path internal/db/migrations up
+gosec: ## gosec SARIF, fails on HIGH severity findings
+	@mkdir -p $(TEST_RESULTS_DIR)
+	go run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) -quiet -fmt sarif -out $(TEST_RESULTS_DIR)/gosec.sarif \
+		-severity high -confidence medium -exclude-dir internal/db/sqlc -exclude-dir pkg/astroclient ./...
 
-migrate-down: ## Roll back one migration
-	migrate -database "$(DATABASE_URL)" -path internal/db/migrations down 1
+govulncheck: ## govulncheck SARIF on the shipping Go toolchain
+	@mkdir -p $(TEST_RESULTS_DIR)
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -format sarif -scan symbol ./... > $(TEST_RESULTS_DIR)/govulncheck.sarif
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -scan symbol ./...
 
-migrate-create: ## Create a new migration (NAME=<name>)
-	@if [ -z "$(NAME)" ]; then echo "Usage: make migrate-create NAME=<name>"; exit 1; fi
-	migrate create -ext sql -dir internal/db/migrations -seq $(NAME)
+secrets-scan: ## gitleaks over the full commit history
+	gitleaks git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=--all .
 
-# ── Docker images ────────────────────────────────────────────────────────────
+updates: ## Pending dependency upgrades (Go modules + npm)
+	go list -u -m all 2>/dev/null | grep '\[' || true
+	cd frontend && npm outdated || true
 
-validate-image-version:
-	@version='$(VERSION)'; version="$${version#v}"; \
-	if ! printf '%s\n' "$$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$$'; then \
-		echo "VERSION=$(VERSION) is not strict semantic versioning; agent connections would be rejected" >&2; \
-		echo "use a value such as 1.2.1-local.1 (IMG_TAG may be set independently)" >&2; \
-		exit 1; \
-	fi
+# ── Container images ─────────────────────────────────────────────────────────
+docker-build: $(addprefix docker-build-,$(IMAGES)) ## Build every production image
 
-docker-build-server: validate-image-version ## Build server image
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.server -t $(IMG_SERVER) .
+docker-build-frontend: ## Build the frontend image
+	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) \
+		-f frontend/Dockerfile -t $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG) frontend
 
-docker-build-agent: validate-image-version ## Build agent image
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.agent  -t $(IMG_AGENT)  .
+docker-build-%: ## Build one image: docker-build-server|worker|agent|migrate|shell|dr
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/astronomer-go-$*:$(IMG_TAG) .
 
-docker-build-worker: validate-image-version ## Build worker image
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.worker -t $(IMG_WORKER) .
+helm-lint: ## helm lint + template dry-run of deploy/chart
+	helm lint deploy/chart
+	helm template astronomer deploy/chart > /dev/null
 
-docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.migrate -t $(IMG_MIGRATE) .
-
-docker-build-frontend: ## Build frontend (Vite dashboard) image from frontend/
-	docker build $(DOCKER_BUILD_ARGS) -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
-
-docker-build-shell: ## Build astronomer-shell (in-cluster kubectl shell pod) image
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.shell -t $(IMG_SHELL) .
-
-docker-build-dr: ## Build authenticated management backup/restore image
-	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.dr -t $(IMG_DR) .
-
-docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr ## Build all images
-
-# Backward-compat alias: `make docker-build` still builds the server image.
-docker-build: docker-build-server ## (alias) build server image
-
-# ── k3d helpers ──────────────────────────────────────────────────────────────
-
-k3d-load: ## Import a Docker image into the k3d cluster (IMG=<image:tag> CLUSTER=<name>)
-	@if [ -z "$(IMG)" ]; then echo "Usage: make k3d-load IMG=astronomer-go-server:dev [CLUSTER=$(CLUSTER)]"; exit 1; fi
-	k3d image import $(IMG) -c $(CLUSTER)
-
-k3d-import-all: docker-build-all ## Build & import all images into k3d
-	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) $(IMG_SHELL) $(IMG_DR) -c $(CLUSTER)
-
-k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLUSTER))
-	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) IMG_REGISTRY=$(IMG_REGISTRY) ./scripts/k3d-bootstrap.sh
-
-validate-live-b6: ## Validate live cluster.k8s_changed SSE flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-b6.sh
-
-validate-live-cloud-acceptance: ## Protected EKS/GKE/AKS/DOKS adopted-cluster allow-list rehearsal
-	@test -n "$(CLOUD_ACCEPTANCE_TARGETS)" || { echo 'CLOUD_ACCEPTANCE_TARGETS is required' >&2; exit 2; }
-	./scripts/validate-cloud-acceptance.py
-
-validate-live-delivery: ## Run Plan 007 W11-04 live delivery matrix (DELIVERY_MATRIX required)
-	@test -n "$(DELIVERY_MATRIX)" || { echo 'DELIVERY_MATRIX is required' >&2; exit 2; }
-	./scripts/validate-live-delivery.sh --matrix "$(DELIVERY_MATRIX)"
-
-validate-live-dex: ## Validate live Dex connector apply + redirect flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-dex.sh
-
-validate-live-dex-oidc: ## Validate live Dex external OIDC callback flow (requires docker; set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-dex-oidc.sh
-
-validate-live-generic-oidc: ## Validate live direct generic OIDC callback flow (requires docker; set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-generic-oidc.sh
-
-validate-live-velero: ## Validate live Velero backup + restore flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-velero.sh
-
-validate-live-cis: ## Validate live CIS scan + report ingestion flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-cis.sh
-
-validate-live-oci: ## Validate live OCI catalog create/sync/install flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-oci.sh
-
-smoke-fresh-cluster: ## Walk the full wizard against a fresh k3d cluster (requires ASTRO_PASSWORD)
-	./scripts/smoke-fresh-cluster.sh
-
-validate-live-projects: ## Validate live project enforcement + audit flow (set AUTH_TOKEN or ASTRO_USERNAME/ASTRO_PASSWORD)
-	./scripts/validate-live-projects.sh
-
-# ── Helm / kubectl ───────────────────────────────────────────────────────────
-
-helm-install: ## Install/upgrade the Helm chart (CLUSTER=$(CLUSTER) NAMESPACE=astronomer)
-	helm upgrade --install astronomer deploy/chart \
-		--namespace $${NAMESPACE:-astronomer} --create-namespace \
-		-f deploy/chart/values.yaml \
-		--set image.server.registry=$(IMG_REGISTRY) \
-		--set image.worker.registry=$(IMG_REGISTRY) \
-		--set image.agent.registry=$(IMG_REGISTRY) \
-		--set image.migrate.registry=$(IMG_REGISTRY) \
-		--set frontend.image.registry=$(IMG_REGISTRY) \
-		--set preflight.image.registry=$(IMG_REGISTRY) \
-		--set image.server.tag=$(IMG_TAG) \
-		--set image.worker.tag=$(IMG_TAG) \
-		--set image.agent.tag=$(IMG_TAG) \
-		--set image.migrate.tag=$(IMG_TAG) \
-		--set frontend.image.tag=$(IMG_TAG) \
-		--set preflight.image.tag=$(IMG_TAG) \
-		--set-string kubectlShell.image=$(IMG_SHELL) \
-		--set-string secrets.secretKey=$(HELM_SECRET_KEY) \
-		--set-string secrets.encryptionKey=$(HELM_ENCRYPTION_KEY)
-
-helm-uninstall: ## Uninstall the Helm release
-	helm uninstall astronomer --namespace $${NAMESPACE:-astronomer}
-
-k8s-apply: ## Apply the raw manifests in deploy/k8s/
-	kubectl apply -f deploy/k8s/
-
-k8s-delete: ## Delete the raw manifests in deploy/k8s/
-	kubectl delete -f deploy/k8s/ --ignore-not-found
-
-# ── Dev (docker compose) ─────────────────────────────────────────────────────
-
-clean: ## Remove build artifacts
-	rm -rf bin/
-
-dev: ## Start backend dependencies for local Vite development
-	docker compose -f deploy/docker-compose.yml up -d
-
-dev-full: ## Start backend and containerized frontend
-	docker compose -f deploy/docker-compose.yml --profile frontend up -d
-
-dev-reload: ## Rebuild and replace the migrator, server, and worker after Go/SQL changes
-	docker compose -f deploy/docker-compose.yml up -d --build migrate server worker
-
-dev-down: ## Stop dev environment
-	docker compose -f deploy/docker-compose.yml down
-
-dev-clean: ## Stop dev environment and remove volumes
-	docker compose -f deploy/docker-compose.yml down -v
-
-# ── Load test ───────────────────────────────────────────────────────────────
-# Synthetic-agent + HTTP workload driver. Tune via LOADTEST_* env vars; output
-# is a markdown report containing a greppable `VERDICT: pass|fail` line plus
-# per-scenario p50/p95/p99 and a server resource snapshot. See
-# scripts/loadtest/README.md and docs/scale-baseline.md.
-LOADTEST_SERVER   ?= http://localhost:8080
-LOADTEST_CLUSTERS ?= 50
-LOADTEST_RPS      ?= 100
-LOADTEST_DURATION ?= 5m
-LOADTEST_OUT      ?= loadtest-report-$(shell date +%Y%m%d).md
-LOADTEST_TOKEN    ?=
-
-load-test: ## Run the load-test harness (see scripts/loadtest/README.md)
-	@LOADTEST_SERVER='$(LOADTEST_SERVER)' \
-	 LOADTEST_CLUSTERS='$(LOADTEST_CLUSTERS)' \
-	 LOADTEST_RPS='$(LOADTEST_RPS)' \
-	 LOADTEST_DURATION='$(LOADTEST_DURATION)' \
-	 LOADTEST_OUT='$(LOADTEST_OUT)' \
-	 LOADTEST_TOKEN='$(LOADTEST_TOKEN)' \
-	 go run ./scripts/loadtest
-
-categorical-contract-check: ## Verify canonical category/database/model/browser parity
-	python3 scripts/categorical-contracts.py check
-	python3 -m unittest discover -s scripts/tests -p categorical_contract_test.py
-
-sdk-v1-compatibility: ## Compile every released SDK field/function/method against current SDK
-	./scripts/check-sdk-v1-compatibility.sh
-
-.PHONY: support-matrix-check
-support-matrix-check: ## Validate scoped support claims and executable qualification lanes
-	python3 scripts/runtime-qualification-matrix.py --check
-	python3 -m unittest discover -s scripts/tests -p 'runtime_qualification_matrix_test.py'
+clean: ## Remove build and test output
+	rm -rf bin tmp $(TEST_RESULTS_DIR) frontend/dist frontend/e2e-results

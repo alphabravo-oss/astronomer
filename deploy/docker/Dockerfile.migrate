@@ -1,22 +1,21 @@
-# syntax=docker/dockerfile:1.6
-# ── Migrate image ─────────────────────────────────────────────────────────────
-# Build the repository-owned migration wrapper on the same Go toolchain as the
-# other first-party images. It takes a database-scoped session lock before
-# golang-migrate touches schema state, preventing concurrent installer
-# deadlocks around non-transactional PostgreSQL DDL.
-FROM golang:1.27.2-alpine@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS builder
+# syntax=docker/dockerfile:1.7
+# Migrate image: the repository-owned migration runner (cmd/migrator) takes a
+# database-scoped advisory lock before golang-migrate touches schema state.
+# Scheduled for deletion in Phase 1 (goose embedded in the server binary).
+ARG GO_VERSION
+FROM golang:${GO_VERSION}-alpine AS builder
 RUN apk add --no-cache git
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd/migrator ./cmd/migrator
-ARG VERSION=2.0.1
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildVersion=${VERSION}" \
-    -o /out/migrate ./cmd/migrator
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildVersion=${VERSION}" -o /out/migrate ./cmd/migrator
 
-FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
-ARG VERSION=2.0.1
+ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
@@ -25,13 +24,10 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-RUN apk add --no-cache ca-certificates
-
 COPY --from=builder /out/migrate /usr/local/bin/migrate
-COPY internal/db/migrations/*.sql /migrations/
-RUN chmod 0755 /usr/local/bin/migrate && chmod 0644 /migrations/*.sql
+COPY --chmod=0644 internal/db/migrations/*.sql /migrations/
 
-USER nobody
+USER 65532:65532
 
-ENTRYPOINT ["migrate"]
+ENTRYPOINT ["/usr/local/bin/migrate"]
 CMD ["-help"]

@@ -3,16 +3,14 @@ global:
   evaluation_interval: 10s
 
 scrape_configs:
+  # The Go binaries run on the host under Air (scripts/dev.sh); the compose
+  # network reaches them through host.docker.internal.
   - job_name: astronomer-server
     static_configs:
-      - targets: ["server:9090"]
+      - targets: ["host.docker.internal:9090"]
   - job_name: astronomer-worker
     static_configs:
-      - targets: ["worker:9090"]
+      - targets: ["host.docker.internal:9091"]
   - job_name: telemetry-stack
     static_configs:
-      - targets:
-          - "tempo:3200"
-          - "loki:3100"
-          - "promtail:9080"
-          - "grafana:3000"
+      - targets: ["tempo:3200", "loki:3100", "alloy:12345", "grafana:3000"]

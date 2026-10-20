@@ -1,41 +1,38 @@
+# syntax=docker/dockerfile:1.7
 # ── Build stage ───────────────────────────────────────────────────────────────
-FROM golang:1.27.2-alpine@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS builder
+# GO_VERSION is derived from go.mod by the Makefile (make docker-build-server) and
+# has no default on purpose: an image can never drift from go.mod (guide ch.04).
+ARG GO_VERSION
+FROM golang:${GO_VERSION}-alpine AS builder
 
 RUN apk add --no-cache git
 
 WORKDIR /src
 
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
 
-ARG VERSION=2.0.1
+ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
-RUN CGO_ENABLED=0 go build \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build \
     -trimpath \
     -ldflags "-s -w \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=${GIT_COMMIT} \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
-    -o /bin/server ./cmd/server
-
-# Build the optional measurement helper from the exact same candidate source.
-# Released server images without this binary remain unqualified for the role.
-RUN CGO_ENABLED=0 go build \
-    -trimpath \
-    -ldflags "-s -w \
-      -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \
-      -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=${GIT_COMMIT} \
-      -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
-    -o /bin/database-cache-helper ./cmd/database-cache-helper
+    -o /out/server ./cmd/server
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+# distroless static: CA bundle + tzdata + nonroot user, no shell, no package
+# manager. Pinned by digest (guide ch.04).
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
-ARG VERSION=2.0.1
+ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
@@ -44,13 +41,10 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-RUN apk add --no-cache ca-certificates tzdata
+COPY --from=builder /out/server /usr/local/bin/server
+# API listener (SERVER_ADDR, default :8000); metrics on SERVER_METRICS_ADDR (:9090).
+EXPOSE 8000 9090
 
-COPY --from=builder /bin/server /usr/local/bin/server
-COPY --from=builder /bin/database-cache-helper /usr/local/bin/database-cache-helper
+USER 65532:65532
 
-USER nobody
-
-EXPOSE 8000
-
-ENTRYPOINT ["server"]
+ENTRYPOINT ["/usr/local/bin/server"]

@@ -1,147 +1,114 @@
+# Local development backing services (guide ch.04/05). The Go binaries and the
+# dashboard run on the host under Air/Vite (scripts/dev.sh); this file owns only
+# Postgres, Redis and the telemetry stack. Images are tag-pinned here (dev
+# stack); production images are digest-pinned in the Helm chart.
+name: astronomer-dev
+
+x-telemetry: &telemetry
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  networks: [astronomer]
+
 services:
   postgres:
-    image: postgres:16-alpine
-    # Port offset from default (5432->5433) to allow co-existence with the Python stack
-    ports:
-      - "5433:5432"
+    # Same major as production CNPG (17.x); integration tests use the same tag.
+    image: postgres:17.11-alpine
+    ports: ["${DEV_PG_PORT:-15432}:5432"]
     environment:
       POSTGRES_USER: astronomer
       POSTGRES_PASSWORD: astronomer
       POSTGRES_DB: astronomer
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    volumes: [postgres_data:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U astronomer"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    networks:
-      - astronomer-go
+      retries: 10
+    networks: [astronomer]
 
   redis:
-    image: redis:7-alpine
-    # Port offset from default (6379->6380) to allow co-existence with the Python stack
-    ports:
-      - "6380:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
+    image: redis:8.10.2-alpine
+    ports: ["${DEV_REDIS_PORT:-16379}:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis_data:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    networks:
-      - astronomer-go
+      retries: 10
+    networks: [astronomer]
 
-  migrate:
-    build:
-      context: ../
-      dockerfile: deploy/docker/Dockerfile.migrate
-    image: astronomer-go-migrate:dev
+  tempo:
+    <<: *telemetry
+    image: grafana/tempo:3.1.0
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./telemetry/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"   # OTLP gRPC (default exporter target)
+      - "4318:4318"   # OTLP HTTP (opt-in via OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf)
+
+  loki:
+    <<: *telemetry
+    image: grafana/loki:3.7.8
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./telemetry/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/var/loki
+    ports: ["3100:3100"]
+
+  alloy:
+    # Grafana Alloy replaces the EOL Promtail: tails the Air/Vite log files the
+    # dev script writes under tmp/logs and ships them to Loki.
+    <<: *telemetry
+    image: grafana/alloy:v1.21.0
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./telemetry/alloy.alloy:/etc/alloy/config.alloy:ro
+      - ../tmp/logs:/var/log/astronomer:ro
+      - alloy_data:/var/lib/alloy/data
+    ports: ["12345:12345"]
+    depends_on: [loki]
+
+  prometheus:
+    <<: *telemetry
+    image: prom/prometheus:v3.15.0
     command:
-      - "-database"
-      - "postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable"
-      - "-path"
-      - "/migrations"
-      - "up"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-    networks:
-      - astronomer-go
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=24h
+      - --web.enable-lifecycle
+    volumes:
+      - ./telemetry/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus_data:/prometheus
+    ports: ["${DEV_PROMETHEUS_PORT:-9092}:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
 
-  server:
-    build:
-      context: ../
-      dockerfile: deploy/docker/Dockerfile.server
-    image: astronomer-go-server:dev
-    # Port offset from default (8000->8001) to allow co-existence with the Python stack
-    ports:
-      - "8001:8000"
+  grafana:
+    <<: *telemetry
+    image: grafana/grafana:13.2.4
     environment:
-      DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: local-dev-secret-key-change-in-production
-      ASTRONOMER_ENCRYPTION_KEY: RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=
-      ENV: development
-      DEBUG: "true"
-      ALLOWED_HOSTS: "*"
-      CORS_ALLOWED_ORIGINS: http://localhost:3000
-      LOG_LEVEL: debug
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health/ || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - astronomer-go
-
-  worker:
-    build:
-      context: ../
-      dockerfile: deploy/docker/Dockerfile.worker
-    image: astronomer-go-worker:dev
-    environment:
-      DATABASE_URL: postgres://astronomer:astronomer@postgres:5432/astronomer?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: local-dev-secret-key-change-in-production
-      ASTRONOMER_ENCRYPTION_KEY: RX3rwYkQNmaSq4_UmGs7sPXONIjnB-M6q0gZtB79vQA=
-      ENV: development
-      LOG_LEVEL: debug
-      AGENT_IMAGE_REPOSITORY: astronomer-go-agent
-      AGENT_IMAGE_TAG: dev
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    networks:
-      - astronomer-go
-
-  frontend:
-    profiles: ["frontend"]
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-    image: astronomer-frontend:dev
-    ports:
-      - "3000:3000"
-    depends_on:
-      - server
-    networks:
-      - astronomer-go
-
-  # Optional reverse proxy (enable with --profile nginx).
-  nginx:
-    profiles: ["nginx"]
-    build:
-      context: ../
-      dockerfile: deploy/nginx/Dockerfile.nginx
-    image: astronomer-go-nginx:dev
-    ports:
-      - "8080:80"
-    depends_on:
-      server:
-        condition: service_healthy
-    networks:
-      - astronomer-go
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    volumes:
+      - ./telemetry/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports: ["${DEV_GRAFANA_PORT:-3001}:3000"]
+    depends_on: [tempo, loki, prometheus]
 
 volumes:
   postgres_data:
   redis_data:
+  tempo_data:
+  loki_data:
+  alloy_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
-  astronomer-go:
-    name: astronomer-go
+  astronomer:
+    name: astronomer-dev

@@ -1,0 +1,34 @@
+// Grafana Alloy: ship the dev stack's JSON log files to Loki.
+local.file_match "astronomer" {
+  path_targets = [{ "__path__" = "/var/log/astronomer/*.log", "job" = "astronomer" }]
+}
+
+discovery.relabel "astronomer" {
+  targets = local.file_match.astronomer.targets
+  rule {
+    source_labels = ["__path__"]
+    regex         = ".*/([^/]+)\\.log"
+    target_label  = "service"
+  }
+}
+
+loki.source.file "astronomer" {
+  targets    = discovery.relabel.astronomer.output
+  forward_to = [loki.process.astronomer.receiver]
+}
+
+loki.process "astronomer" {
+  stage.json {
+    expressions = { level = "level", event = "event" }
+  }
+  stage.labels {
+    values = { level = "", event = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

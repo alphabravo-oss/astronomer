@@ -44,3 +44,10 @@ screenshots/
 
 # Vendored Helm subchart tarballs (rebuilt via `helm dependency build`; Chart.lock pins versions)
 deploy/chart/charts/*
+
+# Dev loop (scripts/dev.sh, Air)
+/tmp/
+/.env.dev.local
+/test-results/
+/frontend/e2e-results/
+/frontend/playwright/.auth/
