@@ -18,8 +18,17 @@ ver_ge() { # ver_ge go1.27.3 1.27.3
 status=0
 for platform in "${platforms[@]}"; do
   dir="$(mktemp -d)"
-  cid="$(docker create --platform "$platform" "$ref" /nonexistent 2>/dev/null)" \
-    || { docker pull -q --platform "$platform" "$ref" >/dev/null; cid="$(docker create --platform "$platform" "$ref" /nonexistent)"; }
+  target="$ref"
+  # A pushed multi-arch index: pull the exact per-platform manifest by digest
+  # (Docker's containerd store refuses a second platform under one index ref).
+  if [[ "$ref" == *@sha256:* ]] && raw="$(docker buildx imagetools inspect --raw "$ref" 2>/dev/null)"; then
+    pd="$(python3 -c 'import json,sys
+d=json.loads(sys.argv[1]); o,a=sys.argv[2].split("/")[:2]
+print(next((m["digest"] for m in d.get("manifests",[]) if m.get("platform",{}).get("os")==o and m.get("platform",{}).get("architecture")==a),""))' "$raw" "$platform")"
+    [ -n "$pd" ] && target="${ref%@*}@$pd"
+  fi
+  docker pull -q --platform "$platform" "$target" >/dev/null 2>&1 || true
+  cid="$(docker create --platform "$platform" "$target" /nonexistent)"
   docker export "$cid" | tar -x -C "$dir" 2>/dev/null || true
   docker rm -f "$cid" >/dev/null
   found=0
