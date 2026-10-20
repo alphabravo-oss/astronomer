@@ -1,6 +1,0 @@
---- FAIL: TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData (0.00s)
-    service_test.go:156: malformed stored strategy became a valid system rollout
-    service_test.go:156: malformed stored strategy became a valid system rollout
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	0.011s
-FAIL

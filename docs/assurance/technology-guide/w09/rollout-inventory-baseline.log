@@ -1,5 +1,0 @@
---- FAIL: TestRolloutInventoryValidatesSeparateStrategyAndFrozenPlan (0.00s)
-    rows_test.go:28: invalid separate strategy missed beside valid frozen plan
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/tools/json-governance	0.011s
-FAIL

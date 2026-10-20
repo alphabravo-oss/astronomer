@@ -1,8 +1,0 @@
-=== RUN   TestControlPlaneCursorProductionRoutesReauthorizeContinuation
-=== RUN   TestControlPlaneCursorProductionRoutesReauthorizeContinuation/alerts
-=== RUN   TestControlPlaneCursorProductionRoutesReauthorizeContinuation/silences
---- PASS: TestControlPlaneCursorProductionRoutesReauthorizeContinuation (0.00s)
-    --- PASS: TestControlPlaneCursorProductionRoutesReauthorizeContinuation/alerts (0.00s)
-    --- PASS: TestControlPlaneCursorProductionRoutesReauthorizeContinuation/silences (0.00s)
-PASS
-ok  	github.com/alphabravocompany/astronomer-go/internal/server	0.061s

@@ -1,9 +1,0 @@
-# Checked pagination consumers
-
-This slice replaces 52 integer casts with the existing checked SQL pagination helpers in 21 handler modules. Authorization, filters, supported offset ranges, and public integer paging metadata remain unchanged. These inputs were already bounded; this refactor does not claim a newly demonstrated vulnerability.
-
-The original characterization failed because its global installed-catalog fixture lacked an explicit global `catalog:read` permission. That failure is retained. After correcting only the fixture permission, all 54 named race-test results passed: two parents, four branches, and 48 cases across outbox list/dead and installed-catalog global/scoped routes. The same inventory passed after the production refactor, with zero skips. Handler vet, cached JSON governance, dependency boundaries, and complexity also passed. Runtime characterization covers those four route families; it does not independently exercise all 21 handlers.
-
-[packet.json](packet.json) indexes 29 lossless gzip artifacts and three complete Git source maps. Each entry records both stored and original byte identities. The original private output directories remain available for independent verification. The packet retains the first fixture failure, corrected baseline, after results, finite runners, initial parser-control failure, and reviewed/applied patches. The unused normal successor runner was never launched; the corrected baseline used the approved race runner.
-
-The before and after runs used the selected Go 1.27.2 binary, retained its identity, held each process-group leader until descendant drain, and passed all immediate, maintained, and final capacity guards. The production change matches all 21 reviewed file bindings and requires no complexity baseline increase. A fresh repository-wide security collection and whole W02 acceptance remain open.

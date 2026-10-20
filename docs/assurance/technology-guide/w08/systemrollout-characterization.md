@@ -1,9 +1,0 @@
-# W08 system rollout characterization
-
-Before SQL movement, four actual PostgreSQL parents characterize creation eligibility and idempotency, mandatory audit rollback for both creation and action, concurrent CAS fencing, and cohort promotion/partial rollback. Fixtures clone the owned database's migrated domain columns/checks/indexes/identity, then use isolated cluster/token projections. They deliberately do not claim full foreign-key or registry-trigger coverage.
-
-The first fixture attempt used identical release spec digests and was corrected to unique valid immutable releases. The retained production baseline run then passed creation, audit failure and concurrent fencing, but failed both cohort subcases: with `MaxConcurrent=1` and `MaxUnavailable=count(1)`, a single queued reconciliation released two assignments. Inspection confirms that the later release condition uses the counts read before the queued branch released its first assignment. This is a concrete observed behavior defect, not a generated-query issue. The SQL has not moved in this baseline commit.
-
-`ASTRONOMER_SYSTEM_ROLLOUT_TEST_DATABASE_URL=<protected owned PostgreSQL 16 DSN> GOMAXPROCS=4 go test -p 2 -count=1 -v ./internal/delivery/systemrollout`: FAIL, cohort release budget exceeded ([baseline log](systemrollout-before.log)). No tests skipped. The following bounded correction must pass these same tests before canonical movement.
-
-The bounded followup updates in-flight/pending counts with the exact rows released by the first write. Later release checks therefore see the same transaction's new assignments and preserve both concurrency and availability budgets. The same full actual PostgreSQL package now passes ([after log](systemrollout-budget-after.log)), and its complete race run passes ([race log](systemrollout-budget-race.log)); zero skips. Complexity remains within existing ceilings. SQL ownership and lock placement remain unchanged in this correction.

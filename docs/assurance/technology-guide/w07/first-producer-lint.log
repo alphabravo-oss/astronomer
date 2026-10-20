@@ -1,5 +1,0 @@
-internal/server/app_distribution_mirror.go:21:18: Error return value of `file.Close` is not checked (errcheck)
-	defer file.Close()
-	                ^
-1 issues:
-* errcheck: 1

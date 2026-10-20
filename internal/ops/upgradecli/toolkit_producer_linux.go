@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strings"
 
-	canonical "github.com/alphabravocompany/astronomer-go/deploy/toolchain"
+	canonical "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli/toolchain"
 )
 
 const installedUpgradeWrapper = `#!/usr/bin/env bash

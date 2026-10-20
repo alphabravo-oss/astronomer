@@ -16,7 +16,7 @@ import (
 	"runtime"
 	"syscall"
 
-	canonical "github.com/alphabravocompany/astronomer-go/deploy/toolchain"
+	canonical "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli/toolchain"
 )
 
 // BootstrapToolkit is derived solely from an authenticated canonical resolution

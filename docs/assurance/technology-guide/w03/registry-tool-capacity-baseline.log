@@ -1,2 +1,0 @@
-{"path":".","mountpoint":"/","total_kib":354066236,"used_kib":271832804,"available_kib":67784156,"available_gib":64,"free_percent":19,"minimum_free_gib":20,"minimum_free_percent":20,"meets_minimum":false}
-check-build-capacity: BLOCK — insufficient safe filesystem headroom

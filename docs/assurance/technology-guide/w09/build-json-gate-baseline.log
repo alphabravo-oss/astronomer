@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "<stdin>", line 3, in <module>
-  File "/root/astronomer-all/astronomer-032-w09/scripts/check-json-governance.py", line 53, in validate
-    raise ValueError(f"serializer ownership drift: unowned={sorted(paths-set(modules))}; stale={sorted(set(modules)-paths)}")
-ValueError: serializer ownership drift: unowned=['deploy/bundles/cmd/distribution/application.go', 'deploy/bundles/cmd/distribution/application_archive.go', 'deploy/bundles/cmd/distribution/artifact.go', 'deploy/bundles/cmd/distribution/main.go', 'deploy/bundles/cmd/distribution/verification.go', 'deploy/bundles/embed.go', 'internal/delivery/distribution/contract.go', 'internal/delivery/resolver/artifact.go']; stale=[]

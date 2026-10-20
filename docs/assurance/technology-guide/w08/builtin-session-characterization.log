@@ -1,4 +1,0 @@
-=== RUN   TestPostgresBuiltinCanceledTransactionReleasesSessionLock
---- PASS: TestPostgresBuiltinCanceledTransactionReleasesSessionLock (0.08s)
-PASS
-ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/builtin	0.112s

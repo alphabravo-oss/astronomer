@@ -1,4 +1,0 @@
-./scripts/check-build-capacity.sh --path .
-check-build-capacity: path=. mount=/ available=63GiB free=19% required=20GiB/20%
-check-build-capacity: BLOCK — insufficient safe filesystem headroom
-make: *** [Makefile:220: release-contract-check] Error 1

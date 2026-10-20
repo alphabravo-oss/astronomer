@@ -1,1 +1,0 @@
-Root verification driver incorrectly required exactly3 total pass actions; actual Go output has3 parents plus3 shape subtests=6PASS, zeroFAIL/SKIP. Driver assertion stopped before18. Underlying17 command exited0. Correct parent counting below; original1.log unchanged.

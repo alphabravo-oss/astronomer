@@ -1,4 +1,0 @@
-ok  	github.com/alphabravocompany/astronomer-go/internal/httpclient	1.154s
-ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/resolver	4.182s
-ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/distribution	3.156s
-ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution	18.812s

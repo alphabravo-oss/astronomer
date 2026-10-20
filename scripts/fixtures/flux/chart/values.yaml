@@ -1,5 +1,0 @@
-message: desired
-image:
-  repository: astronomer-flux-fixture-server
-  tag: test
-  pullPolicy: Never

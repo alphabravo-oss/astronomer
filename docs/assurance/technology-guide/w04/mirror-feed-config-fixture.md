@@ -1,9 +1,0 @@
-# Mirrored database feed fixture config closure
-
-The first complete mirrored CA run on frozen `9a621785` stopped at the focused race gate. Its unchanged ordinary provider baseline passed 3 parent tests and 3 cases. The focused run emitted 20 parents and 62 terminals: 60 passed, the `exact-mirror` signed feed leaf and its parent failed, and none skipped. All 19 fatal capacity guards passed. The owned driver drained its processes, restored the baseline and confirmed unchanged source. Full coupled race, actual Cosign publisher, vet, governance, complexity, dependency, docs and CLI gates were not reached.
-
-The immutable private receipt SHA256 is `b4298847fa11e0654e2f2da9b835796fd607376091d346c8cc2c2c54ee6592ec`; focused raw log SHA256 is `a5b2c826ab5c766b8509001f1025c85441d32b3975e4e220121ddb5efc16e105`. Earlier capacity and environment failures remain retained separately. This failed attempt grants no package qualification.
-
-Source inspection found that the new fixture supplied layer bytes while its manifest also declared the exact `{}` config blob. The fixture helper did not populate that config, which the canonical database metadata loader must fetch and hash. The approved test-only correction supplies those unchanged declared bytes. Its three-line patch SHA256 is `c6e732ac2bc3d3951351f9818ddb184833780568c3a97c0f5061214152677b15`; all production verification, signatures and descriptors stay unchanged. Source-byte checks and `git diff --check` passed. The correction has not been executed.
-
-This consumer fixture authenticates descriptor claims with local QA keys and private TLS. Opaque payloads and a disabled scanner do not establish real supplier metadata, freshness, scan use or production OIDC publication. Shared component/current catalog source, migration 079, transaction acceptance, production composition and actual job provenance still need their own qualification.

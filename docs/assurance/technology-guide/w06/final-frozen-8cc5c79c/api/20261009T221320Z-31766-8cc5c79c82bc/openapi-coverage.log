@@ -1,9 +1,0 @@
-OpenAPI coverage report
-=======================
-router operations   : 828
-spec operations     : 838
-documented (matched): 828
-missing (undocumented routes): 0
-extra (spec drift, no route): 0
-nil-gated (unrouted in dump, allowlisted): 10
-coverage            : 100.0%  (828/828)

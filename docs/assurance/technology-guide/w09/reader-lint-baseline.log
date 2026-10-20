@@ -1,8 +1,0 @@
-Captured stderr/stdout from golangci-lint2.14.0 full touched-package invocation before approved cleanup; exit1.
-internal/httpclient/destinations_test.go:89:28: Error return value of `response.Body.Close` is not checked (errcheck)
-internal/httpclient/trust.go:21:18: Error return value of `file.Close` is not checked (errcheck)
-internal/jsoncontract/postgres_integration_test.go:54:21: Error return value of `tx.Rollback` is not checked (errcheck)
-internal/jsoncontract/postgres_integration_test.go:109:19: Error return value of `tx.Rollback` is not checked (errcheck)
-internal/jsoncontract/postgres_integration_test.go:170:19: Error return value of `tx.Rollback` is not checked (errcheck)
-internal/httpclient/destinations_test.go:195:3: QF1003: could use tagged switch on port (staticcheck)
-6 issues: errcheck5; staticcheck1.

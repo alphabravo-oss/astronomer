@@ -1,8 +1,0 @@
---- FAIL: TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing (0.00s)
-    service_test.go:185: large v1 budget stalled rollout: got=0 want=3
-    service_test.go:188: in-flight reservation lost: got=2147483647 want=2
-    service_test.go:185: large v1 budget stalled rollout: got=0 want=3
-    service_test.go:188: in-flight reservation lost: got=0 want=2
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	0.010s
-FAIL

@@ -1,5 +1,0 @@
---- FAIL: TestExpectedSchemaVersionMatchesMigrations (0.00s)
-    schema_version_test.go:42: ExpectedSchemaVersion=71 but max migration on disk is 73; bump the constant in schema_version.go when adding a migration
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/db	0.012s
-FAIL

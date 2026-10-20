@@ -1,4 +1,0 @@
-=== RUN   TestApplicationImageUpgradePreservesCNPGAndSharedOperatorOwnership
---- PASS: TestApplicationImageUpgradePreservesCNPGAndSharedOperatorOwnership (0.37s)
-PASS
-ok  	github.com/alphabravocompany/astronomer-go/deploy	0.379s

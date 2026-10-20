@@ -1,4 +1,0 @@
-
-> astronomer-frontend@1.2.0 lint
-> eslint . --ext .ts,.tsx --max-warnings=0
-

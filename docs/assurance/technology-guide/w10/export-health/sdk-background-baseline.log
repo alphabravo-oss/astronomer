@@ -1,7 +1,0 @@
-2026/10/10 00:32:17 traces export: failed to send to http://127.0.0.1:40795/v1/traces: 400 Bad Request (body: synthetic-unlabelled-collector-response-body)
-2026/10/10 00:32:19 no ErrorHandler delegate configured ErrorHandler remains its current value.
---- FAIL: TestBackgroundOTLPErrorBodyDoesNotBypassDiagnosticPolicy (2.01s)
-    otel_sdk_diagnostics_test.go:65: actual background SDK error was not observed through safe handler
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/observability	2.049s
-FAIL

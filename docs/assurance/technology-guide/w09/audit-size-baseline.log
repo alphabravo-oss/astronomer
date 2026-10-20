@@ -1,6 +1,0 @@
---- FAIL: TestRecordOversizedDetailRejectedBeforeDBOrBus (0.19s)
-    audit_test.go:227: oversized mandatory detail accepted: <nil>
-    audit_test.go:234: oversized detail reached database/bus: db=true bus=2 outbox=false
-FAIL
-FAIL	github.com/alphabravocompany/astronomer-go/internal/audit	0.209s
-FAIL

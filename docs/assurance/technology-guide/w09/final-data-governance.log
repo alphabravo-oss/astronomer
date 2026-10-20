@@ -1,2 +1,0 @@
-json-governance: 189 request owners; 205 storage candidates classified (including exact binary/scalar exclusions); 1155 serializer/read sites discovered
-data-governance: 97 destructive tables classified; durable JSON writer governance present

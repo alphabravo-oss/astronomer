@@ -1,8 +1,0 @@
-=== RUN   TestPostgresRecoveryFixtureProductionReaders
-restored credentials, Charlie TLS keys, agent scope, tenants, audit intents and delivery generations verified
---- PASS: TestPostgresRecoveryFixtureProductionReaders (0.13s)
-PASS
-ok  	github.com/alphabravocompany/astronomer-go/scripts/cnpg-recovery-fixture	0.168s
-
-DONE 1 tests in 0.168s
-qualification evidence: /root/.cache/astronomer-032/qualification/w12-recovery-draft7/recovery-readers/evidence.json

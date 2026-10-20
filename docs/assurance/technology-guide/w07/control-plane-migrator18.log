@@ -1,2 +1,0 @@
-{"time":"2026-10-09T23:58:48.389306961Z","level":"INFO","msg":"database migration","detail":"74/u control_plane_alert_keyset (16.654461ms)"}
-{"time":"2026-10-09T23:58:48.402311175Z","level":"INFO","msg":"database migration","detail":"75/u control_plane_silence_keyset (29.887826ms)"}
