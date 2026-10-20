@@ -223,6 +223,68 @@ Secret (which must then also contain `trusted_root.json` for keyless policies,
 plus any `<keyRef>.pub` keys). Rotate the pinned root by updating the toolchain
 copy, copying it into the chart and releasing.
 
+## Sigstore policy-controller and the cluster-local registry (zot)
+
+Clusters that enforce Sigstore `policy-controller` with
+`no-match-policy: deny` (the live `astronomer` namespace does) must name every
+image the chart can run. Enabling `registry.zot` adds one new third-party image
+and moves every other reference onto the zot host, so two changes are needed.
+
+1. **The zot image itself.** project-zot does not publish cosign signatures
+   for `ghcr.io/project-zot/zot` (verified: `cosign verify` reports "no
+   signatures found" for v2.1.22), so admit exactly the reviewed digest with a
+   static authority — never a tag or a repository-wide glob:
+
+   ```yaml
+   apiVersion: policy.sigstore.dev/v1beta1
+   kind: ClusterImagePolicy
+   metadata:
+     name: astronomer-zot-registry
+   spec:
+     mode: enforce
+     images:
+       - glob: ghcr.io/project-zot/zot@sha256:96cda11459ce6f8c60da3b03f03e9f67fd11b3ae2d82c4c04c92b3c608996080
+       # Only when image.registry pre-loads it from an operator mirror:
+       # - glob: <image.registry>/project-zot/zot@sha256:96cda11459ce6f8c60da3b03f03e9f67fd11b3ae2d82c4c04c92b3c608996080
+     authorities:
+       - name: pinned-zot-v2-1-22
+         static:
+           action: pass
+   ```
+
+   Bump the digest in this policy in the same change that bumps
+   `registry.zot.image.digest`.
+
+2. **Images served from zot.** With `registry.zot.enabled`, images render as
+   `<release>-zot.<namespace>.svc.cluster.local:5000/<path>`. policy-controller
+   matches the rendered reference, so the existing policies must cover the
+   zot host too:
+
+   - first-party images keep their keyless authority — `astro airgap mirror`
+     copies the cosign `.sig`/`.att` companions and OCI referrers next to each
+     digest, so verification against the zot copy uses the same identity:
+
+     ```yaml
+     # astronomer-release-keyless: add to spec.images
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/alphabravo-oss/astronomer-**
+     ```
+
+   - the pinned third-party passthrough list gets the zot spelling of each
+     entry, e.g.:
+
+     ```yaml
+     # astronomer-third-party-passthrough: add to spec.images
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/busybox**
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/valkey/valkey**
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/postgres**
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/dexidp/dex**
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/fluent/fluent-bit**
+     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/cloudnative-pg/**
+     ```
+
+   Replace `astronomer-zot.astronomer` with `<release>-zot.<namespace>` (or
+   the `registry.zot.host` override).
+
 ---
 
 ## What's covered, what's not

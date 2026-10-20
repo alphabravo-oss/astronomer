@@ -53,7 +53,7 @@ func databaseStartupOptionsForBuild(ctx context.Context, cfg *config.Config, rel
 		return result, err
 	}
 	binding := distribution.DatabaseUpdateBinding{BaseRelease: release, BaseDistributionDigest: cfg.DeliveryBundleDigest, MirrorEndorsementDigest: identity, CatalogDigest: cfg.DeliveryBundleCatalogDigest, Profile: "builtins", CandidateSourceCommit: commit, Scanner: distribution.DatabaseScannerCompatibility{ImageDigest: cfg.DeliveryDatabaseScannerDigest, Version: cfg.DeliveryDatabaseScannerVersion, MainSchema: 2, JavaSchema: 1}}
-	result.Distribution = distribution.Options{Repository: cfg.DeliveryBundleRepository, Digest: cfg.DeliveryBundleDigest, CatalogDigest: cfg.DeliveryBundleCatalogDigest, Release: release, Profile: "builtins", UpdateBinding: &binding, Policy: model.TrustPolicy{Provider: model.SignatureCosignKeyless, Identity: cfg.DeliveryBundleCertificateIdentity, Issuer: cfg.DeliveryBundleOIDCIssuer}, TrustDirectory: cfg.DeliverySourceTrustDirectory, Network: network}
+	result.Distribution = distribution.Options{Repository: cfg.DeliveryBundleRepository, Digest: cfg.DeliveryBundleDigest, CatalogDigest: cfg.DeliveryBundleCatalogDigest, Release: release, Profile: "builtins", UpdateBinding: &binding, Policy: model.TrustPolicy{Provider: model.SignatureCosignKeyless, Identity: cfg.DeliveryBundleCertificateIdentity, Issuer: cfg.DeliveryBundleOIDCIssuer}, TrustDirectory: cfg.DeliverySourceTrustDirectory, Network: network, LocalRegistry: cfg.RegistryLocal}
 	read, err := databaseReadRegistryOptions(cfg)
 	if err != nil {
 		return distribution.DatabaseRestartInspectionOptions{}, err

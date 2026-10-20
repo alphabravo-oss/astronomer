@@ -133,6 +133,7 @@ type ClusterHandler struct {
 	grafanaFolders       grafanaFolderReconciler
 	agentImage           string
 	systemArtifactURL    string
+	imageRegistry        string
 	systemArtifactDigest string
 	systemOIDCIssuer     string
 	systemOIDCIdentity   string
@@ -193,9 +194,11 @@ type AgentDisconnector interface {
 // NewClusterHandler creates a new cluster handler.
 func NewClusterHandler(queries ClusterQuerier) *ClusterHandler {
 	return &ClusterHandler{
-		queries:              queries,
-		metrics:              clustermetrics.NewProvider(),
-		agentImage:           "ghcr.io/alphabravo-oss/astronomer-go-agent:latest",
+		queries: queries,
+		metrics: clustermetrics.NewProvider(),
+		// Bare local name (config default AGENT_IMAGE_REPOSITORY); never a public
+		// registry. Production wiring replaces it via SetAgentImage.
+		agentImage:           "astronomer-go-agent:latest",
 		registrationTokenTTL: time.Hour,
 	}
 }

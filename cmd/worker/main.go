@@ -39,6 +39,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
+	registrystartup "github.com/alphabravocompany/astronomer-go/internal/registry/startup"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -139,6 +140,11 @@ func main() {
 	// forgeable in development, so report them on every boot in every env. The
 	// worker decrypts the same credential columns the server does.
 	observability.ReportInsecureDevKeys(logging.Slog(log), config.DevSentinelsInUse(cfg))
+
+	if _, err := registrystartup.Resolve(context.Background(), cfg, logging.Slog(log), "worker"); err != nil {
+		log.Error().Err(err).Msg("invalid registry policy")
+		os.Exit(1)
+	}
 
 	// Telemetry — same telemetry.Init contract as the server. The worker's
 	// asynq handlers extract traceparent from task payloads, so when both
@@ -244,6 +250,7 @@ func main() {
 		Queries:                       sqlc.New(database.Pool()),
 		Log:                           logging.Slog(log),
 		AgentImageRepo:                cfg.AgentImageRepository,
+		ImageRegistry:                 cfg.RegistryLocal,
 		AgentImageTag:                 cfg.AgentImageTag,
 		SystemArtifactURL:             cfg.DeliveryFluxDistributionRepository,
 		SystemArtifactDigest:          cfg.DeliveryFluxDistributionDigest,

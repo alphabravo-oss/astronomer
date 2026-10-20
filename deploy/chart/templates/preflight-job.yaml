@@ -43,9 +43,9 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- if $cnpgUpgrade }}
-          image: {{ .Values.postgres.cloudNativePG.imageName | quote }}
+          image: {{ include "astronomer.rehost" (dict "ref" .Values.postgres.cloudNativePG.imageName "local" (include "astronomer.localRegistry" .)) | quote }}
           {{- else }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "digest" .Values.postgres.image.digest "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "digest" .Values.postgres.image.digest "registry" .Values.postgres.image.registry "fallback" (include "astronomer.localRegistry" .)) | quote }}
           {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
@@ -175,7 +175,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "digest" .Values.preflight.image.digest "registry" .Values.preflight.image.registry "fallback" (.Values.image.registry | default "ghcr.io/alphabravo-oss")) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.preflight.image.repository "tag" .Values.preflight.image.tag "digest" .Values.preflight.image.digest "registry" .Values.preflight.image.registry "fallback" (include "astronomer.localRegistry" .) "online" "ghcr.io/alphabravo-oss") | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: HOME

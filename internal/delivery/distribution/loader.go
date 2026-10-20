@@ -41,6 +41,9 @@ type Options struct {
 	Client         *http.Client
 	Network        httpclient.DestinationPolicy
 	MirrorPlan     *MirrorPlan
+	// LocalRegistry is REGISTRY_LOCAL: verified child charts, workload images
+	// and values subjects are re-hosted onto it after any mirror endorsement.
+	LocalRegistry string
 	// UpdateBinding is independently injected build/base/scanner intent. A
 	// successful signed catalog must match it before granting base provenance.
 	// Its absence preserves ordinary distribution loading without update authority.
@@ -119,6 +122,12 @@ func (l *Loader) Load(ctx context.Context) (builtinbundles.Catalog, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 	if l.options.Development {
+		if l.options.LocalRegistry != "" {
+			// The source-tree catalog points at public helm_http repositories and
+			// upstream images; it cannot be served from the cluster-local registry.
+			l.status.BlockedCategory = "network"
+			return builtinbundles.Catalog{}, errors.New("development built-in catalog is unavailable under REGISTRY_LOCAL: built-ins require a verified release distribution mirrored into the cluster-local registry")
+		}
 		return builtinbundles.Load()
 	}
 	if err := ctx.Err(); err != nil {
@@ -189,6 +198,10 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 		}
 	}
 	catalog, err = projectMirrors(ctx, catalog, l.options.MirrorPlan, l.options.Network)
+	if err != nil {
+		return builtinbundles.Catalog{}, err
+	}
+	catalog, err = projectLocalRegistry(catalog, l.options.LocalRegistry)
 	if err != nil {
 		return builtinbundles.Catalog{}, err
 	}

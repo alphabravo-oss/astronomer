@@ -200,7 +200,7 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 		valueBytes, _ := json.Marshal(component.Values)
 		var values any
 		_ = json.Unmarshal(valueBytes, &values)
-		rewritten, err := rewriteValues(values, images)
+		rewritten, err := rewriteValues(values, exactTable(images))
 		if err != nil {
 			return builtinbundles.Catalog{}, err
 		}
@@ -217,7 +217,7 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 	return catalog, nil
 }
 
-func rewriteValues(value any, images map[string]string) (any, error) {
+func rewriteValues(value any, images locationTable) (any, error) {
 	switch typed := value.(type) {
 	case map[string]any:
 		handled, err := rewriteDatabaseLocations(typed, images)
@@ -249,7 +249,7 @@ func rewriteValues(value any, images map[string]string) (any, error) {
 			if registryOK && registry != "" {
 				source = registry + "/" + source
 			}
-			target, found := images[source]
+			target, found := images.target(source)
 			if !found {
 				return nil, errors.New("values image map is outside authenticated inventory")
 			}
@@ -286,7 +286,7 @@ func rewriteValues(value any, images map[string]string) (any, error) {
 		}
 		return typed, nil
 	case string:
-		if target, found := images[typed]; found {
+		if target, found := images.target(typed); found {
 			return target, nil
 		}
 		if strings.Contains(typed, "/") && strings.Contains(typed, "@sha256:") {

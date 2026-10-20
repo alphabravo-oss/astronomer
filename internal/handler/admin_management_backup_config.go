@@ -233,10 +233,9 @@ func (h *AdminDrillHandler) buildDestinationCronJob(ctx context.Context, row sql
 	if sa == "" {
 		sa = h.resourcePrefix()
 	}
+	// MANAGEMENT_BACKUP_IMAGE is explicit configuration (the chart renders the
+	// DR image re-hosted by the registry policy); there is no public default.
 	image := h.backupImage
-	if image == "" {
-		image = defaultManagementBackupImage
-	}
 	nonRoot := int64(65534)
 	falseVal := false
 	env := []corev1.EnvVar{

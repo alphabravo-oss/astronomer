@@ -22,6 +22,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/grafanaproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	registrystartup "github.com/alphabravocompany/astronomer-go/internal/registry/startup"
 	"github.com/alphabravocompany/astronomer-go/internal/server"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -126,6 +127,13 @@ func main() {
 	})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to init telemetry")
+		os.Exit(1)
+	}
+
+	// Layered registry policy: emit the egress-endpoints line and resolve
+	// every configured runtime reference (layer=local|fallback|fail_closed).
+	if _, err := registrystartup.Resolve(context.Background(), cfg, logging.Slog(logger), "server"); err != nil {
+		logger.Error().Err(err).Msg("invalid registry policy")
 		os.Exit(1)
 	}
 

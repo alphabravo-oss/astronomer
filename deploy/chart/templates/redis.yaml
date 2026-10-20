@@ -42,7 +42,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["valkey-server", "--appendonly", "yes"]
           ports:
@@ -130,7 +130,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: VALKEY_PASSWORD
@@ -236,7 +236,7 @@ spec:
       {{- end }}
       initContainers:
         - name: configure
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: VALKEY_PASSWORD
@@ -275,7 +275,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: VALKEY_PASSWORD

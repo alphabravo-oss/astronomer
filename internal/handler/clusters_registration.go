@@ -121,13 +121,18 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 	if h == nil {
 		return
 	}
-	if repository == "" {
-		repository = "ghcr.io/alphabravo-oss/astronomer-go-agent"
-	}
 	if tag == "" {
 		tag = "latest"
 	}
 	h.agentImage = targetAgentImage(repository, tag)
+}
+
+// SetImageRegistry sets REGISTRY_LOCAL for rendered install manifests: the
+// embedded Flux controller images are re-hosted onto the cluster-local registry.
+func (h *ClusterHandler) SetImageRegistry(local string) {
+	if h != nil {
+		h.imageRegistry = strings.TrimSpace(local)
+	}
 }
 
 // SetAgentTelemetry carries non-secret trace routing into newly rendered agent
@@ -598,9 +603,12 @@ type registrationCAQuerier interface {
 
 func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string, agentOnly ...bool) (string, error) {
 	annotations := clusterAnnotations(cluster.Annotations)
-	agentImage := "ghcr.io/alphabravo-oss/astronomer-go-agent:latest"
-	if h != nil && h.agentImage != "" {
+	agentImage := ""
+	if h != nil {
 		agentImage = h.agentImage
+	}
+	if agentImage == "" {
+		return "", errors.New("agent image is not configured (AGENT_IMAGE_REPOSITORY)")
 	}
 	// Server-CA pin: populate the CA bundle + checksum from the operator-provided
 	// registration.ca_bundle. Empty when no private CA is configured, in which
@@ -634,6 +642,7 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		OTELInsecure:         h.agentOTELInsecure,
 		OTELSamplerRatio:     h.agentOTELSampler,
 		Environment:          h.agentEnvironment,
+		ImageRegistry:        h.imageRegistry,
 	}
 	if len(agentOnly) > 0 && agentOnly[0] {
 		return agenttemplate.RenderAgentYAML(data), nil

@@ -24,7 +24,7 @@ type runtimeTaskComposition struct {
 func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger zerolog.Logger, routed *routerComposition, foundation *runtimeFoundation) (*runtimeTaskComposition, error) {
 	core := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
 		Queries: c.queries, ManagementBackup: routed.deps.AdminPlatform.AdminDrill, Log: logging.Slog(logger),
-		AgentImageRepo: cfg.AgentImageRepository, AgentImageTag: cfg.AgentImageTag,
+		AgentImageRepo: cfg.AgentImageRepository, AgentImageTag: cfg.AgentImageTag, ImageRegistry: cfg.RegistryLocal,
 		PlatformName: "Astronomer", Leader: c.taskLeader, K8s: c.requester,
 		ChartRecommendationPolicy:     catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight),
 		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
