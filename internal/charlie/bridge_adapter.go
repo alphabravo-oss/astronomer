@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 )
 
 // RuntimeBridge is the sole adapter from product services to the fixed local

@@ -5250,6 +5250,95 @@ func (q *Queries) UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharli
 	return i, err
 }
 
+const updateCharlieConnectionAppliedArtifacts = `-- name: UpdateCharlieConnectionAppliedArtifacts :one
+UPDATE charlie_connections
+SET chart_reference = $1,
+    chart_digest = $2,
+    image_reference = $3,
+    image_digest = $4,
+    updated_at = now()
+WHERE id = $5
+RETURNING id, installation_id, product_id, product_slug, deployment_id, route_id, central_url, central_ca_fingerprint, signing_key_id, signing_key_fingerprint, onboarding_schema_version, central_api_version, agent_protocol_version, chart_version, chart_digest, image_digest, logical_agent_id, replica_count, bridge_service_name, mcp_service_name, local_trust_material_encrypted, agent_secret_name, onboarding_package_id, onboarding_package_digest, onboarding_package_expires_at, enrollment_credentials_expires_at, artifact_credential_expires_at, certificate_expires_at, onboarding_state, agent_secret_hmac, requested_mode, verified_mode, verified_mode_revision, emergency_disabled, emergency_disabled_by_id, emergency_disabled_at, disclosure_digest, acknowledged_disclosure_digest, leader_instance_id, fencing_epoch, health_state, active, last_error_code, last_verified_at, last_connected_at, last_rotated_at, reconciliation_due_at, created_by_id, created_at, updated_at, chart_reference, image_reference, kubernetes_visibility_profile, kubernetes_visibility_pod_logs, kubernetes_visibility_rediscovery_state, kubernetes_visibility_candidate_digest
+`
+
+type UpdateCharlieConnectionAppliedArtifactsParams struct {
+	ChartReference string    `json:"chart_reference"`
+	ChartDigest    string    `json:"chart_digest"`
+	ImageReference string    `json:"image_reference"`
+	ImageDigest    string    `json:"image_digest"`
+	ID             uuid.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateCharlieConnectionAppliedArtifacts(ctx context.Context, arg UpdateCharlieConnectionAppliedArtifactsParams) (CharlieConnection, error) {
+	row := q.db.QueryRow(ctx, updateCharlieConnectionAppliedArtifacts,
+		arg.ChartReference,
+		arg.ChartDigest,
+		arg.ImageReference,
+		arg.ImageDigest,
+		arg.ID,
+	)
+	var i CharlieConnection
+	err := row.Scan(
+		&i.ID,
+		&i.InstallationID,
+		&i.ProductID,
+		&i.ProductSlug,
+		&i.DeploymentID,
+		&i.RouteID,
+		&i.CentralUrl,
+		&i.CentralCaFingerprint,
+		&i.SigningKeyID,
+		&i.SigningKeyFingerprint,
+		&i.OnboardingSchemaVersion,
+		&i.CentralApiVersion,
+		&i.AgentProtocolVersion,
+		&i.ChartVersion,
+		&i.ChartDigest,
+		&i.ImageDigest,
+		&i.LogicalAgentID,
+		&i.ReplicaCount,
+		&i.BridgeServiceName,
+		&i.McpServiceName,
+		&i.LocalTrustMaterialEncrypted,
+		&i.AgentSecretName,
+		&i.OnboardingPackageID,
+		&i.OnboardingPackageDigest,
+		&i.OnboardingPackageExpiresAt,
+		&i.EnrollmentCredentialsExpiresAt,
+		&i.ArtifactCredentialExpiresAt,
+		&i.CertificateExpiresAt,
+		&i.OnboardingState,
+		&i.AgentSecretHmac,
+		&i.RequestedMode,
+		&i.VerifiedMode,
+		&i.VerifiedModeRevision,
+		&i.EmergencyDisabled,
+		&i.EmergencyDisabledByID,
+		&i.EmergencyDisabledAt,
+		&i.DisclosureDigest,
+		&i.AcknowledgedDisclosureDigest,
+		&i.LeaderInstanceID,
+		&i.FencingEpoch,
+		&i.HealthState,
+		&i.Active,
+		&i.LastErrorCode,
+		&i.LastVerifiedAt,
+		&i.LastConnectedAt,
+		&i.LastRotatedAt,
+		&i.ReconciliationDueAt,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ChartReference,
+		&i.ImageReference,
+		&i.KubernetesVisibilityProfile,
+		&i.KubernetesVisibilityPodLogs,
+		&i.KubernetesVisibilityRediscoveryState,
+		&i.KubernetesVisibilityCandidateDigest,
+	)
+	return i, err
+}
+
 const updateCharlieKubernetesVisibility = `-- name: UpdateCharlieKubernetesVisibility :one
 UPDATE charlie_connections
 SET kubernetes_visibility_profile = $1,

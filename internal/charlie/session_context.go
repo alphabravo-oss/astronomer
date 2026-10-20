@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"k8s.io/client-go/discovery"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 type sessionContextQueries interface {

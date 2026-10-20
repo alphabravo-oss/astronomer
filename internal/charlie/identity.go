@@ -8,8 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 const (

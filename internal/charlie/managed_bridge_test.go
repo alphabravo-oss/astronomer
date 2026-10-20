@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/google/uuid"
 )
 
 func TestManagedBridgeCreatesNoTransportUntilRuntimeIsLiveAndDropsItOnDisable(t *testing.T) {

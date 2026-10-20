@@ -14,8 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/gowebpki/jcs"
+
+	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 )
 
 const (

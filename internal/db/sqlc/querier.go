@@ -2564,6 +2564,7 @@ type Querier interface {
 	UpdateBackupStorageConfig(ctx context.Context, arg UpdateBackupStorageConfigParams) (BackupStorageConfig, error)
 	UpdateBackupVeleroIdentity(ctx context.Context, arg UpdateBackupVeleroIdentityParams) error
 	UpdateCharlieAgentStatus(ctx context.Context, arg UpdateCharlieAgentStatusParams) (CharlieConnection, error)
+	UpdateCharlieConnectionAppliedArtifacts(ctx context.Context, arg UpdateCharlieConnectionAppliedArtifactsParams) (CharlieConnection, error)
 	UpdateCharlieKubernetesVisibility(ctx context.Context, arg UpdateCharlieKubernetesVisibilityParams) (CharlieConnection, error)
 	UpdateCharlieSessionCursor(ctx context.Context, arg UpdateCharlieSessionCursorParams) (CharlieSession, error)
 	UpdateCharlieTriggerRule(ctx context.Context, arg UpdateCharlieTriggerRuleParams) (CharlieTriggerRule, error)

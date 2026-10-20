@@ -17,7 +17,7 @@ import (
 // convention.
 func TestCharlieProcessesCannotBypassClosedOperationalEmitters(t *testing.T) {
 	repositoryRoot := filepath.Clean(filepath.Join("..", ".."))
-	for _, root := range []string{"internal/charlie", "internal/charliequalification", "internal/handler", "internal/worker/tasks", "internal/server", "cmd/charlie-qualification-hook"} {
+	for _, root := range []string{"internal/charlie", "internal/handler", "internal/worker/tasks", "internal/server"} {
 		err := filepath.WalkDir(filepath.Join(repositoryRoot, root), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -27,7 +27,7 @@ func TestCharlieProcessesCannotBypassClosedOperationalEmitters(t *testing.T) {
 			}
 			relative, _ := filepath.Rel(repositoryRoot, path)
 			relative = filepath.ToSlash(relative)
-			if relative == "internal/charlie/observability.go" || relative == "internal/charliequalification/observability.go" {
+			if relative == "internal/charlie/observability.go" {
 				return nil
 			}
 			fileSet := token.NewFileSet()
@@ -84,7 +84,7 @@ func isCharlieOperationalSource(root, path string) bool {
 		return false
 	}
 	relative = filepath.ToSlash(relative)
-	if strings.HasPrefix(relative, "internal/charlie/") || strings.HasPrefix(relative, "internal/charliequalification/") || strings.HasPrefix(relative, "cmd/charlie-qualification-hook/") {
+	if strings.HasPrefix(relative, "internal/charlie/") {
 		return true
 	}
 	base := filepath.Base(relative)

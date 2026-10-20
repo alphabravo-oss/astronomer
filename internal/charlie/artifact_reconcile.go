@@ -13,6 +13,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 const advertisedReleaseSchema = "charlie.artifacts.release/v1"
@@ -26,10 +28,18 @@ type AdvertisedRelease struct {
 	ChartDigest    string `json:"chart_digest"`
 }
 
+// artifactConnectionStore reads the active connection and records the release
+// that was actually applied. Persisting the applied digests is what makes the
+// reconciler converge: without it every tick re-applies the same release.
+type artifactConnectionStore interface {
+	activeCharlieConnectionReader
+	UpdateCharlieConnectionAppliedArtifacts(context.Context, sqlc.UpdateCharlieConnectionAppliedArtifactsParams) (sqlc.CharlieConnection, error)
+}
+
 // ArtifactReconciler pulls Charlie's advertised agent release over the same
 // 443 registry origin used at consume time and helm-upgrades when the pin moves.
 type ArtifactReconciler struct {
-	Queries  activeCharlieConnectionReader
+	Queries  artifactConnectionStore
 	Client   kubernetes.Interface
 	Helm     HelmReleaser
 	HTTP     *http.Client
@@ -37,7 +47,7 @@ type ArtifactReconciler struct {
 	Now      func() time.Time
 }
 
-func NewArtifactReconciler(queries activeCharlieConnectionReader, client kubernetes.Interface, helm HelmReleaser) *ArtifactReconciler {
+func NewArtifactReconciler(queries artifactConnectionStore, client kubernetes.Interface, helm HelmReleaser) *ArtifactReconciler {
 	if queries == nil || client == nil || helm == nil {
 		return nil
 	}
@@ -105,14 +115,26 @@ func (r *ArtifactReconciler) Reconcile(ctx context.Context) error {
 	if !validMode(Mode(modeCeiling)) {
 		modeCeiling = string(ModeDisabled)
 	}
-	return r.Helm.Apply(ctx, HelmReleaseSpec{
+	if err := r.Helm.Apply(ctx, HelmReleaseSpec{
 		ChartRef: offered.Chart, ChartDigest: offered.ChartDigest,
 		Image: offered.Image, ImageDigest: digest, PullUser: "charlie", PullSecret: password, ReuseValues: true,
 		Values: map[string]any{
 			"image":   map[string]any{"repository": repo, "digest": digest, "pullPolicy": "IfNotPresent"},
 			"runtime": map[string]any{"modeCeiling": modeCeiling},
 		},
-	})
+	}); err != nil {
+		return err
+	}
+	// Record what was applied so the next tick compares against reality and
+	// Helm history stops growing by one revision per interval.
+	if _, err := r.Queries.UpdateCharlieConnectionAppliedArtifacts(ctx, sqlc.UpdateCharlieConnectionAppliedArtifactsParams{
+		ChartReference: offered.Chart, ChartDigest: offered.ChartDigest,
+		ImageReference: offered.Image, ImageDigest: offered.ManifestDigest,
+		ID: connection.ID,
+	}); err != nil {
+		return fmt.Errorf("persist applied Charlie agent release: %w", err)
+	}
+	return nil
 }
 
 func (r *ArtifactReconciler) httpClient() *http.Client {

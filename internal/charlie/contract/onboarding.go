@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"sync"
 
-	bridgeschema "github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/schema"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	bridgeschema "github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/schema"
 )
 
 //go:embed pinned/schemas/onboarding-v1.schema.json

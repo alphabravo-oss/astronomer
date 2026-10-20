@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 )
 
 // AdminBridgeStatus is bounded health/configuration metadata reported by the

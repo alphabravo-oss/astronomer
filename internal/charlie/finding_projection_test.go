@@ -2,14 +2,16 @@ package charlie
 
 import (
 	"errors"
-	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 func TestFindingProjectionSessionEligibilitySkipsNonApplicableHistory(t *testing.T) {

@@ -13,14 +13,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	productversion "github.com/alphabravocompany/astronomer-go/pkg/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	productversion "github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 type operationalCapabilityQueries interface {

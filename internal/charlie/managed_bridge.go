@@ -13,9 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/google/uuid"
 )
 
 type ManagedBridgeConfig struct {

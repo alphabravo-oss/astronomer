@@ -219,6 +219,16 @@ INSERT INTO charlie_connections (
     sqlc.narg(created_by_id), sqlc.narg(reconciliation_due_at)
 ) RETURNING *;
 
+-- name: UpdateCharlieConnectionAppliedArtifacts :one
+UPDATE charlie_connections
+SET chart_reference = sqlc.arg(chart_reference),
+    chart_digest = sqlc.arg(chart_digest),
+    image_reference = sqlc.arg(image_reference),
+    image_digest = sqlc.arg(image_digest),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
 -- name: GetCharlieConnectionByPackageID :one
 SELECT * FROM charlie_connections WHERE onboarding_package_id = $1;
 

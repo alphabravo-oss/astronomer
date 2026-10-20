@@ -14,8 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/gowebpki/jcs"
+
+	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 )
 
 const MaxOnboardingPackageBytes = 262144

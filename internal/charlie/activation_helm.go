@@ -134,6 +134,9 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 	}
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = r.namespace
+	// Bound release history: the reconciler used to add one revision per
+	// interval; MaxHistory keeps the Secret count flat even if it regresses.
+	upgrade.MaxHistory = 5
 	upgrade.WaitStrategy = kube.HookOnlyStrategy
 	upgrade.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
 	upgrade.ServerSideApply = "false"

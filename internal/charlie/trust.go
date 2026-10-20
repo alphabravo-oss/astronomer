@@ -15,8 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 const (
