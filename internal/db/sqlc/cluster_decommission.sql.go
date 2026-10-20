@@ -761,17 +761,29 @@ func (q *Queries) SetClusterDecommissionForce(ctx context.Context, id uuid.UUID)
 
 const tombstoneCluster = `-- name: TombstoneCluster :exec
 
-UPDATE clusters
-SET
-    decommissioned_at = now(),
-    status = 'decommissioned',
-    updated_at = now()
-WHERE id = $1
+
+WITH tombstoned AS (
+    UPDATE clusters
+    SET
+        decommissioned_at = now(),
+        status = 'decommissioned',
+        updated_at = now()
+    WHERE clusters.id = $1
+    RETURNING clusters.id
+)
+UPDATE cluster_deployments d
+SET phase = 'removed', last_error_code = 'cluster_decommissioned', last_message = ''
+FROM tombstoned
+WHERE d.cluster_id = tombstoned.id AND d.phase <> 'removed'
 `
 
 // Cluster tombstone — the final phase of the reconciler. We never hard-delete
 // the cluster row; setting decommissioned_at preserves the id for audit_archive
 // referential integrity and lets the UI render historical references.
+// The tombstone cascades to the cluster's delivery deployments in the same
+// statement: they can never be observed again, so leaving them active kept the
+// delivery backlog/stale-status alerts firing forever. 'removed' is the
+// terminal deployment phase; the reason is kept in last_error_code.
 func (q *Queries) TombstoneCluster(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, tombstoneCluster, id)
 	return err

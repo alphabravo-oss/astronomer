@@ -2501,6 +2501,10 @@ type Querier interface {
 	// Cluster tombstone — the final phase of the reconciler. We never hard-delete
 	// the cluster row; setting decommissioned_at preserves the id for audit_archive
 	// referential integrity and lets the UI render historical references.
+	// The tombstone cascades to the cluster's delivery deployments in the same
+	// statement: they can never be observed again, so leaving them active kept the
+	// delivery backlog/stale-status alerts firing forever. 'removed' is the
+	// terminal deployment phase; the reason is kept in last_error_code.
 	TombstoneCluster(ctx context.Context, id uuid.UUID) error
 	// Sets status='tombstoned' + tombstoned_at=now. The reaper later picks
 	// the row up via ListExpiredTombstones.

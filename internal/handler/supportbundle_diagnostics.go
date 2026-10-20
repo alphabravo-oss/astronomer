@@ -55,7 +55,7 @@ SELECT jsonb_build_object(
     'targets', (SELECT count(*) FROM delivery_targets WHERE deletion_state <> 'deleted'),
     'rollouts', (SELECT COALESCE(jsonb_object_agg(state, count), '{}'::jsonb) FROM (SELECT state, count(*) AS count FROM delivery_rollouts GROUP BY state) s),
     'deployments', (SELECT COALESCE(jsonb_object_agg(phase, count), '{}'::jsonb) FROM (SELECT phase, count(*) AS count FROM cluster_deployments GROUP BY phase) d),
-    'stale_deployments', (SELECT count(*) FROM cluster_deployments WHERE phase NOT IN ('pending','removed') AND (last_observed_at IS NULL OR last_observed_at < clock_timestamp() - interval '5 minutes')),
+    'stale_deployments', (SELECT count(*) FROM cluster_deployments d JOIN clusters c ON c.id = d.cluster_id AND c.decommissioned_at IS NULL WHERE d.phase NOT IN ('pending','removed') AND (d.last_observed_at IS NULL OR d.last_observed_at < clock_timestamp() - interval '5 minutes')),
     'flux_not_ready', (SELECT count(*) FROM delivery_controller_inventory WHERE NOT ready)
   )
 )`
