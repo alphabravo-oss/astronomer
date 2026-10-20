@@ -49,6 +49,12 @@ type systemInventoryTransaction interface {
 	CreateDeliverySystemEvent(context.Context, sqlc.CreateDeliverySystemEventParams) (sqlc.DeliverySystemEvent, error)
 }
 
+// localSystemRetargeter moves the management-plane cluster's system
+// assignment to the released release (it is never part of a system rollout).
+type localSystemRetargeter interface {
+	RetargetLocalDeliverySystemAssignment(context.Context, uuid.UUID) (int64, error)
+}
+
 type Runner interface {
 	Run(context.Context, func(Transaction) error) error
 }
@@ -167,6 +173,11 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			return refreshDeploymentSourceTimes(ctx, tx, payload, authenticatedCluster, sessionID)
 		}
 		if systemTx, ok := tx.(systemInventoryTransaction); ok {
+			if local, ok := tx.(localSystemRetargeter); ok {
+				if _, err := local.RetargetLocalDeliverySystemAssignment(ctx, authenticatedCluster); err != nil {
+					return fmt.Errorf("retarget local delivery system assignment: %w", err)
+				}
+			}
 			observedAt := time.Now().UTC()
 			observed, err := systemTx.ObserveDeliverySystemAssignment(ctx, sqlc.ObserveDeliverySystemAssignmentParams{
 				ClusterID: authenticatedCluster, ObservedDistributionDigest: payload.ControllerInventory.DistributionDigest,

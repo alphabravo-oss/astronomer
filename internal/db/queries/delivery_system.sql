@@ -32,6 +32,21 @@ SELECT r.*, selected.generation AS assignment_generation,
 FROM selected
 JOIN delivery_system_releases r ON r.id = selected.release_id;
 
+-- name: RetargetLocalDeliverySystemAssignment :execrows
+-- The management-plane cluster (is_local) never joins a system rollout: it
+-- upgrades with the server. Its assignment is seeded once, so without this it
+-- keeps targeting the release that was current at enrollment and, once the
+-- embedded agent advances, sits in 'applying' forever. Move it to the
+-- released release before every observation.
+UPDATE delivery_system_cluster_assignments a
+SET desired_release_id = r.id, previous_release_id = a.desired_release_id, rollout_id = NULL,
+    generation = a.generation + 1, phase = 'released', fence = a.fence + 1,
+    released_at = now(), ready_at = NULL, last_error_code = ''
+FROM delivery_system_releases r, clusters c
+WHERE a.cluster_id = sqlc.arg(cluster_id) AND c.id = a.cluster_id
+  AND c.is_local AND c.decommissioned_at IS NULL
+  AND r.state = 'released' AND a.desired_release_id <> r.id;
+
 -- name: ObserveDeliverySystemAssignment :one
 WITH seeded AS (
     INSERT INTO delivery_system_cluster_assignments (
