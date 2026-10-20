@@ -281,11 +281,11 @@ delivery:
       docker.io: registry.internal.example.com
 ```
 
-For a tagged release, generate these values with `scripts/mirror-release.py`
-instead of writing them by hand. The utility consumes the signed release
-manifest, mirrors every management/downstream/Charlie subject, verifies exact
-destination digests, emits the mapping plus digest-pinned Helm overrides, and
-signs the mapping after successful copy. See
+For a tagged release, copy every subject with `astro airgap mirror --to <registry>`
+(it consumes the signed release manifest via `--release-manifest`, preserves
+digests, indexes and signatures, and verifies destination digests), then set
+`image.registry` or enable `registry.zot`: every image is re-hosted with the
+same path rule. See
 [`docs/airgapped-install.md`](../../docs/airgapped-install.md).
 
 `image.registry` remains a development convenience. Production mirror values

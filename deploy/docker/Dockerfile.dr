@@ -1,4 +1,20 @@
 # syntax=docker/dockerfile:1.7
+# ── Build stage: dr-crypto (internal/drcrypto) ───────────────────────────────
+# GO_VERSION is derived from go.mod by the Makefile (make docker-build-dr) and
+# has no default on purpose: an image can never drift from go.mod (guide ch.04).
+ARG GO_VERSION
+FROM golang:${GO_VERSION}-alpine AS builder
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/dr-crypto ./cmd/dr-crypto
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+# pg_dump/pg_restore and the AWS CLI run the backup/restore shell steps; all
+# cryptography is the static Go dr-crypto binary (no Python in the image).
 FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 ARG VERSION=2.0.1
@@ -8,12 +24,9 @@ ARG BUILD_DATE=unknown
 RUN apk add --no-cache \
       aws-cli \
       ca-certificates \
-      postgresql16-client \
-      py3-cryptography \
-      python3
+      postgresql16-client
 
-COPY deploy/dr/dr_crypto.py /usr/local/bin/dr-crypto
-RUN chmod 0555 /usr/local/bin/dr-crypto
+COPY --from=builder --chmod=0555 /out/dr-crypto /usr/local/bin/dr-crypto
 
 LABEL org.opencontainers.image.title="Astronomer management DR utility" \
       org.opencontainers.image.description="Authenticated PostgreSQL backup, restore, and retention runtime" \

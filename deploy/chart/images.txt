@@ -7,8 +7,8 @@
 #                  deploy/bundles/catalog.json
 #
 # Air-gapped install procedure: verify the tagged release-manifest signature,
-# then use scripts/mirror-release.py to resolve the complete immutable copy
-# plan, verify destination digests, sign the mapping, and emit Helm overrides.
+# then run "astro airgap plan" and "astro airgap mirror --to <registry>" to copy
+# every image (digests, multi-arch indexes and signatures preserved).
 #
 # See docs/airgapped-install.md for the full operator procedure.
 busybox:1.36
