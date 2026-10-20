@@ -1,4 +1,4 @@
-package observability
+package telemetry
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func TestBackgroundOTLPErrorBodyDoesNotBypassDiagnosticPolicy(t *testing.T) {
 	}))
 	defer server.Close()
 	var capture sdkLogCapture
-	shutdown, err := InitTracing(context.Background(), testSlog(&capture), TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1})
+	shutdown, err := initForTest(t, testLogger(&capture), Config{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SampleRate: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

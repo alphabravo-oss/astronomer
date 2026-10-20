@@ -1,30 +1,31 @@
-package observability
+package telemetry
 
 import (
 	"context"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// When the OTLP endpoint is unset, InitTracing
+// When the OTLP endpoint is unset, Init
 // must install a no-op provider and W3C propagator without exporter
 // goroutines or egress, and return a Shutdown that
 // returns nil immediately.
-func TestInitTracing_DisabledByDefault(t *testing.T) {
+func TestInitDisabledTracingByDefault(t *testing.T) {
 	preserveTracingGlobals(t)
 
-	cfg := TracingConfig{}
+	cfg := Config{}
 	if cfg.Endpoint != "" {
 		t.Fatalf("expected empty Endpoint when env unset, got %q", cfg.Endpoint)
 	}
 
-	shutdown, err := InitTracing(context.Background(), nil, cfg)
+	shutdown, err := initForTest(t, zerolog.Nop(), cfg)
 	if err != nil {
-		t.Fatalf("InitTracing returned error in disabled mode: %v", err)
+		t.Fatalf("Init returned error in disabled mode: %v", err)
 	}
 	if shutdown == nil {
 		t.Fatal("Shutdown is nil; caller expects a non-nil callable even in no-op mode")
@@ -92,10 +93,10 @@ func TestTracingSamplerHonorsExplicitZero(t *testing.T) {
 }
 
 func TestTracingResourceCarriesDeploymentIdentity(t *testing.T) {
-	res, err := tracingResource(TracingConfig{
-		ServiceVersion: "1.2.3", Environment: "staging",
+	res, err := newResource(Config{
+		ServiceName: "astronomer-worker", ServiceVersion: "1.2.3", Environment: "staging",
 		ServiceNamespace: "astronomer", ServiceInstanceID: "pod-1",
-	}, "astronomer-worker")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

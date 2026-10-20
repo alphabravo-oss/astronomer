@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -28,7 +29,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 	discardLog := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	t.Run("healthy", func(t *testing.T) {
-		srv := httptest.NewServer(newWorkerMux(fakePinger{}, discardLog))
+		srv := httptest.NewServer(newWorkerMux(fakePinger{}, promhttp.Handler(), discardLog))
 		defer srv.Close()
 		resp, err := http.Get(srv.URL + "/healthz")
 		if err != nil {
@@ -41,7 +42,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 	})
 
 	t.Run("redis_down", func(t *testing.T) {
-		srv := httptest.NewServer(newWorkerMux(fakePinger{err: errors.New("dial tcp: connection refused")}, discardLog))
+		srv := httptest.NewServer(newWorkerMux(fakePinger{err: errors.New("dial tcp: connection refused")}, promhttp.Handler(), discardLog))
 		defer srv.Close()
 		resp, err := http.Get(srv.URL + "/healthz")
 		if err != nil {
@@ -59,6 +60,7 @@ func TestWorkerHealthz_C02(t *testing.T) {
 		const sentinel = "redis-master.astronomer.svc.cluster.local:6379"
 		srv := httptest.NewServer(newWorkerMux(
 			fakePinger{err: errors.New("dial tcp " + sentinel + ": connection refused")},
+			promhttp.Handler(),
 			discardLog,
 		))
 		defer srv.Close()
@@ -116,7 +118,7 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- StartMetricsServer(ctx, addr, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		errCh <- StartMetricsServer(ctx, addr, nil, promhttp.Handler(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}()
 
 	deadline := time.Now().Add(3 * time.Second)

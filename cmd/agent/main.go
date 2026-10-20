@@ -18,9 +18,9 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -85,15 +85,16 @@ func runConnect(logger *slog.Logger) error {
 	if instanceID == "" {
 		instanceID = cfg.ClusterID
 	}
-	otelShutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{
+	otelShutdown, metricsHandler, err := telemetry.Init(context.Background(), telemetry.Config{
 		Endpoint: cfg.OTELExporterEndpoint, Protocol: cfg.OTELExporterProtocol, Insecure: cfg.OTELExporterInsecure,
-		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		Headers:     telemetry.ParseOTLPHeaders(cfg.OTELExporterHeaders),
 		ServiceName: "astronomer-agent", ServiceVersion: version.Version,
 		Environment: cfg.Environment, ServiceNamespace: "astronomer", ServiceInstanceID: instanceID,
-		SamplerRatio: cfg.OTELSamplerRatio,
+		SampleRate: cfg.OTELSamplerRatio,
+		Logger:     *logging.Default(),
 	})
 	if err != nil {
-		return fmt.Errorf("initialize agent tracing: %w", err)
+		return fmt.Errorf("initialize agent telemetry: %w", err)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -194,6 +195,7 @@ func runConnect(logger *slog.Logger) error {
 		health.SetAgentBuildSHA(version.GitCommit)
 		health.SetPrivilegeProfile(cfg.PrivilegeProfile)
 		health.SetClusterID(cfg.ClusterID)
+		health.SetMetricsHandler(metricsHandler)
 		if mc, err := metricsv.NewForConfig(restConfig); err == nil {
 			health.SetMetricsClient(mc)
 		} else {

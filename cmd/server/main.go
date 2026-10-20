@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -109,25 +110,22 @@ func main() {
 
 	logger.Info().Str("event", "server_starting").Str("version", version.Version).Str("commit", version.GitCommit).Str("env", cfg.Env).Msg("starting astronomer server")
 
-	// Distributed tracing foundation. No-op when
-	// OTEL_EXPORTER_OTLP_ENDPOINT is unset; otherwise wires an OTLP gRPC
-	// exporter (OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf opts into HTTP) behind the global TracerProvider so the chi otelhttp
-	// middleware, pgx OTel tracer, and tunnel originator spans all
-	// flow into the same backend.
-	tracingCfg := observability.TracingConfig{
+	// Telemetry (guide ch.05): W3C propagation, the OTLP tracer provider
+	// (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset; gRPC by default,
+	// OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf opts into HTTP) and the meter
+	// provider whose Prometheus exporter shares the default registry with the
+	// client_golang collectors. It must precede NewApp: otelhttp, otelpgx and
+	// the tunnel originator capture the global providers at construction.
+	otelShutdown, metricsHandler, err := telemetry.Init(context.Background(), telemetry.Config{
+		ServiceName: "astronomer-server", ServiceVersion: version.Version, Environment: cfg.Env,
+		ServiceNamespace: "astronomer", ServiceInstanceID: cfg.ProcessHostname,
 		Endpoint: cfg.OTELExporterEndpoint, Protocol: cfg.OTELExporterProtocol, Insecure: cfg.OTELExporterInsecure,
-		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
-		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
-		SamplerRatio: cfg.OTELSamplerRatio,
-	}
-	tracingCfg.ServiceName = "astronomer-server"
-	tracingCfg.ServiceVersion = version.Version
-	tracingCfg.Environment = cfg.Env
-	tracingCfg.ServiceNamespace = "astronomer"
-	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
-	otelShutdown, err := observability.InitTracing(context.Background(), logging.Slog(logger), tracingCfg)
+		Headers:    telemetry.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		SampleRate: cfg.OTELSamplerRatio,
+		Logger:     logger,
+	})
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to init otel tracing")
+		logger.Error().Err(err).Msg("failed to init telemetry")
 		os.Exit(1)
 	}
 
@@ -238,7 +236,7 @@ func main() {
 	}
 	if cfg.ServerMetricsAddr != "" {
 		if err := srv.AddRuntimeLoop("metrics-listener", true, func(ctx context.Context) error {
-			return server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger)
+			return server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, metricsHandler, logger)
 		}); err != nil {
 			logger.Error().Err(err).Msg("failed to register metrics listener")
 			os.Exit(1)

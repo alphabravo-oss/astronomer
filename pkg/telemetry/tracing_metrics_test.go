@@ -1,4 +1,4 @@
-package observability
+package telemetry
 
 import (
 	"context"
@@ -12,12 +12,15 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 func TestExporterMetricsDistinguishActualWireSuccessAndFailure(t *testing.T) {
@@ -55,8 +58,8 @@ func TestExporterMetricsDistinguishActualWireSuccessAndFailure(t *testing.T) {
 	}
 	want := `# HELP astronomer_tracing_exports_total Completed SDK export calls, including failure; not internal retries or queue drops.
 # TYPE astronomer_tracing_exports_total counter
-astronomer_tracing_exports_total{astronomer_instance_id="` + InstanceID() + `",result="failure"} 1
-astronomer_tracing_exports_total{astronomer_instance_id="` + InstanceID() + `",result="success"} 1
+astronomer_tracing_exports_total{astronomer_instance_id="` + observability.InstanceID() + `",result="failure"} 1
+astronomer_tracing_exports_total{astronomer_instance_id="` + observability.InstanceID() + `",result="success"} 1
 `
 	if err := testutil.GatherAndCompare(registry, strings.NewReader(want), "astronomer_tracing_exports_total"); err != nil {
 		t.Fatal(err)
@@ -68,7 +71,7 @@ astronomer_tracing_exports_total{astronomer_instance_id="` + InstanceID() + `",r
 	for _, family := range families {
 		for _, metric := range family.Metric {
 			for _, label := range metric.Label {
-				if label.GetName() != instanceIDLabel && label.GetName() != "result" {
+				if label.GetName() != "astronomer_instance_id" && label.GetName() != "result" {
 					t.Fatal("unbounded exporter label")
 				}
 			}
@@ -85,7 +88,7 @@ func TestTracingEnabledWithZeroSamplingDoesNotImplyExports(t *testing.T) {
 	}))
 	defer server.Close()
 	beforeSuccess, beforeFailure := tracingMetrics.success.Load(), tracingMetrics.failure.Load()
-	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 0})
+	shutdown, err := initForTest(t, zerolog.Nop(), Config{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SampleRate: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +115,7 @@ func TestTracingEnabledWithZeroSamplingDoesNotImplyExports(t *testing.T) {
 	if requests.Load() != 0 || tracingMetrics.success.Load() != beforeSuccess || tracingMetrics.failure.Load() != beforeFailure {
 		t.Fatal("sampling zero produced an HTTP export or invented exporter progress")
 	}
-	shutdown, err = InitTracing(context.Background(), nil, TracingConfig{})
+	shutdown, err = initForTest(t, zerolog.Nop(), Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

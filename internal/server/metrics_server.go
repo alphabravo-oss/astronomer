@@ -8,13 +8,12 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
-// StartMetricsServer exposes Prometheus metrics on a dedicated listener so
-// scrape traffic is isolated from the public API surface.
-func StartMetricsServer(ctx context.Context, addr string, log zerolog.Logger) error {
+// StartMetricsServer serves the telemetry.Init /metrics handler (legacy
+// client_golang collectors and OTel instruments on one registry) on a
+// dedicated listener so scrape traffic is isolated from the public API.
+func StartMetricsServer(ctx context.Context, addr string, metrics http.Handler, log zerolog.Logger) error {
 	if addr == "" {
 		log.Info().Str("event", "server_metrics_listener_disabled").Msg("server metrics listener disabled")
 		return nil
@@ -22,7 +21,7 @@ func StartMetricsServer(ctx context.Context, addr string, log zerolog.Logger) er
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           appmiddleware.MetricsHandler(),
+		Handler:           metrics,
 		ReadHeaderTimeout: 15 * time.Second,
 	}
 

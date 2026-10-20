@@ -15,5 +15,6 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0007](0007-rest-to-connect-rpc.md) | REST/OpenAPI to Connect-RPC migration strategy | proposed |
 | [0008](0008-charlie-integration-retained.md) | Charlie integration is retained | accepted |
 | [0011](0011-zerolog-logging-with-slog-bridge.md) | zerolog via pkg/logging, with a log/slog bridge | accepted |
+| [0012](0012-otel-meter-provider-prometheus-exporter.md) | pkg/telemetry: one Init for tracer and meter providers, one /metrics | accepted |
 
 The threat model lives next to these decisions: [`../threat-model.md`](../threat-model.md).

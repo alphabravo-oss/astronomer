@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -63,13 +65,6 @@ type summaryProbe struct {
 func TestRequestSummaryLogIntegration(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	database, err := db.Connect(ctx, testdb.DSN(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(database.Close)
-	queries := sqlc.New(database.Pool())
-
 	const (
 		password       = "Leak-Probe-Password-7f3a"
 		wrongPassword  = "Leak-Probe-Wrong-Password-91c2"
@@ -79,29 +74,12 @@ func TestRequestSummaryLogIntegration(t *testing.T) {
 		traceMe        = "0af7651916cd43dd8448eb211c80319c"
 		traceAnonymous = "5b8aa5a2d2c872e8321cf37308d69df2"
 	)
-	if err := auth.EnsureBootstrapAdmin(ctx, queries, auth.BootstrapAdminConfig{
-		Username: "admin", Email: "admin@example.test", Password: password,
-	}, nil); err != nil {
-		t.Fatal(err)
-	}
-
 	var captured lockedBuffer
 	logger, err := logging.NewWithWriter(&captured, logging.Config{Level: "debug", Component: "server"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	jwt := auth.MustNewJWTManager("request-summary-integration-signing-key-0001", 60)
-	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwt)
-	authHandler.SetRunTx(sqlcMutationTxRunner[handler.AuthMutationTx](database))
-	authHandler.SetPasswordRehasher(queries)
-	authHandler.SetRoleBindings(queries)
-	authHandler.SetAuditWriter(queries)
-	authHandler.SetLockoutQuerier(queries)
-	authHandler.SetRevocationQuerier(queries)
-	authHandler.SetLogger(logging.Slog(logger))
-	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{
-		Logger: logger, JWT: jwt, Auth: authHandler, AuthQueries: queries, AuditWriter: queries, Queries: queries,
-	}})
+	queries, router := integrationAuthRouter(t, logger, password)
 	server := httptest.NewServer(wrapWithTracing(router))
 	t.Cleanup(server.Close)
 
@@ -248,4 +226,35 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 		t.Fatal(err)
 	}
 	return parsed
+}
+
+// integrationAuthRouter builds the production router with the real auth
+// handler over a freshly migrated Postgres holding one admin
+// (admin@example.test / password).
+func integrationAuthRouter(t *testing.T, logger zerolog.Logger, password string) (*sqlc.Queries, http.Handler) {
+	t.Helper()
+	ctx := t.Context()
+	database, err := db.Connect(ctx, testdb.DSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	queries := sqlc.New(database.Pool())
+	if err := auth.EnsureBootstrapAdmin(ctx, queries, auth.BootstrapAdminConfig{
+		Username: "admin", Email: "admin@example.test", Password: password,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	jwt := auth.MustNewJWTManager("request-summary-integration-signing-key-0001", 60)
+	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwt)
+	authHandler.SetRunTx(sqlcMutationTxRunner[handler.AuthMutationTx](database))
+	authHandler.SetPasswordRehasher(queries)
+	authHandler.SetRoleBindings(queries)
+	authHandler.SetAuditWriter(queries)
+	authHandler.SetLockoutQuerier(queries)
+	authHandler.SetRevocationQuerier(queries)
+	authHandler.SetLogger(logging.Slog(logger))
+	return queries, NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{
+		Logger: logger, JWT: jwt, Auth: authHandler, AuthQueries: queries, AuditWriter: queries, Queries: queries,
+	}})
 }

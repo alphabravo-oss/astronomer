@@ -1,10 +1,9 @@
-package observability
+package telemetry
 
 import (
 	"bytes"
 	"context"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
@@ -27,7 +28,7 @@ func TestOTLPActualWireRedactsSecretsAcrossSpanFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 	}))
 	defer server.Close()
-	shutdown, err := InitTracing(context.Background(), testSlog(io.Discard), TracingConfig{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SamplerRatio: 1, ServiceName: "safe-service", ServiceVersion: "Bearer synthetic-resource-secret"})
+	shutdown, err := initForTest(t, testLogger(io.Discard), Config{Endpoint: server.URL, Protocol: ProtocolHTTPProtobuf, SampleRate: 1, ServiceName: "safe-service", ServiceVersion: "Bearer synthetic-resource-secret"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,10 +59,10 @@ func TestOTLPActualWireRedactsSecretsAcrossSpanFields(t *testing.T) {
 	}
 }
 
-func testSlog(w io.Writer) *slog.Logger {
+func testLogger(w io.Writer) zerolog.Logger {
 	logger, err := logging.NewWithWriter(w, logging.Config{Level: "debug"})
 	if err != nil {
 		panic(err)
 	}
-	return logging.Slog(logger)
+	return logger
 }

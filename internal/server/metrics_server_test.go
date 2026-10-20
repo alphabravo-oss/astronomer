@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -42,7 +43,7 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- StartMetricsServer(ctx, addr, zerolog.Nop())
+		errCh <- StartMetricsServer(ctx, addr, promhttp.Handler(), zerolog.Nop())
 	}()
 
 	deadline := time.Now().Add(3 * time.Second)

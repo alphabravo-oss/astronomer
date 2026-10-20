@@ -15,8 +15,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/oauth2"
 
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 )
 
 func TestAuthUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {
@@ -29,11 +31,16 @@ func TestAuthUpstreamBodiesAbsentFromJSONAndActualOTLP(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 	}))
 	defer collector.Close()
-	priorProvider, priorPropagator := otel.GetTracerProvider(), otel.GetTextMapPropagator()
-	defer func() { otel.SetTracerProvider(priorProvider); otel.SetTextMapPropagator(priorPropagator) }()
+	priorProvider, priorMeters, priorPropagator := otel.GetTracerProvider(), otel.GetMeterProvider(), otel.GetTextMapPropagator()
+	defer func() {
+		otel.SetTracerProvider(priorProvider)
+		otel.SetMeterProvider(priorMeters)
+		otel.SetTextMapPropagator(priorPropagator)
+	}()
 	var output bytes.Buffer
 	logger := diagnosticSlog(&output)
-	shutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{Protocol: observability.ProtocolHTTPProtobuf, Endpoint: collector.URL, SamplerRatio: 1, ServiceName: "upstream-error-fixture"})
+	registry := prometheus.NewRegistry()
+	shutdown, _, err := telemetry.Init(context.Background(), telemetry.Config{Protocol: telemetry.ProtocolHTTPProtobuf, Endpoint: collector.URL, SampleRate: 1, ServiceName: "upstream-error-fixture", Registerer: registry, Gatherer: registry})
 	if err != nil {
 		t.Fatal(err)
 	}

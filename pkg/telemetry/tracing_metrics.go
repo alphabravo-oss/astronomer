@@ -1,4 +1,4 @@
-package observability
+package telemetry
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 // These describe exporter calls, not process/dependency readiness or the SDK's
@@ -21,9 +23,9 @@ type tracingMetricsCollector struct {
 
 func newTracingMetricsCollector() *tracingMetricsCollector {
 	return &tracingMetricsCollector{
-		enabledDesc:     prometheus.NewDesc("astronomer_tracing_enabled", "1 when trace export is configured; not collector readiness.", MetricLabels(), nil),
-		exportsDesc:     prometheus.NewDesc("astronomer_tracing_exports_total", "Completed SDK export calls, including failure; not internal retries or queue drops.", MetricLabels("result"), nil),
-		lastSuccessDesc: prometheus.NewDesc("astronomer_tracing_last_success_timestamp_seconds", "Last successful export time; zero means no successful export observed.", MetricLabels(), nil),
+		enabledDesc:     prometheus.NewDesc("astronomer_tracing_enabled", "1 when trace export is configured; not collector readiness.", observability.MetricLabels(), nil),
+		exportsDesc:     prometheus.NewDesc("astronomer_tracing_exports_total", "Completed SDK export calls, including failure; not internal retries or queue drops.", observability.MetricLabels("result"), nil),
+		lastSuccessDesc: prometheus.NewDesc("astronomer_tracing_last_success_timestamp_seconds", "Last successful export time; zero means no successful export observed.", observability.MetricLabels(), nil),
 	}
 }
 
@@ -40,10 +42,10 @@ func (metrics *tracingMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	// Instance identity is established after tracing initialization. Resolve it
 	// at collection time rather than retaining an extra "unknown" startup series.
-	ch <- prometheus.MustNewConstMetric(metrics.enabledDesc, prometheus.GaugeValue, enabled, MetricValues()...)
-	ch <- prometheus.MustNewConstMetric(metrics.exportsDesc, prometheus.CounterValue, float64(metrics.success.Load()), MetricValues("success")...)
-	ch <- prometheus.MustNewConstMetric(metrics.exportsDesc, prometheus.CounterValue, float64(metrics.failure.Load()), MetricValues("failure")...)
-	ch <- prometheus.MustNewConstMetric(metrics.lastSuccessDesc, prometheus.GaugeValue, float64(metrics.lastSuccess.Load())/1e9, MetricValues()...)
+	ch <- prometheus.MustNewConstMetric(metrics.enabledDesc, prometheus.GaugeValue, enabled, observability.MetricValues()...)
+	ch <- prometheus.MustNewConstMetric(metrics.exportsDesc, prometheus.CounterValue, float64(metrics.success.Load()), observability.MetricValues("success")...)
+	ch <- prometheus.MustNewConstMetric(metrics.exportsDesc, prometheus.CounterValue, float64(metrics.failure.Load()), observability.MetricValues("failure")...)
+	ch <- prometheus.MustNewConstMetric(metrics.lastSuccessDesc, prometheus.GaugeValue, float64(metrics.lastSuccess.Load())/1e9, observability.MetricValues()...)
 }
 
 var tracingMetrics = newTracingMetricsCollector()

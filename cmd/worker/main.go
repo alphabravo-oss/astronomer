@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
+	"github.com/alphabravocompany/astronomer-go/pkg/telemetry"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
@@ -131,15 +132,16 @@ func main() {
 	// worker decrypts the same credential columns the server does.
 	observability.ReportInsecureDevKeys(logging.Slog(log), config.DevSentinelsInUse(cfg))
 
-	// Distributed tracing — same InitTracing/Shutdown contract as
-	// the server. The worker's asynq handlers extract traceparent from
-	// incoming task payloads (planned follow-up in this same sprint),
-	// so when both processes point at the same OTLP endpoint a single
-	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
-	tracingCfg := workerTracingConfig(cfg)
-	otelShutdown, err := observability.InitTracing(context.Background(), logging.Slog(log), tracingCfg)
+	// Telemetry — same telemetry.Init contract as the server. The worker's
+	// asynq handlers extract traceparent from task payloads, so when both
+	// processes point at the same OTLP endpoint one trace spans HTTP → asynq
+	// → worker DB queries → tunnel calls. The returned handler serves the
+	// shared client_golang + OTel registry on WORKER_METRICS_ADDR.
+	telemetryCfg := workerTelemetryConfig(cfg)
+	telemetryCfg.Logger = log
+	otelShutdown, metricsHandler, err := telemetry.Init(context.Background(), telemetryCfg)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to init otel tracing")
+		log.Error().Err(err).Msg("failed to init telemetry")
 		os.Exit(1)
 	}
 	defer func() {
@@ -497,7 +499,7 @@ func main() {
 		// reachability via the asynq client is the meaningful liveness signal
 		// for a queue consumer — if it can't reach Redis it can't process or
 		// enqueue anything.
-		if err := worker.StartMetricsServer(ctx, cfg.WorkerMetricsAddr, runtimeEnqueuer, logging.Slog(log)); err != nil {
+		if err := worker.StartMetricsServer(ctx, cfg.WorkerMetricsAddr, runtimeEnqueuer, metricsHandler, logging.Slog(log)); err != nil {
 			errCh <- fmt.Errorf("metrics server: %w", err)
 		}
 	}()
