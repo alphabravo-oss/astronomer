@@ -141,7 +141,7 @@ OIDC identity and pass.
 
 **Covered:**
 - All first-party chart images: `astronomer-go-server`,
-  `astronomer-go-worker`, `astronomer-go-agent`, `astronomer-go-migrate`,
+  `astronomer-go-worker`, `astronomer-go-agent`,
   `astronomer-shell`, and `astronomer-frontend`
 - Both the `:v<version>` and `:latest` tags
 - SBOMs (SPDX 2.3 JSON format) attached as cosign attestations

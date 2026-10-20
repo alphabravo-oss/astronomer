@@ -76,12 +76,6 @@ image:
   # Production sets this true and refuses every active image without an exact
   # sha256 digest. Development keeps tag-based local-image workflows available.
   requireDigest: false
-  # F1 schema-skew guard: server and migrate ship the same DB schema and are
-  # built from one commit, so their tags MUST match. The chart fails the render
-  # when image.server.tag != image.migrate.tag (a mismatch can 503 the plane
-  # permanently via the /readyz schema floor). Set true ONLY for a deliberate
-  # skewed rollout that ships no new migration (a NOTES.txt warning then fires).
-  allowSchemaSkew: false
   # Per-image `registry` is the online default home (first-party = GHCR). The
   # global `image.registry` above overrides ALL of these when set (air-gap:
   # mirror everything into one private registry). Empty global => these defaults.
@@ -99,11 +93,6 @@ image:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v2.0.1"
-    digest: ""
-  migrate:
-    registry: ghcr.io/alphabravo-oss
-    repository: astronomer-go-migrate
     tag: "v2.0.1"
     digest: ""
 
@@ -508,30 +497,18 @@ redis:
     database: 0
 
 # =============================================================================
-# Migrations
+# Init containers (wait-for-postgres / wait-for-redis)
 # =============================================================================
-migrate:
-  enabled: true
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 65534
-    runAsGroup: 65534
-    fsGroup: 65534
-    seccompProfile:
-      type: RuntimeDefault
-  securityContext:
-    allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: true
-    capabilities:
-      drop:
-        - ALL
+# Schema migrations are embedded in the server binary and applied at boot
+# under a PostgreSQL advisory lock (guide ch.02); there is no migrate image.
+initWait:
   resources:
     requests:
-      cpu: 50m
-      memory: 64Mi
+      cpu: 25m
+      memory: 32Mi
     limits:
-      cpu: 500m
-      memory: 256Mi
+      cpu: 200m
+      memory: 64Mi
 preflight:
   enabled: true
   image:

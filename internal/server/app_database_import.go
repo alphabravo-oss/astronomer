@@ -118,8 +118,8 @@ func prepareDatabaseTransferCommand(bounded context.Context, cfg *config.Config)
 	if database.SchemaHealth(bounded) != nil {
 		return nil, errors.New("offline database import schema health invalid")
 	}
-	schema, dirty, err := database.SchemaVersion(bounded)
-	if err != nil || dirty || schema != db.ExpectedSchemaVersion {
+	schema, err := database.SchemaVersion(bounded)
+	if err != nil || schema != db.ExpectedSchemaVersion {
 		return nil, errors.New("offline database import current schema required")
 	}
 	restart, err := provider.NewDatabaseRestartRevoker(database.Pool(), options)

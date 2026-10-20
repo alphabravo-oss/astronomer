@@ -19,8 +19,8 @@ import (
 type operationalDBFake struct{ version int64 }
 
 func (f operationalDBFake) Health(context.Context) error { return nil }
-func (f operationalDBFake) SchemaVersion(context.Context) (int64, bool, error) {
-	return f.version, false, nil
+func (f operationalDBFake) SchemaVersion(context.Context) (int64, error) {
+	return f.version, nil
 }
 func (f operationalDBFake) Pool() *pgxpool.Pool { return nil }
 

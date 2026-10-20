@@ -6,19 +6,9 @@ Chart version: {{ .Chart.Version }} (app {{ .Chart.AppVersion }})
 
 Server image : {{ include "astronomer.image" (dict "context" . "component" "server") }}
 Worker image : {{ include "astronomer.image" (dict "context" . "component" "worker") }}
-Migrate image: {{ include "astronomer.image" (dict "context" . "component" "migrate") }}
 
-Migrations were applied via a pre-install/pre-upgrade Helm hook Job.
-{{- if ne (toString .Values.image.server.tag) (toString .Values.image.migrate.tag) }}
-
-!! SCHEMA-SKEW OVERRIDE ACTIVE (F1) !!
-   image.server.tag ({{ .Values.image.server.tag }}) != image.migrate.tag ({{ .Values.image.migrate.tag }})
-   and image.allowSchemaSkew=true, so the chart did NOT refuse the mismatch.
-   The server's /readyz enforces a minimum DB schema; if the migrate image ships
-   a schema BELOW the server binary's ExpectedSchemaVersion, the server pods will
-   be held out of Service rotation until you deploy a matching migrate image.
-   Only keep this override for a hotfix that ships no new migration.
-{{- end }}
+Schema migrations are embedded in the server binary and applied at boot under
+a PostgreSQL advisory lock; there is no separate migrate image or Job.
 
 TLS
 ---

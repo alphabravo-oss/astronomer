@@ -32,11 +32,16 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	if err != nil {
 		return err
 	}
-	// T8.1 — fail fast on a corrupt schema_migrations row set
-	// (multi-row drift or dirty=true). The .247 incident on 2026-05-13
-	// silently shipped {84 dirty=t, 86 clean} for hours; refusing to
-	// start surfaces it in the first CrashLoop instead of letting the
-	// pod serve traffic against an indeterminate schema.
+	// Apply pending migrations under the session advisory lock before
+	// anything else touches the schema (guide ch.02). Concurrent replicas
+	// serialize on the lock; a failed migration is terminal for the process.
+	result, migrateErr := database.Migrate(ctx, logger)
+	if migrateErr != nil {
+		database.Close()
+		return fmt.Errorf("database migration failed: %w", migrateErr)
+	}
+	logger.Info("database schema ready", "event", "database_schema_ready",
+		"applied", result.Applied, "version", result.Version)
 	if shErr := database.SchemaHealth(ctx); shErr != nil {
 		database.Close()
 		return fmt.Errorf("schema health check failed: %w", shErr)

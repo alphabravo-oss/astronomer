@@ -123,7 +123,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
 	}
 	for _, field := range []string{
-		"image.server.digest", "image.worker.digest", "image.agent.digest", "image.migrate.digest",
+		"image.server.digest", "image.worker.digest", "image.agent.digest",
 		"utilities.busybox.digest", "postgres.image.digest", "preflight.image.digest", "frontend.image.digest",
 		"dex.image.digest", "managementBackup.image.digest", "managementRestoreDrill.image.digest",
 		"managementRestoreDrill.sidecar.image.digest",
@@ -140,7 +140,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 	}
 	rendered := stdout.String()
 	for name, minimum := range map[string]int{
-		"database-credentials":  5,
+		"database-credentials":  4,
 		"redis-credentials":     2,
 		"core-credentials":      3,
 		"bootstrap-credentials": 1,

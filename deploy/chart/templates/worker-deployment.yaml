@@ -47,7 +47,7 @@ spec:
               until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
               echo "postgres up"
           resources:
-            {{- toYaml .Values.migrate.resources | nindent 12 }}
+            {{- toYaml .Values.initWait.resources | nindent 12 }}
         {{- end }}
         {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
         - name: wait-redis
@@ -65,7 +65,7 @@ spec:
               until nc -z {{ include "astronomer.fullname" . }}-redis 6379; do sleep 1; done
               echo "redis up"
           resources:
-            {{- toYaml .Values.migrate.resources | nindent 12 }}
+            {{- toYaml .Values.initWait.resources | nindent 12 }}
         {{- end }}
       containers:
         - name: worker

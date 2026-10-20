@@ -75,8 +75,8 @@ type fakeDBSchema struct {
 }
 
 func (f fakeDBSchema) Health(context.Context) error { return nil }
-func (f fakeDBSchema) SchemaVersion(context.Context) (int64, bool, error) {
-	return f.version, f.dirty, f.err
+func (f fakeDBSchema) SchemaVersion(context.Context) (int64, error) {
+	return f.version, f.err
 }
 
 // TestReadinessSchemaVersionGate (C-03): the pod stays out of rotation until the

@@ -35,7 +35,6 @@ func TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers
 			for _, workload := range []struct{ kind, name string }{
 				{kind: "Deployment", name: "astronomer-server"},
 				{kind: "Deployment", name: "astronomer-worker"},
-				{kind: "Job", name: "astronomer-migrate"},
 			} {
 				doc := findRenderedDoc(t, docs, workload.kind, workload.name)
 				raw, _ := json.Marshal(doc)

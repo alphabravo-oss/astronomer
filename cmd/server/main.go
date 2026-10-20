@@ -34,6 +34,10 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 		return true, 0
 	}
 
+	if args[0] == "migrate" {
+		return true, handleMigrateCommand(args[1:], stdout, stderr)
+	}
+
 	if args[0] == "database-update-export" {
 		return true, handleDatabaseExportCommand(args[1:], stdout, stderr)
 	}

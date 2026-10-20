@@ -77,12 +77,10 @@
         "registry": { "type": "string" },
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
         "pullSecrets": { "type": "array" },
-        "allowSchemaSkew": { "type": "boolean" },
         "requireDigest": { "type": "boolean" },
         "server": { "$ref": "#/definitions/imageRef" },
         "worker": { "$ref": "#/definitions/imageRef" },
-        "agent": { "$ref": "#/definitions/imageRef" },
-        "migrate": { "$ref": "#/definitions/imageRef" }
+        "agent": { "$ref": "#/definitions/imageRef" }
       }
     },
     "frontend": { "$ref": "#/definitions/workload" },
@@ -222,7 +220,7 @@
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },
-    "migrate": { "$ref": "#/definitions/workload" },
+    "initWait": { "type": "object", "additionalProperties": true },
     "preflight": {
       "allOf": [{ "$ref": "#/definitions/workload" }],
       "type": "object",

@@ -169,10 +169,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer taskLeader.Close()
-	// C-01: fail fast on a corrupt schema_migrations row set (dirty=true or
-	// multi-row drift), same guard the server runs in NewApp. A worker that
-	// keeps sweeping against an indeterminate schema hides the .247-class
-	// incident instead of CrashLooping on it.
+	// Only the server applies migrations; a worker that comes up first waits
+	// for the schema instead of crash-looping against missing tables, then
+	// runs the same schema guard the server runs in NewApp.
+	schemaWaitCtx, cancelSchemaWait := context.WithTimeout(context.Background(), 10*time.Minute)
+	if waitErr := database.WaitForSchema(schemaWaitCtx, log); waitErr != nil {
+		cancelSchemaWait()
+		log.Error("database schema not ready; refusing to start", "error", waitErr)
+		os.Exit(1)
+	}
+	cancelSchemaWait()
 	if shErr := database.SchemaHealth(context.Background()); shErr != nil {
 		log.Error("schema health check failed; refusing to start", "error", shErr)
 		os.Exit(1)

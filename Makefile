@@ -4,7 +4,7 @@
 # Every target is phony. VERSION/COMMIT/DATE use ?= so CI can override them.
 
 .PHONY: help dev dev-down dev-status dev-logs build test test-integration lint vet fmt \
-        generate sqlc migrate migrate-down check security gosec govulncheck secrets-scan \
+        generate sqlc migrate check security gosec govulncheck secrets-scan \
         fips-build updates docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
         frontend-check clean $(BINARIES)
 
@@ -40,7 +40,7 @@ TEST_RESULTS_DIR    ?= test-results
 # ── Images ───────────────────────────────────────────────────────────────────
 IMG_REGISTRY ?= ghcr.io/alphabravo-oss
 IMG_TAG      ?= $(VERSION)
-IMAGES       := server worker agent migrate shell dr frontend
+IMAGES       := server worker agent shell dr frontend
 DOCKER_BUILD_ARGS = --build-arg GO_VERSION=$(GO_VERSION) \
                     --build-arg VERSION=$(VERSION) \
                     --build-arg GIT_COMMIT=$(GIT_COMMIT) \
@@ -123,11 +123,8 @@ generate: sqlc ## Regenerate every checked-in artifact (sqlc, OpenAPI types/clie
 
 # ── Migrations ───────────────────────────────────────────────────────────────
 DATABASE_URL ?= postgres://astronomer:astronomer@localhost:15432/astronomer?sslmode=disable
-migrate: ## Apply pending migrations (DATABASE_URL)
-	go run ./cmd/migrator -database "$(DATABASE_URL)" -path internal/db/migrations up
-
-migrate-down: ## Roll back one migration (DATABASE_URL)
-	go run ./cmd/migrator -database "$(DATABASE_URL)" -path internal/db/migrations down 1
+migrate: ## Apply pending embedded goose migrations (DATABASE_URL); the server also does this at boot
+	go run ./cmd/server migrate -database "$(DATABASE_URL)"
 
 # ── Security gates (guide ch.06) ─────────────────────────────────────────────
 security: gosec govulncheck secrets-scan ## gosec (fail on HIGH) + govulncheck + gitleaks full history
@@ -162,7 +159,7 @@ docker-build-frontend: ## Build the frontend image
 	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) \
 		-f frontend/Dockerfile -t $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG) frontend
 
-docker-build-%: ## Build one image: docker-build-server|worker|agent|migrate|shell|dr
+docker-build-%: ## Build one image: docker-build-server|worker|agent|shell|dr
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.$* -t $(IMG_REGISTRY)/astronomer-go-$*:$(IMG_TAG) .
 
 # The base values profile requires release-stamped digests and real key material;

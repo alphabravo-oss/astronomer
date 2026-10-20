@@ -48,7 +48,7 @@ This file is the project-root source of truth for engineering discipline
 | --- | --- |
 | `make dev` / `scripts/dev.sh up` | Postgres 17 + Redis + Tempo/Loki/Alloy/Prometheus/Grafana (compose), Air-reloaded `server` and `worker`, Vite dashboard on :3000 |
 | `scripts/dev.sh status|logs|down` | Inspect or stop the stack; logs under `tmp/logs/` |
-| `make migrate` / `make migrate-down` | Apply / roll back migrations (`DATABASE_URL`) |
+| `make migrate` | Apply pending embedded goose migrations (`DATABASE_URL`); the server also runs them at boot |
 | `make check` | `lint vet fmt build test` — the PR gate |
 | `make test` / `make test-integration` | Unit (no Docker) / integration (`-tags integration`, real backends) |
 | `make security` | gosec (fail on HIGH) + govulncheck + gitleaks over full history |
@@ -64,7 +64,7 @@ Prometheus `:9092`, Tempo OTLP gRPC `:4317`.
 ## Architecture
 
 - `cmd/{server,worker,agent,astro}` are composition roots and nothing else
-  (`migrator`, `keyrotate`, `dexconfigcheck` remain until Phase 1 replaces them).
+  (`keyrotate`, `dexconfigcheck` remain until Phase 1 replaces them).
 - `internal/<domain>` owns a domain; `internal/handler` is the legacy flat
   handler package being split domain by domain (ADR-0007).
 - `internal/db`: pgx v5 pool with the composite otelpgx + metrics tracer,

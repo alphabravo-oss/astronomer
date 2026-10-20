@@ -1,6 +1,5 @@
 // Package deploy — chart-render coverage for the P0 chart DR items:
 //
-//	F1  server↔migrate image-tag skew guard
 //	F8  bootstrap-password GitOps stability (existingSecret escape hatch)
 //	F4  encryption-key backup + restore-drill decrypt proof
 //
@@ -21,43 +20,6 @@ func drProdValues(t *testing.T) string {
 		t.Fatal("runtime.Caller(0) failed")
 	}
 	return filepath.Join(filepath.Dir(here), "chart", "values-production.yaml")
-}
-
-// ── F1: server↔migrate image-tag skew guard ────────────────────────────────
-
-// A skewed pair (server tag != migrate tag) can leave the DB below the server
-// binary's schema floor and 503 the plane permanently. The chart must refuse
-// the render — not silently produce a mismatched Deployment.
-func TestF1_MismatchedServerMigrateTagsFailsRender(t *testing.T) {
-	errOut := helmTemplateExpectError(t, nil,
-		"image.server.tag=commit-A",
-		"image.migrate.tag=commit-B",
-	)
-	if !strings.Contains(errOut, "image-skew guard (F1) failed") {
-		t.Fatalf("mismatched server/migrate tags did not trip the F1 guard:\n%s", errOut)
-	}
-}
-
-// Matching tags (the built-from-one-commit norm) render cleanly.
-func TestF1_MatchingTagsRender(t *testing.T) {
-	out := helmTemplate(t, "image.server.tag=v9", "image.migrate.tag=v9")
-	if !strings.Contains(out, "astronomer-go-server:v9") {
-		t.Fatalf("expected server image at tag v9 in render:\n%s", out)
-	}
-}
-
-// The escape hatch (allowSchemaSkew=true) lets a deliberate hotfix through and
-// swaps the hard failure for a NOTES.txt warning.
-func TestF1_AllowSchemaSkewOverride(t *testing.T) {
-	out := helmTemplate(t,
-		"image.server.tag=commit-A",
-		"image.migrate.tag=commit-B",
-		"image.allowSchemaSkew=true",
-	)
-	// Render succeeds and the server Deployment still names the override tag.
-	if !strings.Contains(out, "astronomer-go-server:commit-A") {
-		t.Fatalf("allowSchemaSkew override should render the server image:\n%s", out)
-	}
 }
 
 // ── F8: bootstrap-password GitOps stability ─────────────────────────────────

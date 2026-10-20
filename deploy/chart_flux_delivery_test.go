@@ -217,7 +217,7 @@ func TestDatabaseUpgradePreflightIsReadOnlyAndBounded(t *testing.T) {
 	script := command[2]
 	for _, want := range []string{
 		"database_schema_rejected:",
-		"SELECT count(*), COALESCE(max(version), 0), COALESCE(bool_or(dirty), false)",
+		"SELECT count(*) FILTER (WHERE NOT is_applied), COALESCE(max(version_id) FILTER (WHERE is_applied), 0)",
 		fmt.Sprintf("outside supported range 1-%d", db.ExpectedSchemaVersion),
 		fmt.Sprintf("accepted for migration to %d", db.ExpectedSchemaVersion),
 		"delivery_assignment_receipts",

@@ -54,37 +54,8 @@ spec:
               until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
               echo "postgres up"
           resources:
-            {{- toYaml .Values.migrate.resources | nindent 12 }}
+            {{- toYaml .Values.initWait.resources | nindent 12 }}
         {{- end }}
-        - name: migrate
-          {{- with .Values.server.securityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          image: {{ include "astronomer.image" (dict "context" . "component" "migrate") | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args:
-            - "-database"
-            - "$(DATABASE_URL)"
-            - "-path"
-            - "/migrations"
-            - "up"
-          env:
-            {{- if include "astronomer.databaseSecretName" . }}
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "astronomer.databaseSecretName" . | quote }}
-                  key: {{ include "astronomer.databaseSecretKey" . | quote }}
-            {{- else }}
-            - name: DATABASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "astronomer.fullname" . }}-config
-                  key: DATABASE_URL
-            {{- end }}
-          resources:
-            {{- toYaml .Values.migrate.resources | nindent 12 }}
       containers:
         - name: server
           {{- with .Values.server.securityContext }}

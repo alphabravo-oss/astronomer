@@ -88,7 +88,7 @@ ServiceAccount name to use.
 
 {{/*
 Image reference helper for astronomer-built images. Pass dict
-  { context: $, component: "server"|"worker"|"agent"|"migrate" }.
+  { context: $, component: "server"|"worker"|"agent" }.
 Honours .Values.image.registry as an optional global prefix.
 */}}
 {{- define "astronomer.image" -}}
@@ -501,31 +501,6 @@ server wires straight to the operator-provided one; otherwise the chart-managed
 {{- end }}
 
 {{/*
-astronomer.validateImageSkew (F1 · BLOCKER) runs on every render, any env.
-
-The server binary enforces a minimum DB schema (internal/db.ExpectedSchemaVersion)
-via /readyz; the matching migrations ship in the migrate image built from the
-SAME commit. Bumping image.server.tag without image.migrate.tag (or vice-versa)
-leaves the applied schema below the server's floor and holds the pod out of
-Service rotation PERMANENTLY — the exact production incident F1 exists to prevent.
-
-Both images are built from one commit, so their tags must match. We fail the
-render on a mismatch unless the operator explicitly opts into a skewed rollout
-(image.allowSchemaSkew=true — e.g. a hotfix that ships no new migration), in
-which case NOTES.txt warns instead. Returns "" so callers can discard it.
-*/}}
-{{- define "astronomer.validateImageSkew" -}}
-  {{- $serverTag := toString .Values.image.server.tag }}
-  {{- $migrateTag := toString .Values.image.migrate.tag }}
-  {{- if ne $serverTag $migrateTag }}
-    {{- if not .Values.image.allowSchemaSkew }}
-      {{- $msg := printf "\n\nAstronomer image-skew guard (F1) failed:\n  - image.server.tag=%q but image.migrate.tag=%q\n\nThe server and migrate images are built from the same commit and MUST ship the\nsame schema: the server's /readyz holds the pod out of Service rotation until the\napplied DB schema reaches the binary's ExpectedSchemaVersion, and those migrations\nlive in the migrate image. A mismatched pair can 503 the management plane\npermanently (this happened in production — see plans/production-readiness.md F1).\n\nDeploy server + migrate from ONE commit so the tags match (values-production.yaml\nsets both from a single --set image.<name>.tag=<git-sha>). If you INTEND a skewed\nrollout that ships no new migration, set image.allowSchemaSkew=true to override." $serverTag $migrateTag }}
-      {{- fail $msg }}
-    {{- end }}
-  {{- end }}
-{{- end }}
-
-{{/*
 astronomer.requireSecretMaterial is consumed by configmap.yaml to fail the
 render whenever the install would come up on key material that isn't the
 operator's own: an empty value, or one of the chart's historically-shipped dev
@@ -633,7 +608,6 @@ rendered manifest.
           "image.server.digest" .Values.image.server.digest
           "image.worker.digest" .Values.image.worker.digest
           "image.agent.digest" .Values.image.agent.digest
-          "image.migrate.digest" .Values.image.migrate.digest
           "utilities.busybox.digest" .Values.utilities.busybox.digest
           "postgres.image.digest" .Values.postgres.image.digest
           "preflight.image.digest" .Values.preflight.image.digest -}}

@@ -112,7 +112,7 @@ spec:
                 fail_schema_preflight "legacy delivery tables detected: ${legacy_tables}"
               fi
 
-              has_migrations=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.schema_migrations') IS NOT NULL;") || exit 1
+              has_migrations=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.goose_db_version') IS NOT NULL;") || exit 1
               if [ "$has_migrations" != "t" ]; then
                 {{- if $cnpgUpgrade }}
                 fail_schema_preflight "CNPG upgrade target must contain a restored or initialized v1 database; refusing an empty cutover"
@@ -122,23 +122,22 @@ spec:
                   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                   WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p');") || exit 1
                 if [ "$public_tables" != "0" ]; then
-                  fail_schema_preflight "unknown public schema without schema_migrations"
+                  fail_schema_preflight "unknown public schema without goose_db_version"
                 fi
                 echo "Empty PostgreSQL database detected; fresh v1 install is allowed."
                 exit 0
               fi
 
               migration_state=$(psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -AtF '|' -c "
-                SELECT count(*), COALESCE(max(version), 0), COALESCE(bool_or(dirty), false)
-                FROM public.schema_migrations;") || {
-                echo "Refusing release: schema_migrations inspection failed."
+                SELECT count(*) FILTER (WHERE NOT is_applied), COALESCE(max(version_id) FILTER (WHERE is_applied), 0)
+                FROM public.goose_db_version;") || {
+                echo "Refusing release: goose_db_version inspection failed."
                 exit 1
               }
-              migration_rows=$(printf '%s' "$migration_state" | cut -d '|' -f 1)
+              migration_unapplied=$(printf '%s' "$migration_state" | cut -d '|' -f 1)
               migration_version=$(printf '%s' "$migration_state" | cut -d '|' -f 2)
-              migration_dirty=$(printf '%s' "$migration_state" | cut -d '|' -f 3)
-              if [ "$migration_rows" != "1" ] || [ "$migration_dirty" != "f" ]; then
-                fail_schema_preflight "expected one clean schema_migrations row, found rows=${migration_rows} version=${migration_version} dirty=${migration_dirty}"
+              if [ "$migration_unapplied" != "0" ]; then
+                fail_schema_preflight "goose_db_version has ${migration_unapplied} rolled-back rows (version=${migration_version}); forward-only schema expected"
               fi
               if [ "$migration_version" -lt "{{ $minimumUpgradeSchema }}" ] || [ "$migration_version" -gt "{{ $targetSchema }}" ]; then
                 fail_schema_preflight "schema version ${migration_version} is outside supported range {{ $minimumUpgradeSchema }}-{{ $targetSchema }}"

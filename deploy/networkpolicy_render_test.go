@@ -210,7 +210,6 @@ func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 		{kind: "Deployment", name: "astronomer-dex"},
 		{kind: "StatefulSet", name: "astronomer-postgres"},
 		{kind: "StatefulSet", name: "astronomer-redis"},
-		{kind: "Job", name: "astronomer-migrate"},
 		{kind: "Job", name: "astronomer-preflight"},
 	} {
 		doc := findRenderedDoc(t, docs, workload.kind, workload.name)

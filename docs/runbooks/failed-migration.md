@@ -1,94 +1,63 @@
 # Runbook — Failed schema migration
 
-**Severity**: page (install is broken)
-**Component**: `internal/db/migrations` + migrate init container
+**Severity**: page (install or upgrade is broken)
+**Component**: `internal/db/migrations` (goose, embedded in the server binary)
+
+## How migrations run
+
+The server applies every pending migration at boot, before it listens, under
+the PostgreSQL session advisory lock `781930472366215`. Replicas starting at
+once serialize on the lock; exactly one applies each migration. The worker
+does not migrate — it waits (up to 10 minutes) for the schema to reach the
+version its binary was built against, then starts. Migrations are
+forward-only: there is no Down section and no roll-back command.
+
+Bookkeeping lives in `public.goose_db_version` (`version_id`, `is_applied`,
+`tstamp`). Transactional migrations roll back on failure; the 16 migrations
+marked `-- +goose NO TRANSACTION` (`CREATE INDEX CONCURRENTLY`) do not.
 
 ## Symptoms
 
-- Server / worker pods stuck in `Init:Error` or `CrashLoopBackOff`
-  with `astronomer-migrate` container reporting a SQL error
-- `kubectl logs <pod> -c migrate` shows the failing migration filename
-  and the Postgres error
-- New install: nothing comes up. Upgrade: existing pods may still serve
-  traffic on the old image until the new ReplicaSet finishes
-  rolling-out
+- Server pods in `CrashLoopBackOff`; `kubectl logs <server-pod>` ends with
+  `database migration failed: migrations: apply: ... (type:sql,version:N)`.
+- Worker pods logging `waiting for database schema` every 10 s and then
+  exiting with `database schema not ready`.
+- `/readyz` reporting `schema_version` with `applied schema version X <
+  required Y` for longer than a migration takes (another replica holds the
+  lock and is itself failing).
 
 ## Triage
 
-1. **Capture the error**:
-   ```bash
-   kubectl -n astronomer logs <server-pod> -c migrate | tail -100
-   ```
-2. **Which version did we get to?**
+1. Capture the failing version and the Postgres error from the server log.
+2. Check the applied state:
    ```sql
-   SELECT * FROM schema_migrations ORDER BY version DESC LIMIT 3;
+   SELECT version_id, is_applied, tstamp FROM goose_db_version ORDER BY id DESC LIMIT 5;
    ```
-   - `dirty=true` → migrate exited mid-statement; manual cleanup needed
-     (see Recovery → "Resolve a dirty migration").
-   - `dirty=false` but pod failing → migration ran but a follow-up
-     change (e.g. a CHECK constraint on existing data) failed.
-3. **Was it caught by `make check-migrations`?** Run locally against
-   the suspect migration. The gate rejects blocking `ADD COLUMN ... NOT NULL`
-   and destructive contract DDL without compatibility-window approval.
+3. Check for a stuck lock holder (a crashed replica's session normally
+   releases it; a hung one does not):
+   ```sql
+   SELECT pid, state, query_start FROM pg_stat_activity
+   WHERE pid IN (SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND objid = 781930472366215);
+   ```
 
 ## Recovery
 
-### Resolve a dirty migration
-
-```sql
-SELECT version, dirty FROM schema_migrations;
-```
-
-Compare live objects and data with the exact `.up.sql` and `.down.sql` files.
-Restore the verified pre-upgrade backup if the resulting state is uncertain.
-If all statements rolled back, reset to the last known-good version with the
-release migration binary; do not edit `schema_migrations` directly:
-
-```bash
-# Compare live objects and data with the exact .up.sql and .down.sql files.
-migrate -database "$DATABASE_URL" -path /migrations force <last-good-version>
-# Restart the pods so the serialized migration entrypoint retries.
-kubectl -n astronomer rollout restart deploy/astronomer-server
-```
-
-For a failure in the first migration, golang-migrate's no-version sentinel is
-`-1`, not `0`. Never force a version merely to make the pod Ready: first prove
-the database objects exactly match that version and retain the SQL inspection
-and approval in the incident record.
-
-### Roll back the migration (when an .up.sql is wrong and you have time)
-
-Use the matching `.down.sql`:
-```bash
-# Inside the migrate container:
-migrate -database "$DATABASE_URL" -path /migrations down 1
-```
-Then redeploy the prior chart version while you fix `.up.sql`.
-
-### Skip a known-broken migration (last resort)
-
-Use `migrate ... force <version>` only if you've manually run and verified the
-equivalent SQL. Direct edits to `schema_migrations` are unsupported. Log the
-deviation, query results, approver, and backup identity in the incident record.
-
-## Verify
-
-- All pods Ready
-- `SELECT version, dirty FROM schema_migrations;` returns highest
-  version with `dirty=false`
-- A representative sqlc query against the schema works (e.g. `SELECT
-  COUNT(*) FROM users;`)
+- **Transactional migration failed** (the common case): the DDL rolled back.
+  Fix the data condition it tripped on (a CHECK constraint, a NOT NULL
+  backfill), or ship a corrected migration with a higher version, then
+  restart the pod. Nothing to clean up.
+- **`NO TRANSACTION` migration failed mid-way**: a `CREATE INDEX CONCURRENTLY`
+  that fails leaves an `INVALID` index. Drop it
+  (`DROP INDEX CONCURRENTLY <name>`) and restart the pod; the migration
+  re-runs from the top.
+- **Lock held by a hung session**: `SELECT pg_terminate_backend(<pid>)` and
+  restart the server pod.
+- **Apply ahead of a rollout** (optional): `server migrate -database "$DATABASE_URL"`
+  from any machine that can reach the database, using the same image tag you
+  are about to deploy.
 
 ## Prevention
 
-- `make check-migrations` in CI (T30)
-- Every `.up.sql` ships with a working `.down.sql`
-- Destructive SQL is a contract-phase release after its declared compatibility
-  window, never a same-release cleanup
-- PostgreSQL 16/17 release fixture, concurrency, and interruption matrix in CI
-
-## Related
-
-- `internal/db/migrations/` — chronological migration files
-- `scripts/check-migrations.sh` — T30 lint
-- `deploy/chart/templates/server-deployment.yaml` — migrate init container
+- `make test-integration` applies the full embedded set to a fresh Postgres
+  17 for every test package (pgtestdb template clone), so a migration that
+  cannot apply never reaches a release.

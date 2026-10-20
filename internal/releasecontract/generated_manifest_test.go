@@ -26,7 +26,7 @@ func TestApplicationImageInventoryByRelease(t *testing.T) {
 			manifest.Release.Version = tc.version
 			manifest.Release.SigningPolicy.CertificateIdentity = strings.TrimSuffix(manifest.Release.SigningPolicy.CertificateIdentity, "v1.0.0") + tc.version
 			if tc.replaceWorker != "" {
-				manifest.Astronomer.Images[5] = testArtifact(tc.replaceWorker, 'c')
+				manifest.Astronomer.Images[4] = testArtifact(tc.replaceWorker, 'c')
 			}
 			if tc.includeDR {
 				manifest.Astronomer.Images = append(manifest.Astronomer.Images, testArtifact("dr", 'd'))

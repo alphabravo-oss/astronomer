@@ -37,7 +37,7 @@ type operationalCapabilityQueries interface {
 
 type operationalDatabase interface {
 	Health(context.Context) error
-	SchemaVersion(context.Context) (int64, bool, error)
+	SchemaVersion(context.Context) (int64, error)
 	Pool() *pgxpool.Pool
 }
 
@@ -212,7 +212,7 @@ func (a *OperationalCapabilityAdapter) installationSummary(ctx context.Context) 
 
 func (a *OperationalCapabilityAdapter) readiness(ctx context.Context) (map[string]any, error) {
 	databaseErr := a.config.Database.Health(ctx)
-	version, dirty, schemaErr := a.config.Database.SchemaVersion(ctx)
+	version, schemaErr := a.config.Database.SchemaVersion(ctx)
 	queues := []map[string]any{}
 	if a.config.Queue != nil {
 		for _, name := range charlieQueueNames {
@@ -222,9 +222,9 @@ func (a *OperationalCapabilityAdapter) readiness(ctx context.Context) (map[strin
 	}
 	components, componentsReady := a.managementComponents(ctx)
 	return map[string]any{
-		"ready":    databaseErr == nil && schemaErr == nil && !dirty && version >= db.ExpectedSchemaVersion && componentsReady,
+		"ready":    databaseErr == nil && schemaErr == nil && version >= db.ExpectedSchemaVersion && componentsReady,
 		"database": map[string]any{"ready": databaseErr == nil},
-		"schema":   map[string]any{"ready": schemaErr == nil && !dirty && version >= db.ExpectedSchemaVersion, "version": version, "dirty": dirty, "expected": db.ExpectedSchemaVersion},
+		"schema":   map[string]any{"ready": schemaErr == nil && version >= db.ExpectedSchemaVersion, "version": version, "expected": db.ExpectedSchemaVersion},
 		"queues":   queues, "workers": components, "tunnel_hub": map[string]any{"ready": componentsReady},
 		"locator": map[string]any{"ready": componentsReady}, "security_cache": map[string]any{"ready": componentsReady},
 	}, nil
@@ -301,11 +301,11 @@ func (a *OperationalCapabilityAdapter) databaseHealth(ctx context.Context) (map[
 }
 
 func (a *OperationalCapabilityAdapter) migrations(ctx context.Context) (map[string]any, error) {
-	version, dirty, err := a.config.Database.SchemaVersion(ctx)
+	version, err := a.config.Database.SchemaVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"current": version, "expected": db.ExpectedSchemaVersion, "dirty": dirty, "ready": !dirty && version >= db.ExpectedSchemaVersion}, nil
+	return map[string]any{"current": version, "expected": db.ExpectedSchemaVersion, "ready": version >= db.ExpectedSchemaVersion}, nil
 }
 
 func (a *OperationalCapabilityAdapter) backups(ctx context.Context) (map[string]any, error) {

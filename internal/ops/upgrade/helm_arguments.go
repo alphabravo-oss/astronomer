@@ -79,7 +79,7 @@ func (in HelmInputs) arguments() ([]string, error) {
 	setting := func(key, value string) { args = append(args, "--set-string", key+"="+value) }
 	setting("image.registry", "")
 	for _, component := range []struct{ name, prefix, repository string }{
-		{"server", "image.server", "astronomer-go-server"}, {"worker", "image.worker", "astronomer-go-worker"}, {"agent", "image.agent", "astronomer-go-agent"}, {"migrate", "image.migrate", "astronomer-go-migrate"}, {"frontend", "frontend.image", "astronomer-frontend"}, {"shell", "preflight.image", "astronomer-shell"},
+		{"server", "image.server", "astronomer-go-server"}, {"worker", "image.worker", "astronomer-go-worker"}, {"agent", "image.agent", "astronomer-go-agent"}, {"frontend", "frontend.image", "astronomer-frontend"}, {"shell", "preflight.image", "astronomer-shell"},
 	} {
 		setting(component.prefix+".registry", "ghcr.io/alphabravo-oss")
 		setting(component.prefix+".repository", component.repository)
@@ -131,7 +131,7 @@ func (in HelmInputs) ApplyArguments() ([]string, error) {
 	return append(args, "--atomic", "--cleanup-on-fail", "--wait", "--wait-for-jobs"), nil
 }
 func applicationBindings(manifest releasecontract.Manifest, version string) (map[string]string, error) {
-	expected := map[string]string{"server": "astronomer-go-server", "worker": "astronomer-go-worker", "agent": "astronomer-go-agent", "migrate": "astronomer-go-migrate", "frontend": "astronomer-frontend", "shell": "astronomer-shell"}
+	expected := map[string]string{"server": "astronomer-go-server", "worker": "astronomer-go-worker", "agent": "astronomer-go-agent", "frontend": "astronomer-frontend", "shell": "astronomer-shell"}
 	parsed, err := semver.NewVersion(version)
 	if err != nil {
 		return nil, errors.New("exact release version required")

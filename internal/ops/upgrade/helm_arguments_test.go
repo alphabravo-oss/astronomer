@@ -15,7 +15,7 @@ func helmFixture(t *testing.T, historical bool) HelmInputs {
 		input.Plan.Target, input.Plan.Previous = "v1.1.9", "v1.1.8"
 	}
 	input.Manifest.Release.Version = input.Plan.Target
-	for _, row := range []struct{ name, repository string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"migrate", "astronomer-go-migrate"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}} {
+	for _, row := range []struct{ name, repository string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}} {
 		input.Manifest.Astronomer.Images = append(input.Manifest.Astronomer.Images, releasecontract.Artifact{Name: row.name, Kind: "container_image", Reference: "ghcr.io/alphabravo-oss/" + row.repository + "@sha256:" + strings.Repeat("a", 64)})
 	}
 	if !historical {

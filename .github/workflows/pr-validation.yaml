@@ -36,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           go_version="$(awk '/^go /{print $2}' go.mod)"
-          for f in deploy/docker/Dockerfile.server deploy/docker/Dockerfile.worker deploy/docker/Dockerfile.agent deploy/docker/Dockerfile.migrate deploy/docker/Dockerfile.shell; do
+          for f in deploy/docker/Dockerfile.server deploy/docker/Dockerfile.worker deploy/docker/Dockerfile.agent deploy/docker/Dockerfile.shell; do
             grep -q '^ARG GO_VERSION$' "$f" || { echo "$f must declare ARG GO_VERSION (derived from go.mod=$go_version)"; exit 1; }
             grep -Eq '^FROM golang:[0-9]' "$f" && { echo "$f hardcodes a Go version"; exit 1; } || true
           done
