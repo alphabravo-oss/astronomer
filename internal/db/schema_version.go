@@ -23,8 +23,15 @@ func (d *DB) Migrate(ctx context.Context, logger *slog.Logger) (migrations.Resul
 	if d == nil || d.pool == nil {
 		return migrations.Result{}, fmt.Errorf("migrate: nil pool")
 	}
-	sqlDB := stdlib.OpenDBFromPool(d.pool)
+	// Migrations run on dedicated connections that are closed afterwards,
+	// never on the application pool: migration SQL may change session state
+	// (00001 sets search_path='' for the session), which must not leak into
+	// connections the application later reuses.
+	cfg := d.pool.Config().ConnConfig.Copy()
+	cfg.Tracer = nil
+	sqlDB := stdlib.OpenDB(*cfg)
 	defer sqlDB.Close()
+	sqlDB.SetMaxIdleConns(0)
 	return migrations.Up(ctx, sqlDB, logger)
 }
 
