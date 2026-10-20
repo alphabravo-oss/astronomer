@@ -127,6 +127,9 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 	if err := m.configureControllerPlacement(ctx, objects); err != nil {
 		return false, err
 	}
+	if err := m.configureTrustBundle(ctx, objects); err != nil {
+		return false, err
+	}
 	for _, object := range objects {
 		if err := m.applyOwned(ctx, object); err != nil {
 			return false, err

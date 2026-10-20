@@ -22,6 +22,14 @@ Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
   go.mod's `go` line. Verified against dv-g3b-emudhra.we-have-a-problem.com
   and dv-g3b-aaa-emudhra.we-have-a-problem.com: rejected from inside the 2.1.0
   server image; a go1.27.2 build accepts the first host inside the 2.0.1 image.
+- Flux `source-controller` (upstream image, go1.26.8, its CA store still
+  trusts emSign ECC Root CA - G3) now runs with the agent image's CA bundle:
+  the agent writes ConfigMap `astronomer-trust-bundle` in
+  `astronomer-delivery-system` and the system Kustomization patches
+  source-controller to mount it over `/etc/ssl/certs` (whole directory — Go
+  also reads per-certificate files, so `SSL_CERT_FILE` alone is not enough).
+  New agent install manifests carry the exact-name Role for that ConfigMap;
+  agents enrolled earlier skip the mount until the Role is applied.
 - Base images refreshed: distroless `static-debian13:nonroot` (was
   debian12) for server/worker/agent, nginx `1.31.7-alpine3.24-slim` for the
   frontend; alpine 3.24.2, node 24.22.0-alpine and golang 1.27.3-alpine were

@@ -1033,3 +1033,44 @@ subjects:
   - kind: ServiceAccount
     name: kube-state-metrics
     namespace: astronomer-monitoring
+
+---
+# Trust bundle for the Flux source-controller (internal/agent/delivery/
+# system_trust.go): the agent publishes its own CA bundle as one ConfigMap and
+# the system Kustomization mounts it over /etc/ssl/certs. CREATE cannot be
+# name-scoped; read/update are exact-name scoped.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: astronomer-agent-trust-bundle
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: delivery
+    app.kubernetes.io/part-of: astronomer
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["astronomer-trust-bundle"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: astronomer-agent-trust-bundle
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/name: astronomer-agent
+    app.kubernetes.io/component: delivery
+    app.kubernetes.io/part-of: astronomer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: astronomer-agent-trust-bundle
+subjects:
+  - kind: ServiceAccount
+    name: {{AGENT_SERVICE_ACCOUNT_NAME}}
+    namespace: astronomer-system
