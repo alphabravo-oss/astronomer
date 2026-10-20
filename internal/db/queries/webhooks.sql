@@ -8,7 +8,7 @@
 --   * the daily retention sweep (default 30 days) that purges old
 --     delivery rows so the table doesn't grow unbounded
 --
--- secret_encrypted is the Fernet ciphertext of the HMAC signing secret;
+-- secret_{key_id,algorithm,ciphertext,nonce} is the age ciphertext of the HMAC signing secret;
 -- this layer stores and returns it verbatim. Decryption happens in the
 -- sender right before signing.
 
@@ -30,10 +30,10 @@ SELECT * FROM webhook_subscriptions WHERE name = $1;
 
 -- name: CreateWebhookSubscription :one
 INSERT INTO webhook_subscriptions (
-    name, url, secret_encrypted, event_filters, payload_template,
+    name, url, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce, event_filters, payload_template,
     extra_headers, enabled, max_retries, timeout_seconds, created_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $11, $12, $13, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateWebhookSubscription :one
@@ -44,7 +44,10 @@ RETURNING *;
 UPDATE webhook_subscriptions
 SET name             = $2,
     url              = $3,
-    secret_encrypted = $4,
+    secret_key_id = $4,
+    secret_algorithm = $11,
+    secret_ciphertext = $12,
+    secret_nonce = $13,
     event_filters    = $5,
     payload_template = $6,
     extra_headers    = $7,

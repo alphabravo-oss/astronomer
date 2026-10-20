@@ -98,15 +98,15 @@ func newDelivery(t *testing.T, subID uuid.UUID, attempts int) sqlc.WebhookDelive
 
 func newSubscription(id uuid.UUID, maxRetries int) sqlc.WebhookSubscription {
 	return sqlc.WebhookSubscription{
-		ID:              id,
-		Name:            "test",
-		Url:             "http://example.invalid/hook",
-		SecretEncrypted: "", // no Fernet — bypasses decrypt path
-		EventFilters:    json.RawMessage(`["*"]`),
-		ExtraHeaders:    json.RawMessage(`{}`),
-		Enabled:         true,
-		MaxRetries:      int32(maxRetries),
-		TimeoutSeconds:  10,
+		ID:   id,
+		Name: "test",
+		Url:  "http://example.invalid/hook",
+		// No sealed secret — bypasses the decrypt path.
+		EventFilters:   json.RawMessage(`["*"]`),
+		ExtraHeaders:   json.RawMessage(`{}`),
+		Enabled:        true,
+		MaxRetries:     int32(maxRetries),
+		TimeoutSeconds: 10,
 	}
 }
 

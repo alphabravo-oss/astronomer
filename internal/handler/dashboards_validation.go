@@ -135,7 +135,7 @@ func datasourceAuditDetail(row sqlc.PrometheusDatasource) map[string]any {
 	}
 	return map[string]any{
 		"endpoint_origin": origin,
-		"has_auth":        row.AuthEncrypted != "",
+		"has_auth":        row.AuthKeyID != "",
 		"tls_skip_verify": row.TlsSkipVerify,
 		"enabled":         row.Enabled,
 	}
@@ -301,7 +301,7 @@ func datasourceToResponse(row sqlc.PrometheusDatasource) DatasourceResponse {
 		ID:            row.ID,
 		Name:          row.Name,
 		URL:           row.Url,
-		HasAuth:       row.AuthEncrypted != "",
+		HasAuth:       row.AuthKeyID != "",
 		TLSSkipVerify: row.TlsSkipVerify,
 		Enabled:       row.Enabled,
 		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),

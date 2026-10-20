@@ -10,57 +10,50 @@
 --     days regardless of forwarder status so stale forwarders don't
 --     pin disk
 --
--- auth_encrypted is the Fernet ciphertext of the JSON auth blob; this
+-- auth_{key_id,algorithm,ciphertext,nonce} is the age ciphertext of the JSON auth blob; this
 -- layer stores and returns it verbatim. Decryption happens in the
 -- dispatcher right before the per-tick connect.
 
 -- name: ListSIEMForwarders :many
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT *
 FROM siem_forwarders ORDER BY created_at DESC;
 
 -- name: ListEnabledSIEMForwarders :many
 -- Used by the event-bus tap: every published event scans this list and
 -- filters by glob. Enabled-only because a disabled forwarder should NOT
 -- accumulate queue rows the dispatcher will never drain.
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT *
 FROM siem_forwarders WHERE enabled = true ORDER BY created_at ASC;
 
 -- name: GetSIEMForwarder :one
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT *
 FROM siem_forwarders WHERE id = $1;
 
 -- name: GetSIEMForwarderByName :one
-SELECT id, name, transport, endpoint, auth_encrypted, event_filters, format,
-       tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-       timeout_seconds, enabled, created_by, created_at, updated_at
+SELECT *
 FROM siem_forwarders WHERE name = $1;
 
 -- name: CreateSIEMForwarder :one
 INSERT INTO siem_forwarders (
-    name, transport, endpoint, auth_encrypted, event_filters, format,
+    name, transport, endpoint, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce, event_filters, format,
     tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
     timeout_seconds, enabled, created_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-RETURNING id, name, transport, endpoint, auth_encrypted, event_filters, format,
-          tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-          timeout_seconds, enabled, created_by, created_at, updated_at;
+VALUES ($1, $2, $3, $4, $14, $15, $16, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING *;
 
 -- name: UpdateSIEMForwarder :one
 -- Full replacement update (PUT semantics). The handler preserves the
--- existing auth_encrypted when the admin didn't re-supply it (sentinel
--- pattern, analogous to webhook_subscriptions.secret_encrypted).
+-- existing auth_{key_id,algorithm,ciphertext,nonce} when the admin didn't re-supply it (sentinel
+-- pattern, analogous to webhook_subscriptions.secret_{key_id,algorithm,ciphertext,nonce}).
 UPDATE siem_forwarders
 SET name              = $2,
     transport         = $3,
     endpoint          = $4,
-    auth_encrypted    = $5,
+    auth_key_id = $5,
+    auth_algorithm = $14,
+    auth_ciphertext = $15,
+    auth_nonce = $16,
     event_filters     = $6,
     format            = $7,
     tls_skip_verify   = $8,
@@ -71,9 +64,7 @@ SET name              = $2,
     enabled           = $13,
     updated_at        = now()
 WHERE id = $1
-RETURNING id, name, transport, endpoint, auth_encrypted, event_filters, format,
-          tls_skip_verify, ca_cert_pem, batch_size, flush_interval_ms,
-          timeout_seconds, enabled, created_by, created_at, updated_at;
+RETURNING *;
 
 -- name: DeleteSIEMForwarder :exec
 -- ON DELETE CASCADE on siem_forward_queue.forwarder_id +

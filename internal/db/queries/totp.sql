@@ -10,15 +10,18 @@
 SELECT * FROM user_totp_enrollments WHERE user_id = $1;
 
 -- name: UpsertUserTOTPEnrollment :one
--- Persists a freshly-confirmed enrollment. Caller passes the Fernet-
+-- Persists a freshly-confirmed enrollment. Caller passes the age-
 -- encrypted secret in $2 — the plaintext must NEVER reach this query.
 -- ON CONFLICT lets the user re-enroll (lost device, new authenticator)
 -- without first calling DeleteUserTOTPEnrollment. confirmed_at is
 -- replaced on the conflict path so the audit detail is accurate.
-INSERT INTO user_totp_enrollments (user_id, secret_encrypted, label, confirmed_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO user_totp_enrollments (user_id, secret_key_id, secret_algorithm, secret_ciphertext, secret_nonce, label, confirmed_at)
+VALUES ($1, $2, $5, $6, $7, $3, $4)
 ON CONFLICT (user_id) DO UPDATE SET
-    secret_encrypted = EXCLUDED.secret_encrypted,
+    secret_key_id = EXCLUDED.secret_key_id,
+    secret_algorithm = EXCLUDED.secret_algorithm,
+    secret_ciphertext = EXCLUDED.secret_ciphertext,
+    secret_nonce = EXCLUDED.secret_nonce,
     label            = EXCLUDED.label,
     confirmed_at     = EXCLUDED.confirmed_at,
     last_used_at     = NULL,

@@ -52,7 +52,7 @@ func (g *Gateway) Launch(w http.ResponseWriter, r *http.Request, target Target, 
 		http.Error(w, "Tool launch unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	sealed, err := g.cipher.Encrypt(string(encoded))
+	sealed, err := g.sealToken(encoded)
 	if err != nil || len(sealed) > 3800 {
 		http.Error(w, "Tool launch unavailable", http.StatusServiceUnavailable)
 		return

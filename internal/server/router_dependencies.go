@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/toolui"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -33,7 +34,7 @@ type RouterDependencies struct {
 type CoreAuthDependencies struct {
 	ToolUI             *toolui.Gateway
 	JWT                *auth.JWTManager
-	Encryptor          *auth.Encryptor
+	Encryptor          *crypto.Encryptor
 	AuthQueries        auth.TokenUserQuerier
 	AuditWriter        audit.Querier
 	EmailEnqueuer      *email.Enqueuer

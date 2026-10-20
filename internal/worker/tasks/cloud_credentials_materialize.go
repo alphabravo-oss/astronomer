@@ -12,7 +12,7 @@
 //
 // The cleartext credential blob only lives inside this worker's
 // process memory and (at apply time) inside the in-cluster Secret that
-// k8s itself encrypts at rest. The DB stores only the Fernet ciphertext.
+// k8s itself encrypts at rest. The DB stores only the age-sealed data_* family.
 package tasks
 
 import (
@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -31,6 +30,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // Task type identifiers. Exported for the worker mux + scheduler.
@@ -84,11 +84,10 @@ type CloudCredentialQuerier interface {
 	MarkCloudCredentialMaterializationFailed(ctx context.Context, arg sqlc.MarkCloudCredentialMaterializationFailedParams) error
 }
 
-// CloudCredentialDecryptor unwraps the encrypted-at-rest blob. The
-// production implementation is *auth.Encryptor; tests pass a stub that
-// returns the input verbatim.
+// CloudCredentialDecryptor opens the sealed data_* family. The production
+// implementation is *crypto.Encryptor.
 type CloudCredentialDecryptor interface {
-	Decrypt(token string) (string, error)
+	Decrypt(sealed crypto.Sealed) ([]byte, error)
 }
 
 // CloudCredentialMaterializeDeps is the wiring for this task.
@@ -185,7 +184,7 @@ func (runtime CloudCredentialRuntime) runCloudCredentialApply(ctx context.Contex
 	}
 	matRow := runtime.findMaterializationRow(ctx, credentialID, clusterID, namespace)
 	provider := cred.Provider
-	clearBlob, err := runtime.decryptAndDecode(cred.DataEncrypted)
+	clearBlob, err := runtime.decryptAndDecode(crypto.FromParts(cred.DataKeyID, cred.DataAlgorithm, cred.DataCiphertext, cred.DataNonce))
 	if err != nil {
 		cloudCredentialMaterializationsTotal.WithLabelValues(observability.MetricValues("apply", provider, "failure")...).Inc()
 		_ = runtime.markMaterializationFailed(ctx, matRow, fmt.Sprintf("decrypt: %v", err))
@@ -218,22 +217,22 @@ func (runtime CloudCredentialRuntime) runCloudCredentialDelete(ctx context.Conte
 	return nil
 }
 
-// decryptAndDecode unwraps the Fernet token and parses the JSON blob
-// into a map[string]string. Empty token means "no blob" (legacy rows
-// migrated from an unencrypted state); we return an empty map so the
-// apply produces an empty Secret rather than 500ing.
-func (runtime CloudCredentialRuntime) decryptAndDecode(token string) (map[string]string, error) {
-	if strings.TrimSpace(token) == "" {
+// decryptAndDecode opens the sealed blob and parses the JSON into a
+// map[string]string. An absent sealed value yields an empty map so the
+// apply produces an empty Secret rather than failing.
+func (runtime CloudCredentialRuntime) decryptAndDecode(sealed crypto.Sealed) (map[string]string, error) {
+	if sealed.IsZero() {
 		return map[string]string{}, nil
 	}
 	if runtime.Deps.Decryptor == nil {
 		return nil, fmt.Errorf("decryptor not configured")
 	}
-	clear, err := runtime.Deps.Decryptor.Decrypt(token)
+	clear, err := runtime.Deps.Decryptor.Decrypt(sealed)
 	if err != nil {
-		return nil, fmt.Errorf("fernet decrypt: %w", err)
+		return nil, fmt.Errorf("decrypt: %w", err)
 	}
-	return cloudcreds.DecodeBlob([]byte(clear))
+	defer zeroBytes(clear)
+	return cloudcreds.DecodeBlob(clear)
 }
 
 // findMaterializationRow returns the row matching the (credential,

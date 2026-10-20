@@ -42,10 +42,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // Task type identifiers. Exported so the worker mux + scheduler can
@@ -114,7 +114,7 @@ type ClusterRegistryApplyQuerier interface {
 type ClusterRegistryApplyDeps struct {
 	Queries   ClusterRegistryApplyQuerier
 	Requester ProjectK8sRequester
-	Encryptor *auth.Encryptor
+	Encryptor *crypto.Encryptor
 }
 
 // clusterRegistryAppliesTotal counts every apply / unapply outcome.
@@ -224,7 +224,8 @@ func (runtime ClusterRegistryRuntime) runApply(ctx context.Context, registryID, 
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
 		return fmt.Errorf("registry %s does not belong to cluster %s", registryID, clusterID)
 	}
-	if err := runtime.materializeClusterRegistryPassword(&cfg); err != nil {
+	password, err := runtime.decryptClusterRegistryPassword(cfg)
+	if err != nil {
 		clusterRegistryAppliesTotal.WithLabelValues(observability.MetricValues("apply", "failure")...).Inc()
 		_ = runtime.markRegistryError(ctx, cfg.ID, fmt.Sprintf("decrypt registry password: %v", err))
 		return err
@@ -249,7 +250,7 @@ func (runtime ClusterRegistryRuntime) runApply(ctx context.Context, registryID, 
 
 	var firstErr error
 	for _, ns := range namespaces {
-		if err := runtime.applyRegistrySecretToNamespace(ctx, clusterID.String(), ns, secretName, cfg); err != nil {
+		if err := runtime.applyRegistrySecretToNamespace(ctx, clusterID.String(), ns, secretName, cfg, password); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -365,8 +366,8 @@ func (runtime ClusterRegistryRuntime) resolveTargetNamespaces(ctx context.Contex
 
 // applyRegistrySecretToNamespace builds the dockerconfigjson body and
 // SSAs the Secret into the namespace under the configured manager.
-func (runtime ClusterRegistryRuntime) applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, secretName string, cfg sqlc.ClusterRegistryConfig) error {
-	dockerCfg := buildDockerConfigJSON(cfg)
+func (runtime ClusterRegistryRuntime) applyRegistrySecretToNamespace(ctx context.Context, clusterID, namespace, secretName string, cfg sqlc.ClusterRegistryConfig, password string) error {
+	dockerCfg := buildDockerConfigJSON(cfg, password)
 	rawDockerCfg, err := json.Marshal(dockerCfg)
 	if err != nil {
 		return fmt.Errorf("marshal dockerconfigjson: %w", err)
@@ -406,32 +407,33 @@ func (runtime ClusterRegistryRuntime) applyRegistrySecretToNamespace(ctx context
 }
 
 // buildDockerConfigJSON renders the .dockerconfigjson "auths" map.
-func buildDockerConfigJSON(cfg sqlc.ClusterRegistryConfig) map[string]any {
+func buildDockerConfigJSON(cfg sqlc.ClusterRegistryConfig, password string) map[string]any {
 	authKey := canonicalRegistryHost(cfg.PrivateRegistryUrl)
 	return map[string]any{
 		"auths": map[string]any{
 			authKey: map[string]any{
 				"username": cfg.RegistryUsername,
-				"password": cfg.RegistryPassword,
-				"auth":     base64.StdEncoding.EncodeToString([]byte(cfg.RegistryUsername + ":" + cfg.RegistryPassword)),
+				"password": password,
+				"auth":     base64.StdEncoding.EncodeToString([]byte(cfg.RegistryUsername + ":" + password)),
 			},
 		},
 	}
 }
 
-func (runtime ClusterRegistryRuntime) materializeClusterRegistryPassword(cfg *sqlc.ClusterRegistryConfig) error {
-	if cfg == nil || strings.TrimSpace(cfg.RegistryPasswordEncrypted) == "" {
-		return nil
+// decryptClusterRegistryPassword opens the sealed registry password. A row
+// without one yields "" (anonymous pull).
+func (runtime ClusterRegistryRuntime) decryptClusterRegistryPassword(cfg sqlc.ClusterRegistryConfig) (string, error) {
+	return decryptRegistryPassword(runtime.Deps.Encryptor, cfg)
+}
+
+func decryptRegistryPassword(enc *crypto.Encryptor, cfg sqlc.ClusterRegistryConfig) (string, error) {
+	if cfg.RegistryPasswordKeyID == "" {
+		return "", nil
 	}
-	if runtime.Deps.Encryptor == nil {
-		return fmt.Errorf("encrypted registry password present but encryptor is not configured")
+	if enc == nil {
+		return "", fmt.Errorf("sealed registry password present but no encryption key is configured")
 	}
-	password, err := runtime.Deps.Encryptor.Decrypt(cfg.RegistryPasswordEncrypted)
-	if err != nil {
-		return err
-	}
-	cfg.RegistryPassword = password
-	return nil
+	return enc.DecryptString(crypto.FromParts(cfg.RegistryPasswordKeyID, cfg.RegistryPasswordAlgorithm, cfg.RegistryPasswordCiphertext, cfg.RegistryPasswordNonce))
 }
 
 // canonicalRegistryHost strips any scheme + trailing slash so the

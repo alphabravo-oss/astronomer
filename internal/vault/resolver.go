@@ -48,6 +48,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 // SentinelEncrypted is the redaction marker the handler sends in place
@@ -141,11 +142,10 @@ type Querier interface {
 	GetProjectDefaultVaultConnection(ctx context.Context, projectID uuid.UUID) (pgtype.UUID, error)
 }
 
-// Decryptor is the surface for unsealing the auth_encrypted blob on a
-// vault_connections row. *auth.Encryptor satisfies this; tests pass a
-// stub that returns its input unchanged.
+// Decryptor opens the sealed auth_* blob on a vault_connections row.
+// *crypto.Encryptor satisfies this.
 type Decryptor interface {
-	Decrypt(token string) (string, error)
+	DecryptString(sealed crypto.Sealed) (string, error)
 }
 
 // Client is the per-connection Vault HTTP client surface. Defined as an
@@ -422,24 +422,20 @@ func (r *Resolver) clientFor(conn sqlc.VaultConnection) (Client, error) {
 }
 
 func (r *Resolver) decryptAuth(conn sqlc.VaultConnection) (string, error) {
-	if r.decrypt == nil {
-		// Tests + early-wire paths sometimes leave the decryptor nil. We
-		// treat the stored blob as already-cleartext in that case — the
-		// tests rely on this. Production wiring always sets a real
-		// decryptor.
-		return conn.AuthEncrypted, nil
-	}
-	if conn.AuthEncrypted == "" {
+	if conn.AuthKeyID == "" {
 		return "{}", nil
 	}
-	v, err := r.decrypt.Decrypt(conn.AuthEncrypted)
+	if r.decrypt == nil {
+		return "", fmt.Errorf("decrypt auth blob for connection %q: no encryption key configured", conn.Name)
+	}
+	v, err := r.decrypt.DecryptString(crypto.FromParts(conn.AuthKeyID, conn.AuthAlgorithm, conn.AuthCiphertext, conn.AuthNonce))
 	if err != nil {
 		return "", fmt.Errorf("decrypt auth blob for connection %q: %w", conn.Name, err)
 	}
 	return v, nil
 }
 
-// DecodeAuthBlob parses the auth_encrypted JSON shape for a given
+// DecodeAuthBlob parses the auth_* sealed JSON shape for a given
 // auth_method. Exposed for the handler's test/health endpoints.
 func DecodeAuthBlob(authMethod, blob string) (map[string]string, error) {
 	if blob == "" {

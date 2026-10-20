@@ -18,7 +18,7 @@ import (
 // RotateOutputToken handles POST /api/v1/logging/outputs/{id}/rotate-token/
 // and POST /api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token/.
 //
-// Plaintext is returned once. Postgres stores SHA-256 hash + Fernet ciphertext.
+// Plaintext is returned once. Postgres stores SHA-256 hash + age ciphertext.
 // The management-cluster hash Secret is reconciled without plaintext.
 func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Request) {
 	outputID, err := parseOutputIDParam(r)
@@ -66,16 +66,16 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to mint ingest token")
 		return
 	}
-	sealed, err := h.encryptor.Encrypt(plaintext)
+	sealed, err := h.encryptor.EncryptString(plaintext)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to encrypt ingest token")
 		return
 	}
 	params := sqlc.UpsertLokiIngestTokenParams{
-		ClusterID:      clusterID,
-		TokenHash:      lokiauth.HashBearer(plaintext),
-		TokenEncrypted: sealed,
-		CreatedByID:    currentUserUUID(r),
+		ClusterID:  clusterID,
+		TokenHash:  lokiauth.HashBearer(plaintext),
+		TokenKeyID: sealed.KeyID, TokenAlgorithm: sealed.Algorithm, TokenCiphertext: sealed.Ciphertext, TokenNonce: sealed.Nonce,
+		CreatedByID: currentUserUUID(r),
 	}
 	mutationContext := withOperationIdempotency(r, "logging")
 	result, err := executeMutation(r, h.runTx,

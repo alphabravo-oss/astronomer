@@ -77,23 +77,27 @@ DELETE FROM maintenance_windows WHERE id = $1;
 -- name: CreateDeferredOperation :one
 INSERT INTO deferred_operations (
     window_id, operation_type, operation_spec, target_cluster_id, target_project_id,
-    deferred_until, expires_at, requested_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    deferred_until, expires_at, requested_by,
+    sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING id, window_id, operation_type, operation_spec, target_cluster_id,
           target_project_id, status, deferred_until, expires_at, requested_by,
-          last_error, dispatched_at, created_at, updated_at;
+          last_error, dispatched_at, created_at, updated_at,
+          sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce;
 
 -- name: GetDeferredOperation :one
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 WHERE id = $1;
 
 -- name: GetDeferredOperationForUpdate :one
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 WHERE id = $1
 FOR UPDATE;
@@ -101,7 +105,8 @@ FOR UPDATE;
 -- name: ListDeferredOperations :many
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
@@ -111,7 +116,8 @@ LIMIT $1 OFFSET $2;
 -- partial index idx_deferred_operations_pending makes this scan cheap.
 SELECT id, window_id, operation_type, operation_spec, target_cluster_id,
        target_project_id, status, deferred_until, expires_at, requested_by,
-       last_error, dispatched_at, created_at, updated_at
+       last_error, dispatched_at, created_at, updated_at,
+       sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
 FROM deferred_operations
 WHERE status = 'pending'
   AND (deferred_until IS NULL OR deferred_until <= sqlc.arg(now))

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -152,13 +154,13 @@ func (h *ResourceHandler) enqueueResourceOperation(w http.ResponseWriter, r *htt
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Durable resource mutation storage is unavailable")
 		return
 	}
-	manifestEncrypted := ""
+	var manifestEncrypted crypto.Sealed
 	if intent.Action == "apply" {
 		if h.encryptor == nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Resource manifest encryption is unavailable")
 			return
 		}
-		manifestEncrypted, err = h.encryptor.Encrypt(string(intent.Manifest))
+		manifestEncrypted, err = h.encryptor.Encrypt(intent.Manifest)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Resource manifest encryption failed")
 			return
@@ -184,7 +186,7 @@ func (h *ResourceHandler) enqueueResourceOperation(w http.ResponseWriter, r *htt
 			IdempotencyScope: scope, IdempotencyKey: key, RequestDigest: digest,
 			ClusterID: clusterID, ResourceType: intent.ResourceType, Namespace: intent.Namespace,
 			ResourceName: intent.Name, Action: intent.Action, ApiPath: intent.APIPath, RequiredVerb: requiredVerb,
-			ManifestEncrypted: manifestEncrypted, ForceApply: intent.Force, CreatedByID: caller,
+			ManifestKeyID: manifestEncrypted.KeyID, ManifestAlgorithm: manifestEncrypted.Algorithm, ManifestCiphertext: manifestEncrypted.Ciphertext, ManifestNonce: manifestEncrypted.Nonce, ForceApply: intent.Force, CreatedByID: caller,
 		})
 		if createErr != nil {
 			var pgErr *pgconn.PgError

@@ -25,8 +25,8 @@ locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock W
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), connector AS (
- INSERT INTO dex_connectors (name,type,display_name,config,enabled)
- SELECT sqlc.arg(name),sqlc.arg(type),sqlc.arg(display_name),sqlc.arg(config),sqlc.arg(enabled) FROM bypass RETURNING *
+ INSERT INTO dex_connectors (name,type,display_name,config,secrets_key_id,secrets_algorithm,secrets_ciphertext,secrets_nonce,enabled)
+ SELECT sqlc.arg(name),sqlc.arg(type),sqlc.arg(display_name),sqlc.arg(config),sqlc.arg(secrets_key_id),sqlc.arg(secrets_algorithm),sqlc.arg(secrets_ciphertext),sqlc.arg(secrets_nonce),sqlc.arg(enabled) FROM bypass RETURNING *
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
  FROM previous_sso,connector WHERE dex_settings.id='00000000-0000-0000-0000-000000000001'::uuid RETURNING runtime_generation
@@ -44,7 +44,7 @@ locked_sso AS MATERIALIZED (SELECT is_enabled FROM sso_configurations,dex_lock W
 previous_sso AS MATERIALIZED (
  SELECT COALESCE((SELECT is_enabled FROM locked_sso),false) OR COALESCE((SELECT saga_previous_sso_enabled FROM locked_settings),false) AS was_enabled FROM locked_settings
 ), connector AS (
- UPDATE dex_connectors SET type=sqlc.arg(type),display_name=sqlc.arg(display_name),config=sqlc.arg(config),enabled=sqlc.arg(enabled),updated_at=now()
+ UPDATE dex_connectors SET type=sqlc.arg(type),display_name=sqlc.arg(display_name),config=sqlc.arg(config),secrets_key_id=sqlc.arg(secrets_key_id),secrets_algorithm=sqlc.arg(secrets_algorithm),secrets_ciphertext=sqlc.arg(secrets_ciphertext),secrets_nonce=sqlc.arg(secrets_nonce),enabled=sqlc.arg(enabled),updated_at=now()
  WHERE dex_connectors.id=sqlc.arg(connector_id) AND EXISTS(SELECT 1 FROM bypass) RETURNING dex_connectors.*
 ), staged AS (
  UPDATE dex_settings SET runtime_generation=runtime_generation+1,saga_previous_sso_enabled=previous_sso.was_enabled,updated_at=now()
@@ -93,14 +93,14 @@ locked_settings AS MATERIALIZED (
 ), staged AS (
     INSERT INTO dex_settings (
         id, issuer_url, cluster_id, namespace, release_name, configmap_name,
-        runtime_secret_name, public_clients, public_clients_encrypted, expiry, extra,
+        runtime_secret_name, public_clients_key_id, public_clients_algorithm, public_clients_ciphertext, public_clients_nonce, expiry, extra,
         chart_release_name, deployment_name, service_name, runtime_phase,
         saga_previous_sso_enabled
     )
     SELECT
         sqlc.arg(id), sqlc.arg(issuer_url), sqlc.arg(cluster_id), sqlc.arg(namespace),
         sqlc.arg(release_name), sqlc.arg(configmap_name), sqlc.arg(runtime_secret_name),
-        sqlc.arg(public_clients), sqlc.arg(public_clients_encrypted), sqlc.arg(expiry),
+        sqlc.arg(public_clients_key_id), sqlc.arg(public_clients_algorithm), sqlc.arg(public_clients_ciphertext), sqlc.arg(public_clients_nonce), sqlc.arg(expiry),
         sqlc.arg(extra), sqlc.arg(chart_release_name), sqlc.arg(deployment_name),
         sqlc.arg(service_name), sqlc.arg(runtime_phase), previous_sso.was_enabled
     FROM previous_sso
@@ -111,8 +111,10 @@ locked_settings AS MATERIALIZED (
         release_name = EXCLUDED.release_name,
         configmap_name = EXCLUDED.configmap_name,
         runtime_secret_name = EXCLUDED.runtime_secret_name,
-        public_clients = CASE WHEN dex_settings.public_clients_cutover_at IS NULL THEN EXCLUDED.public_clients ELSE '[]'::jsonb END,
-        public_clients_encrypted = EXCLUDED.public_clients_encrypted,
+        public_clients_key_id = EXCLUDED.public_clients_key_id,
+        public_clients_algorithm = EXCLUDED.public_clients_algorithm,
+        public_clients_ciphertext = EXCLUDED.public_clients_ciphertext,
+        public_clients_nonce = EXCLUDED.public_clients_nonce,
         expiry = EXCLUDED.expiry,
         extra = EXCLUDED.extra,
         chart_release_name = EXCLUDED.chart_release_name,
@@ -172,12 +174,3 @@ WHERE id = $1
   AND EXISTS(SELECT 1 FROM dex_lock)
 RETURNING *;
 
--- name: BackfillDexPublicClientsEnvelope :one
-UPDATE dex_settings
-SET public_clients_encrypted = $2,
-    updated_at = now()
-WHERE id = $1
-  AND public_clients_cutover_at IS NULL
-  AND public_clients_encrypted = ''
-  AND public_clients = sqlc.arg(legacy_public_clients)::jsonb
-RETURNING *;

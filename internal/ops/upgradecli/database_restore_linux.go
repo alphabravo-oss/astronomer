@@ -27,7 +27,7 @@ DROP DATABASE :"bound_name";
 SQL`
 
 const temporaryEncryptedProofScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -At --set=proof_id="$2" <<'SQL'
-SELECT count(*) FROM webhook_subscriptions WHERE id=:'proof_id'::uuid AND secret_encrypted <> '';
+SELECT count(*) FROM webhook_subscriptions WHERE id=:'proof_id'::uuid AND secret_key_id <> '';
 SQL`
 
 // TemporaryDatabase verifies one exact retained backup in a separate database.

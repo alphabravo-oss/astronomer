@@ -160,7 +160,7 @@ func (m *ManagedBridge) configurationConnection(ctx context.Context) (sqlc.Charl
 	}
 	connection := activation.Connection
 	if connection.OnboardingState != "active" ||
-		connection.HealthState == "disconnected" || strings.TrimSpace(connection.LocalTrustMaterialEncrypted) == "" {
+		connection.HealthState == "disconnected" || connection.LocalTrustMaterialKeyID == "" {
 		return sqlc.CharlieConnection{}, false
 	}
 	return connection, true

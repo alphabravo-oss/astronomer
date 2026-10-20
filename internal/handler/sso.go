@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -66,7 +68,7 @@ type SSOHandler struct {
 	states map[string]ssoState
 
 	runTx     ssoRunTxFunc
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 }
 
 type ssoState struct {
@@ -111,7 +113,7 @@ func (h *SSOHandler) SetRBACCacheInvalidator(inv SSORBACInvalidator) {
 }
 
 // SetEncryptor wires the required upstream-token encryption dependency.
-func (h *SSOHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *SSOHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h != nil {
 		h.encryptor = e
 	}

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -65,20 +67,20 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
-	// Auth material is Fernet-sealed before opening the mutation transaction.
+	// Auth material is age-sealed before opening the mutation transaction.
 	// Decrypt happens only inside the sync worker; an unwired encryptor fails
-	// closed instead of writing a misleading plaintext auth_encrypted value.
+	// closed instead of writing a misleading plaintext auth_* sealed value.
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	authBlob := req.Auth
-	if authBlob != "" {
+	var authBlob crypto.Sealed
+	if req.Auth != "" {
 		if h.encryptor == nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "GitOps credential encryption is not configured")
 			return
 		}
-		ct, encErr := h.encryptor.Encrypt(authBlob)
+		ct, encErr := h.encryptor.EncryptString(req.Auth)
 		if encErr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt gitops auth blob")
 			return
@@ -95,19 +97,19 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.CreateGitOpsSourceParams{
-		Name:                   req.Name,
-		RepoUrl:                req.RepoURL,
-		Branch:                 gitopsDefaultString(req.Branch, "main"),
-		PathPrefix:             req.PathPrefix,
-		AuthMode:               gitopsDefaultString(req.AuthMode, "none"),
-		AuthEncrypted:          authBlob,
-		SyncMode:               gitopsDefaultString(req.SyncMode, "interval"),
-		SyncIntervalSeconds:    defaultIntervalSeconds(req.SyncIntervalSeconds),
-		OnDelete:               gitopsDefaultString(req.OnDelete, "log"),
-		Enabled:                enabled,
-		CreatedBy:              currentUserUUID(r),
-		WebhookProvider:        webhookProvider,
-		WebhookSecretEncrypted: webhookSecret,
+		Name:       req.Name,
+		RepoUrl:    req.RepoURL,
+		Branch:     gitopsDefaultString(req.Branch, "main"),
+		PathPrefix: req.PathPrefix,
+		AuthMode:   gitopsDefaultString(req.AuthMode, "none"),
+		AuthKeyID:  authBlob.KeyID, AuthAlgorithm: authBlob.Algorithm, AuthCiphertext: authBlob.Ciphertext, AuthNonce: authBlob.Nonce,
+		SyncMode:            gitopsDefaultString(req.SyncMode, "interval"),
+		SyncIntervalSeconds: defaultIntervalSeconds(req.SyncIntervalSeconds),
+		OnDelete:            gitopsDefaultString(req.OnDelete, "log"),
+		Enabled:             enabled,
+		CreatedBy:           currentUserUUID(r),
+		WebhookProvider:     webhookProvider,
+		WebhookSecretKeyID:  webhookSecret.KeyID, WebhookSecretAlgorithm: webhookSecret.Algorithm, WebhookSecretCiphertext: webhookSecret.Ciphertext, WebhookSecretNonce: webhookSecret.Nonce,
 	}
 	row, err := executeMutation(r, h.runTx,
 		func(q GitOpsMutationTx) (sqlc.GitopsRegistrationSource, error) {
@@ -173,24 +175,24 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// auth blob: a sentinel or empty value means "keep the stored blob".
 	// A fresh, non-sentinel value must be encrypted at rest exactly like
 	// Create — otherwise a PUT that rotates the git PAT / SSH key would
-	// silently persist the new credential in PLAINTEXT in auth_encrypted
+	// silently persist the new credential in PLAINTEXT in auth_* sealed
 	// (the sync worker's decryptGitAuth() falls back to the raw value on a
-	// Fernet-decrypt miss, so the leak is invisible at runtime).
+	// decrypt miss, so the leak is invisible at runtime).
 	replaceAuth := req.Auth != GitOpsAuthSentinel && req.Auth != ""
-	var replacementAuth string
+	var replacementAuth crypto.Sealed
 	if replaceAuth {
 		if h.encryptor == nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "GitOps credential encryption is not configured")
 			return
 		}
-		ct, encErr := h.encryptor.Encrypt(req.Auth)
+		ct, encErr := h.encryptor.EncryptString(req.Auth)
 		if encErr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt gitops auth blob")
 			return
 		}
 		replacementAuth = ct
 	}
-	var replacementWebhookSecret string
+	var replacementWebhookSecret crypto.Sealed
 	if req.WebhookSecret != "" {
 		var encErr error
 		replacementWebhookSecret, encErr = h.encryptWebhookSecret(req.WebhookSecret)
@@ -204,7 +206,7 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if getErr != nil {
 			return gitOpsUpdateMutationResult{}, getErr
 		}
-		authBlob := existing.AuthEncrypted
+		authBlob := crypto.FromParts(existing.AuthKeyID, existing.AuthAlgorithm, existing.AuthCiphertext, existing.AuthNonce)
 		if replaceAuth {
 			authBlob = replacementAuth
 		}
@@ -217,34 +219,34 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 			allowMass = *req.AllowMassDecommission
 		}
 		webhookProvider := existing.WebhookProvider
-		webhookSecret := existing.WebhookSecretEncrypted
+		webhookSecret := crypto.FromParts(existing.WebhookSecretKeyID, existing.WebhookSecretAlgorithm, existing.WebhookSecretCiphertext, existing.WebhookSecretNonce)
 		if req.WebhookProvider != nil {
 			webhookProvider = strings.TrimSpace(*req.WebhookProvider)
 			if webhookProvider == "" {
-				webhookSecret = ""
+				webhookSecret = crypto.Sealed{}
 			}
 		}
-		if replacementWebhookSecret != "" {
+		if !replacementWebhookSecret.IsZero() {
 			webhookSecret = replacementWebhookSecret
 		}
-		if webhookProvider != "" && webhookSecret == "" {
+		if webhookProvider != "" && webhookSecret.IsZero() {
 			return gitOpsUpdateMutationResult{}, errGitOpsWebhookSecretRequired
 		}
 		row, updateErr := q.UpdateGitOpsSource(r.Context(), sqlc.UpdateGitOpsSourceParams{
-			ID:                     id,
-			Name:                   gitopsDefaultString(req.Name, existing.Name),
-			RepoUrl:                gitopsDefaultString(req.RepoURL, existing.RepoUrl),
-			Branch:                 gitopsDefaultString(req.Branch, existing.Branch),
-			PathPrefix:             req.PathPrefix,
-			AuthMode:               gitopsDefaultString(req.AuthMode, existing.AuthMode),
-			AuthEncrypted:          authBlob,
-			SyncMode:               gitopsDefaultString(req.SyncMode, existing.SyncMode),
-			SyncIntervalSeconds:    defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
-			OnDelete:               gitopsDefaultString(req.OnDelete, existing.OnDelete),
-			Enabled:                enabled,
-			AllowMassDecommission:  allowMass,
-			WebhookProvider:        webhookProvider,
-			WebhookSecretEncrypted: webhookSecret,
+			ID:         id,
+			Name:       gitopsDefaultString(req.Name, existing.Name),
+			RepoUrl:    gitopsDefaultString(req.RepoURL, existing.RepoUrl),
+			Branch:     gitopsDefaultString(req.Branch, existing.Branch),
+			PathPrefix: req.PathPrefix,
+			AuthMode:   gitopsDefaultString(req.AuthMode, existing.AuthMode),
+			AuthKeyID:  authBlob.KeyID, AuthAlgorithm: authBlob.Algorithm, AuthCiphertext: authBlob.Ciphertext, AuthNonce: authBlob.Nonce,
+			SyncMode:              gitopsDefaultString(req.SyncMode, existing.SyncMode),
+			SyncIntervalSeconds:   defaultIntervalSecondsOr(req.SyncIntervalSeconds, existing.SyncIntervalSeconds),
+			OnDelete:              gitopsDefaultString(req.OnDelete, existing.OnDelete),
+			Enabled:               enabled,
+			AllowMassDecommission: allowMass,
+			WebhookProvider:       webhookProvider,
+			WebhookSecretKeyID:    webhookSecret.KeyID, WebhookSecretAlgorithm: webhookSecret.Algorithm, WebhookSecretCiphertext: webhookSecret.Ciphertext, WebhookSecretNonce: webhookSecret.Nonce,
 		})
 		return gitOpsUpdateMutationResult{
 			row: row, overrideArmed: req.AllowMassDecommission != nil &&

@@ -22,7 +22,7 @@
 //	                      ├──► 4xx → MarkDropped (permanent — operator fixes URL)
 //	                      └──► 5xx / timeout → MarkFailed + reschedule
 //
-// The webhook secret is Fernet-encrypted under auth.Encryptor. Decryption
+// The webhook secret is sealed with age under pkg/crypto.Encryptor. Decryption
 // happens inside Sender right before signing; plaintext NEVER reaches a
 // log line or a database column.
 //

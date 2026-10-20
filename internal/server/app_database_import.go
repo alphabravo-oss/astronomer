@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -159,7 +158,7 @@ func prepareDatabaseTransferCommand(bounded context.Context, cfg *config.Config)
 		return nil, err
 	}
 	defer clear(ca)
-	encryptor, err := auth.NewEncryptor(cfg.EncryptionKey)
+	encryptor, err := cfg.LoadEncryptor()
 	if err != nil {
 		return nil, errors.New("offline database import existing credential reader unavailable")
 	}

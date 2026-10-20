@@ -69,7 +69,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	requester := handler.NewTunnelK8sRequester(hub)
 	// Cross-pod fallback for server-internal tunnel calls (shell open,
 	// project reconciler, etc.). The dedicated internal PSK is independent of
-	// the Fernet credential-encryption key.
+	// the age credential-encryption key.
 	requester.SetInternalPSK(cfg.InternalPSK)
 	helmRequester := handler.NewTunnelHelmRequester(hub)
 	// Same cross-pod PSK plumbing as the k8s requester: enables the
@@ -104,7 +104,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 		return time.Duration(grafanaSessionTTL(ctx)) * time.Minute
 	})
 	// Migration 146: the Thanos/Prometheus/Alertmanager credential is
-	// Fernet-sealed at rest. This handler both reads it (to build a monitoring
+	// age-sealed at rest. This handler both reads it (to build a monitoring
 	// client) and read-modify-writes the column it lives in.
 	monitoringHandler.SetEncryptor(encryptor)
 	alertingHandler := handler.NewAlertingHandlerWithDeps(queries, requester)
@@ -127,7 +127,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	catalogHandler.SetK8sRequester(requester)
 	catalogHandler.SetRunTx(sqlcMutationTxRunner[handler.CatalogMutationTx](database))
 	catalogHandler.SetLogger(logger)
-	// Migration 145: chart-repository credentials are Fernet-sealed at rest.
+	// Migration 145: chart-repository credentials are age-sealed at rest.
 	catalogHandler.SetEncryptor(encryptor)
 	// P4.9 — catalog_release.changed liveness events on installed-chart writes.
 	catalogHandler.SetEventBus(bus)

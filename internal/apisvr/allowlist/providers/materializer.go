@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type credentialQueries interface {
@@ -17,7 +18,7 @@ type credentialQueries interface {
 }
 
 type credentialDecryptor interface {
-	DecryptBytes(string) ([]byte, error)
+	Decrypt(sealed crypto.Sealed) ([]byte, error)
 }
 
 // SQLCredentialMaterializer resolves only credentials explicitly linked to a
@@ -111,7 +112,7 @@ func (m *SQLCredentialMaterializer) ResolveForCluster(ctx context.Context, clust
 	if !credentialProviderMatches(row.Provider, provider) {
 		return nil, fmt.Errorf("cloud credential %s has provider %q, incompatible with %s", row.ID, row.Provider, provider)
 	}
-	plain, err := m.decryptor.DecryptBytes(row.DataEncrypted)
+	plain, err := m.decryptor.Decrypt(crypto.FromParts(row.DataKeyID, row.DataAlgorithm, row.DataCiphertext, row.DataNonce))
 	if err != nil {
 		return nil, fmt.Errorf("decrypt cloud credential %s: %w", row.ID, err)
 	}

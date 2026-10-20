@@ -113,7 +113,7 @@ type ManagementBackupRetention struct {
 	Monthly string `json:"monthly,omitempty"`
 }
 
-// ManagementKeyBackupStatus reports whether the Fernet/JWT key is being
+// ManagementKeyBackupStatus reports whether the encryption/JWT key is being
 // wrapped into S3 alongside the dump. WrappingConfigured is the DR-critical
 // flag: the chart refuses to upload the key in plaintext, so an enabled
 // CronJob without wrapping means dumps exist but a restore onto a new
@@ -309,7 +309,7 @@ func destinationView(row sqlc.ManagementBackupDestination) ManagementBackupDesti
 		KeepDaily:         row.KeepDaily,
 		KeepWeekly:        row.KeepWeekly,
 		KeepMonthly:       row.KeepMonthly,
-		HasCredentials:    row.EncryptedCredentials != "",
+		HasCredentials:    row.CredentialsKeyID != "",
 		DesiredGeneration: row.DesiredGeneration,
 		AppliedGeneration: row.AppliedGeneration,
 		DesiredState:      row.DesiredState,

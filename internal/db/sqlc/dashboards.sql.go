@@ -101,37 +101,46 @@ func (q *Queries) CreateDashboardWidget(ctx context.Context, arg CreateDashboard
 }
 
 const createPrometheusDatasource = `-- name: CreatePrometheusDatasource :one
-INSERT INTO prometheus_datasources (name, url, auth_encrypted, tls_skip_verify, enabled)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+INSERT INTO prometheus_datasources (name, url, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce, tls_skip_verify, enabled)
+VALUES ($1, $2, $3, $6, $7, $8, $4, $5)
+RETURNING id, name, url, tls_skip_verify, enabled, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 `
 
 type CreatePrometheusDatasourceParams struct {
-	Name          string `json:"name"`
-	Url           string `json:"url"`
-	AuthEncrypted string `json:"auth_encrypted"`
-	TlsSkipVerify bool   `json:"tls_skip_verify"`
-	Enabled       bool   `json:"enabled"`
+	Name           string `json:"name"`
+	Url            string `json:"url"`
+	AuthKeyID      string `json:"auth_key_id"`
+	TlsSkipVerify  bool   `json:"tls_skip_verify"`
+	Enabled        bool   `json:"enabled"`
+	AuthAlgorithm  string `json:"auth_algorithm"`
+	AuthCiphertext []byte `json:"auth_ciphertext"`
+	AuthNonce      []byte `json:"auth_nonce"`
 }
 
 func (q *Queries) CreatePrometheusDatasource(ctx context.Context, arg CreatePrometheusDatasourceParams) (PrometheusDatasource, error) {
 	row := q.db.QueryRow(ctx, createPrometheusDatasource,
 		arg.Name,
 		arg.Url,
-		arg.AuthEncrypted,
+		arg.AuthKeyID,
 		arg.TlsSkipVerify,
 		arg.Enabled,
+		arg.AuthAlgorithm,
+		arg.AuthCiphertext,
+		arg.AuthNonce,
 	)
 	var i PrometheusDatasource
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.AuthEncrypted,
 		&i.TlsSkipVerify,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
@@ -202,7 +211,7 @@ func (q *Queries) GetDashboardWidgetByID(ctx context.Context, id uuid.UUID) (Das
 }
 
 const getPrometheusDatasourceByID = `-- name: GetPrometheusDatasourceByID :one
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT id, name, url, tls_skip_verify, enabled, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM prometheus_datasources
 WHERE id = $1
 `
@@ -214,17 +223,20 @@ func (q *Queries) GetPrometheusDatasourceByID(ctx context.Context, id uuid.UUID)
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.AuthEncrypted,
 		&i.TlsSkipVerify,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
 
 const getPrometheusDatasourceByName = `-- name: GetPrometheusDatasourceByName :one
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT id, name, url, tls_skip_verify, enabled, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM prometheus_datasources
 WHERE name = $1
 `
@@ -236,11 +248,14 @@ func (q *Queries) GetPrometheusDatasourceByName(ctx context.Context, name string
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.AuthEncrypted,
 		&i.TlsSkipVerify,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
@@ -301,7 +316,7 @@ func (q *Queries) ListDashboardWidgetsPage(ctx context.Context, arg ListDashboar
 }
 
 const listEnabledPrometheusDatasources = `-- name: ListEnabledPrometheusDatasources :many
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT id, name, url, tls_skip_verify, enabled, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM prometheus_datasources
 WHERE enabled = true
 ORDER BY name ASC
@@ -320,11 +335,14 @@ func (q *Queries) ListEnabledPrometheusDatasources(ctx context.Context) ([]Prome
 			&i.ID,
 			&i.Name,
 			&i.Url,
-			&i.AuthEncrypted,
 			&i.TlsSkipVerify,
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AuthKeyID,
+			&i.AuthAlgorithm,
+			&i.AuthCiphertext,
+			&i.AuthNonce,
 		); err != nil {
 			return nil, err
 		}
@@ -338,7 +356,7 @@ func (q *Queries) ListEnabledPrometheusDatasources(ctx context.Context) ([]Prome
 
 const listPrometheusDatasourcesPage = `-- name: ListPrometheusDatasourcesPage :many
 
-SELECT id, name, url, (auth_encrypted <> '') AS has_auth,
+SELECT id, name, url, (auth_key_id <> '') AS has_auth,
        tls_skip_verify, enabled, created_at, updated_at
 FROM prometheus_datasources
 ORDER BY name ASC, id ASC
@@ -536,21 +554,27 @@ const updatePrometheusDatasource = `-- name: UpdatePrometheusDatasource :one
 UPDATE prometheus_datasources
 SET name            = $2,
     url             = $3,
-    auth_encrypted  = $4,
+    auth_key_id = $4,
+    auth_algorithm = $7,
+    auth_ciphertext = $8,
+    auth_nonce = $9,
     tls_skip_verify = $5,
     enabled         = $6,
     updated_at      = now()
 WHERE id = $1
-RETURNING id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+RETURNING id, name, url, tls_skip_verify, enabled, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 `
 
 type UpdatePrometheusDatasourceParams struct {
-	ID            uuid.UUID `json:"id"`
-	Name          string    `json:"name"`
-	Url           string    `json:"url"`
-	AuthEncrypted string    `json:"auth_encrypted"`
-	TlsSkipVerify bool      `json:"tls_skip_verify"`
-	Enabled       bool      `json:"enabled"`
+	ID             uuid.UUID `json:"id"`
+	Name           string    `json:"name"`
+	Url            string    `json:"url"`
+	AuthKeyID      string    `json:"auth_key_id"`
+	TlsSkipVerify  bool      `json:"tls_skip_verify"`
+	Enabled        bool      `json:"enabled"`
+	AuthAlgorithm  string    `json:"auth_algorithm"`
+	AuthCiphertext []byte    `json:"auth_ciphertext"`
+	AuthNonce      []byte    `json:"auth_nonce"`
 }
 
 func (q *Queries) UpdatePrometheusDatasource(ctx context.Context, arg UpdatePrometheusDatasourceParams) (PrometheusDatasource, error) {
@@ -558,20 +582,26 @@ func (q *Queries) UpdatePrometheusDatasource(ctx context.Context, arg UpdateProm
 		arg.ID,
 		arg.Name,
 		arg.Url,
-		arg.AuthEncrypted,
+		arg.AuthKeyID,
 		arg.TlsSkipVerify,
 		arg.Enabled,
+		arg.AuthAlgorithm,
+		arg.AuthCiphertext,
+		arg.AuthNonce,
 	)
 	var i PrometheusDatasource
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Url,
-		&i.AuthEncrypted,
 		&i.TlsSkipVerify,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }

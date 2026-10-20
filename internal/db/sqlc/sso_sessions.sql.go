@@ -37,7 +37,7 @@ func (q *Queries) DeleteSSOSessionsByUser(ctx context.Context, userID uuid.UUID)
 }
 
 const getLatestSSOSessionByUser = `-- name: GetLatestSSOSessionByUser :one
-SELECT jti, user_id, provider_name, upstream_id_token_encrypted, end_session_endpoint, expires_at, created_at FROM sso_sessions
+SELECT jti, user_id, provider_name, end_session_endpoint, expires_at, created_at, upstream_id_token_key_id, upstream_id_token_algorithm, upstream_id_token_ciphertext, upstream_id_token_nonce FROM sso_sessions
 WHERE user_id = $1 AND expires_at > now()
 ORDER BY created_at DESC
 LIMIT 1
@@ -56,16 +56,19 @@ func (q *Queries) GetLatestSSOSessionByUser(ctx context.Context, userID uuid.UUI
 		&i.Jti,
 		&i.UserID,
 		&i.ProviderName,
-		&i.UpstreamIDTokenEncrypted,
 		&i.EndSessionEndpoint,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.UpstreamIDTokenKeyID,
+		&i.UpstreamIDTokenAlgorithm,
+		&i.UpstreamIDTokenCiphertext,
+		&i.UpstreamIDTokenNonce,
 	)
 	return i, err
 }
 
 const getSSOSession = `-- name: GetSSOSession :one
-SELECT jti, user_id, provider_name, upstream_id_token_encrypted, end_session_endpoint, expires_at, created_at FROM sso_sessions WHERE jti = $1
+SELECT jti, user_id, provider_name, end_session_endpoint, expires_at, created_at, upstream_id_token_key_id, upstream_id_token_algorithm, upstream_id_token_ciphertext, upstream_id_token_nonce FROM sso_sessions WHERE jti = $1
 `
 
 // Lookup the upstream session row for an Astronomer JWT's JTI. Used by
@@ -79,10 +82,13 @@ func (q *Queries) GetSSOSession(ctx context.Context, jti string) (SsoSession, er
 		&i.Jti,
 		&i.UserID,
 		&i.ProviderName,
-		&i.UpstreamIDTokenEncrypted,
 		&i.EndSessionEndpoint,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.UpstreamIDTokenKeyID,
+		&i.UpstreamIDTokenAlgorithm,
+		&i.UpstreamIDTokenCiphertext,
+		&i.UpstreamIDTokenNonce,
 	)
 	return i, err
 }
@@ -90,25 +96,31 @@ func (q *Queries) GetSSOSession(ctx context.Context, jti string) (SsoSession, er
 const insertSSOSession = `-- name: InsertSSOSession :exec
 
 INSERT INTO sso_sessions (
-    jti, user_id, provider_name, upstream_id_token_encrypted,
+    jti, user_id, provider_name, upstream_id_token_key_id, upstream_id_token_algorithm, upstream_id_token_ciphertext, upstream_id_token_nonce,
     end_session_endpoint, expires_at
 )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $7, $8, $9, $5, $6)
 ON CONFLICT (jti) DO UPDATE SET
     user_id                     = EXCLUDED.user_id,
     provider_name               = EXCLUDED.provider_name,
-    upstream_id_token_encrypted = EXCLUDED.upstream_id_token_encrypted,
+    upstream_id_token_key_id = EXCLUDED.upstream_id_token_key_id,
+    upstream_id_token_algorithm = EXCLUDED.upstream_id_token_algorithm,
+    upstream_id_token_ciphertext = EXCLUDED.upstream_id_token_ciphertext,
+    upstream_id_token_nonce = EXCLUDED.upstream_id_token_nonce,
     end_session_endpoint        = EXCLUDED.end_session_endpoint,
     expires_at                  = EXCLUDED.expires_at
 `
 
 type InsertSSOSessionParams struct {
-	Jti                      string    `json:"jti"`
-	UserID                   uuid.UUID `json:"user_id"`
-	ProviderName             string    `json:"provider_name"`
-	UpstreamIDTokenEncrypted string    `json:"upstream_id_token_encrypted"`
-	EndSessionEndpoint       string    `json:"end_session_endpoint"`
-	ExpiresAt                time.Time `json:"expires_at"`
+	Jti                       string    `json:"jti"`
+	UserID                    uuid.UUID `json:"user_id"`
+	ProviderName              string    `json:"provider_name"`
+	UpstreamIDTokenKeyID      string    `json:"upstream_id_token_key_id"`
+	EndSessionEndpoint        string    `json:"end_session_endpoint"`
+	ExpiresAt                 time.Time `json:"expires_at"`
+	UpstreamIDTokenAlgorithm  string    `json:"upstream_id_token_algorithm"`
+	UpstreamIDTokenCiphertext []byte    `json:"upstream_id_token_ciphertext"`
+	UpstreamIDTokenNonce      []byte    `json:"upstream_id_token_nonce"`
 }
 
 // Single sign-out (SLO) session tracking — migration 054.
@@ -121,7 +133,7 @@ type InsertSSOSessionParams struct {
 // Lifetime is bounded by expires_at (= the Astronomer JWT's exp). The
 // nightly retention worker piggy-backs on the jwt_revocations purge.
 // Called by the SSO Callback after the Astronomer JWT pair is minted.
-// jti is the access JWT's JTI; upstream_id_token_encrypted is Fernet-
+// jti is the access JWT's JTI; upstream_id_token_{key_id,algorithm,ciphertext,nonce} is age-
 // ciphertext (the caller wraps before calling). ON CONFLICT replaces
 // the row so a fresh login re-uses the JTI key (which it shouldn't —
 // JTIs are uuid.New per token — but the upsert protects against a
@@ -131,15 +143,18 @@ func (q *Queries) InsertSSOSession(ctx context.Context, arg InsertSSOSessionPara
 		arg.Jti,
 		arg.UserID,
 		arg.ProviderName,
-		arg.UpstreamIDTokenEncrypted,
+		arg.UpstreamIDTokenKeyID,
 		arg.EndSessionEndpoint,
 		arg.ExpiresAt,
+		arg.UpstreamIDTokenAlgorithm,
+		arg.UpstreamIDTokenCiphertext,
+		arg.UpstreamIDTokenNonce,
 	)
 	return err
 }
 
 const listSSOSessionsByUser = `-- name: ListSSOSessionsByUser :many
-SELECT jti, user_id, provider_name, upstream_id_token_encrypted, end_session_endpoint, expires_at, created_at FROM sso_sessions WHERE user_id = $1 ORDER BY created_at DESC
+SELECT jti, user_id, provider_name, end_session_endpoint, expires_at, created_at, upstream_id_token_key_id, upstream_id_token_algorithm, upstream_id_token_ciphertext, upstream_id_token_nonce FROM sso_sessions WHERE user_id = $1 ORDER BY created_at DESC
 `
 
 // Used by admin force-logout to enumerate the user's active upstream
@@ -159,10 +174,13 @@ func (q *Queries) ListSSOSessionsByUser(ctx context.Context, userID uuid.UUID) (
 			&i.Jti,
 			&i.UserID,
 			&i.ProviderName,
-			&i.UpstreamIDTokenEncrypted,
 			&i.EndSessionEndpoint,
 			&i.ExpiresAt,
 			&i.CreatedAt,
+			&i.UpstreamIDTokenKeyID,
+			&i.UpstreamIDTokenAlgorithm,
+			&i.UpstreamIDTokenCiphertext,
+			&i.UpstreamIDTokenNonce,
 		); err != nil {
 			return nil, err
 		}

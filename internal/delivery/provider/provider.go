@@ -22,6 +22,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	deliverymetrics "github.com/alphabravocompany/astronomer-go/internal/delivery/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -40,7 +41,7 @@ type Querier interface {
 }
 
 type Decryptor interface {
-	Decrypt(string) (string, error)
+	Decrypt(sealed crypto.Sealed) ([]byte, error)
 }
 
 type Provider struct {
@@ -328,7 +329,7 @@ func compileAssignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow) (prot
 	if !trust.AllowUnsigned {
 		source.Verify = verification(trust)
 	}
-	if row.AuthMode != string(model.AuthNone) || row.CaBundleEncrypted != "" {
+	if row.AuthMode != string(model.AuthNone) || row.CaBundleKeyID != "" {
 		source.CredentialSecret = names.AuthSecret
 	}
 	if !trust.AllowUnsigned && trust.KeyRef != "" {
@@ -393,15 +394,14 @@ func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2
 	if response == nil {
 		return errors.New("delivery response is required")
 	}
-	if systemRelease != nil && systemRelease.RegistryCredentialEncrypted != "" {
+	if systemRelease != nil && systemRelease.RegistryCredentialKeyID != "" {
 		if response.System == nil || p.decryptor == nil {
 			return errors.New("system registry credential decryptor is unavailable")
 		}
-		plain, err := p.decryptor.Decrypt(systemRelease.RegistryCredentialEncrypted)
+		material, err := p.decryptor.Decrypt(crypto.FromParts(systemRelease.RegistryCredentialKeyID, systemRelease.RegistryCredentialAlgorithm, systemRelease.RegistryCredentialCiphertext, systemRelease.RegistryCredentialNonce))
 		if err != nil {
 			return fmt.Errorf("decrypt system registry credential: %w", err)
 		}
-		material := []byte(plain)
 		if !json.Valid(material) {
 			clear(material)
 			return errors.New("system registry credential is not valid docker configuration JSON")
@@ -426,10 +426,12 @@ func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2
 		if !needsAuth && !needsTrust {
 			continue
 		}
-		if p.decryptor == nil && (row.CredentialEncrypted != "" || row.CaBundleEncrypted != "") {
+		if p.decryptor == nil && (row.CredentialKeyID != "" || row.CaBundleKeyID != "") {
 			return errors.New("source credential decryptor is unavailable")
 		}
-		data, err := p.decryptCredential(row.SourceType, row.CredentialEncrypted, row.CaBundleEncrypted)
+		data, err := p.decryptCredential(row.SourceType,
+			crypto.FromParts(row.CredentialKeyID, row.CredentialAlgorithm, row.CredentialCiphertext, row.CredentialNonce),
+			crypto.FromParts(row.CaBundleKeyID, row.CaBundleAlgorithm, row.CaBundleCiphertext, row.CaBundleNonce))
 		if err != nil {
 			return err
 		}
@@ -460,14 +462,14 @@ func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2
 	return nil
 }
 
-func (p *Provider) decryptCredential(sourceType, encrypted, encryptedCA string) (map[string][]byte, error) {
+func (p *Provider) decryptCredential(sourceType string, sealed, sealedCA crypto.Sealed) (map[string][]byte, error) {
 	data := make(map[string][]byte)
-	if encrypted != "" {
-		plain, err := p.decryptor.Decrypt(encrypted)
+	if !sealed.IsZero() {
+		buffer, err := p.decryptor.Decrypt(sealed)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt source credential: %w", err)
 		}
-		buffer := []byte(plain)
+
 		var values map[string]string
 		err = decodeStrict(buffer, &values)
 		clear(buffer)
@@ -478,8 +480,8 @@ func (p *Provider) decryptCredential(sourceType, encrypted, encryptedCA string) 
 			data[key] = []byte(value)
 		}
 	}
-	if encryptedCA != "" {
-		plain, err := p.decryptor.Decrypt(encryptedCA)
+	if !sealedCA.IsZero() {
+		plain, err := p.decryptor.Decrypt(sealedCA)
 		if err != nil {
 			zeroMap(data)
 			return nil, fmt.Errorf("decrypt source CA: %w", err)
@@ -488,7 +490,7 @@ func (p *Provider) decryptCredential(sourceType, encrypted, encryptedCA string) 
 		if sourceType == string(model.SourceHelmHTTP) || sourceType == string(model.SourceHelmOCI) || sourceType == string(model.SourceOCIArtifact) {
 			caKey = "caFile"
 		}
-		data[caKey] = []byte(plain)
+		data[caKey] = plain
 	}
 	return data, nil
 }

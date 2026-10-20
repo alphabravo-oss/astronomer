@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -57,7 +58,7 @@ func (h *CloudCredentialHandler) loadCredentialForRequest(w http.ResponseWriter,
 // the data blob. includeMaterializations=true means "fetch + attach the
 // per-(cluster, namespace) status rows" (only on single-row GET).
 func (h *CloudCredentialHandler) rowToResponse(ctx context.Context, row sqlc.CloudCredential, includeMaterializations bool) (CloudCredentialResponse, error) {
-	blob, err := h.decryptToMap(row.DataEncrypted)
+	blob, err := h.decryptToMap(crypto.FromParts(row.DataKeyID, row.DataAlgorithm, row.DataCiphertext, row.DataNonce))
 	if err != nil {
 		return CloudCredentialResponse{}, err
 	}
@@ -112,19 +113,19 @@ func (h *CloudCredentialHandler) rowToErrorResponse(row sqlc.CloudCredential, er
 }
 
 // decryptToMap is the inverse of (encode → encrypt). Returns an empty
-// map for an empty ciphertext so legacy / migrated rows decode cleanly.
-func (h *CloudCredentialHandler) decryptToMap(ciphertext string) (map[string]string, error) {
-	if strings.TrimSpace(ciphertext) == "" {
+// map when no credential is stored.
+func (h *CloudCredentialHandler) decryptToMap(sealed crypto.Sealed) (map[string]string, error) {
+	if sealed.IsZero() {
 		return map[string]string{}, nil
 	}
 	if h.encryptor == nil {
 		return nil, errors.New("encryptor not configured")
 	}
-	plain, err := h.encryptor.Decrypt(ciphertext)
+	plain, err := h.encryptor.Decrypt(sealed)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}
-	return cloudcreds.DecodeBlob([]byte(plain))
+	return cloudcreds.DecodeBlob(plain)
 }
 
 // canonicaliseTargetRefs validates the incoming target_refs slice and

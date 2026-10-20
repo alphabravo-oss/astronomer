@@ -1,5 +1,5 @@
 -- Signed downstream delivery-system releases and staged rollout state.
--- Public projections deliberately omit registry_credential_encrypted.
+-- Public projections deliberately omit registry_credential_{key_id,algorithm,ciphertext,nonce}.
 
 -- name: ListDeliverySystemReleases :many
 SELECT id, release_sequence, version, artifact_url, artifact_digest,

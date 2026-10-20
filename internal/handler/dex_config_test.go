@@ -17,7 +17,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,13 +24,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -204,21 +204,22 @@ func (f *fakeDexQuerier) StageCreateDexConnector(_ context.Context, arg sqlc.Sta
 		}
 	}
 	row := sqlc.DexConnector{
-		ID:          uuid.New(),
-		Name:        arg.Name,
-		Type:        arg.Type,
-		DisplayName: arg.DisplayName,
-		Config:      arg.Config,
-		Enabled:     arg.Enabled,
-		CreatedAt:   time.Now().UTC(),
-		UpdatedAt:   time.Now().UTC(),
+		ID:           uuid.New(),
+		Name:         arg.Name,
+		Type:         arg.Type,
+		DisplayName:  arg.DisplayName,
+		Config:       arg.Config,
+		Enabled:      arg.Enabled,
+		SecretsKeyID: arg.SecretsKeyID, SecretsAlgorithm: arg.SecretsAlgorithm, SecretsCiphertext: arg.SecretsCiphertext, SecretsNonce: arg.SecretsNonce,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	f.connectors[row.ID] = row
 	generation, err := f.stageConnectorMutation()
 	if err != nil {
 		delete(f.connectors, row.ID)
 	}
-	return sqlc.StageCreateDexConnectorRow{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: row.Config, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, RuntimeGeneration: generation}, err
+	return sqlc.StageCreateDexConnectorRow{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: row.Config, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, SecretsKeyID: row.SecretsKeyID, SecretsAlgorithm: row.SecretsAlgorithm, SecretsCiphertext: row.SecretsCiphertext, SecretsNonce: row.SecretsNonce, RuntimeGeneration: generation}, err
 }
 
 func (f *fakeDexQuerier) StageUpdateDexConnector(_ context.Context, arg sqlc.StageUpdateDexConnectorParams) (sqlc.StageUpdateDexConnectorRow, error) {
@@ -229,6 +230,7 @@ func (f *fakeDexQuerier) StageUpdateDexConnector(_ context.Context, arg sqlc.Sta
 	row.Type = arg.Type
 	row.DisplayName = arg.DisplayName
 	row.Config = arg.Config
+	row.SecretsKeyID, row.SecretsAlgorithm, row.SecretsCiphertext, row.SecretsNonce = arg.SecretsKeyID, arg.SecretsAlgorithm, arg.SecretsCiphertext, arg.SecretsNonce
 	row.Enabled = arg.Enabled
 	row.UpdatedAt = time.Now().UTC()
 	previous := f.connectors[arg.ConnectorID]
@@ -237,7 +239,7 @@ func (f *fakeDexQuerier) StageUpdateDexConnector(_ context.Context, arg sqlc.Sta
 	if err != nil {
 		f.connectors[arg.ConnectorID] = previous
 	}
-	return sqlc.StageUpdateDexConnectorRow{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: row.Config, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, RuntimeGeneration: generation}, err
+	return sqlc.StageUpdateDexConnectorRow{ID: row.ID, Name: row.Name, Type: row.Type, DisplayName: row.DisplayName, Config: row.Config, Enabled: row.Enabled, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, SecretsKeyID: row.SecretsKeyID, SecretsAlgorithm: row.SecretsAlgorithm, SecretsCiphertext: row.SecretsCiphertext, SecretsNonce: row.SecretsNonce, RuntimeGeneration: generation}, err
 }
 
 func (f *fakeDexQuerier) StageDeleteDexConnector(_ context.Context, id uuid.UUID) (int64, error) {
@@ -297,8 +299,8 @@ func (f *fakeDexQuerier) StageDexSettingsAndDisableSSO(_ context.Context, arg sq
 	row := sqlc.DexSetting{
 		ID: arg.ID, IssuerUrl: arg.IssuerUrl, ClusterID: arg.ClusterID,
 		Namespace: arg.Namespace, ReleaseName: arg.ReleaseName, ConfigmapName: arg.ConfigmapName,
-		RuntimeSecretName: arg.RuntimeSecretName, PublicClients: arg.PublicClients,
-		PublicClientsEncrypted: arg.PublicClientsEncrypted, Expiry: arg.Expiry, Extra: arg.Extra,
+		RuntimeSecretName:  arg.RuntimeSecretName,
+		PublicClientsKeyID: arg.PublicClientsKeyID, PublicClientsAlgorithm: arg.PublicClientsAlgorithm, PublicClientsCiphertext: arg.PublicClientsCiphertext, PublicClientsNonce: arg.PublicClientsNonce, Expiry: arg.Expiry, Extra: arg.Extra,
 		ChartReleaseName: arg.ChartReleaseName, DeploymentName: arg.DeploymentName, ServiceName: arg.ServiceName,
 		RuntimePhase: arg.RuntimePhase, RuntimeGeneration: generation, SagaPreviousSsoEnabled: previousEnabled,
 		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
@@ -307,10 +309,6 @@ func (f *fakeDexQuerier) StageDexSettingsAndDisableSSO(_ context.Context, arg sq
 		row.RuntimeAppliedGeneration = f.settings.RuntimeAppliedGeneration
 		row.RuntimeStagedGeneration = f.settings.RuntimeStagedGeneration
 		row.CreatedAt = f.settings.CreatedAt
-		if f.settings.PublicClientsCutoverAt.Valid {
-			row.PublicClients = json.RawMessage(`[]`)
-			row.PublicClientsCutoverAt = f.settings.PublicClientsCutoverAt
-		}
 	}
 	f.settings = &row
 	return generation, nil
@@ -356,16 +354,6 @@ func (f *fakeDexQuerier) MarkDexRuntimeApplied(_ context.Context, arg sqlc.MarkD
 	return *f.settings, nil
 }
 
-func (f *fakeDexQuerier) BackfillDexPublicClientsEnvelope(_ context.Context, arg sqlc.BackfillDexPublicClientsEnvelopeParams) (sqlc.DexSetting, error) {
-	if f.settings == nil || f.settings.ID != arg.ID || f.settings.PublicClientsEncrypted != "" ||
-		!bytes.Equal(f.settings.PublicClients, arg.LegacyPublicClients) {
-		return sqlc.DexSetting{}, errors.New("legacy migration conflict")
-	}
-	f.settings.PublicClientsEncrypted = arg.PublicClientsEncrypted
-	f.settings.UpdatedAt = time.Now().UTC()
-	return *f.settings, nil
-}
-
 func (f *fakeDexQuerier) GetPlatformConfig(_ context.Context) (sqlc.PlatformConfiguration, error) {
 	if f.platform == nil {
 		return sqlc.PlatformConfiguration{}, errors.New("not found")
@@ -383,19 +371,19 @@ func (f *fakeDexQuerier) GetSSOConfigurationByProvider(_ context.Context, provid
 
 func (f *fakeDexQuerier) CreateSSOConfiguration(_ context.Context, arg sqlc.CreateSSOConfigurationParams) (sqlc.SsoConfiguration, error) {
 	row := sqlc.SsoConfiguration{
-		ID:                    uuid.New(),
-		Provider:              arg.Provider,
-		IsEnabled:             arg.IsEnabled,
-		DisplayName:           arg.DisplayName,
-		Config:                arg.Config,
-		ClientID:              arg.ClientID,
-		ClientSecretEncrypted: arg.ClientSecretEncrypted,
-		AllowedOrganizations:  arg.AllowedOrganizations,
-		AllowedDomains:        arg.AllowedDomains,
-		AutoCreateUsers:       arg.AutoCreateUsers,
-		DefaultGlobalRoleID:   arg.DefaultGlobalRoleID,
-		CreatedAt:             time.Now().UTC(),
-		UpdatedAt:             time.Now().UTC(),
+		ID:                uuid.New(),
+		Provider:          arg.Provider,
+		IsEnabled:         arg.IsEnabled,
+		DisplayName:       arg.DisplayName,
+		Config:            arg.Config,
+		ClientID:          arg.ClientID,
+		ClientSecretKeyID: arg.ClientSecretKeyID, ClientSecretAlgorithm: arg.ClientSecretAlgorithm, ClientSecretCiphertext: arg.ClientSecretCiphertext, ClientSecretNonce: arg.ClientSecretNonce,
+		AllowedOrganizations: arg.AllowedOrganizations,
+		AllowedDomains:       arg.AllowedDomains,
+		AutoCreateUsers:      arg.AutoCreateUsers,
+		DefaultGlobalRoleID:  arg.DefaultGlobalRoleID,
+		CreatedAt:            time.Now().UTC(),
+		UpdatedAt:            time.Now().UTC(),
 	}
 	f.ssoByProv[arg.Provider] = row
 	return row, nil
@@ -411,7 +399,7 @@ func (f *fakeDexQuerier) UpdateSSOConfiguration(_ context.Context, arg sqlc.Upda
 			row.DisplayName = arg.DisplayName
 			row.Config = arg.Config
 			row.ClientID = arg.ClientID
-			row.ClientSecretEncrypted = arg.ClientSecretEncrypted
+			row.ClientSecretKeyID, row.ClientSecretAlgorithm, row.ClientSecretCiphertext, row.ClientSecretNonce = arg.ClientSecretKeyID, arg.ClientSecretAlgorithm, arg.ClientSecretCiphertext, arg.ClientSecretNonce
 			row.AllowedOrganizations = arg.AllowedOrganizations
 			row.AllowedDomains = arg.AllowedDomains
 			row.AutoCreateUsers = arg.AutoCreateUsers
@@ -432,7 +420,7 @@ func (f *fakeDexQuerier) EnableDexSSOForGeneration(_ context.Context, arg sqlc.E
 	if !exists {
 		row = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true, CreatedAt: time.Now().UTC()}
 	}
-	row.IsEnabled, row.DisplayName, row.Config, row.ClientID, row.ClientSecretEncrypted = true, arg.DisplayName, arg.Config, arg.ClientID, arg.ClientSecretEncrypted
+	row.IsEnabled, row.DisplayName, row.Config, row.ClientID, row.ClientSecretKeyID, row.ClientSecretAlgorithm, row.ClientSecretCiphertext, row.ClientSecretNonce = true, arg.DisplayName, arg.Config, arg.ClientID, arg.ClientSecretKeyID, arg.ClientSecretAlgorithm, arg.ClientSecretCiphertext, arg.ClientSecretNonce
 	row.UpdatedAt = time.Now().UTC()
 	f.ssoByProv["dex"] = row
 	f.settings.SagaPreviousSsoEnabled = false
@@ -625,36 +613,36 @@ func TestValidateConnectorConfig_RequiredFieldsByType(t *testing.T) {
 // ----- 2. renderDexConfig ----------------------------------------------
 
 func TestRenderDexConfig_DecryptsSecretsAndForwardsExpiry(t *testing.T) {
-	keyStr, err := auth.GenerateKey()
+	keyStr, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(keyStr)
+	enc, err := crypto.NewEncryptor(keyStr)
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
 	h := NewDexHandler(newFakeDexQuerier())
 	h.SetEncryptor(enc)
 
-	encryptedSecret, err := enc.Encrypt("super-secret")
+	encryptedSecret, err := enc.EncryptString(`{"clientSecret":"super-secret"}`)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
 	connectorCfg, _ := json.Marshal(map[string]any{
-		"tenant":       "tenant-id",
-		"clientID":     "client-id",
-		"clientSecret": encryptedSecret,
+		"tenant":   "tenant-id",
+		"clientID": "client-id",
 	})
 	connectors := []sqlc.DexConnector{
 		{
-			ID:          uuid.New(),
-			Name:        "azure-prod",
-			Type:        "microsoft",
-			DisplayName: "Azure AD (prod)",
-			Config:      connectorCfg,
-			Enabled:     true,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
+			ID:           uuid.New(),
+			Name:         "azure-prod",
+			Type:         "microsoft",
+			DisplayName:  "Azure AD (prod)",
+			Config:       connectorCfg,
+			SecretsKeyID: encryptedSecret.KeyID, SecretsAlgorithm: encryptedSecret.Algorithm, SecretsCiphertext: encryptedSecret.Ciphertext,
+			Enabled:   true,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		},
 	}
 	settings := sqlc.DexSetting{
@@ -663,7 +651,6 @@ func TestRenderDexConfig_DecryptsSecretsAndForwardsExpiry(t *testing.T) {
 		Namespace:     "dex",
 		ReleaseName:   "dex",
 		ConfigmapName: "astronomer-dex-config",
-		PublicClients: json.RawMessage(`[{"id":"astronomer","name":"Astronomer","redirectURIs":["https://astro.example.com/api/v1/auth/callback/dex/"],"secret":"client-secret"}]`),
 		Expiry:        json.RawMessage(`{"idTokens":"1h","refreshTokens":{"reuseInterval":"3s","validIfNotUsedFor":"168h"}}`),
 		Extra:         json.RawMessage(`{"logger":{"level":"info"}}`),
 	}
@@ -797,15 +784,14 @@ func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *test
 	defer mockK8s.Close()
 
 	q := newFakeDexQuerier()
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
-	ciphertext, _ := enc.Encrypt("hostile-'\"-secret")
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
+	ciphertext, _ := enc.EncryptString("hostile-'\"-secret")
 	clusterID := uuid.New()
 	q.settings = &sqlc.DexSetting{
 		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
 		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
-		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, PublicClients: json.RawMessage(`[]`),
-		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
+		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
 	connectorCfg, _ := json.Marshal(map[string]any{
 		"tenant": "abc", "clientID": "id", "clientSecret": ciphertext,
@@ -871,8 +857,7 @@ func TestApply_FixedPointDoesNotMutateOrRollout(t *testing.T) {
 	q.settings = &sqlc.DexSetting{
 		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
 		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
-		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, PublicClients: json.RawMessage(`[]`),
-		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
+		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	rendered, err := h.renderDexConfig(*q.settings, nil, nil)
@@ -920,7 +905,7 @@ func TestPreparePhaseCrashRetryStagesSecretWithoutDeploymentCutover(t *testing.T
 	q.settings = &sqlc.DexSetting{
 		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
 		Namespace: "dex", ReleaseName: "dex", DeploymentName: "dex", ServiceName: "dex", RuntimeSecretName: "runtime",
-		RuntimePhase: "prepare", RuntimeGeneration: 4, PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
+		RuntimePhase: "prepare", RuntimeGeneration: 4, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	rendered, err := h.renderDexConfig(*q.settings, nil, nil)
@@ -1049,7 +1034,6 @@ func TestApply_503WhenNoK8sRequester(t *testing.T) {
 		Namespace:     "dex",
 		ReleaseName:   "dex",
 		ConfigmapName: "astronomer-dex-config",
-		PublicClients: json.RawMessage(`[]`),
 		Expiry:        json.RawMessage(`{}`),
 		Extra:         json.RawMessage(`{}`),
 	}
@@ -1067,8 +1051,8 @@ func TestApply_503WhenNoK8sRequester(t *testing.T) {
 func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 	q := newFakeDexQuerier()
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh"}
-	keyStr, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(keyStr)
+	keyStr, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(keyStr)
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 
@@ -1093,15 +1077,14 @@ func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 		stored = c
 	}
 	cfg := decodeJSONMap(stored.Config)
-	storedSecret, _ := cfg["clientSecret"].(string)
-	if storedSecret == "supersecret" {
-		t.Errorf("clientSecret should be encrypted at rest, got plaintext")
+	if _, present := cfg["clientSecret"]; present {
+		t.Errorf("clientSecret must not be stored in the config JSONB at all")
 	}
-	if storedSecret == "" {
-		t.Errorf("clientSecret missing")
+	if stored.SecretsKeyID != enc.CurrentKeyID() || strings.Contains(string(stored.SecretsCiphertext), "supersecret") {
+		t.Errorf("connector secrets were not sealed: key=%q", stored.SecretsKeyID)
 	}
-	if pt, err := enc.Decrypt(storedSecret); err != nil || pt != "supersecret" {
-		t.Errorf("encrypted secret didn't round-trip: pt=%q err=%v", pt, err)
+	if pt, err := enc.DecryptString(crypto.FromParts(stored.SecretsKeyID, stored.SecretsAlgorithm, stored.SecretsCiphertext, stored.SecretsNonce)); err != nil || pt != `{"clientSecret":"supersecret"}` {
+		t.Errorf("sealed connector secrets didn't round-trip: pt=%q err=%v", pt, err)
 	}
 	createAudit := q.auditRowAt(t, 0)
 	assertDexAudit(t, createAudit, "dex.connector.create", "dex_connector")
@@ -1200,7 +1183,7 @@ func TestDexConnectorUpdateAndDeleteAreAudited(t *testing.T) {
 func TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO(t *testing.T) {
 	t.Skip("synchronous apply contract replaced by durable Dex operation worker")
 	q := newFakeDexQuerier()
-	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex", ReleaseName: "dex", DeploymentName: "dex", ServiceName: "dex", RuntimeSecretName: "runtime", RuntimePhase: "fresh", RuntimeGeneration: 1, RuntimeAppliedGeneration: 1, RuntimeStagedGeneration: 1, ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex", ReleaseName: "dex", DeploymentName: "dex", ServiceName: "dex", RuntimeSecretName: "runtime", RuntimePhase: "fresh", RuntimeGeneration: 1, RuntimeAppliedGeneration: 1, RuntimeStagedGeneration: 1, ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
 	q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", IsEnabled: true}
 	config := json.RawMessage(`{"ssoURL":"https://idp.example.com/saml","entityIssuer":"urn:example:idp"}`)
 	staged, err := q.StageCreateDexConnector(context.Background(), sqlc.StageCreateDexConnectorParams{Name: "saml", Type: "saml", Config: config, Enabled: true})
@@ -1271,8 +1254,8 @@ func TestCreateConnector_RejectsUppercaseLDAPBeforeRegistryLookup(t *testing.T) 
 func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	t.Skip("synchronous registration contract replaced by durable Dex operation worker")
 	q := newFakeDexQuerier()
-	keyStr, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(keyStr)
+	keyStr, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(keyStr)
 	q.platform = &sqlc.PlatformConfiguration{
 		ID:           1,
 		ServerUrl:    "https://astronomer.example.com",
@@ -1285,7 +1268,6 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 		ReleaseName:   "dex",
 		ConfigmapName: "astronomer-dex-config",
 		ClusterID:     pgtype.UUID{Bytes: uuid.New(), Valid: true},
-		PublicClients: json.RawMessage(`[]`),
 		Expiry:        json.RawMessage(`{}`),
 		Extra:         json.RawMessage(`{}`),
 	}
@@ -1312,10 +1294,10 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	if row.ClientID != "astronomer" {
 		t.Errorf("client_id = %s", row.ClientID)
 	}
-	if row.ClientSecretEncrypted == "" {
+	if row.ClientSecretKeyID == "" {
 		t.Errorf("expected encrypted secret")
 	}
-	if pt, err := enc.Decrypt(row.ClientSecretEncrypted); err != nil || pt != "shared-secret" {
+	if pt, err := enc.DecryptString(crypto.FromParts(row.ClientSecretKeyID, row.ClientSecretAlgorithm, row.ClientSecretCiphertext, row.ClientSecretNonce)); err != nil || pt != "shared-secret" {
 		t.Errorf("secret didn't round-trip: pt=%q err=%v", pt, err)
 	}
 	// Config JSON contains issuer_url.
@@ -1325,7 +1307,7 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 		t.Errorf("issuer_url not stored in sso config: %v", cfg)
 	}
 	var clients []map[string]any
-	plainClients, err := enc.Decrypt(q.settings.PublicClientsEncrypted)
+	plainClients, err := enc.DecryptString(crypto.FromParts(q.settings.PublicClientsKeyID, q.settings.PublicClientsAlgorithm, q.settings.PublicClientsCiphertext, q.settings.PublicClientsNonce))
 	if err != nil {
 		t.Fatalf("decrypt public_clients: %v", err)
 	}
@@ -1355,7 +1337,7 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	}
 	staticClients, _ := dexDoc["staticClients"].([]any)
 	dexClient, _ := staticClients[0].(map[string]any)
-	serverSecret, err := enc.Decrypt(row.ClientSecretEncrypted)
+	serverSecret, err := enc.DecryptString(crypto.FromParts(row.ClientSecretKeyID, row.ClientSecretAlgorithm, row.ClientSecretCiphertext, row.ClientSecretNonce))
 	if err != nil || dexClient["secret"] != serverSecret {
 		t.Fatalf("Dex/server credential pair diverged: dex=%v server=%q err=%v", dexClient["secret"], serverSecret, err)
 	}
@@ -1378,11 +1360,11 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 	if rotateRecorder.Code != http.StatusOK {
 		t.Fatalf("rotation status=%d body=%s", rotateRecorder.Code, rotateRecorder.Body.String())
 	}
-	rotatedServerSecret, err := enc.Decrypt(q.ssoByProv["dex"].ClientSecretEncrypted)
+	rotatedServerSecret, err := enc.DecryptString(crypto.FromParts(q.ssoByProv["dex"].ClientSecretKeyID, q.ssoByProv["dex"].ClientSecretAlgorithm, q.ssoByProv["dex"].ClientSecretCiphertext, q.ssoByProv["dex"].ClientSecretNonce))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rotatedClientsJSON, err := enc.Decrypt(q.settings.PublicClientsEncrypted)
+	rotatedClientsJSON, err := enc.DecryptString(crypto.FromParts(q.settings.PublicClientsKeyID, q.settings.PublicClientsAlgorithm, q.settings.PublicClientsCiphertext, q.settings.PublicClientsNonce))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1398,19 +1380,19 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 func TestRegisterAsSSO_AtomicFailurePreservesCredentialPair(t *testing.T) {
 	t.Skip("synchronous registration contract replaced by durable Dex operation worker")
 	q := newFakeDexQuerier()
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
-	oldCipher, _ := enc.Encrypt("old-paired-secret")
-	oldClients, _ := enc.Encrypt(`[{"id":"astronomer","secret":"old-paired-secret"}]`)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
+	oldCipher, _ := enc.EncryptString("old-paired-secret")
+	oldClients, _ := enc.EncryptString(`[{"id":"astronomer","secret":"old-paired-secret"}]`)
 	q.platform = &sqlc.PlatformConfiguration{ID: 1, ServerUrl: "https://astronomer.example.com"}
 	q.settings = &sqlc.DexSetting{
 		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
 		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
-		PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: oldClients,
+		PublicClientsKeyID: oldClients.KeyID, PublicClientsAlgorithm: oldClients.Algorithm, PublicClientsCiphertext: oldClients.Ciphertext, PublicClientsNonce: oldClients.Nonce,
 		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
 	q.ssoByProv["dex"] = sqlc.SsoConfiguration{
-		ID: uuid.New(), Provider: "dex", ClientID: "astronomer", ClientSecretEncrypted: oldCipher,
+		ID: uuid.New(), Provider: "dex", ClientID: "astronomer", ClientSecretKeyID: oldCipher.KeyID, ClientSecretAlgorithm: oldCipher.Algorithm, ClientSecretCiphertext: oldCipher.Ciphertext, ClientSecretNonce: oldCipher.Nonce,
 		AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true,
 	}
 	q.upsertErr = errors.New("atomic statement failed")
@@ -1423,7 +1405,7 @@ func TestRegisterAsSSO_AtomicFailurePreservesCredentialPair(t *testing.T) {
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	if q.settings.PublicClientsEncrypted != oldClients || q.ssoByProv["dex"].ClientSecretEncrypted != oldCipher ||
+	if !bytes.Equal(q.settings.PublicClientsCiphertext, oldClients.Ciphertext) || !bytes.Equal(q.ssoByProv["dex"].ClientSecretCiphertext, oldCipher.Ciphertext) ||
 		strings.Contains(recorder.Body.String(), "new-secret") {
 		t.Fatalf("failed atomic rotation changed or leaked the pair")
 	}
@@ -1432,22 +1414,21 @@ func TestRegisterAsSSO_AtomicFailurePreservesCredentialPair(t *testing.T) {
 func TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges(t *testing.T) {
 	t.Skip("synchronous registration contract replaced by durable Dex operation worker")
 	q := newFakeDexQuerier()
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
-	oldCipher, _ := enc.Encrypt("old-paired-secret")
-	oldClients, _ := enc.Encrypt(`[{"id":"astronomer","name":"Astronomer","redirectURIs":["https://platform.example/api/v1/auth/callback/dex"],"secret":"old-paired-secret"}]`)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
+	oldCipher, _ := enc.EncryptString("old-paired-secret")
+	oldClients, _ := enc.EncryptString(`[{"id":"astronomer","name":"Astronomer","redirectURIs":["https://platform.example/api/v1/auth/callback/dex"],"secret":"old-paired-secret"}]`)
 	q.platform = &sqlc.PlatformConfiguration{ID: 1, ServerUrl: "https://platform.example"}
 	q.settings = &sqlc.DexSetting{
 		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
 		ReleaseName: "dex", RuntimeSecretName: "astronomer-dex-runtime",
-		ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, PublicClients: json.RawMessage(`[]`),
-		PublicClientsEncrypted: oldClients, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ClusterID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, PublicClientsKeyID: oldClients.KeyID, PublicClientsAlgorithm: oldClients.Algorithm, PublicClientsCiphertext: oldClients.Ciphertext, PublicClientsNonce: oldClients.Nonce,
 		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
 	q.ssoByProv["dex"] = sqlc.SsoConfiguration{
 		ID: uuid.New(), Provider: "dex", IsEnabled: true, DisplayName: "Sign in with Dex",
 		Config: json.RawMessage(`{"issuer_url":"https://dex.example.com"}`), ClientID: "astronomer",
-		ClientSecretEncrypted: oldCipher, AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true,
+		ClientSecretKeyID: oldCipher.KeyID, ClientSecretAlgorithm: oldCipher.Algorithm, ClientSecretCiphertext: oldCipher.Ciphertext, ClientSecretNonce: oldCipher.Nonce, AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true,
 	}
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
@@ -1468,7 +1449,7 @@ func TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges(t *t
 	if retried.Code != http.StatusOK || !q.ssoByProv["dex"].IsEnabled || !strings.Contains(retried.Body.String(), `"verified":true`) {
 		t.Fatalf("retry did not converge: status=%d row=%#v body=%s", retried.Code, q.ssoByProv["dex"], retried.Body.String())
 	}
-	serverSecret, err := enc.Decrypt(q.ssoByProv["dex"].ClientSecretEncrypted)
+	serverSecret, err := enc.DecryptString(crypto.FromParts(q.ssoByProv["dex"].ClientSecretKeyID, q.ssoByProv["dex"].ClientSecretAlgorithm, q.ssoByProv["dex"].ClientSecretCiphertext, q.ssoByProv["dex"].ClientSecretNonce))
 	if err != nil || serverSecret != "new-paired-secret" {
 		t.Fatalf("retry enabled wrong server credential: %q err=%v", serverSecret, err)
 	}
@@ -1477,10 +1458,10 @@ func TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges(t *t
 func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
 	q := newFakeDexQuerier()
 	h := wireDexMutationFixture(NewDexHandler(q), q)
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
 	h.SetEncryptor(enc)
-	ciphertext, _ := enc.Encrypt("secret")
+	ciphertext, _ := enc.EncryptString(`{"clientSecret":"secret"}`)
 	settings := sqlc.DexSetting{
 		ID:            dexSettingsSingletonID,
 		IssuerUrl:     "https://dex.example.com/dex",
@@ -1488,18 +1469,18 @@ func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
 		ReleaseName:   "dex",
 		ConfigmapName: "astronomer-dex-config",
 		ClusterID:     pgtype.UUID{Bytes: uuid.New(), Valid: true},
-		PublicClients: json.RawMessage(`[]`),
 		Expiry:        json.RawMessage(`{}`),
 		Extra:         json.RawMessage(`{}`),
 	}
 	connectors := []sqlc.DexConnector{
 		{
-			ID:          uuid.New(),
-			Name:        "oidc-live",
-			Type:        "oidc",
-			DisplayName: "OIDC Live",
-			Config:      json.RawMessage(fmt.Sprintf(`{"issuer":"https://issuer.example.com","clientID":"id","clientSecret":%q}`, ciphertext)),
-			Enabled:     true,
+			ID:           uuid.New(),
+			Name:         "oidc-live",
+			Type:         "oidc",
+			DisplayName:  "OIDC Live",
+			Config:       json.RawMessage(`{"issuer":"https://issuer.example.com","clientID":"id"}`),
+			SecretsKeyID: ciphertext.KeyID, SecretsAlgorithm: ciphertext.Algorithm, SecretsCiphertext: ciphertext.Ciphertext,
+			Enabled: true,
 		},
 	}
 	rendered, err := h.renderDexConfig(settings, nil, connectors)
@@ -1545,53 +1526,10 @@ func TestUpdateSettings_RejectsMissingIssuer(t *testing.T) {
 	}
 }
 
-func TestGetSettings_BackfillsEnvelopeWithoutScrubbingCompatibilityCopy(t *testing.T) {
-	q := newFakeDexQuerier()
-	legacySecret := "legacy-low-entropy-secret"
-	q.settings = &sqlc.DexSetting{
-		ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", Namespace: "dex",
-		ReleaseName: "dex", ConfigmapName: "legacy-dex-config",
-		PublicClients: json.RawMessage(`[{"id":"astronomer","name":"Astronomer","redirectURIs":["https://platform.example/callback"],"secret":"` + legacySecret + `"}]`),
-		Expiry:        json.RawMessage(`{}`), Extra: json.RawMessage(`{}`), UpdatedAt: time.Now().UTC(),
-	}
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
-	h := wireDexMutationFixture(NewDexHandler(q), q)
-	h.SetEncryptor(enc)
-	configureVerifiedDexRuntime(t, q, h)
-	recorder := httptest.NewRecorder()
-	h.GetSettings(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/auth/dex/settings/", nil))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
-	}
-	if !strings.Contains(string(q.settings.PublicClients), legacySecret) || q.settings.PublicClientsEncrypted == "" || q.settings.PublicClientsCutoverAt.Valid {
-		t.Fatalf("compatibility row was not safely dual-stored before cutover: %#v", q.settings)
-	}
-	if strings.Contains(q.settings.PublicClientsEncrypted, legacySecret) || strings.Contains(recorder.Body.String(), legacySecret) {
-		t.Fatalf("legacy secret leaked after migration: row=%q response=%s", q.settings.PublicClientsEncrypted, recorder.Body.String())
-	}
-	var response struct {
-		Data struct {
-			RuntimeSecretName string `json:"runtime_secret_name"`
-			PublicClients     []struct {
-				Secret           string `json:"secret"`
-				SecretConfigured bool   `json:"secret_configured"`
-			} `json:"public_clients"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
-	}
-	if response.Data.RuntimeSecretName != "legacy-dex-config" || len(response.Data.PublicClients) != 1 ||
-		response.Data.PublicClients[0].Secret != "" || !response.Data.PublicClients[0].SecretConfigured {
-		t.Fatalf("response did not preserve alias/redaction contract: %#v", response.Data)
-	}
-}
-
 func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
-	clients, _ := enc.Encrypt(`[{"id":"app","redirectURIs":["https://platform.example/callback"],"secret":"synthetic"}]`)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
+	clients, _ := enc.EncryptString(`[{"id":"app","redirectURIs":["https://platform.example/callback"],"secret":"synthetic"}]`)
 	for name, fixture := range map[string]struct {
 		expiry json.RawMessage
 		extra  json.RawMessage
@@ -1601,7 +1539,7 @@ func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			q := newFakeDexQuerier()
-			q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: clients, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, Expiry: fixture.expiry, Extra: fixture.extra}
+			q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", PublicClientsKeyID: clients.KeyID, PublicClientsAlgorithm: clients.Algorithm, PublicClientsCiphertext: clients.Ciphertext, PublicClientsNonce: clients.Nonce, Expiry: fixture.expiry, Extra: fixture.extra}
 			h := wireDexMutationFixture(NewDexHandler(q), q)
 			h.SetEncryptor(enc)
 			recorder := httptest.NewRecorder()
@@ -1618,7 +1556,7 @@ func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
 
 func TestBundledSettingsBindPreservesChartIdentityAndRuntimeConfiguration(t *testing.T) {
 	q := newFakeDexQuerier()
-	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://old.example.com/dex", Namespace: "platform-system", ReleaseName: "elite-dex", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", RuntimePhase: "fresh", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{"idTokens":"2h"}`), Extra: json.RawMessage(`{"logger":{"level":"info"}}`), RuntimeGeneration: 7}
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://old.example.com/dex", Namespace: "platform-system", ReleaseName: "elite-dex", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", RuntimePhase: "fresh", Expiry: json.RawMessage(`{"idTokens":"2h"}`), Extra: json.RawMessage(`{"logger":{"level":"info"}}`), RuntimeGeneration: 7}
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.bundledIdentity = &DexRuntimeIdentity{Namespace: "platform-system", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", MigrationPhase: "fresh"}
 	clusterID := uuid.NewString()
@@ -1690,8 +1628,8 @@ func TestStaleGenerationCannotEnableDexSSOOrOverwriteNewerSecret(t *testing.T) {
 }
 
 func TestDexSagaAtomicFailureAndABRestorationTimeline(t *testing.T) {
-	base := sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
-	params := sqlc.StageDexSettingsAndDisableSSOParams{ID: base.ID, RuntimePhase: "fresh", PublicClients: base.PublicClients, Expiry: base.Expiry, Extra: base.Extra}
+	base := sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh", Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
+	params := sqlc.StageDexSettingsAndDisableSSOParams{ID: base.ID, RuntimePhase: "fresh", Expiry: base.Expiry, Extra: base.Extra}
 
 	t.Run("statement failure leaves generation and SSO unchanged", func(t *testing.T) {
 		q := newFakeDexQuerier()
@@ -1771,48 +1709,6 @@ func TestDexGenerationCASStopsAfterInterleavedExternalReads(t *testing.T) {
 	})
 }
 
-func TestLoadPublicClientsMixedVersionAuthorityAndCutover(t *testing.T) {
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
-	q := newFakeDexQuerier()
-	h := wireDexMutationFixture(NewDexHandler(q), q)
-	h.SetEncryptor(enc)
-	staleEnvelope, _ := enc.Encrypt(`[{"id":"stale","redirectURIs":["https://platform.example/stale"],"secret":"stale"}]`)
-	freshEnvelope, _ := enc.Encrypt(`[{"id":"fresh","redirectURIs":["https://platform.example/fresh"],"secret":"fresh"}]`)
-
-	t.Run("pre-cutover compatibility copy wins over stale envelope", func(t *testing.T) {
-		row := sqlc.DexSetting{ID: dexSettingsSingletonID, PublicClients: json.RawMessage(`[{"id":"old-writer","redirectURIs":["https://platform.example/latest"],"secret":"latest"}]`), PublicClientsEncrypted: staleEnvelope}
-		clients, _, err := h.loadPublicClients(context.Background(), row)
-		if err != nil || len(clients) != 1 || clients[0]["id"] != "old-writer" {
-			t.Fatalf("clients=%#v err=%v", clients, err)
-		}
-	})
-
-	t.Run("post-cutover envelope is authoritative", func(t *testing.T) {
-		row := sqlc.DexSetting{ID: dexSettingsSingletonID, PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: freshEnvelope, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
-		clients, _, err := h.loadPublicClients(context.Background(), row)
-		if err != nil || len(clients) != 1 || clients[0]["id"] != "fresh" {
-			t.Fatalf("clients=%#v err=%v", clients, err)
-		}
-	})
-
-	t.Run("post-cutover empty envelope means empty client set", func(t *testing.T) {
-		row := sqlc.DexSetting{ID: dexSettingsSingletonID, PublicClients: json.RawMessage(`[]`), PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
-		clients, _, err := h.loadPublicClients(context.Background(), row)
-		if err != nil || len(clients) != 0 {
-			t.Fatalf("clients=%#v err=%v", clients, err)
-		}
-	})
-
-	t.Run("post-cutover encrypted clients fail closed without encryptor", func(t *testing.T) {
-		withoutKey := wireDexMutationFixture(NewDexHandler(q), q)
-		row := sqlc.DexSetting{ID: dexSettingsSingletonID, PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: freshEnvelope, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
-		if _, _, err := withoutKey.loadPublicClients(context.Background(), row); err == nil {
-			t.Fatal("expected missing encryptor failure")
-		}
-	})
-}
-
 func TestCreateConnector_FailsClosedWithoutEncryptor(t *testing.T) {
 	q := newFakeDexQuerier()
 	h := wireDexMutationFixture(NewDexHandler(q), q)
@@ -1829,8 +1725,8 @@ func TestCreateConnector_FailsClosedWithoutEncryptor(t *testing.T) {
 }
 
 func TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition(t *testing.T) {
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
 	q := newFakeDexQuerier()
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
@@ -1853,7 +1749,7 @@ func TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition(t *testing.
 		}
 	}
 
-	cipher, _ := enc.Encrypt("existing-secret")
+	cipher, _ := enc.EncryptString("existing-secret")
 	id := uuid.New()
 	config, _ := json.Marshal(map[string]any{"host": "ldap.example:636", "bindDN": "cn=svc", "bindPW": cipher, "userSearch": map[string]any{"baseDN": "dc=example", "username": "uid", "idAttr": "uid", "emailAttr": "mail"}})
 	q.connectors[id] = sqlc.DexConnector{ID: id, Name: "ldap", Type: "ldap", Config: config, Enabled: true}
@@ -1871,42 +1767,42 @@ func TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition(t *testing.
 
 func TestRegisterAsSSOPlatformConfigFailurePreservesPair(t *testing.T) {
 	t.Skip("synchronous registration contract replaced by durable Dex operation worker")
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
 	q := newFakeDexQuerier()
-	oldServer, _ := enc.Encrypt("old")
-	oldClients, _ := enc.Encrypt(`[{"id":"astronomer","secret":"old"}]`)
-	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example", PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: oldClients, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
-	q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientSecretEncrypted: oldServer, AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
+	oldServer, _ := enc.EncryptString("old")
+	oldClients, _ := enc.EncryptString(`[{"id":"astronomer","secret":"old"}]`)
+	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example", PublicClientsKeyID: oldClients.KeyID, PublicClientsAlgorithm: oldClients.Algorithm, PublicClientsCiphertext: oldClients.Ciphertext, PublicClientsNonce: oldClients.Nonce, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
+	q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientSecretKeyID: oldServer.KeyID, ClientSecretAlgorithm: oldServer.Algorithm, ClientSecretCiphertext: oldServer.Ciphertext, ClientSecretNonce: oldServer.Nonce, AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
 	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	configureVerifiedDexRuntime(t, q, h)
 	raw, _ := json.Marshal(map[string]any{"client_secret": "new"})
 	recorder := httptest.NewRecorder()
 	h.RegisterAsSSO(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(raw)))
-	if recorder.Code != http.StatusInternalServerError || q.settings.PublicClientsEncrypted != oldClients || q.ssoByProv["dex"].ClientSecretEncrypted != oldServer || strings.Contains(recorder.Body.String(), "new") {
+	if recorder.Code != http.StatusInternalServerError || !bytes.Equal(q.settings.PublicClientsCiphertext, oldClients.Ciphertext) || !bytes.Equal(q.ssoByProv["dex"].ClientSecretCiphertext, oldServer.Ciphertext) || strings.Contains(recorder.Body.String(), "new") {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
 func TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure(t *testing.T) {
-	key, _ := auth.GenerateKey()
-	enc, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	enc, _ := crypto.NewEncryptor(key)
 	for _, mode := range []string{"empty-url", "malformed-envelope", "bad-server-ciphertext"} {
 		t.Run(mode, func(t *testing.T) {
 			q := newFakeDexQuerier()
 			q.platform = &sqlc.PlatformConfiguration{ID: 1, ServerUrl: "https://platform.example"}
-			q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
+			q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example", Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
 			q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientID: "astronomer", AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
 			body := map[string]any{"client_secret": "replacement"}
 			switch mode {
 			case "empty-url":
 				q.platform.ServerUrl = ""
 			case "malformed-envelope":
-				q.settings.PublicClientsCutoverAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-				q.settings.PublicClientsEncrypted, _ = enc.Encrypt(`not-json`)
+				malformed, _ := enc.EncryptString(`not-json`)
+				q.settings.PublicClientsKeyID, q.settings.PublicClientsAlgorithm, q.settings.PublicClientsCiphertext, q.settings.PublicClientsNonce = malformed.Parts()
 			case "bad-server-ciphertext":
-				q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientSecretEncrypted: "invalid", AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
+				q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientSecretKeyID: "test-key", ClientSecretAlgorithm: crypto.AlgorithmAgeX25519, ClientSecretCiphertext: []byte("invalid"), AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
 				body = map[string]any{}
 			}
 			h := wireDexMutationFixture(NewDexHandler(q), q)
@@ -1917,8 +1813,8 @@ func TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure(
 			raw, _ := json.Marshal(body)
 			recorder := httptest.NewRecorder()
 			h.RegisterAsSSO(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(raw)))
-			if recorder.Code < 400 || q.settings.PublicClientsEncrypted != beforeSettings.PublicClientsEncrypted ||
-				q.ssoByProv["dex"].ClientSecretEncrypted != beforeSSO.ClientSecretEncrypted {
+			if recorder.Code < 400 || !bytes.Equal(q.settings.PublicClientsCiphertext, beforeSettings.PublicClientsCiphertext) ||
+				!bytes.Equal(q.ssoByProv["dex"].ClientSecretCiphertext, beforeSSO.ClientSecretCiphertext) {
 				t.Fatalf("mode=%s status=%d body=%s", mode, recorder.Code, recorder.Body.String())
 			}
 		})

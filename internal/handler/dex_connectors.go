@@ -25,6 +25,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
@@ -125,7 +127,14 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
 	}
-	if err := h.encryptSecretFields(req.Type, req.Config); err != nil {
+	createSecrets, err := splitSecretFields(req.Type, req.Config)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, err.Error())
+		return
+	}
+	sealedSecrets, err := h.sealConnectorSecrets(createSecrets)
+	clear(createSecrets)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret fields")
 		return
 	}
@@ -145,6 +154,7 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		Config:      cfgBytes,
 		Enabled:     enabled,
 	}
+	params.SecretsKeyID, params.SecretsAlgorithm, params.SecretsCiphertext, params.SecretsNonce = sealedSecrets.Parts()
 	staged, err := executeMutation(r, h.runTx,
 		func(q DexMutationTx) (sqlc.StageCreateDexConnectorRow, error) {
 			return q.StageCreateDexConnector(r.Context(), params)
@@ -163,7 +173,7 @@ func (h *DexHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create connector")
 		return
 	}
-	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
+	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt, SecretsKeyID: staged.SecretsKeyID, SecretsAlgorithm: staged.SecretsAlgorithm, SecretsCiphertext: staged.SecretsCiphertext, SecretsNonce: staged.SecretsNonce}
 	w.Header().Set("Location", "/api/v1/auth/dex/connectors/"+row.ID.String()+"/")
 	response, err := h.connectorResponse(row)
 	if err != nil {
@@ -215,15 +225,30 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		enabled = *req.Enabled
 	}
 	cfgBytes := existing.Config
+	sealedSecrets := crypto.FromParts(existing.SecretsKeyID, existing.SecretsAlgorithm, existing.SecretsCiphertext, existing.SecretsNonce)
 	if req.Config != nil {
 		// Merge: any secret field left empty in the request is preserved from
 		// the existing row (so the UI can PATCH without resending the secret).
-		merged := mergeSecretFromExisting(connectorType, existing.Config, req.Config)
+		existingSecrets, openErr := h.openConnectorSecrets(existing)
+		if openErr != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.EncryptUnavailable, "Existing connector secrets are unavailable")
+			return
+		}
+		merged := mergeSecretFromExisting(connectorType, existingSecrets, req.Config)
+		clear(existingSecrets)
 		if err := validateConnectorConfig(connectorType, merged); err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 			return
 		}
-		if err := h.encryptSecretFields(connectorType, merged); err != nil {
+		updateSecrets, splitErr := splitSecretFields(connectorType, merged)
+		if splitErr != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidType, splitErr.Error())
+			return
+		}
+		var sealErr error
+		sealedSecrets, sealErr = h.sealConnectorSecrets(updateSecrets)
+		clear(updateSecrets)
+		if sealErr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret fields")
 			return
 		}
@@ -241,6 +266,7 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		Config:      cfgBytes,
 		Enabled:     enabled,
 	}
+	params.SecretsKeyID, params.SecretsAlgorithm, params.SecretsCiphertext, params.SecretsNonce = sealedSecrets.Parts()
 	staged, err := executeMutation(r, h.runTx,
 		func(q DexMutationTx) (sqlc.StageUpdateDexConnectorRow, error) {
 			return q.StageUpdateDexConnector(r.Context(), params)
@@ -255,7 +281,7 @@ func (h *DexHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update connector")
 		return
 	}
-	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt}
+	row := sqlc.DexConnector{ID: staged.ID, Name: staged.Name, Type: staged.Type, DisplayName: staged.DisplayName, Config: staged.Config, Enabled: staged.Enabled, CreatedAt: staged.CreatedAt, UpdatedAt: staged.UpdatedAt, SecretsKeyID: staged.SecretsKeyID, SecretsAlgorithm: staged.SecretsAlgorithm, SecretsCiphertext: staged.SecretsCiphertext, SecretsNonce: staged.SecretsNonce}
 	response, err := h.connectorResponse(row)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Saved Dex connector failed validation")

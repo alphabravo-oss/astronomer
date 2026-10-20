@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	batchv1 "k8s.io/api/batch/v1"
@@ -66,22 +68,22 @@ func (h *AdminDrillHandler) respondDestinationWriteError(w http.ResponseWriter, 
 	RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to persist management backup destination")
 }
 
-func (h *AdminDrillHandler) encryptDestinationCredentials(access, secret string) (string, error) {
+func (h *AdminDrillHandler) encryptDestinationCredentials(access, secret string) (crypto.Sealed, error) {
 	if h == nil || h.encryptor == nil {
-		return "", errors.New("management backup credential encryption is not configured")
+		return crypto.Sealed{}, errors.New("management backup credential encryption is not configured")
 	}
 	payload, err := json.Marshal(map[string]string{"access_key": access, "secret_key": secret})
 	if err != nil {
-		return "", err
+		return crypto.Sealed{}, err
 	}
-	return h.encryptor.Encrypt(string(payload))
+	return h.encryptor.Encrypt(payload)
 }
 
 func (h *AdminDrillHandler) decryptDestinationCredentials(row sqlc.ManagementBackupDestination) (string, string, error) {
-	if h == nil || h.encryptor == nil || row.EncryptedCredentials == "" {
+	if h == nil || h.encryptor == nil || row.CredentialsKeyID == "" {
 		return "", "", errors.New("management backup credentials are unavailable")
 	}
-	plaintext, err := h.encryptor.Decrypt(row.EncryptedCredentials)
+	plaintext, err := h.encryptor.DecryptString(crypto.FromParts(row.CredentialsKeyID, row.CredentialsAlgorithm, row.CredentialsCiphertext, row.CredentialsNonce))
 	if err != nil {
 		return "", "", err
 	}

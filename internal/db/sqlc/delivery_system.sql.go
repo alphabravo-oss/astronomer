@@ -86,39 +86,42 @@ WITH assigned AS (
     ORDER BY generation DESC
     LIMIT 1
 )
-SELECT r.id, r.release_sequence, r.version, r.artifact_url, r.artifact_digest, r.distribution_digest, r.agent_version, r.agent_image, r.minimum_kubernetes, r.maximum_kubernetes, r.crd_storage_version, r.previous_storage_version, r.interval, r.timeout, r.verification_policy, r.registry_credential_encrypted, r.credential_key_version, r.credential_epoch, r.spec_digest, r.state, r.released_at, r.retired_at, r.created_by, r.created_at, selected.generation AS assignment_generation,
+SELECT r.id, r.release_sequence, r.version, r.artifact_url, r.artifact_digest, r.distribution_digest, r.agent_version, r.agent_image, r.minimum_kubernetes, r.maximum_kubernetes, r.crd_storage_version, r.previous_storage_version, r.interval, r.timeout, r.verification_policy, r.credential_key_version, r.credential_epoch, r.spec_digest, r.state, r.released_at, r.retired_at, r.created_by, r.created_at, r.registry_credential_key_id, r.registry_credential_algorithm, r.registry_credential_ciphertext, r.registry_credential_nonce, selected.generation AS assignment_generation,
        selected.phase AS assignment_phase
 FROM selected
 JOIN delivery_system_releases r ON r.id = selected.release_id
 `
 
 type GetClusterDeliverySystemReleaseRow struct {
-	ID                          uuid.UUID          `json:"id"`
-	ReleaseSequence             int64              `json:"release_sequence"`
-	Version                     string             `json:"version"`
-	ArtifactUrl                 string             `json:"artifact_url"`
-	ArtifactDigest              string             `json:"artifact_digest"`
-	DistributionDigest          string             `json:"distribution_digest"`
-	AgentVersion                string             `json:"agent_version"`
-	AgentImage                  string             `json:"agent_image"`
-	MinimumKubernetes           string             `json:"minimum_kubernetes"`
-	MaximumKubernetes           string             `json:"maximum_kubernetes"`
-	CrdStorageVersion           string             `json:"crd_storage_version"`
-	PreviousStorageVersion      string             `json:"previous_storage_version"`
-	Interval                    string             `json:"interval"`
-	Timeout                     string             `json:"timeout"`
-	VerificationPolicy          json.RawMessage    `json:"verification_policy"`
-	RegistryCredentialEncrypted string             `json:"registry_credential_encrypted"`
-	CredentialKeyVersion        int32              `json:"credential_key_version"`
-	CredentialEpoch             int64              `json:"credential_epoch"`
-	SpecDigest                  string             `json:"spec_digest"`
-	State                       string             `json:"state"`
-	ReleasedAt                  pgtype.Timestamptz `json:"released_at"`
-	RetiredAt                   pgtype.Timestamptz `json:"retired_at"`
-	CreatedBy                   pgtype.UUID        `json:"created_by"`
-	CreatedAt                   time.Time          `json:"created_at"`
-	AssignmentGeneration        int64              `json:"assignment_generation"`
-	AssignmentPhase             string             `json:"assignment_phase"`
+	ID                           uuid.UUID          `json:"id"`
+	ReleaseSequence              int64              `json:"release_sequence"`
+	Version                      string             `json:"version"`
+	ArtifactUrl                  string             `json:"artifact_url"`
+	ArtifactDigest               string             `json:"artifact_digest"`
+	DistributionDigest           string             `json:"distribution_digest"`
+	AgentVersion                 string             `json:"agent_version"`
+	AgentImage                   string             `json:"agent_image"`
+	MinimumKubernetes            string             `json:"minimum_kubernetes"`
+	MaximumKubernetes            string             `json:"maximum_kubernetes"`
+	CrdStorageVersion            string             `json:"crd_storage_version"`
+	PreviousStorageVersion       string             `json:"previous_storage_version"`
+	Interval                     string             `json:"interval"`
+	Timeout                      string             `json:"timeout"`
+	VerificationPolicy           json.RawMessage    `json:"verification_policy"`
+	CredentialKeyVersion         int32              `json:"credential_key_version"`
+	CredentialEpoch              int64              `json:"credential_epoch"`
+	SpecDigest                   string             `json:"spec_digest"`
+	State                        string             `json:"state"`
+	ReleasedAt                   pgtype.Timestamptz `json:"released_at"`
+	RetiredAt                    pgtype.Timestamptz `json:"retired_at"`
+	CreatedBy                    pgtype.UUID        `json:"created_by"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	RegistryCredentialKeyID      string             `json:"registry_credential_key_id"`
+	RegistryCredentialAlgorithm  string             `json:"registry_credential_algorithm"`
+	RegistryCredentialCiphertext []byte             `json:"registry_credential_ciphertext"`
+	RegistryCredentialNonce      []byte             `json:"registry_credential_nonce"`
+	AssignmentGeneration         int64              `json:"assignment_generation"`
+	AssignmentPhase              string             `json:"assignment_phase"`
 }
 
 func (q *Queries) GetClusterDeliverySystemRelease(ctx context.Context, clusterID uuid.UUID) (GetClusterDeliverySystemReleaseRow, error) {
@@ -140,7 +143,6 @@ func (q *Queries) GetClusterDeliverySystemRelease(ctx context.Context, clusterID
 		&i.Interval,
 		&i.Timeout,
 		&i.VerificationPolicy,
-		&i.RegistryCredentialEncrypted,
 		&i.CredentialKeyVersion,
 		&i.CredentialEpoch,
 		&i.SpecDigest,
@@ -149,6 +151,10 @@ func (q *Queries) GetClusterDeliverySystemRelease(ctx context.Context, clusterID
 		&i.RetiredAt,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.RegistryCredentialKeyID,
+		&i.RegistryCredentialAlgorithm,
+		&i.RegistryCredentialCiphertext,
+		&i.RegistryCredentialNonce,
 		&i.AssignmentGeneration,
 		&i.AssignmentPhase,
 	)
@@ -200,7 +206,7 @@ type ListDeliverySystemReleasesRow struct {
 }
 
 // Signed downstream delivery-system releases and staged rollout state.
-// Public projections deliberately omit registry_credential_encrypted.
+// Public projections deliberately omit registry_credential_{key_id,algorithm,ciphertext,nonce}.
 func (q *Queries) ListDeliverySystemReleases(ctx context.Context, arg ListDeliverySystemReleasesParams) ([]ListDeliverySystemReleasesRow, error) {
 	rows, err := q.db.Query(ctx, listDeliverySystemReleases, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {

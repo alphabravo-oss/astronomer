@@ -18,8 +18,8 @@ SELECT EXISTS (
 SELECT 1 FROM delivery_sources
 WHERE id=$1 AND project_id=$2 AND name=$3 AND description=$4
 AND source_type=$5 AND url=$6 AND auth_mode='none'
-AND credential_encrypted='' AND credential_key_version=0 AND credential_epoch=0
-AND ca_bundle_encrypted='' AND proxy_ref='' AND trust_policy=$7::jsonb
+AND credential_key_id = '' AND credential_key_version=0 AND credential_epoch=0
+AND ca_bundle_key_id = '' AND proxy_ref='' AND trust_policy=$7::jsonb
 AND status='ready' AND last_error_code=''
 )::boolean
 `

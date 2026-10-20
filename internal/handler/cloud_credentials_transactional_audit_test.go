@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -27,7 +29,7 @@ type stagedCloudCredentialMutationTx struct {
 }
 
 func (tx *stagedCloudCredentialMutationTx) CreateCloudCredential(_ context.Context, arg sqlc.CreateCloudCredentialParams) (sqlc.CloudCredential, error) {
-	tx.row = sqlc.CloudCredential{ID: uuid.New(), ProjectID: arg.ProjectID, Name: arg.Name, Provider: arg.Provider, DataEncrypted: arg.DataEncrypted, TargetRefs: arg.TargetRefs}
+	tx.row = sqlc.CloudCredential{ID: uuid.New(), ProjectID: arg.ProjectID, Name: arg.Name, Provider: arg.Provider, DataKeyID: arg.DataKeyID, DataAlgorithm: arg.DataAlgorithm, DataCiphertext: arg.DataCiphertext, DataNonce: arg.DataNonce, TargetRefs: arg.TargetRefs}
 	return tx.row, nil
 }
 
@@ -74,7 +76,7 @@ func TestCloudCredentialCommitsEncryptedStateTaskAndAuditTogether(t *testing.T) 
 			})
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/cloud-credentials/", nil)
 			projectID, clusterID := uuid.New(), uuid.New()
-			params := sqlc.CreateCloudCredentialParams{ProjectID: projectID, Name: "aws-prod", Provider: "aws", DataEncrypted: "ciphertext"}
+			params := sqlc.CreateCloudCredentialParams{ProjectID: projectID, Name: "aws-prod", Provider: "aws", DataKeyID: "test-key", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: []byte("ciphertext")}
 			refs := []TargetRef{{ClusterID: clusterID, Namespace: "apps", SecretName: "aws-prod"}}
 
 			_, err := executeMutation(r, h.runTx,

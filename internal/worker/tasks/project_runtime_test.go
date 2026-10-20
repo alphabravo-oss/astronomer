@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func TestProjectRuntimeValidatesAndBindsFamily(t *testing.T) {
@@ -17,11 +17,11 @@ func TestProjectRuntimeValidatesAndBindsFamily(t *testing.T) {
 			t.Errorf("validation error %q does not report %s", err, dependency)
 		}
 	}
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}

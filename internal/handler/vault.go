@@ -21,7 +21,7 @@
 //     PUT    /api/v1/projects/{id}/default-vault-connection/
 //
 // Encryption:
-//   - auth_encrypted is a Fernet-encrypted JSON blob whose shape depends
+//   - auth_* sealed is a age-encrypted JSON blob whose shape depends
 //     on auth_method (see internal/vault/resolver.go DecodeAuthBlob).
 //   - GETs decrypt then redact: the response shows method-specific
 //     redaction (e.g. token: "<encrypted>") so the UI can render the
@@ -47,6 +47,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -55,7 +57,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -145,7 +146,7 @@ func (h *VaultHandler) persistHealthResult(r *http.Request, result vaultHealthPe
 type VaultHandler struct {
 	queries   VaultConnectionQuerier
 	auditor   any // auditWriterV1 surface; same pattern as cloud_credentials
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 	probe     VaultProbe
 	resolver  *avault.Resolver // cached resolver for ClearCache calls on mutate/delete
 	runTx     vaultRunTxFunc
@@ -171,7 +172,7 @@ func (h *VaultHandler) SetRunTx(runTx vaultRunTxFunc) {
 
 func (h *VaultHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func (h *VaultHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *VaultHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h != nil {
 		h.encryptor = e
 	}
@@ -294,7 +295,7 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.AuthenticationRequired, err.Error())
 		return
 	}
-	encrypted, err := h.encryptor.Encrypt(authBlob)
+	encrypted, err := h.encryptor.EncryptString(authBlob)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt auth blob")
 		return
@@ -314,11 +315,11 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := sqlc.CreateVaultConnectionParams{
-		Name:          req.Name,
-		Description:   req.Description,
-		Addr:          req.Addr,
-		AuthMethod:    req.AuthMethod,
-		AuthEncrypted: encrypted,
+		Name:        req.Name,
+		Description: req.Description,
+		Addr:        req.Addr,
+		AuthMethod:  req.AuthMethod,
+		AuthKeyID:   encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
 		Namespace:     req.Namespace,
 		TlsSkipVerify: req.TLSSkipVerify,
 		CaCertPem:     req.CACertPEM,
@@ -392,7 +393,7 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.AuthenticationRequired, err.Error())
 		return
 	}
-	encrypted, err := h.encryptor.Encrypt(authBlob)
+	encrypted, err := h.encryptor.EncryptString(authBlob)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt auth blob")
 		return
@@ -407,11 +408,11 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := sqlc.UpdateVaultConnectionParams{
-		ID:            id,
-		Description:   req.Description,
-		Addr:          req.Addr,
-		AuthMethod:    req.AuthMethod,
-		AuthEncrypted: encrypted,
+		ID:          id,
+		Description: req.Description,
+		Addr:        req.Addr,
+		AuthMethod:  req.AuthMethod,
+		AuthKeyID:   encrypted.KeyID, AuthAlgorithm: encrypted.Algorithm, AuthCiphertext: encrypted.Ciphertext, AuthNonce: encrypted.Nonce,
 		Namespace:     req.Namespace,
 		TlsSkipVerify: req.TLSSkipVerify,
 		CaCertPem:     req.CACertPEM,
@@ -667,13 +668,13 @@ func toVaultConnectionListResponse(row sqlc.ListVaultConnectionsPageRow) VaultCo
 
 // decryptAuth returns the cleartext JSON blob for a connection.
 func (h *VaultHandler) decryptAuth(conn sqlc.VaultConnection) (string, error) {
-	if h.encryptor == nil {
-		return conn.AuthEncrypted, nil
-	}
-	if conn.AuthEncrypted == "" {
+	if conn.AuthKeyID == "" {
 		return "{}", nil
 	}
-	return h.encryptor.Decrypt(conn.AuthEncrypted)
+	if h.encryptor == nil {
+		return "", errors.New("vault auth is encrypted but no encryption key is configured")
+	}
+	return h.encryptor.DecryptString(crypto.FromParts(conn.AuthKeyID, conn.AuthAlgorithm, conn.AuthCiphertext, conn.AuthNonce))
 }
 
 func (h *VaultHandler) decryptAuthMap(conn sqlc.VaultConnection) (map[string]string, error) {

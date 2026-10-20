@@ -234,9 +234,7 @@ func (h *ClusterHandler) GenerateRegistrationToken(w http.ResponseWriter, r *htt
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
 		return
 	}
-	token.Token = tokenStr
-
-	RespondJSON(w, http.StatusCreated, token)
+	RespondJSON(w, http.StatusCreated, registrationTokenResponse{ClusterRegistrationToken: token, Token: tokenStr})
 }
 
 // RotateAgentToken handles POST /api/v1/clusters/{id}/agent-token/rotate/.
@@ -407,7 +405,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().Add(h.registrationTokenTTL),
 	}
-	token, err := executeMutation(r, h.runTx,
+	_, err = executeMutation(r, h.runTx,
 		func(q ClusterMutationTx) (sqlc.ClusterRegistrationToken, error) {
 			return q.CreateClusterRegistrationToken(r.Context(), params)
 		},
@@ -425,8 +423,6 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create registration token")
 		return
 	}
-	token.Token = tokenStr
-
 	manifest, err := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r), scope == "agent")
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render agent configuration")
@@ -698,4 +694,11 @@ func agentServerURLFor(ctx context.Context, q interface {
 		}
 	}
 	return agentServerURL(r)
+}
+
+// registrationTokenResponse returns the freshly-minted plaintext token exactly
+// once alongside the stored row; only its hash is persisted.
+type registrationTokenResponse struct {
+	sqlc.ClusterRegistrationToken
+	Token string `json:"token"`
 }

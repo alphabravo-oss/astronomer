@@ -19,7 +19,7 @@ import (
 // schema in both directions and cost us twice:
 //
 //   - Every column added to helm_repositories became a public API field with
-//     no review. Migration 145 added auth_config_encrypted, and the Fernet
+//     no review. Migration 145 added auth_config_* sealed, and the sealed
 //     ciphertext started shipping to every catalog reader; redactHelmRepository
 //     has to blank it explicitly, and the key is still on the wire. Here the
 //     field simply does not exist, so it cannot leak by default.
@@ -65,8 +65,8 @@ type HelmRepositoryResponse struct {
 	// repository. It is enrichment, not a column: see chartCountsFor.
 	ChartCount int64 `json:"chart_count"`
 
-	// NOTE: auth_config_encrypted is intentionally absent. It is the
-	// migration-145 Fernet envelope; it is of no use to any client and
+	// NOTE: auth_config_* sealed is intentionally absent. It is the
+	// sealed auth_config_* family; it is of no use to any client and
 	// shipping it would hand every catalog reader an offline target.
 }
 

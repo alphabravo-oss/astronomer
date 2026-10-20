@@ -14,7 +14,7 @@ import (
 )
 
 const getLokiIngestTokenByCluster = `-- name: GetLokiIngestTokenByCluster :one
-SELECT id, cluster_id, token_hash, token_encrypted, created_at, rotated_at, created_by_id FROM loki_ingest_tokens WHERE cluster_id = $1
+SELECT id, cluster_id, token_hash, created_at, rotated_at, created_by_id, token_key_id, token_algorithm, token_ciphertext, token_nonce FROM loki_ingest_tokens WHERE cluster_id = $1
 `
 
 func (q *Queries) GetLokiIngestTokenByCluster(ctx context.Context, clusterID uuid.UUID) (LokiIngestToken, error) {
@@ -24,10 +24,13 @@ func (q *Queries) GetLokiIngestTokenByCluster(ctx context.Context, clusterID uui
 		&i.ID,
 		&i.ClusterID,
 		&i.TokenHash,
-		&i.TokenEncrypted,
 		&i.CreatedAt,
 		&i.RotatedAt,
 		&i.CreatedByID,
+		&i.TokenKeyID,
+		&i.TokenAlgorithm,
+		&i.TokenCiphertext,
+		&i.TokenNonce,
 	)
 	return i, err
 }
@@ -137,38 +140,50 @@ func (q *Queries) ListLokiQueryACLUserCandidates(ctx context.Context) ([]ListLok
 }
 
 const upsertLokiIngestToken = `-- name: UpsertLokiIngestToken :one
-INSERT INTO loki_ingest_tokens (cluster_id, token_hash, token_encrypted, created_by_id, rotated_at)
-VALUES ($1, $2, $3, $4, now())
+INSERT INTO loki_ingest_tokens (cluster_id, token_hash, token_key_id, token_algorithm, token_ciphertext, token_nonce, created_by_id, rotated_at)
+VALUES ($1, $2, $3, $5, $6, $7, $4, now())
 ON CONFLICT (cluster_id) DO UPDATE SET
     token_hash = EXCLUDED.token_hash,
-    token_encrypted = EXCLUDED.token_encrypted,
+    token_key_id = EXCLUDED.token_key_id,
+    token_algorithm = EXCLUDED.token_algorithm,
+    token_ciphertext = EXCLUDED.token_ciphertext,
+    token_nonce = EXCLUDED.token_nonce,
     rotated_at = now()
-RETURNING id, cluster_id, token_hash, token_encrypted, created_at, rotated_at, created_by_id
+RETURNING id, cluster_id, token_hash, created_at, rotated_at, created_by_id, token_key_id, token_algorithm, token_ciphertext, token_nonce
 `
 
 type UpsertLokiIngestTokenParams struct {
-	ClusterID      uuid.UUID   `json:"cluster_id"`
-	TokenHash      string      `json:"token_hash"`
-	TokenEncrypted string      `json:"token_encrypted"`
-	CreatedByID    pgtype.UUID `json:"created_by_id"`
+	ClusterID       uuid.UUID   `json:"cluster_id"`
+	TokenHash       string      `json:"token_hash"`
+	TokenKeyID      string      `json:"token_key_id"`
+	CreatedByID     pgtype.UUID `json:"created_by_id"`
+	TokenAlgorithm  string      `json:"token_algorithm"`
+	TokenCiphertext []byte      `json:"token_ciphertext"`
+	TokenNonce      []byte      `json:"token_nonce"`
 }
 
 func (q *Queries) UpsertLokiIngestToken(ctx context.Context, arg UpsertLokiIngestTokenParams) (LokiIngestToken, error) {
 	row := q.db.QueryRow(ctx, upsertLokiIngestToken,
 		arg.ClusterID,
 		arg.TokenHash,
-		arg.TokenEncrypted,
+		arg.TokenKeyID,
 		arg.CreatedByID,
+		arg.TokenAlgorithm,
+		arg.TokenCiphertext,
+		arg.TokenNonce,
 	)
 	var i LokiIngestToken
 	err := row.Scan(
 		&i.ID,
 		&i.ClusterID,
 		&i.TokenHash,
-		&i.TokenEncrypted,
 		&i.CreatedAt,
 		&i.RotatedAt,
 		&i.CreatedByID,
+		&i.TokenKeyID,
+		&i.TokenAlgorithm,
+		&i.TokenCiphertext,
+		&i.TokenNonce,
 	)
 	return i, err
 }

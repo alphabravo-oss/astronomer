@@ -3,6 +3,8 @@ package handler
 import (
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -16,8 +18,8 @@ func TestCloudCredentialMaterializeDedupeKeyRotates(t *testing.T) {
 	credID := uuid.New()
 	ref := TargetRef{ClusterID: uuid.New(), Namespace: "team-a", SecretName: "aws-creds"}
 
-	v1 := cloudCredentialDataVersion(sqlc.CloudCredential{DataEncrypted: "ciphertext-OLD"})
-	v2 := cloudCredentialDataVersion(sqlc.CloudCredential{DataEncrypted: "ciphertext-NEW-after-rotation"})
+	v1 := cloudCredentialDataVersion(sqlc.CloudCredential{DataKeyID: "test-key", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: []byte("ciphertext-OLD")})
+	v2 := cloudCredentialDataVersion(sqlc.CloudCredential{DataKeyID: "test-key", DataAlgorithm: crypto.AlgorithmAgeX25519, DataCiphertext: []byte("ciphertext-NEW-after-rotation")})
 	if v1 == v2 {
 		t.Fatalf("different encrypted payloads must yield different data versions")
 	}

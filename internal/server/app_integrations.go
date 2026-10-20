@@ -64,7 +64,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	}
 
 	// SMTP email (migration 047). Wired only when the encryptor is
-	// available — the password column is Fernet-encrypted and a
+	// available — the password column is age-sealed and a
 	// missing key would mean we couldn't round-trip a saved password.
 	// The Enqueuer is best-effort across the codebase: every hook
 	// site calls EnqueueAndLog so a missing SMTP relay never breaks a
@@ -105,7 +105,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 
 	// Outbound webhook subscriptions (migration 048). Wired only when
 	// the encryptor is available — the HMAC signing secret is
-	// Fernet-encrypted at rest. The Tap subscribes to the same in-memory
+	// age-sealed at rest. The Tap subscribes to the same in-memory
 	// bus the SSE stream consumes; the dispatcher task drains pending
 	// deliveries every 15s. Tap.Start runs further below alongside the
 	// other reconciler goroutines once reconcileCtx is defined.
@@ -127,7 +127,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	}
 
 	// External SIEM forwarders (migration 055). Same gate as webhooks
-	// (the auth blob is Fernet-encrypted) and parallel wiring: the bus
+	// (the auth blob is age-sealed) and parallel wiring: the bus
 	// tap subscribes to the same events.Bus the SSE stream consumes,
 	// and the dispatcher task drains the per-forwarder queue every 2s.
 	// We start the tap further below once reconcileCtx is defined.

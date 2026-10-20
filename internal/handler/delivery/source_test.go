@@ -19,8 +19,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type sourceVerifyTxFake struct {
@@ -125,15 +125,15 @@ func (f *sourceQueryFake) CreateDeliverySourceResolutionAndOutbox(ctx context.Co
 	return f.resolveFn(ctx, arg)
 }
 
-func TestSourceCreateUsesFernetAndNeverEchoesCredential(t *testing.T) {
+func TestSourceCreateSealsAndNeverEchoesCredential(t *testing.T) {
 	projectID := uuid.New()
 	sourceID := uuid.New()
 	secret := "fixture-password-do-not-echo"
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptor, err := auth.NewEncryptor(key)
+	encryptor, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,20 +155,20 @@ func TestSourceCreateUsesFernetAndNeverEchoesCredential(t *testing.T) {
 	if persisted.ProjectID != projectID || persisted.CredentialKeyVersion != 7 || persisted.CredentialEpoch != 1 {
 		t.Fatalf("unexpected persisted credential metadata: %#v", persisted)
 	}
-	if persisted.CredentialEncrypted == "" || strings.Contains(persisted.CredentialEncrypted, secret) {
-		t.Fatalf("credential was not sealed: %q", persisted.CredentialEncrypted)
+	if persisted.CredentialKeyID != encryptor.CurrentKeyID() || persisted.CredentialAlgorithm != crypto.AlgorithmAgeX25519 || strings.Contains(string(persisted.CredentialCiphertext), secret) {
+		t.Fatalf("credential was not sealed: %q", persisted.CredentialKeyID)
 	}
-	plaintext, err := encryptor.Decrypt(persisted.CredentialEncrypted)
+	plaintext, err := encryptor.DecryptString(crypto.FromParts(persisted.CredentialKeyID, persisted.CredentialAlgorithm, persisted.CredentialCiphertext, persisted.CredentialNonce))
 	if err != nil {
 		t.Fatalf("decrypt persisted credential: %v", err)
 	}
 	if !strings.Contains(plaintext, secret) || !strings.Contains(plaintext, `"username":"release-bot"`) {
 		t.Fatalf("sealed payload does not contain typed Flux credential: %s", plaintext)
 	}
-	if strings.Contains(recorder.Body.String(), secret) || strings.Contains(recorder.Body.String(), persisted.CredentialEncrypted) {
+	if strings.Contains(recorder.Body.String(), secret) || strings.Contains(recorder.Body.String(), persisted.CredentialKeyID) {
 		t.Fatalf("response exposed credential material: %s", recorder.Body.String())
 	}
-	for _, forbidden := range []string{"credential_encrypted", "ca_bundle", "password", "username"} {
+	for _, forbidden := range []string{"credential_ciphertext", "credential_key_id", "ca_bundle", "password", "username"} {
 		if strings.Contains(recorder.Body.String(), forbidden) {
 			t.Fatalf("response exposed write-only field %q: %s", forbidden, recorder.Body.String())
 		}
@@ -207,7 +207,7 @@ func TestSourceUpdateChangesMetadataWithoutReadingCredentials(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	if updated.Description != "next" || updated.ReplaceCaBundle || strings.Contains(recorder.Body.String(), "credential_encrypted") {
+	if updated.Description != "next" || updated.ReplaceCaBundle || strings.Contains(recorder.Body.String(), "credential_ciphertext") {
 		t.Fatalf("update leaked or mutated secrets: %#v body=%s", updated, recorder.Body.String())
 	}
 }
@@ -356,10 +356,10 @@ func TestSourceRotateIsWriteOnlyAndScopedBeforeEncryption(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	if rotated.ProjectID != projectID || rotated.ID != sourceID || rotated.CredentialEncrypted == "" {
+	if rotated.ProjectID != projectID || rotated.ID != sourceID || rotated.CredentialKeyID == "" {
 		t.Fatalf("unexpected rotate query: %#v", rotated)
 	}
-	if strings.Contains(recorder.Body.String(), secret) || strings.Contains(recorder.Body.String(), rotated.CredentialEncrypted) {
+	if strings.Contains(recorder.Body.String(), secret) || strings.Contains(recorder.Body.String(), string(rotated.CredentialCiphertext)) {
 		t.Fatalf("rotate response echoed secret: %s", recorder.Body.String())
 	}
 }
@@ -414,7 +414,7 @@ func TestSourceListPaginationValidationAndSecretFreeProjection(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	for _, forbidden := range []string{"credential_encrypted", "ca_bundle_encrypted", "private_key", "password"} {
+	for _, forbidden := range []string{"credential_ciphertext", "ca_bundle_ciphertext", "private_key", "password"} {
 		if strings.Contains(recorder.Body.String(), forbidden) {
 			t.Fatalf("list exposed %q: %s", forbidden, recorder.Body.String())
 		}
@@ -433,11 +433,15 @@ func TestSourceListPaginationValidationAndSecretFreeProjection(t *testing.T) {
 
 type failingEncryptor struct{}
 
-func (failingEncryptor) Encrypt(string) (string, error) { return "", errors.New("sealed") }
+func (failingEncryptor) Encrypt([]byte) (crypto.Sealed, error) {
+	return crypto.Sealed{}, errors.New("sealed")
+}
 
 type passthroughEncryptor struct{}
 
-func (passthroughEncryptor) Encrypt(value string) (string, error) { return "sealed:" + value, nil }
+func (passthroughEncryptor) Encrypt(value []byte) (crypto.Sealed, error) {
+	return crypto.Sealed{KeyID: "test", Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: append([]byte("sealed:"), value...)}, nil
+}
 
 func createSourceRow(id uuid.UUID, arg sqlc.CreateDeliverySourceParams) sqlc.CreateDeliverySourceRow {
 	now := time.Now().UTC()

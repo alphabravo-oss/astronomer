@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/cloudcreds"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -106,7 +108,7 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
-	ciphertext, err := h.encryptor.Encrypt(string(plain))
+	ciphertext, err := h.encryptor.Encrypt(plain)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
 		return
@@ -131,13 +133,13 @@ func (h *CloudCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	createParams := sqlc.CreateCloudCredentialParams{
-		ProjectID:     projectID,
-		Name:          req.Name,
-		Provider:      strings.ToLower(req.Provider),
-		Description:   req.Description,
-		DataEncrypted: ciphertext,
-		TargetRefs:    refsJSON,
-		CreatedBy:     userIDFromRequest(r),
+		ProjectID:   projectID,
+		Name:        req.Name,
+		Provider:    strings.ToLower(req.Provider),
+		Description: req.Description,
+		DataKeyID:   ciphertext.KeyID, DataAlgorithm: ciphertext.Algorithm, DataCiphertext: ciphertext.Ciphertext, DataNonce: ciphertext.Nonce,
+		TargetRefs: refsJSON,
+		CreatedBy:  userIDFromRequest(r),
 	}
 	created, err := executeMutation(r, h.runTx,
 		func(q CloudCredentialMutationTx) (sqlc.CloudCredential, error) {
@@ -195,7 +197,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Decrypt existing for the merge step (sentinel-preserves-stored).
-	priorBlob, err := h.decryptToMap(existing.DataEncrypted)
+	priorBlob, err := h.decryptToMap(crypto.FromParts(existing.DataKeyID, existing.DataAlgorithm, existing.DataCiphertext, existing.DataNonce))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored credential")
 		return
@@ -241,7 +243,7 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode credential")
 		return
 	}
-	ciphertext, err := h.encryptor.Encrypt(string(plain))
+	ciphertext, err := h.encryptor.Encrypt(plain)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt credential")
 		return
@@ -278,10 +280,10 @@ func (h *CloudCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 		description = req.Description
 	}
 	updateParams := sqlc.UpdateCloudCredentialParams{
-		ID:            existing.ID,
-		Description:   description,
-		DataEncrypted: ciphertext,
-		TargetRefs:    refsJSON,
+		ID:          existing.ID,
+		Description: description,
+		DataKeyID:   ciphertext.KeyID, DataAlgorithm: ciphertext.Algorithm, DataCiphertext: ciphertext.Ciphertext, DataNonce: ciphertext.Nonce,
+		TargetRefs: refsJSON,
 	}
 	droppedRefs := diffTargetRefs(decodeStoredTargetRefs(existing.TargetRefs), refsCanonical)
 	updated, err := executeMutation(r, h.runTx,
@@ -363,7 +365,7 @@ func (h *CloudCredentialHandler) Test(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	blob, err := h.decryptToMap(row.DataEncrypted)
+	blob, err := h.decryptToMap(crypto.FromParts(row.DataKeyID, row.DataAlgorithm, row.DataCiphertext, row.DataNonce))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DecryptError, "Failed to decrypt stored credential")
 		return

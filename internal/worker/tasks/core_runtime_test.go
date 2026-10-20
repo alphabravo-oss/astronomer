@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/hibiken/asynq"
 )
 
@@ -17,7 +19,9 @@ func (*coreRuntimeK8s) SupportsCapability(context.Context, string, string) (bool
 	return true, nil
 }
 
-func (*coreRuntimeDecryptor) DecryptBytes(value string) ([]byte, error) { return []byte(value), nil }
+func (*coreRuntimeDecryptor) Decrypt(sealed crypto.Sealed) ([]byte, error) {
+	return sealed.Ciphertext, nil
+}
 
 func TestCoreRuntimeBindHandlerScopesDependenciesPerInvocation(t *testing.T) {
 	values := make(chan string, 2)

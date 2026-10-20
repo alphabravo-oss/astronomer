@@ -97,7 +97,6 @@ func TestTunnelQueueHAIntegration(t *testing.T) {
 	agentToken := "tunnel-ha-agent-" + uuid.NewString()
 	if _, err := queries.UpsertClusterAgentToken(ctx, sqlc.UpsertClusterAgentTokenParams{
 		ClusterID: clusterID,
-		Token:     agentToken,
 		TokenHash: auth.HashOpaqueToken(agentToken),
 	}); err != nil {
 		t.Fatal(err)

@@ -98,7 +98,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 	// Fail the ingest rather than silently falling back to an anonymous pull:
 	// a private registry answers an anonymous pull with 401, which would be
 	// recorded against the repository as an upstream authentication problem
-	// and send the operator looking at registry ACLs instead of at the Fernet
+	// and send the operator looking at registry ACLs instead of at the encryption
 	// key. See ErrAuthConfigUnavailable.
 	cfg, err := ResolveOCIAuthConfig(repo, dec)
 	if err != nil {

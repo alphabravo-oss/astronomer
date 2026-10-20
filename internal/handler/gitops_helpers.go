@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -51,13 +53,13 @@ func gitOpsSourceAuditDetail(row sqlc.GitopsRegistrationSource) map[string]any {
 		"branch":                      row.Branch,
 		"on_delete":                   row.OnDelete,
 		"auth_mode":                   row.AuthMode,
-		"auth_configured":             row.AuthEncrypted != "",
+		"auth_configured":             row.AuthKeyID != "",
 		"enabled":                     row.Enabled,
 		"allow_mass_decommission":     row.AllowMassDecommission,
 		"sync_interval_seconds":       row.SyncIntervalSeconds,
 		"repository_location_omitted": true,
 		"webhook_provider":            row.WebhookProvider,
-		"webhook_configured":          row.WebhookProvider != "" && row.WebhookSecretEncrypted != "",
+		"webhook_configured":          row.WebhookProvider != "" && row.WebhookSecretKeyID != "",
 	}
 }
 
@@ -150,19 +152,19 @@ func validateGitOpsRequest(req *gitopsSourceRequest, requireFields bool) error {
 	return nil
 }
 
-func (h *GitOpsHandler) encryptWebhookSecret(plaintext string) (string, error) {
+func (h *GitOpsHandler) encryptWebhookSecret(plaintext string) (crypto.Sealed, error) {
 	if plaintext == "" {
-		return "", nil
+		return crypto.Sealed{}, nil
 	}
 	if len(plaintext) < 32 {
-		return "", errGitOpsWebhookSecretRequired
+		return crypto.Sealed{}, errGitOpsWebhookSecretRequired
 	}
 	if h == nil || h.encryptor == nil {
-		return "", errors.New("GitOps webhook encryption is not configured")
+		return crypto.Sealed{}, errors.New("GitOps webhook encryption is not configured")
 	}
-	ciphertext, err := h.encryptor.Encrypt(plaintext)
+	ciphertext, err := h.encryptor.EncryptString(plaintext)
 	if err != nil {
-		return "", fmt.Errorf("encrypt GitOps webhook secret: %w", err)
+		return crypto.Sealed{}, fmt.Errorf("encrypt GitOps webhook secret: %w", err)
 	}
 	return ciphertext, nil
 }

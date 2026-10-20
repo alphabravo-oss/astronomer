@@ -59,7 +59,7 @@ func TestDeliverySourceStateAndAuditCommitTogether(t *testing.T) {
 				return nil
 			})
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources/", nil)
-			params := sqlc.CreateDeliverySourceParams{ProjectID: uuid.New(), Name: "platform", SourceType: "git", AuthMode: "bearer", CredentialEncrypted: "ciphertext", CredentialKeyVersion: 1}
+			params := sqlc.CreateDeliverySourceParams{ProjectID: uuid.New(), Name: "platform", SourceType: "git", AuthMode: "bearer", CredentialKeyID: "k", CredentialAlgorithm: "age-x25519-chacha20poly1305", CredentialCiphertext: []byte("ciphertext"), CredentialKeyVersion: 1}
 
 			_, err := executeMutation(r, h.runTx,
 				func(q SourceMutationTx) (sqlc.CreateDeliverySourceRow, error) {

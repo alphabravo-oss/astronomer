@@ -8,7 +8,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -27,11 +26,12 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/gitops"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type rejectingGitOpsDecryptor struct{}
 
-func (rejectingGitOpsDecryptor) Decrypt(string) (string, error) {
+func (rejectingGitOpsDecryptor) DecryptString(crypto.Sealed) (string, error) {
 	return "", errors.New("no matching key")
 }
 
@@ -56,23 +56,13 @@ func TestGitOpsSourceSyncTaskCarriesOnlySourceID(t *testing.T) {
 	}
 }
 
-func TestGitOpsAuthRejectsUndecryptableFernetButRetainsLegacyPlaintext(t *testing.T) {
-	tokenBytes := make([]byte, 57)
-	tokenBytes[0] = 0x80
-	fernetShaped := base64.URLEncoding.EncodeToString(tokenBytes)
+func TestGitOpsAuthRejectsUndecryptableCredential(t *testing.T) {
 	runtime := GitOpsRuntime{Deps: GitOpsDeps{Decryptor: rejectingGitOpsDecryptor{}}}
-
 	method, err := runtime.buildGitAuth(sqlc.GitopsRegistrationSource{
-		Name: "broken", AuthMode: "https_token", AuthEncrypted: fernetShaped,
+		Name: "broken", AuthMode: "https_token", AuthKeyID: "k", AuthAlgorithm: crypto.AlgorithmAgeX25519, AuthCiphertext: []byte("x"),
 	})
 	if err == nil || method != nil || !strings.Contains(err.Error(), "decrypt source") {
-		t.Fatalf("undecryptable Fernet method/error=%T/%v", method, err)
-	}
-	method, err = runtime.buildGitAuth(sqlc.GitopsRegistrationSource{
-		Name: "legacy", AuthMode: "https_token", AuthEncrypted: "legacy-plaintext-token",
-	})
-	if err != nil || method == nil {
-		t.Fatalf("legacy plaintext compatibility method/error=%T/%v", method, err)
+		t.Fatalf("undecryptable credential method/error=%T/%v", method, err)
 	}
 }
 

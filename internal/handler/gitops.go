@@ -25,16 +25,17 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // GitOpsAuthSentinel is the placeholder returned in GET responses for
-// the auth_encrypted column. PUT requests that echo this value back are
+// the auth_* sealed column. PUT requests that echo this value back are
 // interpreted as "keep existing auth blob".
 const GitOpsAuthSentinel = "<encrypted>"
 
@@ -94,7 +95,7 @@ type GitOpsHandler struct {
 	runner     GitOpsSyncRunner
 	log        *slog.Logger
 	audit      AuthAuditWriter
-	encryptor  *auth.Encryptor
+	encryptor  *crypto.Encryptor
 }
 
 func (h *GitOpsHandler) SetRunTx(runTx gitOpsRunTxFunc) {
@@ -111,10 +112,10 @@ func (h *GitOpsHandler) SetTaskOutbox(writer tasks.TaskOutboxWriter) {
 	}
 }
 
-// SetEncryptor wires the Fernet encryptor for GitOps auth blobs. Credentialed
+// SetEncryptor wires the age encryptor for GitOps auth blobs. Credentialed
 // writes fail closed when it is absent; plaintext is never accepted for the
-// auth_encrypted column.
-func (h *GitOpsHandler) SetEncryptor(e *auth.Encryptor) {
+// auth_* sealed column.
+func (h *GitOpsHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}
@@ -134,7 +135,7 @@ func NewGitOpsHandler(q GitOpsQuerier, runner GitOpsSyncRunner, log *slog.Logger
 func (h *GitOpsHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
 
 // gitopsSourceResponse is the wire shape returned by every handler. The
-// auth_encrypted column is replaced with a sentinel.
+// auth_* sealed column is replaced with a sentinel.
 type gitopsSourceResponse struct {
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
@@ -167,7 +168,7 @@ func toGitOpsSourceResponse(row sqlc.GitopsRegistrationSource) gitopsSourceRespo
 		PathPrefix:            row.PathPrefix,
 		AuthMode:              row.AuthMode,
 		Auth:                  "",
-		AuthConfigured:        row.AuthEncrypted != "",
+		AuthConfigured:        row.AuthKeyID != "",
 		SyncMode:              row.SyncMode,
 		SyncIntervalSeconds:   row.SyncIntervalSeconds,
 		OnDelete:              row.OnDelete,
@@ -176,7 +177,7 @@ func toGitOpsSourceResponse(row sqlc.GitopsRegistrationSource) gitopsSourceRespo
 		Enabled:               row.Enabled,
 		AllowMassDecommission: row.AllowMassDecommission,
 		WebhookProvider:       row.WebhookProvider,
-		WebhookConfigured:     row.WebhookProvider != "" && row.WebhookSecretEncrypted != "",
+		WebhookConfigured:     row.WebhookProvider != "" && row.WebhookSecretKeyID != "",
 		CreatedAt:             row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:             row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -242,7 +243,7 @@ type gitopsSourceRequest struct {
 	// WebhookProvider is nil on update to preserve the existing setting.
 	// An explicit empty string disables inbound webhooks and clears the secret.
 	WebhookProvider *string `json:"webhook_provider,omitempty"`
-	// WebhookSecret is accepted only on create/rotation and is always Fernet
+	// WebhookSecret is accepted only on create/rotation and is always age
 	// encrypted before the source mutation transaction opens.
 	WebhookSecret string `json:"webhook_secret,omitempty"`
 }

@@ -26,27 +26,27 @@ func (q *Queries) CountVaultConnections(ctx context.Context) (int64, error) {
 
 const createVaultConnection = `-- name: CreateVaultConnection :one
 INSERT INTO vault_connections (
-    name, description, addr, auth_method, auth_encrypted, namespace,
+    name, description, addr, auth_method, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce, namespace,
     tls_skip_verify, ca_cert_pem, default_mount, enabled, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, name, description, addr, auth_method, auth_encrypted, namespace,
-          tls_skip_verify, ca_cert_pem, default_mount, enabled,
-          cached_token_expires_at, last_health_at, last_health_ok, last_error,
-          created_by, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $12, $13, $14, $6, $7, $8, $9, $10, $11)
+RETURNING id, name, description, addr, auth_method, namespace, tls_skip_verify, ca_cert_pem, default_mount, enabled, cached_token_expires_at, last_health_at, last_health_ok, last_error, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 `
 
 type CreateVaultConnectionParams struct {
-	Name          string      `json:"name"`
-	Description   string      `json:"description"`
-	Addr          string      `json:"addr"`
-	AuthMethod    string      `json:"auth_method"`
-	AuthEncrypted string      `json:"auth_encrypted"`
-	Namespace     string      `json:"namespace"`
-	TlsSkipVerify bool        `json:"tls_skip_verify"`
-	CaCertPem     string      `json:"ca_cert_pem"`
-	DefaultMount  string      `json:"default_mount"`
-	Enabled       bool        `json:"enabled"`
-	CreatedBy     pgtype.UUID `json:"created_by"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
+	Addr           string      `json:"addr"`
+	AuthMethod     string      `json:"auth_method"`
+	AuthKeyID      string      `json:"auth_key_id"`
+	Namespace      string      `json:"namespace"`
+	TlsSkipVerify  bool        `json:"tls_skip_verify"`
+	CaCertPem      string      `json:"ca_cert_pem"`
+	DefaultMount   string      `json:"default_mount"`
+	Enabled        bool        `json:"enabled"`
+	CreatedBy      pgtype.UUID `json:"created_by"`
+	AuthAlgorithm  string      `json:"auth_algorithm"`
+	AuthCiphertext []byte      `json:"auth_ciphertext"`
+	AuthNonce      []byte      `json:"auth_nonce"`
 }
 
 func (q *Queries) CreateVaultConnection(ctx context.Context, arg CreateVaultConnectionParams) (VaultConnection, error) {
@@ -55,13 +55,16 @@ func (q *Queries) CreateVaultConnection(ctx context.Context, arg CreateVaultConn
 		arg.Description,
 		arg.Addr,
 		arg.AuthMethod,
-		arg.AuthEncrypted,
+		arg.AuthKeyID,
 		arg.Namespace,
 		arg.TlsSkipVerify,
 		arg.CaCertPem,
 		arg.DefaultMount,
 		arg.Enabled,
 		arg.CreatedBy,
+		arg.AuthAlgorithm,
+		arg.AuthCiphertext,
+		arg.AuthNonce,
 	)
 	var i VaultConnection
 	err := row.Scan(
@@ -70,7 +73,6 @@ func (q *Queries) CreateVaultConnection(ctx context.Context, arg CreateVaultConn
 		&i.Description,
 		&i.Addr,
 		&i.AuthMethod,
-		&i.AuthEncrypted,
 		&i.Namespace,
 		&i.TlsSkipVerify,
 		&i.CaCertPem,
@@ -83,6 +85,10 @@ func (q *Queries) CreateVaultConnection(ctx context.Context, arg CreateVaultConn
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
@@ -110,10 +116,7 @@ func (q *Queries) GetProjectDefaultVaultConnection(ctx context.Context, id uuid.
 }
 
 const getVaultConnectionByID = `-- name: GetVaultConnectionByID :one
-SELECT id, name, description, addr, auth_method, auth_encrypted, namespace,
-       tls_skip_verify, ca_cert_pem, default_mount, enabled,
-       cached_token_expires_at, last_health_at, last_health_ok, last_error,
-       created_by, created_at, updated_at
+SELECT id, name, description, addr, auth_method, namespace, tls_skip_verify, ca_cert_pem, default_mount, enabled, cached_token_expires_at, last_health_at, last_health_ok, last_error, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM vault_connections
 WHERE id = $1
 `
@@ -127,7 +130,6 @@ func (q *Queries) GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (Vau
 		&i.Description,
 		&i.Addr,
 		&i.AuthMethod,
-		&i.AuthEncrypted,
 		&i.Namespace,
 		&i.TlsSkipVerify,
 		&i.CaCertPem,
@@ -140,15 +142,16 @@ func (q *Queries) GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (Vau
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
 
 const getVaultConnectionByName = `-- name: GetVaultConnectionByName :one
-SELECT id, name, description, addr, auth_method, auth_encrypted, namespace,
-       tls_skip_verify, ca_cert_pem, default_mount, enabled,
-       cached_token_expires_at, last_health_at, last_health_ok, last_error,
-       created_by, created_at, updated_at
+SELECT id, name, description, addr, auth_method, namespace, tls_skip_verify, ca_cert_pem, default_mount, enabled, cached_token_expires_at, last_health_at, last_health_ok, last_error, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 FROM vault_connections
 WHERE name = $1
 `
@@ -162,7 +165,6 @@ func (q *Queries) GetVaultConnectionByName(ctx context.Context, name string) (Va
 		&i.Description,
 		&i.Addr,
 		&i.AuthMethod,
-		&i.AuthEncrypted,
 		&i.Namespace,
 		&i.TlsSkipVerify,
 		&i.CaCertPem,
@@ -175,6 +177,10 @@ func (q *Queries) GetVaultConnectionByName(ctx context.Context, name string) (Va
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }
@@ -182,7 +188,7 @@ func (q *Queries) GetVaultConnectionByName(ctx context.Context, name string) (Va
 const listVaultConnectionsPage = `-- name: ListVaultConnectionsPage :many
 
 SELECT id, name, description, addr, auth_method,
-       (auth_encrypted <> '') AS auth_configured, namespace,
+       (auth_key_id <> '') AS auth_configured, namespace,
        tls_skip_verify, ca_cert_pem, default_mount, enabled,
        cached_token_expires_at, last_health_at, last_health_ok, last_error,
        created_by, created_at, updated_at
@@ -220,7 +226,7 @@ type ListVaultConnectionsPageRow struct {
 // Vault connections CRUD (migration 067).
 //
 // Canonical sqlc source for Vault connection persistence.
-// List projection intentionally excludes auth_encrypted. Detail/probe paths
+// List projection intentionally excludes auth_{key_id,algorithm,ciphertext,nonce}. Detail/probe paths
 // use GetVaultConnectionByID when they need to resolve credential material.
 func (q *Queries) ListVaultConnectionsPage(ctx context.Context, arg ListVaultConnectionsPageParams) ([]ListVaultConnectionsPageRow, error) {
 	rows, err := q.db.Query(ctx, listVaultConnectionsPage, arg.QueryOffset, arg.QueryLimit)
@@ -283,7 +289,10 @@ UPDATE vault_connections
 SET description     = $2,
     addr            = $3,
     auth_method     = $4,
-    auth_encrypted  = $5,
+    auth_key_id = $5,
+    auth_algorithm = $11,
+    auth_ciphertext = $12,
+    auth_nonce = $13,
     namespace       = $6,
     tls_skip_verify = $7,
     ca_cert_pem     = $8,
@@ -291,23 +300,23 @@ SET description     = $2,
     enabled         = $10,
     updated_at      = now()
 WHERE id = $1
-RETURNING id, name, description, addr, auth_method, auth_encrypted, namespace,
-          tls_skip_verify, ca_cert_pem, default_mount, enabled,
-          cached_token_expires_at, last_health_at, last_health_ok, last_error,
-          created_by, created_at, updated_at
+RETURNING id, name, description, addr, auth_method, namespace, tls_skip_verify, ca_cert_pem, default_mount, enabled, cached_token_expires_at, last_health_at, last_health_ok, last_error, created_by, created_at, updated_at, auth_key_id, auth_algorithm, auth_ciphertext, auth_nonce
 `
 
 type UpdateVaultConnectionParams struct {
-	ID            uuid.UUID `json:"id"`
-	Description   string    `json:"description"`
-	Addr          string    `json:"addr"`
-	AuthMethod    string    `json:"auth_method"`
-	AuthEncrypted string    `json:"auth_encrypted"`
-	Namespace     string    `json:"namespace"`
-	TlsSkipVerify bool      `json:"tls_skip_verify"`
-	CaCertPem     string    `json:"ca_cert_pem"`
-	DefaultMount  string    `json:"default_mount"`
-	Enabled       bool      `json:"enabled"`
+	ID             uuid.UUID `json:"id"`
+	Description    string    `json:"description"`
+	Addr           string    `json:"addr"`
+	AuthMethod     string    `json:"auth_method"`
+	AuthKeyID      string    `json:"auth_key_id"`
+	Namespace      string    `json:"namespace"`
+	TlsSkipVerify  bool      `json:"tls_skip_verify"`
+	CaCertPem      string    `json:"ca_cert_pem"`
+	DefaultMount   string    `json:"default_mount"`
+	Enabled        bool      `json:"enabled"`
+	AuthAlgorithm  string    `json:"auth_algorithm"`
+	AuthCiphertext []byte    `json:"auth_ciphertext"`
+	AuthNonce      []byte    `json:"auth_nonce"`
 }
 
 func (q *Queries) UpdateVaultConnection(ctx context.Context, arg UpdateVaultConnectionParams) (VaultConnection, error) {
@@ -316,12 +325,15 @@ func (q *Queries) UpdateVaultConnection(ctx context.Context, arg UpdateVaultConn
 		arg.Description,
 		arg.Addr,
 		arg.AuthMethod,
-		arg.AuthEncrypted,
+		arg.AuthKeyID,
 		arg.Namespace,
 		arg.TlsSkipVerify,
 		arg.CaCertPem,
 		arg.DefaultMount,
 		arg.Enabled,
+		arg.AuthAlgorithm,
+		arg.AuthCiphertext,
+		arg.AuthNonce,
 	)
 	var i VaultConnection
 	err := row.Scan(
@@ -330,7 +342,6 @@ func (q *Queries) UpdateVaultConnection(ctx context.Context, arg UpdateVaultConn
 		&i.Description,
 		&i.Addr,
 		&i.AuthMethod,
-		&i.AuthEncrypted,
 		&i.Namespace,
 		&i.TlsSkipVerify,
 		&i.CaCertPem,
@@ -343,6 +354,10 @@ func (q *Queries) UpdateVaultConnection(ctx context.Context, arg UpdateVaultConn
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthKeyID,
+		&i.AuthAlgorithm,
+		&i.AuthCiphertext,
+		&i.AuthNonce,
 	)
 	return i, err
 }

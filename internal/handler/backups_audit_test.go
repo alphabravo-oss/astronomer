@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -48,23 +49,21 @@ func (q *backupAuditQuerier) GetBackupStorageConfigByID(_ context.Context, id uu
 func (q *backupAuditQuerier) CreateBackupStorageConfig(_ context.Context, arg sqlc.CreateBackupStorageConfigParams) (sqlc.BackupStorageConfig, error) {
 	now := time.Now()
 	row := sqlc.BackupStorageConfig{
-		ID:                   uuid.New(),
-		Name:                 arg.Name,
-		StorageType:          arg.StorageType,
-		Bucket:               arg.Bucket,
-		Prefix:               arg.Prefix,
-		Region:               arg.Region,
-		EndpointUrl:          arg.EndpointUrl,
-		AccessKey:            arg.AccessKey,
-		SecretKey:            arg.SecretKey,
-		IsDefault:            arg.IsDefault,
-		CreatedByID:          arg.CreatedByID,
-		CreatedAt:            now,
-		UpdatedAt:            now,
-		ClusterID:            arg.ClusterID,
-		VeleroNamespace:      arg.VeleroNamespace,
-		BslName:              arg.BslName,
-		EncryptedCredentials: arg.EncryptedCredentials,
+		ID:               uuid.New(),
+		Name:             arg.Name,
+		StorageType:      arg.StorageType,
+		Bucket:           arg.Bucket,
+		Prefix:           arg.Prefix,
+		Region:           arg.Region,
+		EndpointUrl:      arg.EndpointUrl,
+		IsDefault:        arg.IsDefault,
+		CreatedByID:      arg.CreatedByID,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		ClusterID:        arg.ClusterID,
+		VeleroNamespace:  arg.VeleroNamespace,
+		BslName:          arg.BslName,
+		CredentialsKeyID: arg.CredentialsKeyID, CredentialsAlgorithm: arg.CredentialsAlgorithm, CredentialsCiphertext: arg.CredentialsCiphertext, CredentialsNonce: arg.CredentialsNonce,
 	}
 	q.storages[row.ID] = row
 	return row, nil
@@ -81,13 +80,11 @@ func (q *backupAuditQuerier) UpdateBackupStorageConfig(_ context.Context, arg sq
 	row.Prefix = arg.Prefix
 	row.Region = arg.Region
 	row.EndpointUrl = arg.EndpointUrl
-	row.AccessKey = arg.AccessKey
-	row.SecretKey = arg.SecretKey
 	row.IsDefault = arg.IsDefault
 	row.ClusterID = arg.ClusterID
 	row.VeleroNamespace = arg.VeleroNamespace
 	row.BslName = arg.BslName
-	row.EncryptedCredentials = arg.EncryptedCredentials
+	row.CredentialsKeyID, row.CredentialsAlgorithm, row.CredentialsCiphertext, row.CredentialsNonce = arg.CredentialsKeyID, arg.CredentialsAlgorithm, arg.CredentialsCiphertext, arg.CredentialsNonce
 	row.UpdatedAt = time.Now()
 	q.storages[arg.ID] = row
 	return row, nil
@@ -204,11 +201,11 @@ func TestBackupMutationsAreAudited(t *testing.T) {
 	q := newBackupAuditQuerier()
 	h := NewBackupHandler(q)
 	h.SetRunTx(func(_ context.Context, fn func(BackupMutationTx) error) error { return fn(q) })
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}

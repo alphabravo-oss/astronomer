@@ -21,6 +21,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func testServer(t *testing.T) http.Handler {
@@ -90,8 +91,8 @@ func TestDSNEnforcesTLS(t *testing.T) {
 }
 
 func TestValidateProductionSecurityConfig(t *testing.T) {
-	validKey := "mjc2rBj19lSbsCp4LzOVgAuWBxGJIGsQNc6oZi0iDTQ="
-	enc, err := auth.NewEncryptor(validKey)
+	validKey := mustTestAgeKey(t)
+	enc, err := crypto.NewEncryptor(validKey)
 	if err != nil {
 		t.Fatalf("NewEncryptor(valid): %v", err)
 	}
@@ -209,7 +210,7 @@ func TestReportInsecureDevKeysOutsideProduction(t *testing.T) {
 	reportInsecureDevKeys(&config.Config{
 		Env:           "development",
 		SecretKey:     "a-real-unique-secret",
-		EncryptionKey: "mjc2rBj19lSbsCp4LzOVgAuWBxGJIGsQNc6oZi0iDTQ=",
+		EncryptionKey: mustTestAgeKey(t),
 	}, logger)
 	if buf.Len() != 0 {
 		t.Fatalf("real keys logged %q, want silence", buf.String())
@@ -226,7 +227,7 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 		t.Fatal("expected missing production security wiring to fail")
 	}
 
-	enc, err := auth.NewEncryptor("mjc2rBj19lSbsCp4LzOVgAuWBxGJIGsQNc6oZi0iDTQ=")
+	enc, err := crypto.NewEncryptor(mustTestAgeKey(t))
 	if err != nil {
 		t.Fatalf("NewEncryptor(valid): %v", err)
 	}
@@ -383,4 +384,13 @@ func (productionSecurityAuthQuerier) GetUserByID(context.Context, uuid.UUID) (sq
 
 func (productionSecurityAuthQuerier) UpdateAPITokenLastUsed(context.Context, uuid.UUID) error {
 	return nil
+}
+
+func mustTestAgeKey(t *testing.T) string {
+	t.Helper()
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }

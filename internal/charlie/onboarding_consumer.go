@@ -12,9 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 type OnboardingTransaction interface {
@@ -79,7 +79,7 @@ func (s PGOnboardingTransactionStore) WithinOnboardingTransaction(ctx context.Co
 type OnboardingConsumer struct {
 	Store            OnboardingTransactionStore
 	Secrets          AgentSecretWriter
-	Encryptor        *auth.Encryptor
+	Encryptor        *crypto.Encryptor
 	BridgeServerDNS  string
 	MCPServerDNS     string
 	ProductNamespace string
@@ -153,7 +153,8 @@ func (c *OnboardingConsumer) Consume(ctx context.Context, validated ValidatedOnb
 			AgentProtocolVersion: contract.AgentProtocolVersion, ChartReference: validated.Package.Artifact.Chart, ChartVersion: contract.AgentChartVersion,
 			ChartDigest: validated.Package.Artifact.ChartDigest, ImageReference: validated.Package.Artifact.Image, ImageDigest: validated.Package.Artifact.ManifestDigest,
 			LogicalAgentID: string(validated.Package.LogicalAgentId), ReplicaCount: int32(validated.Package.ReplicaCount), BridgeServiceName: c.BridgeServerDNS,
-			McpServiceName: c.MCPServerDNS, LocalTrustMaterialEncrypted: trust.EncryptedLocalTrust,
+			McpServiceName: c.MCPServerDNS, LocalTrustMaterialKeyID: trust.SealedLocalTrust.KeyID, LocalTrustMaterialAlgorithm: trust.SealedLocalTrust.Algorithm,
+			LocalTrustMaterialCiphertext: trust.SealedLocalTrust.Ciphertext, LocalTrustMaterialNonce: trust.SealedLocalTrust.Nonce,
 			AgentSecretName: secretName, OnboardingPackageID: validated.PackageID,
 			OnboardingPackageDigest: validated.RawDigest, OnboardingState: "secrets_pending",
 			OnboardingPackageExpiresAt:     validated.Package.ExpiresAt.UTC(),

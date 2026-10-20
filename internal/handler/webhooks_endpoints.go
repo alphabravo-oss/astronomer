@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -76,7 +78,7 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor is not configured; cannot store webhook secret")
 		return
 	}
-	secretEnc, err := h.encryptor.Encrypt(*req.Secret)
+	secretEnc, err := h.encryptor.EncryptString(*req.Secret)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt webhook secret")
 		return
@@ -86,9 +88,9 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	headersJSON, _ := json.Marshal(merged.ExtraHeaders)
 
 	params := sqlc.CreateWebhookSubscriptionParams{
-		Name:            merged.Name,
-		Url:             merged.URL,
-		SecretEncrypted: secretEnc,
+		Name:        merged.Name,
+		Url:         merged.URL,
+		SecretKeyID: secretEnc.KeyID, SecretAlgorithm: secretEnc.Algorithm, SecretCiphertext: secretEnc.Ciphertext, SecretNonce: secretEnc.Nonce,
 		EventFilters:    filtersJSON,
 		PayloadTemplate: merged.PayloadTemplate,
 		ExtraHeaders:    headersJSON,
@@ -173,7 +175,7 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	// Secret handling: SecretSentinel means "keep existing". Any other
 	// non-empty value is re-encrypted.
-	encryptedSecret := existing.SecretEncrypted
+	encryptedSecret := crypto.FromParts(existing.SecretKeyID, existing.SecretAlgorithm, existing.SecretCiphertext, existing.SecretNonce)
 	if req.Secret != nil && *req.Secret != SecretSentinel {
 		if strings.TrimSpace(*req.Secret) == "" {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "secret cannot be blanked; supply a new value or omit the field")
@@ -183,7 +185,7 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Encryptor unavailable")
 			return
 		}
-		enc, encErr := h.encryptor.Encrypt(*req.Secret)
+		enc, encErr := h.encryptor.EncryptString(*req.Secret)
 		if encErr != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncryptError, "Failed to encrypt secret")
 			return
@@ -194,10 +196,10 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 	headersJSON, _ := json.Marshal(merged.ExtraHeaders)
 
 	params := sqlc.UpdateWebhookSubscriptionParams{
-		ID:              id,
-		Name:            merged.Name,
-		Url:             merged.URL,
-		SecretEncrypted: encryptedSecret,
+		ID:          id,
+		Name:        merged.Name,
+		Url:         merged.URL,
+		SecretKeyID: encryptedSecret.KeyID, SecretAlgorithm: encryptedSecret.Algorithm, SecretCiphertext: encryptedSecret.Ciphertext, SecretNonce: encryptedSecret.Nonce,
 		EventFilters:    filtersJSON,
 		PayloadTemplate: merged.PayloadTemplate,
 		ExtraHeaders:    headersJSON,

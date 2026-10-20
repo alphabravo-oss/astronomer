@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
@@ -182,7 +184,7 @@ type AuthHandler struct {
 	// encryptor decrypts the upstream id_token stored alongside an
 	// sso_sessions row. Required by the SLO path; without it the
 	// stored ciphertext can't be unwrapped and Logout degrades.
-	encryptor *auth.Encryptor
+	encryptor *crypto.Encryptor
 
 	// postLogoutRedirectURL is the post_logout_redirect_uri value sent
 	// to the IdP in the end_session redirect. Typically
@@ -330,10 +332,10 @@ func (h *AuthHandler) SetSSOSessionStore(s SSOSessionStore) {
 	h.ssoSessions = s
 }
 
-// SetEncryptor wires the Fernet encryptor used by Logout to decrypt
+// SetEncryptor wires the age encryptor used by Logout to decrypt
 // the upstream id_token stored on an sso_sessions row. Required by
 // the SLO path. nil keeps the legacy local-only logout shape.
-func (h *AuthHandler) SetEncryptor(e *auth.Encryptor) {
+func (h *AuthHandler) SetEncryptor(e *crypto.Encryptor) {
 	if h == nil {
 		return
 	}

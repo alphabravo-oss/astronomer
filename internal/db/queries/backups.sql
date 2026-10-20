@@ -9,10 +9,10 @@ SELECT * FROM backup_storage_configs ORDER BY created_at DESC LIMIT $1 OFFSET $2
 -- name: CreateBackupStorageConfig :one
 INSERT INTO backup_storage_configs (
     name, storage_type, bucket, prefix, region, endpoint_url,
-    access_key, secret_key, is_default, created_by_id,
-    cluster_id, velero_namespace, bsl_name, encrypted_credentials
+    is_default, created_by_id,
+    cluster_id, velero_namespace, bsl_name, credentials_key_id, credentials_algorithm, credentials_ciphertext, credentials_nonce
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
 
 -- name: UpdateBackupStorageConfig :one
@@ -23,13 +23,14 @@ UPDATE backup_storage_configs SET
     prefix = $5,
     region = $6,
     endpoint_url = $7,
-    access_key = $8,
-    secret_key = $9,
-    is_default = $10,
-    cluster_id = $11,
-    velero_namespace = $12,
-    bsl_name = $13,
-    encrypted_credentials = $14
+    is_default = $8,
+    cluster_id = $9,
+    velero_namespace = $10,
+    bsl_name = $11,
+    credentials_key_id = $12,
+    credentials_algorithm = $13,
+    credentials_ciphertext = $14,
+    credentials_nonce = $15
 WHERE id = $1
 RETURNING *;
 

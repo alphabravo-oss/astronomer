@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 const ResourceOperationType = "resource:operation"
@@ -105,7 +106,7 @@ func HandleResourceOperation(ctx context.Context, task *asynq.Task) error {
 		if deps.ResourceDecryptor == nil {
 			return failResourceOperation(ctx, queries, operation, "decryptor_unavailable", 0, false)
 		}
-		body, err = deps.ResourceDecryptor.DecryptBytes(operation.ManifestEncrypted)
+		body, err = deps.ResourceDecryptor.Decrypt(crypto.FromParts(operation.ManifestKeyID, operation.ManifestAlgorithm, operation.ManifestCiphertext, operation.ManifestNonce))
 		if err != nil {
 			return failResourceOperation(ctx, queries, operation, "decrypt_failed", 0, true)
 		}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -1243,7 +1244,7 @@ func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerF
 		}
 
 		encKeys := 0
-		encKeyInventory := []iauth.EncryptionKeyInfo{}
+		encKeyInventory := []crypto.KeyInfo{}
 		if deps.CoreAuth.Encryptor != nil {
 			encKeys = deps.CoreAuth.Encryptor.KeyCount()
 			encKeyInventory = deps.CoreAuth.Encryptor.KeyInventory()

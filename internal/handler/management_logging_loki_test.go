@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -76,11 +77,11 @@ func TestReconcileManagementLoggingLokiMissingLeavesChartDefaultOff(t *testing.T
 	helm := &loggingHelmStub{}
 	h.helm = helm
 	h.requester = &loggingFakeRequester{}
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,11 +102,11 @@ func TestReconcileManagementLoggingHealthyOverlaysEndpointWithoutPrintingToken(t
 	h.helm = helm
 	fake := &loggingFakeRequester{}
 	h.requester = fake
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,10 +147,10 @@ func TestReconcileManagementLoggingHealthyOverlaysEndpointWithoutPrintingToken(t
 	}
 
 	tok, ok := q.ingestTokens[uuid.MustParse(stackTestClusterID)]
-	if !ok || tok.TokenEncrypted == "" {
+	if !ok || tok.TokenKeyID == "" {
 		t.Fatal("management ingest token was not stored")
 	}
-	plain, err := enc.Decrypt(tok.TokenEncrypted)
+	plain, err := enc.DecryptString(crypto.FromParts(tok.TokenKeyID, tok.TokenAlgorithm, tok.TokenCiphertext, tok.TokenNonce))
 	if err != nil {
 		t.Fatalf("decrypt stored token: %v", err)
 	}
@@ -190,11 +191,11 @@ func TestReconcileManagementLoggingDisablesWhenLokiUninstalled(t *testing.T) {
 	helm := &loggingHelmStub{}
 	h.helm = helm
 	h.requester = &loggingFakeRequester{}
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatal(err)
 	}

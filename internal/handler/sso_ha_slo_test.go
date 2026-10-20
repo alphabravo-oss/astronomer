@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -61,11 +63,11 @@ func (f *fakeSSOSessionWriter) InsertSSOSession(_ context.Context, arg sqlc.Inse
 // single sign-out is dead for any session older than one access lifetime.
 func TestPersistSSOSessionExpiresAtTracksRefreshToken(t *testing.T) {
 	h := testSSOHandler(t)
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}

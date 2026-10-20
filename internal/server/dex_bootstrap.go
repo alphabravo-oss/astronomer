@@ -129,7 +129,8 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 				ID: existing.ID, IssuerUrl: existing.IssuerUrl, ClusterID: existing.ClusterID,
 				Namespace: desiredNamespace, ReleaseName: desiredDeployment,
 				ConfigmapName: desiredRuntimeName, RuntimeSecretName: desiredRuntimeName,
-				PublicClients: existing.PublicClients, PublicClientsEncrypted: existing.PublicClientsEncrypted,
+				PublicClientsKeyID: existing.PublicClientsKeyID, PublicClientsAlgorithm: existing.PublicClientsAlgorithm,
+				PublicClientsCiphertext: existing.PublicClientsCiphertext, PublicClientsNonce: existing.PublicClientsNonce,
 				Expiry: existing.Expiry, Extra: existing.Extra,
 				ChartReleaseName: desiredChartRelease, DeploymentName: desiredDeployment, ServiceName: desiredService,
 				RuntimePhase: desiredPhase,
@@ -160,21 +161,19 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv, "astronomer-dex-runtime")
 
 	_, err = queries.StageDexSettingsAndDisableSSO(ctx, sqlc.StageDexSettingsAndDisableSSOParams{
-		ID:                     dexBootstrapSingletonID,
-		IssuerUrl:              issuer,
-		ClusterID:              pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
-		Namespace:              namespace,
-		ReleaseName:            deploymentName,
-		ConfigmapName:          runtimeSecretName,
-		RuntimeSecretName:      runtimeSecretName,
-		PublicClientsEncrypted: "",
-		PublicClients:          []byte("[]"),
-		Expiry:                 []byte("{}"),
-		Extra:                  []byte("{}"),
-		ChartReleaseName:       chartReleaseName,
-		DeploymentName:         deploymentName,
-		ServiceName:            serviceName,
-		RuntimePhase:           runtimePhase,
+		ID:                dexBootstrapSingletonID,
+		IssuerUrl:         issuer,
+		ClusterID:         pgtype.UUID{}, // unset — local-cluster wiring is the operator's call via the UI
+		Namespace:         namespace,
+		ReleaseName:       deploymentName,
+		ConfigmapName:     runtimeSecretName,
+		RuntimeSecretName: runtimeSecretName,
+		Expiry:            []byte("{}"),
+		Extra:             []byte("{}"),
+		ChartReleaseName:  chartReleaseName,
+		DeploymentName:    deploymentName,
+		ServiceName:       serviceName,
+		RuntimePhase:      runtimePhase,
 	})
 	if err != nil {
 		return false, err

@@ -25,7 +25,7 @@ func TestDeliverySourcePublicQueriesExcludeSecretColumns(t *testing.T) {
 		"-- name: RevokeDeliverySource :one",
 	} {
 		query := namedQuery(t, text, marker)
-		for _, prohibited := range []string{"credential_encrypted", "ca_bundle_encrypted"} {
+		for _, prohibited := range []string{"credential_ciphertext", "ca_bundle_ciphertext"} {
 			// The create/rotate statements necessarily write ciphertext. Only
 			// their RETURNING projection is part of the public response boundary.
 			projection := query
@@ -46,14 +46,14 @@ func TestDeliverySecretProjectionsAreClosedAndInternal(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	for _, secret := range []string{"s.credential_encrypted", "s.ca_bundle_encrypted"} {
+	for _, secret := range []string{"s.credential_ciphertext", "s.ca_bundle_ciphertext"} {
 		if got := strings.Count(text, secret); got != 2 {
 			t.Fatalf("%s appears %d times; want resolution-worker and assignment-provider projections", secret, got)
 		}
 	}
 	for _, marker := range []string{"-- name: GetDeliverySourceResolutionWork :one", "-- name: ListClusterDeliveryAssignments :many"} {
 		query := namedQuery(t, text, marker)
-		if !strings.Contains(query, "s.credential_encrypted") || !strings.Contains(query, "s.ca_bundle_encrypted") {
+		if !strings.Contains(query, "s.credential_ciphertext") || !strings.Contains(query, "s.ca_bundle_ciphertext") {
 			t.Fatalf("%s must project both encrypted source fields", marker)
 		}
 	}

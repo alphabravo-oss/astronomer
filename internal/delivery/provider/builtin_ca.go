@@ -43,7 +43,7 @@ func validBuiltinCA(ca []byte) bool {
 
 func builtinCAEligible(row sqlc.ListClusterDeliveryAssignmentsRow) bool {
 	return row.Scope == string(model.ScopePlatform) && row.SourceType == string(model.SourceHelmOCI) &&
-		row.AuthMode == string(model.AuthNone) && row.CredentialEncrypted == "" && row.CaBundleEncrypted == ""
+		row.AuthMode == string(model.AuthNone) && row.CredentialKeyID == "" && row.CaBundleKeyID == ""
 }
 
 func (p *Provider) applyBuiltinCAMetadata(ctx context.Context, row sqlc.ListClusterDeliveryAssignmentsRow, assignment *protocol.DeliveryAssignmentV2) (string, error) {

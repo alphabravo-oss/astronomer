@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -89,11 +90,11 @@ func (f *fakeSIEMQuerier) CreateSIEMForwarder(_ context.Context, arg sqlc.Create
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	row := sqlc.SiemForwarder{
-		ID:              uuid.New(),
-		Name:            arg.Name,
-		Transport:       arg.Transport,
-		Endpoint:        arg.Endpoint,
-		AuthEncrypted:   arg.AuthEncrypted,
+		ID:        uuid.New(),
+		Name:      arg.Name,
+		Transport: arg.Transport,
+		Endpoint:  arg.Endpoint,
+		AuthKeyID: arg.AuthKeyID, AuthAlgorithm: arg.AuthAlgorithm, AuthCiphertext: arg.AuthCiphertext, AuthNonce: arg.AuthNonce,
 		EventFilters:    arg.EventFilters,
 		Format:          arg.Format,
 		TlsSkipVerify:   arg.TlsSkipVerify,
@@ -120,7 +121,7 @@ func (f *fakeSIEMQuerier) UpdateSIEMForwarder(_ context.Context, arg sqlc.Update
 	row.Name = arg.Name
 	row.Transport = arg.Transport
 	row.Endpoint = arg.Endpoint
-	row.AuthEncrypted = arg.AuthEncrypted
+	row.AuthKeyID, row.AuthAlgorithm, row.AuthCiphertext, row.AuthNonce = arg.AuthKeyID, arg.AuthAlgorithm, arg.AuthCiphertext, arg.AuthNonce
 	row.EventFilters = arg.EventFilters
 	row.Format = arg.Format
 	row.TlsSkipVerify = arg.TlsSkipVerify
@@ -238,11 +239,11 @@ func authedSIEMRequest(method, target string, callerID uuid.UUID, body []byte) *
 
 func newSIEMTestHandler(t *testing.T, q *fakeSIEMQuerier) *SIEMHandler {
 	t.Helper()
-	key, err := auth.GenerateKey()
+	key, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	enc, err := auth.NewEncryptor(key)
+	enc, err := crypto.NewEncryptor(key)
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}
@@ -321,7 +322,7 @@ func TestSIEMHandler_CRUD(t *testing.T) {
 		t.Fatalf("update: status=%d body=%s", w.Code, w.Body.String())
 	}
 	q.mu.Lock()
-	if q.byID[fwdID].AuthEncrypted == "" {
+	if q.byID[fwdID].AuthKeyID == "" {
 		t.Errorf("update with omitted auth should have preserved the ciphertext")
 	}
 	if q.byID[fwdID].Enabled {

@@ -5,14 +5,14 @@
 // or registry password for a private OCI registry, sat in the clear in the
 // platform database and in every backup of it.
 //
-// The credential now lives in `auth_config_encrypted` as a Fernet token over
+// The credential now lives in the sealed `auth_config_*` column family over
 // the complete document; `auth_config` keeps only the non-secret projection.
 // Everything that needs a chart-repository credential goes through this file,
 // on purpose. There are five distinct consumers across two processes — the
 // interactive Sync/Test-connection handler, the chart-archive hydrator, the
 // OCI ingest, the scheduled index sweep and the scheduled asset fetch — and
 // the way this change ships broken is one of them reading `repo.AuthConfig`
-// directly and authenticating with a stripped document or a Fernet token.
+// directly and authenticating with a stripped document or a ciphertext.
 // Resolve*() is the only supported way to read the field.
 package catalog
 
@@ -26,9 +26,10 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/credential"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
-// Decryptor unwraps the Fernet envelope. *auth.Encryptor satisfies it; it is
+// Decryptor opens the sealed value. *crypto.Encryptor satisfies it; it is
 // declared as an interface here so this package does not depend on the auth
 // package (and so the worker can keep injecting a narrow dependency, the same
 // shape as tasks.GitOpsDecryptor).
@@ -54,7 +55,7 @@ var AuthConfigSecretKeys = []string{
 // The fallback-to-ciphertext shape is a real bug in this codebase
 // (decryptGitAuth in internal/worker/tasks/gitops_sync.go returns the stored
 // blob when Decrypt fails), and it is worth naming why it is wrong: sending a
-// Fernet token as a password produces an upstream 401, which reads to the
+// ciphertext as a password produces an upstream 401, which reads to the
 // operator as "the repository rejected my credential" when what actually
 // happened is that ASTRONOMER_ENCRYPTION_KEY is wrong or a rotation dropped a
 // key too early. Callers should use a request-scoped decryptor instead.
@@ -69,15 +70,15 @@ var ErrAuthConfigUnavailable = credential.ErrUnavailable
 // repository.
 //
 // Disambiguation is by COLUMN, not by inspecting the bytes: a non-empty
-// AuthConfigEncrypted means the envelope is authoritative; an empty one means
+// sealed auth_config_* value is authoritative; an empty one means
 // the row predates migration 145 (or was written by a deployment with no
-// Fernet key) and AuthConfig is still the whole document. There is no
-// "does this look like a Fernet token" heuristic to get wrong.
+// key) and AuthConfig is still the whole document. There is no
+// "does this look like ciphertext" heuristic to get wrong.
 //
 // The error is terminal for credential purposes. It is never accompanied by a
 // usable document.
 func ResolveAuthConfig(repo sqlc.HelmRepository, dec Decryptor) (json.RawMessage, error) {
-	return credential.Resolve(repo.AuthConfigEncrypted, repo.AuthConfig, dec,
+	return credential.Resolve(crypto.FromParts(repo.AuthConfigKeyID, repo.AuthConfigAlgorithm, repo.AuthConfigCiphertext, repo.AuthConfigNonce), repo.AuthConfig, dec,
 		fmt.Sprintf("chart repository %q auth_config", repo.Name))
 }
 
@@ -106,7 +107,7 @@ func ResolveOCIAuthConfig(repo sqlc.HelmRepository, dec Decryptor) (OCIAuthConfi
 }
 
 // SealAuthConfig splits an operator-supplied auth_config document into the
-// pair of columns migration 145 defines: the Fernet envelope over the whole
+// pair of columns migration 145 defines: the sealed value over the whole
 // document, and the non-secret projection that stays queryable as JSONB.
 //
 // With no encryptor (development; config.ValidateProductionSecurity refuses to
@@ -119,7 +120,7 @@ func ResolveOCIAuthConfig(repo sqlc.HelmRepository, dec Decryptor) (OCIAuthConfi
 // repo with only a `charts` list) leaves the envelope empty: sealing it anyway
 // would put the chart list out of reach of the catalog API for no gain and
 // make the repository list depend on a successful decrypt.
-func SealAuthConfig(full json.RawMessage, enc Encryptor) (ciphertext string, public json.RawMessage, err error) {
+func SealAuthConfig(full json.RawMessage, enc Encryptor) (sealed crypto.Sealed, public json.RawMessage, err error) {
 	return credential.Seal(full, enc, hasAuthConfigSecret, stripAuthConfigSecretKeys, "chart repository auth_config")
 }
 
@@ -267,7 +268,7 @@ func ApplyIndexAuth(req *http.Request, repo sqlc.HelmRepository, dec Decryptor, 
 // Split out of ApplyIndexAuth for the callers that must handle a decrypt
 // failure themselves rather than degrade to an anonymous request — currently
 // TestRepoConnection, where reporting the upstream's 401 would tell the
-// operator their password is wrong when the actual fault is the Fernet key.
+// operator their password is wrong when the actual fault is the encryption key.
 // Keeping the header rules in one place means those callers cannot support a
 // different set of auth_types than the unattended sweep does.
 func SetIndexAuthHeader(req *http.Request, authType string, cfg IndexAuthConfig) {

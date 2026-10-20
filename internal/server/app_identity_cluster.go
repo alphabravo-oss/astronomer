@@ -46,7 +46,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	configureSessionTimeoutPolicy(authHandler, jwtManager, queries, logger)
 	// Single sign-out (migration 054 / NIST 800-53 AC-12). Wired when
 	// the encryptor is available: the stored upstream id_token is
-	// Fernet-encrypted at rest, so without the key Logout has nothing
+	// age-sealed at rest, so without the key Logout has nothing
 	// to decrypt. The post_logout_redirect_uri is derived from the
 	// callback base URL — keeping it adjacent to the SSO redirect URI
 	// means the same dashboard hostname is registered with the IdP for
@@ -58,7 +58,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 		authHandler.SetPostLogoutRedirectURL(callbackBase + "/auth/logout-done/")
 	}
 
-	// 2FA / TOTP (migration 043). The handler needs the Fernet
+	// 2FA / TOTP (migration 043). The handler needs the age
 	// encryptor to wrap secrets at rest; without it we skip wiring so
 	// /auth/totp/* returns 503 not_configured if invoked. The Login
 	// gate degrades to the legacy password-only flow.

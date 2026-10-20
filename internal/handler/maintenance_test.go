@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
@@ -373,6 +375,7 @@ func (g *gateMaintenanceQuerier) CreateDeferredOperation(_ context.Context, arg 
 	g.createdRow.WindowID = arg.WindowID
 	g.createdRow.OperationType = arg.OperationType
 	g.createdRow.OperationSpec = arg.OperationSpec
+	g.createdRow.SealedSpecKeyID, g.createdRow.SealedSpecAlgorithm, g.createdRow.SealedSpecCiphertext, g.createdRow.SealedSpecNonce = arg.SealedSpecKeyID, arg.SealedSpecAlgorithm, arg.SealedSpecCiphertext, arg.SealedSpecNonce
 	g.createdRow.TargetClusterID = arg.TargetClusterID
 	g.createdRow.TargetProjectID = arg.TargetProjectID
 	g.createdRow.DeferredUntil = arg.DeferredUntil
@@ -399,6 +402,7 @@ func (g *gateMaintenanceQuerier) CreateDeferredOperationIdempotent(_ context.Con
 	row.WindowID = arg.WindowID
 	row.OperationType = arg.OperationType
 	row.OperationSpec = arg.OperationSpec
+	row.SealedSpecKeyID, row.SealedSpecAlgorithm, row.SealedSpecCiphertext, row.SealedSpecNonce = arg.SealedSpecKeyID, arg.SealedSpecAlgorithm, arg.SealedSpecCiphertext, arg.SealedSpecNonce
 	row.TargetClusterID = arg.TargetClusterID
 	row.TargetProjectID = arg.TargetProjectID
 	row.DeferredUntil = arg.DeferredUntil
@@ -428,8 +432,8 @@ type gateEvalQuerier struct {
 
 type gateTestCipher struct{}
 
-func (gateTestCipher) Encrypt(plaintext string) (string, error) {
-	return base64.RawURLEncoding.EncodeToString([]byte(plaintext)), nil
+func (gateTestCipher) Encrypt(plaintext []byte) (crypto.Sealed, error) {
+	return crypto.Sealed{KeyID: "test", Algorithm: crypto.AlgorithmAgeX25519, Ciphertext: []byte(base64.RawURLEncoding.EncodeToString(plaintext))}, nil
 }
 
 func (g *gateEvalQuerier) ListEnabledMaintenanceWindows(_ context.Context) ([]sqlc.MaintenanceWindow, error) {
@@ -523,9 +527,8 @@ func TestDefer_Returns202AndInserts(t *testing.T) {
 	if bytes.Contains(q.createdRow.OperationSpec, []byte("top-secret")) {
 		t.Fatal("deferred operation persisted a request secret in plaintext")
 	}
-	var envelope EncryptedDeferredOpSpec
-	if err := json.Unmarshal(q.createdRow.OperationSpec, &envelope); err != nil || envelope.SchemaVersion != 1 || envelope.Ciphertext == "" {
-		t.Fatalf("operation_spec is not a versioned encrypted envelope: %s", q.createdRow.OperationSpec)
+	if string(q.createdRow.OperationSpec) != "{}" || q.createdRow.SealedSpecKeyID == "" || len(q.createdRow.SealedSpecCiphertext) == 0 {
+		t.Fatalf("deferred request is not in the sealed_spec family: spec=%s key=%q", q.createdRow.OperationSpec, q.createdRow.SealedSpecKeyID)
 	}
 }
 

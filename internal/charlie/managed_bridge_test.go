@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
 
 func TestManagedBridgeCreatesNoTransportUntilRuntimeIsLiveAndDropsItOnDisable(t *testing.T) {
@@ -27,8 +27,8 @@ func TestManagedBridgeCreatesNoTransportUntilRuntimeIsLiveAndDropsItOnDisable(t 
 		t.Fatal("disabled bridge read trust files or constructed a transport")
 	}
 
-	key, _ := auth.GenerateKey()
-	encryptor, _ := auth.NewEncryptor(key)
+	key, _ := crypto.GenerateKey()
+	encryptor, _ := crypto.NewEncryptor(key)
 	trust, err := GenerateLocalTrust(encryptor, LocalTrustConfig{InstallationID: installationID.String(), BridgeServerDNS: "charlie-agent-bridge.astronomer-charlie.svc", MCPServerDNS: "astronomer-charlie-mcp.astronomer.svc"})
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestManagedBridgeOperationalDisabledPermitsOnlyConfigurationPlane(t *testin
 	connection := sqlc.CharlieConnection{
 		ID: uuid.New(), InstallationID: uuid.New(), Active: true, OnboardingState: "active",
 		RequestedMode: string(ModeDisabled), VerifiedMode: string(ModeDisabled),
-		LocalTrustMaterialEncrypted: "present",
+		LocalTrustMaterialKeyID: "present", LocalTrustMaterialAlgorithm: crypto.AlgorithmAgeX25519, LocalTrustMaterialCiphertext: []byte("present"),
 	}
 	connections := &mutableBridgeConnection{row: connection}
 	bridge, err := NewManagedBridge(ManagedBridgeConfig{

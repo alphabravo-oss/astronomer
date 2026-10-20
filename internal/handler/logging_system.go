@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -300,7 +302,7 @@ func (h *LoggingHandler) attachLokiBearer(ctx context.Context, env *loggingOpera
 	if err != nil {
 		return fmt.Errorf("load ingest token: %w", err)
 	}
-	plain, err := h.encryptor.Decrypt(tok.TokenEncrypted)
+	plain, err := h.encryptor.DecryptString(crypto.FromParts(tok.TokenKeyID, tok.TokenAlgorithm, tok.TokenCiphertext, tok.TokenNonce))
 	if err != nil {
 		return fmt.Errorf("decrypt ingest token: %w", err)
 	}

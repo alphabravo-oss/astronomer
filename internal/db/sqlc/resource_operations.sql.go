@@ -27,7 +27,7 @@ WHERE id = $2
       status IN ('pending', 'retrying')
       OR (status = 'running' AND (locked_until IS NULL OR locked_until <= $4))
   )
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, manifest_encrypted, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce
 `
 
 type ClaimResourceOperationGenerationParams struct {
@@ -57,7 +57,6 @@ func (q *Queries) ClaimResourceOperationGeneration(ctx context.Context, arg Clai
 		&i.Action,
 		&i.RequiredVerb,
 		&i.ApiPath,
-		&i.ManifestEncrypted,
 		&i.ForceApply,
 		&i.Generation,
 		&i.ObservedGeneration,
@@ -71,6 +70,10 @@ func (q *Queries) ClaimResourceOperationGeneration(ctx context.Context, arg Clai
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManifestKeyID,
+		&i.ManifestAlgorithm,
+		&i.ManifestCiphertext,
+		&i.ManifestNonce,
 	)
 	return i, err
 }
@@ -79,32 +82,35 @@ const createResourceOperationIdempotent = `-- name: CreateResourceOperationIdemp
 INSERT INTO resource_operations (
     idempotency_scope, idempotency_key, request_digest, cluster_id,
     resource_type, namespace, resource_name, action, api_path,
-    required_verb, manifest_encrypted, force_apply, created_by_id
+    required_verb, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce, force_apply, created_by_id
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6,
     $7, $8, $9,
-    $10, $11, $12, $13
+    $10, $11, $12, $13, $14, $15, $16
 )
 ON CONFLICT (idempotency_scope, idempotency_key)
 DO UPDATE SET updated_at = resource_operations.updated_at
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, manifest_encrypted, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce
 `
 
 type CreateResourceOperationIdempotentParams struct {
-	IdempotencyScope  string      `json:"idempotency_scope"`
-	IdempotencyKey    string      `json:"idempotency_key"`
-	RequestDigest     string      `json:"request_digest"`
-	ClusterID         uuid.UUID   `json:"cluster_id"`
-	ResourceType      string      `json:"resource_type"`
-	Namespace         string      `json:"namespace"`
-	ResourceName      string      `json:"resource_name"`
-	Action            string      `json:"action"`
-	ApiPath           string      `json:"api_path"`
-	RequiredVerb      string      `json:"required_verb"`
-	ManifestEncrypted string      `json:"manifest_encrypted"`
-	ForceApply        bool        `json:"force_apply"`
-	CreatedByID       pgtype.UUID `json:"created_by_id"`
+	IdempotencyScope   string      `json:"idempotency_scope"`
+	IdempotencyKey     string      `json:"idempotency_key"`
+	RequestDigest      string      `json:"request_digest"`
+	ClusterID          uuid.UUID   `json:"cluster_id"`
+	ResourceType       string      `json:"resource_type"`
+	Namespace          string      `json:"namespace"`
+	ResourceName       string      `json:"resource_name"`
+	Action             string      `json:"action"`
+	ApiPath            string      `json:"api_path"`
+	RequiredVerb       string      `json:"required_verb"`
+	ManifestKeyID      string      `json:"manifest_key_id"`
+	ManifestAlgorithm  string      `json:"manifest_algorithm"`
+	ManifestCiphertext []byte      `json:"manifest_ciphertext"`
+	ManifestNonce      []byte      `json:"manifest_nonce"`
+	ForceApply         bool        `json:"force_apply"`
+	CreatedByID        pgtype.UUID `json:"created_by_id"`
 }
 
 func (q *Queries) CreateResourceOperationIdempotent(ctx context.Context, arg CreateResourceOperationIdempotentParams) (ResourceOperation, error) {
@@ -119,7 +125,10 @@ func (q *Queries) CreateResourceOperationIdempotent(ctx context.Context, arg Cre
 		arg.Action,
 		arg.ApiPath,
 		arg.RequiredVerb,
-		arg.ManifestEncrypted,
+		arg.ManifestKeyID,
+		arg.ManifestAlgorithm,
+		arg.ManifestCiphertext,
+		arg.ManifestNonce,
 		arg.ForceApply,
 		arg.CreatedByID,
 	)
@@ -136,7 +145,6 @@ func (q *Queries) CreateResourceOperationIdempotent(ctx context.Context, arg Cre
 		&i.Action,
 		&i.RequiredVerb,
 		&i.ApiPath,
-		&i.ManifestEncrypted,
 		&i.ForceApply,
 		&i.Generation,
 		&i.ObservedGeneration,
@@ -150,12 +158,16 @@ func (q *Queries) CreateResourceOperationIdempotent(ctx context.Context, arg Cre
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManifestKeyID,
+		&i.ManifestAlgorithm,
+		&i.ManifestCiphertext,
+		&i.ManifestNonce,
 	)
 	return i, err
 }
 
 const getResourceOperation = `-- name: GetResourceOperation :one
-SELECT id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, manifest_encrypted, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at FROM resource_operations WHERE id = $1
+SELECT id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce FROM resource_operations WHERE id = $1
 `
 
 func (q *Queries) GetResourceOperation(ctx context.Context, id uuid.UUID) (ResourceOperation, error) {
@@ -173,7 +185,6 @@ func (q *Queries) GetResourceOperation(ctx context.Context, id uuid.UUID) (Resou
 		&i.Action,
 		&i.RequiredVerb,
 		&i.ApiPath,
-		&i.ManifestEncrypted,
 		&i.ForceApply,
 		&i.Generation,
 		&i.ObservedGeneration,
@@ -187,6 +198,10 @@ func (q *Queries) GetResourceOperation(ctx context.Context, id uuid.UUID) (Resou
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManifestKeyID,
+		&i.ManifestAlgorithm,
+		&i.ManifestCiphertext,
+		&i.ManifestNonce,
 	)
 	return i, err
 }
@@ -202,7 +217,7 @@ SET status = 'failed',
 WHERE id = $3
   AND generation = $4
   AND observed_generation < $4
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, manifest_encrypted, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce
 `
 
 type MarkResourceOperationFailedParams struct {
@@ -232,7 +247,6 @@ func (q *Queries) MarkResourceOperationFailed(ctx context.Context, arg MarkResou
 		&i.Action,
 		&i.RequiredVerb,
 		&i.ApiPath,
-		&i.ManifestEncrypted,
 		&i.ForceApply,
 		&i.Generation,
 		&i.ObservedGeneration,
@@ -246,6 +260,10 @@ func (q *Queries) MarkResourceOperationFailed(ctx context.Context, arg MarkResou
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManifestKeyID,
+		&i.ManifestAlgorithm,
+		&i.ManifestCiphertext,
+		&i.ManifestNonce,
 	)
 	return i, err
 }
@@ -261,7 +279,7 @@ SET status = 'retrying',
 WHERE id = $3
   AND generation = $4
   AND observed_generation < $4
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, manifest_encrypted, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce
 `
 
 type MarkResourceOperationRetryingParams struct {
@@ -291,7 +309,6 @@ func (q *Queries) MarkResourceOperationRetrying(ctx context.Context, arg MarkRes
 		&i.Action,
 		&i.RequiredVerb,
 		&i.ApiPath,
-		&i.ManifestEncrypted,
 		&i.ForceApply,
 		&i.Generation,
 		&i.ObservedGeneration,
@@ -305,6 +322,10 @@ func (q *Queries) MarkResourceOperationRetrying(ctx context.Context, arg MarkRes
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManifestKeyID,
+		&i.ManifestAlgorithm,
+		&i.ManifestCiphertext,
+		&i.ManifestNonce,
 	)
 	return i, err
 }
@@ -322,7 +343,7 @@ SET status = 'succeeded',
 WHERE id = $4
   AND generation = $1
   AND observed_generation < $1
-RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, manifest_encrypted, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at
+RETURNING id, idempotency_scope, idempotency_key, request_digest, cluster_id, resource_type, namespace, resource_name, action, required_verb, api_path, force_apply, generation, observed_generation, status, attempt_count, locked_until, error_code, observed_status_code, observed_resource_version, created_by_id, completed_at, created_at, updated_at, manifest_key_id, manifest_algorithm, manifest_ciphertext, manifest_nonce
 `
 
 type MarkResourceOperationSucceededParams struct {
@@ -352,7 +373,6 @@ func (q *Queries) MarkResourceOperationSucceeded(ctx context.Context, arg MarkRe
 		&i.Action,
 		&i.RequiredVerb,
 		&i.ApiPath,
-		&i.ManifestEncrypted,
 		&i.ForceApply,
 		&i.Generation,
 		&i.ObservedGeneration,
@@ -366,6 +386,10 @@ func (q *Queries) MarkResourceOperationSucceeded(ctx context.Context, arg MarkRe
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ManifestKeyID,
+		&i.ManifestAlgorithm,
+		&i.ManifestCiphertext,
+		&i.ManifestNonce,
 	)
 	return i, err
 }

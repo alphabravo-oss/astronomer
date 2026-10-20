@@ -79,16 +79,20 @@ func (q *Queries) CreateRestoreOperationIdempotent(ctx context.Context, arg Crea
 }
 
 type CreateDeferredOperationIdempotentParams struct {
-	Scope           string             `json:"scope"`
-	IdempotencyKey  string             `json:"idempotency_key"`
-	WindowID        uuid.UUID          `json:"window_id"`
-	OperationType   string             `json:"operation_type"`
-	OperationSpec   json.RawMessage    `json:"operation_spec"`
-	TargetClusterID pgtype.UUID        `json:"target_cluster_id"`
-	TargetProjectID pgtype.UUID        `json:"target_project_id"`
-	DeferredUntil   pgtype.Timestamptz `json:"deferred_until"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	RequestedBy     pgtype.UUID        `json:"requested_by"`
+	Scope                string             `json:"scope"`
+	IdempotencyKey       string             `json:"idempotency_key"`
+	WindowID             uuid.UUID          `json:"window_id"`
+	OperationType        string             `json:"operation_type"`
+	OperationSpec        json.RawMessage    `json:"operation_spec"`
+	TargetClusterID      pgtype.UUID        `json:"target_cluster_id"`
+	TargetProjectID      pgtype.UUID        `json:"target_project_id"`
+	DeferredUntil        pgtype.Timestamptz `json:"deferred_until"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	RequestedBy          pgtype.UUID        `json:"requested_by"`
+	SealedSpecKeyID      string             `json:"sealed_spec_key_id"`
+	SealedSpecAlgorithm  string             `json:"sealed_spec_algorithm"`
+	SealedSpecCiphertext []byte             `json:"sealed_spec_ciphertext"`
+	SealedSpecNonce      []byte             `json:"sealed_spec_nonce"`
 }
 
 const createDeferredOperationIdempotent = `-- name: CreateDeferredOperationIdempotent :one
@@ -104,9 +108,10 @@ WITH claimed AS (
 inserted AS (
     INSERT INTO deferred_operations (
         id, window_id, operation_type, operation_spec, target_cluster_id,
-        target_project_id, deferred_until, expires_at, requested_by
+        target_project_id, deferred_until, expires_at, requested_by,
+        sealed_spec_key_id, sealed_spec_algorithm, sealed_spec_ciphertext, sealed_spec_nonce
     )
-    SELECT operation_id, $3, $4, $5, $6, $7, $8, $9, $10
+    SELECT operation_id, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
     FROM claimed
     WHERE operation_table = 'deferred_operations'
     ON CONFLICT (id) DO NOTHING
@@ -132,9 +137,18 @@ func (q *Queries) CreateDeferredOperationIdempotent(ctx context.Context, arg Cre
 		arg.DeferredUntil,
 		arg.ExpiresAt,
 		arg.RequestedBy,
+		arg.SealedSpecKeyID,
+		arg.SealedSpecAlgorithm,
+		arg.SealedSpecCiphertext,
+		arg.SealedSpecNonce,
 	))
 	if err == nil {
-		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "deferred_operations", op.ID, op)
+		// The idempotency replay copy must not carry the sealed request: it is
+		// not a registered sealed family (rotation would never rewrite it) and
+		// the response never needs it.
+		replay := op
+		replay.SealedSpecKeyID, replay.SealedSpecAlgorithm, replay.SealedSpecCiphertext, replay.SealedSpecNonce = "", "", nil, nil
+		err = q.attachOperationIdempotencyResponse(ctx, arg.Scope, arg.IdempotencyKey, "deferred_operations", op.ID, replay)
 	}
 	return op, err
 }
