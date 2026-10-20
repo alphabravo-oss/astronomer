@@ -42,7 +42,7 @@
       "1.2.x",
       "2.0.x"
     ],
-    "target_schema": 81,
+    "target_schema": 90,
     "tls_required_in_production": true
   },
   "release_line": "2.0.x",
