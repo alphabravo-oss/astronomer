@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 type mutableCursorRouteRBAC struct{ bindings []rbac.RoleBinding }
@@ -65,12 +65,15 @@ func TestControlPlaneCursorProductionRoutesReauthorizeContinuation(t *testing.T)
 			}
 			h.SetCursorCodec(codec)
 			auth := &mutableCursorRouteRBAC{bindings: []rbac.RoleBinding{{RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceAlerts), Verbs: []string{string(rbac.VerbRead)}}}}}}
-			router := chi.NewRouter()
-			registerToolsControlPlaneRoutes(router, RouterDependencies{CoreAuth: CoreAuthDependencies{RBACEngine: rbac.NewEngine(), RBACQueries: auth}, ClusterResources: ClusterResourceDependencies{ControlPlane: h}})
-			actor := uuid.NewString()
+			jwtMgr := iauth.MustNewJWTManager("control-plane-cursor-route-secret", 60)
+			router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: auth}, ClusterResources: ClusterResourceDependencies{ControlPlane: h}})
+			token, err := jwtMgr.GenerateAccessToken(uuid.New())
+			if err != nil {
+				t.Fatal(err)
+			}
 			request := func(query string) *httptest.ResponseRecorder {
-				req := httptest.NewRequest(http.MethodGet, "/controllers/"+collection+"/?"+query, nil)
-				req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: actor}))
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/controllers/"+collection+"/?"+query, nil)
+				req.Header.Set("Authorization", "Bearer "+token)
 				rec := httptest.NewRecorder()
 				router.ServeHTTP(rec, req)
 				return rec

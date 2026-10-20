@@ -725,6 +725,9 @@ func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
 	for i := 0; i < typ.NumField(); i++ {
 		groupType := typ.Field(i)
 		groupValue := value.Field(i)
+		if groupType.Type.Kind() != reflect.Struct {
+			continue
+		}
 		for j := 0; j < groupType.Type.NumField(); j++ {
 			field := groupType.Type.Field(j)
 			if field.Type.Kind() != reflect.Pointer {

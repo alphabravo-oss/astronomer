@@ -13,7 +13,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -37,18 +36,18 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 
 	r.Route("/delivery", func(r chi.Router) {
 		if deps.Delivery.Inventory != nil {
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryInventory, rbac.VerbRead)).
+			r.
 				Get("/estate/", deps.Delivery.Inventory.Fleet)
-			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbRead)).
+			r.
 				Get("/system/compatibility/", deps.Delivery.Inventory.SystemCompatibility)
 		}
 		if deps.Delivery.System != nil {
 			r.Route("/system/rollouts", func(r chi.Router) {
-				r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbCreate), idempotency).
+				r.With(writeProjects, idempotency).
 					Post("/", deps.Delivery.System.Start)
-				r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbRead)).
+				r.
 					Get("/{id}/", deps.Delivery.System.Get)
-				r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbRead)).
+				r.
 					Get("/{id}/clusters/", deps.Delivery.System.Assignments)
 				for _, route := range []struct {
 					path    string
@@ -58,7 +57,7 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 					{"resume", deps.Delivery.System.Resume}, {"abort", deps.Delivery.System.Abort},
 					{"retry", deps.Delivery.System.Retry}, {"rollback", deps.Delivery.System.Rollback},
 				} {
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbUpdate), idempotency).
+					r.With(writeProjects, idempotency).
 						Post("/{id}/"+route.path+"/", route.handler)
 				}
 			})
@@ -69,110 +68,110 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 
 			if deps.Delivery.OverrideSets != nil {
 				r.Route("/override-sets", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbList)).Get("/", deps.Delivery.OverrideSets.List)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbCreate), idempotency).Post("/", deps.Delivery.OverrideSets.Create)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Get("/{id}/", deps.Delivery.OverrideSets.Get)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbUpdate), idempotency).Put("/{id}/", deps.Delivery.OverrideSets.Update)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.Delivery.OverrideSets.Delete)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Post("/effective/", deps.Delivery.OverrideSets.Effective)
+					r.Get("/", deps.Delivery.OverrideSets.List)
+					r.With(writeProjects, idempotency).Post("/", deps.Delivery.OverrideSets.Create)
+					r.Get("/{id}/", deps.Delivery.OverrideSets.Get)
+					r.With(writeProjects, idempotency).Put("/{id}/", deps.Delivery.OverrideSets.Update)
+					r.With(writeProjects, idempotency).Delete("/{id}/", deps.Delivery.OverrideSets.Delete)
+					r.Post("/effective/", deps.Delivery.OverrideSets.Effective)
 				})
 			}
 
 			if deps.Delivery.ConfigurationTemplates != nil {
 				r.Route("/configuration-templates", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbList)).Get("/", deps.Delivery.ConfigurationTemplates.List)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbCreate), idempotency).Post("/", deps.Delivery.ConfigurationTemplates.Create)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Get("/{id}/", deps.Delivery.ConfigurationTemplates.Get)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbUpdate), idempotency).Put("/{id}/", deps.Delivery.ConfigurationTemplates.Update)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.Delivery.ConfigurationTemplates.Delete)
+					r.Get("/", deps.Delivery.ConfigurationTemplates.List)
+					r.With(writeProjects, idempotency).Post("/", deps.Delivery.ConfigurationTemplates.Create)
+					r.Get("/{id}/", deps.Delivery.ConfigurationTemplates.Get)
+					r.With(writeProjects, idempotency).Put("/{id}/", deps.Delivery.ConfigurationTemplates.Update)
+					r.With(writeProjects, idempotency).Delete("/{id}/", deps.Delivery.ConfigurationTemplates.Delete)
 				})
 			}
 
 			if deps.Delivery.Sources != nil {
 				r.Route("/sources", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbList)).
+					r.
 						Get("/", deps.Delivery.Sources.List)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbCreate), idempotency).
+					r.With(writeProjects, idempotency).
 						Post("/", deps.Delivery.Sources.Create)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbRead)).
+					r.
 						Get("/{id}/", deps.Delivery.Sources.Get)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbUpdate), idempotency).
+					r.With(writeProjects, idempotency).
 						Patch("/{id}/", deps.Delivery.Sources.Update)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbDelete), idempotency).
+					r.With(writeProjects, idempotency).
 						Delete("/{id}/", deps.Delivery.Sources.Delete)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbUpdate), idempotency).
+					r.With(writeProjects, idempotency).
 						Post("/{id}/rotate-credential/", deps.Delivery.Sources.RotateCredential)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliverySources, rbac.VerbUpdate), idempotency).
+					r.With(writeProjects, idempotency).
 						Post("/{id}/verify/", deps.Delivery.Sources.Verify)
 				})
 			}
 
 			if deps.Delivery.Bundles != nil {
 				r.Route("/bundles", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbList)).
+					r.
 						Get("/", deps.Delivery.Bundles.List)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbCreate), idempotency).
+					r.With(writeProjects, idempotency).
 						Post("/", deps.Delivery.Bundles.Create)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbRead)).
+					r.
 						Get("/{id}/", deps.Delivery.Bundles.Get)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbUpdate), idempotency).
+					r.With(writeProjects, idempotency).
 						Patch("/{id}/", deps.Delivery.Bundles.Update)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbDelete), idempotency).
+					r.With(writeProjects, idempotency).
 						Delete("/{id}/", deps.Delivery.Bundles.Delete)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbList)).
+					r.
 						Get("/{id}/versions/", deps.Delivery.Bundles.ListVersions)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbCreate), idempotency).
+					r.With(writeProjects, idempotency).
 						Post("/{id}/versions/", deps.Delivery.Bundles.CreateVersion)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryBundles, rbac.VerbRead)).
+					r.
 						Get("/{id}/versions/{versionId}/", deps.Delivery.Bundles.GetVersion)
 				})
 			}
 
 			if deps.Delivery.Targets != nil {
 				r.Route("/targets", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryTargets, rbac.VerbList)).Get("/", deps.Delivery.Targets.List)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryTargets, rbac.VerbCreate), idempotency).Post("/", deps.Delivery.Targets.Create)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryTargets, rbac.VerbRead)).Get("/{id}/", deps.Delivery.Targets.Get)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryTargets, rbac.VerbUpdate), idempotency).Patch("/{id}/", deps.Delivery.Targets.Update)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryTargets, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.Delivery.Targets.Delete)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryTargets, rbac.VerbRead)).Post("/{id}/preview/", deps.Delivery.Targets.Preview)
+					r.Get("/", deps.Delivery.Targets.List)
+					r.With(writeProjects, idempotency).Post("/", deps.Delivery.Targets.Create)
+					r.Get("/{id}/", deps.Delivery.Targets.Get)
+					r.With(writeProjects, idempotency).Patch("/{id}/", deps.Delivery.Targets.Update)
+					r.With(writeProjects, idempotency).Delete("/{id}/", deps.Delivery.Targets.Delete)
+					r.Post("/{id}/preview/", deps.Delivery.Targets.Preview)
 					if deps.Delivery.Rollouts != nil {
-						r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollouts, rbac.VerbCreate), idempotency).Post("/{id}/rollouts/", deps.Delivery.Rollouts.Start)
+						r.With(writeProjects, idempotency).Post("/{id}/rollouts/", deps.Delivery.Rollouts.Start)
 					}
-					r.With(writeProjects, requireSuperuser(deps), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryOrphans, rbac.VerbOrphan), idempotency).Post("/{id}/orphan/", deps.Delivery.Targets.Orphan)
+					r.With(writeProjects, idempotency).Post("/{id}/orphan/", deps.Delivery.Targets.Orphan)
 				})
 			}
 
 			if deps.Delivery.Rollouts != nil {
 				r.Route("/rollouts", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollouts, rbac.VerbList)).Get("/", deps.Delivery.Rollouts.List)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollouts, rbac.VerbRead)).Get("/{id}/", deps.Delivery.Rollouts.Get)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollouts, rbac.VerbRead)).Get("/{id}/clusters/", deps.Delivery.Rollouts.Clusters)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollouts, rbac.VerbRead)).Get("/{id}/events/", deps.Delivery.Rollouts.Events)
+					r.Get("/", deps.Delivery.Rollouts.List)
+					r.Get("/{id}/", deps.Delivery.Rollouts.Get)
+					r.Get("/{id}/clusters/", deps.Delivery.Rollouts.Clusters)
+					r.Get("/{id}/events/", deps.Delivery.Rollouts.Events)
 					for _, route := range []struct {
 						path    string
 						handler http.HandlerFunc
 					}{{"pause", deps.Delivery.Rollouts.Pause}, {"resume", deps.Delivery.Rollouts.Resume}, {"abort", deps.Delivery.Rollouts.Abort}, {"retry", deps.Delivery.Rollouts.Retry}} {
-						r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollouts, rbac.VerbUpdate), idempotency).Post("/{id}/"+route.path+"/", route.handler)
+						r.With(writeProjects, idempotency).Post("/{id}/"+route.path+"/", route.handler)
 					}
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryApprovals, rbac.VerbApprove), idempotency).Post("/{id}/approve/", deps.Delivery.Rollouts.Approve)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryRollbacks, rbac.VerbRollback), idempotency).Post("/{id}/rollback/", deps.Delivery.Rollouts.Rollback)
+					r.With(writeProjects, idempotency).Post("/{id}/approve/", deps.Delivery.Rollouts.Approve)
+					r.With(writeProjects, idempotency).Post("/{id}/rollback/", deps.Delivery.Rollouts.Rollback)
 				})
 			}
 
 			if deps.Delivery.Deployments != nil {
 				r.Route("/deployments", func(r chi.Router) {
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryDeployments, rbac.VerbList)).Get("/", deps.Delivery.Deployments.List)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryDeployments, rbac.VerbRead)).Get("/{id}/", deps.Delivery.Deployments.Get)
-					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryDeployments, rbac.VerbRead)).Get("/{id}/events/", deps.Delivery.Deployments.Events)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryDeployments, rbac.VerbUpdate), idempotency).Post("/{id}/reconcile/", deps.Delivery.Deployments.Reconcile)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryDeployments, rbac.VerbUpdate), idempotency).Post("/{id}/suspend/", deps.Delivery.Deployments.Suspend)
-					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryDeployments, rbac.VerbUpdate), idempotency).Post("/{id}/resume/", deps.Delivery.Deployments.Resume)
+					r.Get("/", deps.Delivery.Deployments.List)
+					r.Get("/{id}/", deps.Delivery.Deployments.Get)
+					r.Get("/{id}/events/", deps.Delivery.Deployments.Events)
+					r.With(writeProjects, idempotency).Post("/{id}/reconcile/", deps.Delivery.Deployments.Reconcile)
+					r.With(writeProjects, idempotency).Post("/{id}/suspend/", deps.Delivery.Deployments.Suspend)
+					r.With(writeProjects, idempotency).Post("/{id}/resume/", deps.Delivery.Deployments.Resume)
 				})
 			}
 
 			if deps.Delivery.Inventory != nil {
-				r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryInventory, rbac.VerbRead)).
+				r.
 					Get("/clusters/{clusterId}/inventory/", deps.Delivery.Inventory.Cluster)
 			}
 		})

@@ -90,6 +90,10 @@ func NewProductionRouter(cfg *config.Config, deps RouterDependencies) (chi.Route
 // focused tests; every missing security dependency still fails closed.
 func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
+	// Authorization for every route is its routePermissions row
+	// (route_permissions_table.go), enforced by the one authorizer that every
+	// authenticator composes; route registrations carry no RBAC gates.
+	deps.CoreAuth.authz = newRouteAuthorizer(r, deps, routePermissions)
 	deps.CoreAuth.ToolUI = newToolUIGateway(cfg, deps)
 
 	// Per-endpoint-class rate limiter. Bucket store
@@ -167,7 +171,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 			// mutation denials here, using its content-free audit contract.
 			authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(slog.Default(), deps.CoreAuth.Queries))
 		}
-		authenticated.Use(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
+		authenticated.Use(requireAuth(deps))
 		if deps.CoreAuth.Queries != nil {
 			// Keep the normal mutation auditor immediately after auth so it
 			// receives actor context and still observes write-scope/RBAC denials.
@@ -200,11 +204,22 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	return r
 }
 
-func requireAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier) func(http.Handler) http.Handler {
-	if jwt == nil {
+// requireAuth authenticates the caller and then runs the route authorizer.
+// Every user-authenticated route goes through exactly this composition (or
+// enrollChallengeOrAuth / requireStreamTicketOrAuth, which compose the same
+// authorizer), so authorization can never be skipped or reordered.
+func requireAuth(deps RouterDependencies) func(http.Handler) http.Handler {
+	if deps.CoreAuth.JWT == nil {
 		return unavailableSecurityDependency("JWT authentication")
 	}
-	return appmiddleware.RequireAuthWithQueries(jwt, queries)
+	return withAuthorization(deps, appmiddleware.RequireAuthWithQueries(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
+}
+
+func withAuthorization(deps RouterDependencies, authn func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	if deps.CoreAuth.authz == nil {
+		return unavailableSecurityDependency("route authorization")
+	}
+	return deps.CoreAuth.authz.after(authn)
 }
 
 func unavailableSecurityDependency(name string) func(http.Handler) http.Handler {
@@ -218,11 +233,11 @@ func unavailableSecurityDependency(name string) func(http.Handler) http.Handler 
 // enrollChallengeOrAuth guards a route with either a normal session or a
 // PurposeTOTPEnrollOnly challenge (see AuthOrTOTPEnrollChallenge). Mirrors
 // requireAuth's nil-jwt passthrough for test wiring.
-func enrollChallengeOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier) func(http.Handler) http.Handler {
-	if jwt == nil {
+func enrollChallengeOrAuth(deps RouterDependencies) func(http.Handler) http.Handler {
+	if deps.CoreAuth.JWT == nil {
 		return unavailableSecurityDependency("JWT authentication")
 	}
-	return appmiddleware.AuthOrTOTPEnrollChallenge(jwt, queries)
+	return withAuthorization(deps, appmiddleware.AuthOrTOTPEnrollChallenge(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
 }
 
 // requireScope returns the API-token scope-enforcement middleware
@@ -272,12 +287,7 @@ func requireCollectionPermission(engine *rbac.Engine, querier rbac.BindingQuerie
 	return appmiddleware.RequireCollectionPermission(engine, querier, resource, verb)
 }
 
-type permissionRequirement struct {
-	resource rbac.Resource
-	verb     rbac.Verb
-}
-
-func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requirements ...permissionRequirement) func(http.Handler) http.Handler {
+func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requirements ...Requirement) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil || len(requirements) == 0 {
 		return unavailableSecurityDependency("RBAC authorization")
 	}
@@ -295,7 +305,7 @@ func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requ
 			}
 			clusterID, projectID := permissionScopeIDs(r)
 			for _, requirement := range requirements {
-				if engine.CheckPermission(bindings, requirement.resource, requirement.verb, clusterID, projectID) {
+				if engine.CheckPermission(bindings, requirement.Resource, requirement.Verb, clusterID, projectID) {
 					next.ServeHTTP(w, r)
 					return
 				}
@@ -305,7 +315,7 @@ func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requ
 	}
 }
 
-func requireAllPermissions(engine *rbac.Engine, querier rbac.BindingQuerier, requirements ...permissionRequirement) func(http.Handler) http.Handler {
+func requireAllPermissions(engine *rbac.Engine, querier rbac.BindingQuerier, requirements ...Requirement) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil || len(requirements) == 0 {
 		return unavailableSecurityDependency("RBAC authorization")
 	}
@@ -323,7 +333,7 @@ func requireAllPermissions(engine *rbac.Engine, querier rbac.BindingQuerier, req
 			}
 			clusterID, projectID := permissionScopeIDs(r)
 			for _, requirement := range requirements {
-				if !engine.CheckPermission(bindings, requirement.resource, requirement.verb, clusterID, projectID) {
+				if !engine.CheckPermission(bindings, requirement.Resource, requirement.Verb, clusterID, projectID) {
 					apiutil.WriteError(w, r, http.StatusForbidden, apiutil.PermissionDenied, "You do not have permission to perform this action")
 					return
 				}
@@ -938,10 +948,6 @@ func parseK8sProxyObjectRef(k8sPath string) map[string]string {
 	return out
 }
 
-func requireServiceProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
-	return requirePermission(engine, querier, rbac.ResourceServices, rbac.VerbProxy)
-}
-
 // requireGenericResourceListPermission gates the generic list route.
 // ResourceHandler.ListGenericResources builds its upstream path from the same
 // ?namespace=, so the query-scoped gate is the honest one here.
@@ -1088,7 +1094,11 @@ func requireServiceProxyScope() func(http.Handler) http.Handler {
 	return requireK8sProxyScope()
 }
 
-func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {
+func requireStreamTicketOrAuth(deps RouterDependencies, kind string, clusterParam string) func(http.Handler) http.Handler {
+	return withAuthorization(deps, streamTicketOrAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries, deps.StreamingInternal.StreamTicketStore, kind, clusterParam))
+}
+
+func streamTicketOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var clusterID uuid.UUID

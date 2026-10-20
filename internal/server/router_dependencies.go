@@ -31,6 +31,9 @@ type RouterDependencies struct {
 // CoreAuthDependencies contains cross-cutting identity, authorization,
 // persistence, documentation, and readiness dependencies.
 type CoreAuthDependencies struct {
+	// authz is the route authorizer NewRouter builds; authenticators compose it.
+	authz *routeAuthorizer
+
 	ToolUI             *toolui.Gateway
 	JWT                *auth.JWTManager
 	Encryptor          *auth.Encryptor
