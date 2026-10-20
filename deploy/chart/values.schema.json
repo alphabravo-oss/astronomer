@@ -620,7 +620,12 @@
         "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/stringArray" },
         "identityProviderEgressCIDRs": { "$ref": "#/definitions/stringArray" },
         "objectStoreEgressCIDRs": { "$ref": "#/definitions/stringArray" },
-        "loggingSinkEgressCIDRs": { "$ref": "#/definitions/stringArray" }
+        "objectStoreEgressPorts": { "$ref": "#/definitions/tcpPortArray" },
+        "loggingSinkEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "walArchiveEgressCIDRs": { "$ref": "#/definitions/stringArray" },
+        "walArchiveEgressPorts": { "$ref": "#/definitions/tcpPortArray" },
+        "cnpgSystemNamespace": { "type": "string", "minLength": 1, "maxLength": 63 },
+        "barmanCloudPluginPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     },
     "metrics": {
@@ -1180,6 +1185,11 @@
     }
   ],
   "definitions": {
+    "tcpPortArray": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+    },
     "kubernetesMinor": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+$"

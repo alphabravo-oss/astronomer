@@ -1022,7 +1022,19 @@ networkPolicy:
   # shipper. Optional workloads receive no catch-all egress from the legacy
   # bucket; operators must name their actual dependency networks here.
   objectStoreEgressCIDRs: []
+  # TCP ports the DR jobs may use towards objectStoreEgressCIDRs. Add the
+  # S3 API port of a non-AWS store (RustFS/MinIO/Ceph RGW, e.g. 9000).
+  objectStoreEgressPorts: [443, 80]
   loggingSinkEgressCIDRs: []
+  # CloudNativePG mode with barmanCloud.enabled: the Barman Cloud plugin
+  # sidecar in each PostgreSQL instance pod archives WAL and base backups to
+  # the ObjectStore endpoint. Name that endpoint's network and S3 API ports.
+  walArchiveEgressCIDRs: []
+  walArchiveEgressPorts: [443]
+  # Namespace of the CloudNativePG operator and Barman Cloud plugin, and the
+  # plugin's CNPG-I gRPC port (instance manager -> plugin Service).
+  cnpgSystemNamespace: cnpg-system
+  barmanCloudPluginPort: 9090
 
 # =============================================================================
 # Metrics scraping
