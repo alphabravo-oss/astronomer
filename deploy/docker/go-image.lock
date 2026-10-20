@@ -1,0 +1,9 @@
+# Single pin for the Go builder image used by every Dockerfile with a Go build
+# stage (server, worker, agent, shell/dex-validator). Included by the Makefile and
+# read by the PR/release workflows. GO_IMAGE_VERSION must equal go.mod's `go`
+# line and GO_IMAGE_DIGEST must be the multi-arch index digest of
+# golang:$(GO_IMAGE_VERSION)-alpine; `make go-image-check` enforces both.
+# Bump: edit go.mod, then
+#   docker buildx imagetools inspect golang:<version>-alpine --format '{{json .Manifest.Digest}}'
+GO_IMAGE_VERSION = 1.27.3
+GO_IMAGE_DIGEST  = sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd

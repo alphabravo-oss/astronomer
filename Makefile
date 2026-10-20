@@ -5,7 +5,7 @@
 
 .PHONY: help dev dev-down dev-status dev-logs build test test-integration lint vet fmt \
         generate sqlc migrate check security gosec govulncheck secrets-scan \
-        fips-build updates docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
+        fips-build updates go-image-check docker-build docker-build-% helm-lint e2e e2e-live frontend-build \
         frontend-check clean $(BINARIES)
 
 SHELL := /bin/bash
@@ -41,7 +41,10 @@ TEST_RESULTS_DIR    ?= test-results
 IMG_REGISTRY ?= ghcr.io/alphabravo-oss
 IMG_TAG      ?= $(VERSION)
 IMAGES       := server worker agent shell dr frontend
+# Go builder image digest pin (one checked-in source of truth for every Go stage).
+include deploy/docker/go-image.lock
 DOCKER_BUILD_ARGS = --build-arg GO_VERSION=$(GO_VERSION) \
+                    --build-arg GO_IMAGE_DIGEST=$(GO_IMAGE_DIGEST) \
                     --build-arg VERSION=$(VERSION) \
                     --build-arg GIT_COMMIT=$(GIT_COMMIT) \
                     --build-arg BUILD_DATE=$(BUILD_DATE)
@@ -153,7 +156,17 @@ updates: ## Pending dependency upgrades (Go modules + npm)
 	cd frontend && npm outdated || true
 
 # ── Container images ─────────────────────────────────────────────────────────
-docker-build: $(addprefix docker-build-,$(IMAGES)) ## Build every production image
+docker-build: go-image-check $(addprefix docker-build-,$(IMAGES)) ## Build every production image
+
+# Fails when go.mod's Go version and the go-image.lock pin disagree, or when the
+# pinned digest is not the current index digest of golang:<version>-alpine.
+go-image-check: ## Verify deploy/docker/go-image.lock matches go.mod and the registry
+	@test "$(GO_IMAGE_VERSION)" = "$(GO_VERSION)" || { \
+		echo "go-image.lock pins golang:$(GO_IMAGE_VERSION)-alpine but go.mod says go $(GO_VERSION)" >&2; exit 1; }
+	@remote="$$(docker buildx imagetools inspect golang:$(GO_VERSION)-alpine --format '{{json .Manifest.Digest}}' | tr -d '"')"; \
+	test "$$remote" = "$(GO_IMAGE_DIGEST)" || { \
+		echo "golang:$(GO_VERSION)-alpine index digest is $$remote, go-image.lock pins $(GO_IMAGE_DIGEST)" >&2; exit 1; }; \
+	echo "go-image.lock OK: golang:$(GO_VERSION)-alpine@$(GO_IMAGE_DIGEST)"
 
 docker-build-frontend: ## Build the frontend image
 	docker build --build-arg VERSION=$(VERSION) --build-arg GIT_COMMIT=$(GIT_COMMIT) --build-arg BUILD_DATE=$(BUILD_DATE) \
