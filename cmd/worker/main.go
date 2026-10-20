@@ -37,6 +37,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
+	registrystartup "github.com/alphabravocompany/astronomer-go/internal/registry/startup"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -137,6 +138,11 @@ func main() {
 	// incoming task payloads (planned follow-up in this same sprint),
 	// so when both processes point at the same OTLP endpoint a single
 	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
+	if _, err := registrystartup.Resolve(context.Background(), cfg, log, "worker"); err != nil {
+		log.Error("invalid registry policy", "error", err)
+		os.Exit(1)
+	}
+
 	tracingCfg := workerTracingConfig(cfg)
 	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
 	if err != nil {

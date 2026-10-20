@@ -118,6 +118,15 @@ type Config struct {
 
 	AgentImageRepository string `mapstructure:"agent_image_repository"`
 	AgentImageTag        string `mapstructure:"agent_image_tag"`
+
+	// Air-gap layered registry policy (internal/registry). RegistryLocal is the
+	// cluster-local registry host every runtime image/artifact reference is
+	// re-hosted onto (layer 1); RegistryFallbacks the opt-in, comma-separated
+	// layer-2 list (empty = fail closed after layer 1); RegistryPlainHTTP the
+	// comma-separated registry hosts reached without TLS (in-cluster zot).
+	RegistryLocal     string `mapstructure:"registry_local"`
+	RegistryFallbacks string `mapstructure:"registry_fallbacks"`
+	RegistryPlainHTTP string `mapstructure:"registry_plain_http"`
 	// ReleaseManifestPath points at the signed, generated compatibility unit
 	// mounted by the packaged chart. When present it is authoritative for every
 	// artifact/version field below; mutable operator overrides cannot split the
@@ -505,6 +514,10 @@ func Load() (*Config, error) {
 		// to disable namespace-filtered reads + kubectl-shell caller scoping.
 		envconfig.Default{Key: "namespace_scoped_rbac_enabled", Value: true},
 		envconfig.Default{Key: "kubectl_shell_image", Value: "astronomer-shell:dev"},
+		// Bare local names, like kubectl_shell_image: public registries are never a
+		// Go default. The chart renders explicit, registry-qualified references.
+		envconfig.Default{Key: "agent_image_repository", Value: "astronomer-go-agent"},
+		envconfig.Default{Key: "management_backup_image", Value: "astronomer-dr:dev"},
 		envconfig.Default{Key: "kubectl_shell_idle_timeout_minutes", Value: 30},
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
 		envconfig.Default{Key: "server_addr", Value: ":8000"},
@@ -547,6 +560,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := applyReleaseManifest(cfg); err != nil {
+		return nil, err
+	}
+	if err := applyRegistryPolicy(cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil

@@ -20,6 +20,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/grafanaproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	registrystartup "github.com/alphabravocompany/astronomer-go/internal/registry/startup"
 	"github.com/alphabravocompany/astronomer-go/internal/server"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -139,6 +140,13 @@ func main() {
 	otelShutdown, err := observability.InitTracing(context.Background(), logger, tracingCfg)
 	if err != nil {
 		logger.Error("failed to init otel tracing", "error", err)
+		os.Exit(1)
+	}
+
+	// Layered registry policy: emit the egress-endpoints line and resolve
+	// every configured runtime reference (layer=local|fallback|fail_closed).
+	if _, err := registrystartup.Resolve(context.Background(), cfg, logger, "server"); err != nil {
+		logger.Error("invalid registry policy", "error", err)
 		os.Exit(1)
 	}
 

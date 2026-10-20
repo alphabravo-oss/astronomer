@@ -14,5 +14,6 @@ Technology Selection Guide. Earlier narrative decisions live under
 | [0006](0006-tailwind-v4-css-first.md) | Tailwind v4 CSS-first configuration | accepted |
 | [0007](0007-rest-to-connect-rpc.md) | REST/OpenAPI to Connect-RPC migration strategy | proposed |
 | [0008](0008-charlie-integration-retained.md) | Charlie integration is retained | accepted |
+| [0014](0014-airgap-layered-registry.md) | Air-gap layered registry: cluster-local zot, opt-in fallbacks, fail closed | accepted |
 
 The threat model lives next to these decisions: [`../threat-model.md`](../threat-model.md).

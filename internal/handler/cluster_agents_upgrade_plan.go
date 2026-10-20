@@ -239,7 +239,9 @@ func targetAgentImage(repository, tag string) string {
 	repository = strings.TrimSpace(repository)
 	tag = strings.TrimSpace(tag)
 	if repository == "" {
-		repository = "ghcr.io/alphabravo-oss/astronomer-go-agent"
+		// No public default: the agent image is explicit configuration
+		// (AGENT_IMAGE_REPOSITORY), re-hosted by the registry policy.
+		return ""
 	}
 	if tag == "" {
 		return repository

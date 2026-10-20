@@ -18,6 +18,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/egress"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -76,6 +77,15 @@ func runConnect(logger *slog.Logger) error {
 		logger.Error("failed to load config", "error", err)
 		return err
 	}
+	// Greppable startup line naming every out-of-cluster endpoint this agent
+	// contacts: the management server tunnel and its trace collector. Delivery
+	// sources (Helm/OCI/Git) arrive at runtime from signed assignments.
+	var endpoints egress.Set
+	endpoints.Add(cfg.ServerURL)
+	endpoints.Add(cfg.OTELExporterEndpoint)
+	endpoints.Dynamic("delivery_sources:signed_assignments")
+	endpoints.Dynamic("flux_distribution:system_release")
+	endpoints.Log(context.Background(), logger, "agent")
 	instanceID := cfg.AgentID
 	if instanceID == "" {
 		instanceID = cfg.ClusterID

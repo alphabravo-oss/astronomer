@@ -344,9 +344,6 @@ func normalizeRuntimeDependencies(deps RuntimeDependencies) RuntimeDependencies 
 	if deps.Log == nil {
 		deps.Log = slog.Default()
 	}
-	if deps.AgentImageRepo == "" {
-		deps.AgentImageRepo = "ghcr.io/alphabravo-oss/astronomer-go-agent"
-	}
 	if deps.AgentImageTag == "" {
 		deps.AgentImageTag = "latest"
 	}

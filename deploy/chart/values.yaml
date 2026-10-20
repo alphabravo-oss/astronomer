@@ -21,7 +21,8 @@ fullnameOverride: ""
 # mounted manifest before consuming any release artifact identity.
 release:
   manifest: ""
-  # Signed output of scripts/mirror-release.py. It is accepted only alongside
+  # Signed mirror mapping (formerly scripts/mirror-release.py; not yet ported
+  # to `astro airgap`). It is accepted only alongside
   # the exact release manifest whose digest it binds.
   mirrorMapping: ""
 
@@ -66,19 +67,23 @@ catalog:
 # Container images
 # =============================================================================
 image:
-  # T23 — air-gapped: a single `registry` value applied as a prefix to
-  # EVERY image in the chart unless an image-specific override is set.
-  # The full set of images that participate is enumerated by
-  # `make images.txt` (see scripts/extract-images.sh).
-  registry: ""           # Empty registry = use local images (k3d-imported).
+  # Cluster-local registry host (air-gap layer 1). When set, EVERY image the
+  # chart renders is re-hosted onto it: the online reference
+  # (<per-image registry>/<repository>) keeps its path and loses its host, e.g.
+  # ghcr.io/alphabravo-oss/astronomer-go-server -> <registry>/alphabravo-oss/astronomer-go-server,
+  # busybox -> <registry>/busybox. `astro airgap mirror --to <registry>` copies
+  # with exactly that mapping. registry.zot.enabled sets it to the in-cluster
+  # zot automatically. Empty (and zot disabled) is the ONLINE profile: images
+  # render with their own online default registries. `astro airgap plan`
+  # enumerates every participating image.
+  registry: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
   # Production sets this true and refuses every active image without an exact
   # sha256 digest. Development keeps tag-based local-image workflows available.
   requireDigest: false
-  # Per-image `registry` is the online default home (first-party = GHCR). The
-  # global `image.registry` above overrides ALL of these when set (air-gap:
-  # mirror everything into one private registry). Empty global => these defaults.
+  # Per-image `registry` is the online default home (first-party = GHCR). A
+  # cluster-local registry (image.registry or registry.zot) re-hosts them.
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
@@ -95,6 +100,67 @@ image:
     repository: astronomer-go-agent
     tag: "v2.0.1"
     digest: ""
+
+# =============================================================================
+# Air-gap layered registry (guide ch.09; internal/registry)
+# =============================================================================
+# Layer 1 is the cluster-local registry (image.registry, or the in-cluster zot
+# below); layer 2 is the opt-in fallback list; layer 3 fails closed. Nothing
+# ever falls through to a public default registry.
+registry:
+  # REGISTRY_FALLBACKS: host[:port][/prefix] entries consulted after a layer-1
+  # miss. Only digest-pinned references from the signed release/bundle are
+  # accepted from a fallback, and only when it serves that exact digest.
+  # Empty = fail closed at layer 1. Requires a cluster-local registry.
+  fallbacks: []
+  # REGISTRY_PLAIN_HTTP: extra registry hosts reached without TLS (the
+  # in-cluster zot is added automatically when it is the local registry).
+  plainHTTPHosts: []
+  zot:
+    # In-cluster OCI registry (project-zot). Enabling it makes it the
+    # cluster-local registry for every image and runtime reference unless
+    # image.registry names another one. Populate with `astro airgap mirror`.
+    enabled: false
+    # Host[:port] written into image references. Default:
+    # <fullname>-zot.<namespace>.svc.cluster.local:<service.port>. Node
+    # container runtimes must map this name to the registry (k3s/RKE2
+    # registries.yaml mirror -> http://127.0.0.1:<nodePort> or the ClusterIP);
+    # see docs/airgapped-install.md.
+    host: ""
+    # The registry cannot serve its own image: pre-load it on air-gapped
+    # nodes. It is re-hosted only onto an operator-supplied image.registry.
+    image:
+      registry: ghcr.io
+      repository: project-zot/zot
+      tag: v2.1.22
+      digest: "sha256:96cda11459ce6f8c60da3b03f03e9f67fd11b3ae2d82c4c04c92b3c608996080"
+    logLevel: info
+    service:
+      type: ClusterIP       # NodePort lets kubelets pull via 127.0.0.1:<nodePort>
+      port: 5000
+      nodePort: null
+      clusterIP: ""         # Optional fixed ClusterIP for node mirror config
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: ""
+    auth:
+      # Secret with key `htpasswd` (bcrypt). When set, anonymous clients get
+      # read-only access and pushes require a listed user; when empty the
+      # registry is anonymous read/write inside the NetworkPolicy boundary.
+      htpasswdSecret: ""
+    networkPolicy:
+      # Sources allowed to pull besides in-namespace pods: kubelet pulls come
+      # from node addresses. Narrow to the node CIDRs in production.
+      pullCIDRs:
+        - 0.0.0.0/0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
 
 # =============================================================================
 # Utility images

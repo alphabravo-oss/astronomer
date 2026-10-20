@@ -4,8 +4,6 @@ import (
 	"errors"
 )
 
-const defaultManagementBackupImage = "ghcr.io/alphabravocompany/pgdump-s3:16-awscli"
-
 var (
 	errManagementBackupReconcileActive = errors.New("management backup reconciliation is active")
 	errManagementBackupStaleGeneration = errors.New("management backup generation is stale")

@@ -87,19 +87,77 @@ ServiceAccount name to use.
 {{- end }}
 
 {{/*
+Cluster-local registry host (air-gap layer 1). image.registry wins; else the
+in-cluster zot Service when registry.zot.enabled; else empty (online profile:
+every image renders with its own online default registry).
+*/}}
+{{- define "astronomer.localRegistry" -}}
+{{- if .Values.image.registry -}}
+{{- .Values.image.registry -}}
+{{- else if and .Values.registry .Values.registry.zot .Values.registry.zot.enabled -}}
+{{- include "astronomer.zotHost" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Host[:port] image references use for the in-cluster zot registry. Pods reach it
+through cluster DNS; node container runtimes need a mirror entry for the same
+name (docs/airgapped-install.md).
+*/}}
+{{- define "astronomer.zotHost" -}}
+{{- .Values.registry.zot.host | default (printf "%s-zot.%s.svc.cluster.local:%d" (include "astronomer.fullname" .) .Release.Namespace (int .Values.registry.zot.service.port)) -}}
+{{- end }}
+
+{{/*
+Comma-separated registry hosts reached without TLS: the in-cluster zot when it
+is the local registry, plus registry.plainHTTPHosts.
+*/}}
+{{- define "astronomer.registryPlainHTTP" -}}
+{{- $hosts := list -}}
+{{- if and (not .Values.image.registry) .Values.registry.zot.enabled -}}
+{{- $hosts = append $hosts (include "astronomer.zotHost" .) -}}
+{{- end -}}
+{{- range (.Values.registry.plainHTTPHosts | default list) -}}
+{{- $hosts = append $hosts . -}}
+{{- end -}}
+{{- join "," $hosts -}}
+{{- end }}
+
+{{/*
+Re-host one online image reference onto the cluster-local registry. This is
+the chart twin of internal/registry.Rehost: the first path segment is the
+registry host when it contains "." or ":" (or is "localhost"), otherwise the
+reference is a Docker Hub short name; Docker Hub "library/" is dropped; tag and
+digest are preserved. Pass dict { ref: "<online ref>", local: "<host>" }.
+*/}}
+{{- define "astronomer.rehost" -}}
+{{- $ref := .ref -}}
+{{- if .local -}}
+{{- $parts := splitn "/" 2 $ref -}}
+{{- $path := $ref -}}
+{{- if and (ne $parts._1 "") (or (contains "." $parts._0) (contains ":" $parts._0) (eq $parts._0 "localhost")) -}}
+{{- $path = $parts._1 -}}
+{{- end -}}
+{{- $path = trimPrefix "library/" $path -}}
+{{- printf "%s/%s" .local $path -}}
+{{- else -}}
+{{- $ref -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Image reference helper for astronomer-built images. Pass dict
   { context: $, component: "server"|"worker"|"agent" }.
-Honours .Values.image.registry as an optional global prefix.
+The online reference is <image.X.registry>/<repository>; with a cluster-local
+registry (image.registry or registry.zot.enabled) it is re-hosted onto it.
 */}}
 {{- define "astronomer.image" -}}
 {{- $img := index .context.Values.image .component -}}
-{{- /* Global image.registry (air-gap mirror) wins; else this image's own
-       registry default (GHCR for first-party); else bare (local dev). */ -}}
-{{- $reg := .context.Values.image.registry | default $img.registry | default "" -}}
 {{- $name := $img.repository -}}
-{{- if $reg -}}
-{{- $name = printf "%s/%s" $reg $img.repository -}}
+{{- if $img.registry -}}
+{{- $name = printf "%s/%s" $img.registry $img.repository -}}
 {{- end -}}
+{{- $name = include "astronomer.rehost" (dict "ref" $name "local" (include "astronomer.localRegistry" .context)) -}}
 {{- if $img.digest -}}
 {{ printf "%s@%s" $name $img.digest }}
 {{- else -}}
@@ -114,11 +172,11 @@ human-readable target version used by fleet upgrade status.
 */}}
 {{- define "astronomer.agentImageRepository" -}}
 {{- $img := .Values.image.agent -}}
-{{- $reg := .Values.image.registry | default $img.registry | default "" -}}
 {{- $name := $img.repository -}}
-{{- if $reg -}}
-{{- $name = printf "%s/%s" $reg $img.repository -}}
+{{- if $img.registry -}}
+{{- $name = printf "%s/%s" $img.registry $img.repository -}}
 {{- end -}}
+{{- $name = include "astronomer.rehost" (dict "ref" $name "local" (include "astronomer.localRegistry" .)) -}}
 {{- if $img.digest -}}
 {{ printf "%s@%s" $name $img.digest }}
 {{- else -}}
@@ -127,26 +185,25 @@ human-readable target version used by fleet upgrade status.
 {{- end }}
 
 {{/*
-Third-party image helper. T23 FEATURES-051126 — air-gapped installs
-mirror runtime images (postgres, redis, kubectl, busybox, DR helper,
-frontend) into the operator's internal registry. Each image
-config supports an optional .registry override; when unset, falls back
-to .Values.image.registry; when that's also unset, the image is left
-unprefixed. Pass dict { repository: $repo, tag: $tag, digest: $digest,
-registry: $reg, fallback: $.Values.image.registry }. digest is optional.
-
-Usage:
-  {{ include "astronomer.thirdPartyImage" (dict
-       "repository" .Values.postgres.image.repository
-       "tag"        .Values.postgres.image.tag
-       "registry"   .Values.postgres.image.registry
-       "fallback"   $.Values.image.registry) }}
+Third-party / auxiliary image helper. Pass dict
+  { repository, tag, digest (optional), registry (per-image override),
+    fallback: (include "astronomer.localRegistry" $),
+    online (optional): online default prefix, e.g. "ghcr.io/alphabravo-oss" }.
+A per-image .registry is an explicit operator prefix and is used verbatim.
+Otherwise the online reference (<online>/<repository>, or the repository as
+written, which may embed its registry host) is re-hosted onto the cluster-local
+registry when one is configured.
 */}}
 {{- define "astronomer.thirdPartyImage" -}}
-{{- $reg := .registry | default .fallback | default "" -}}
 {{- $name := .repository -}}
-{{- if $reg -}}
-{{- $name = printf "%s/%s" $reg .repository -}}
+{{- if .registry -}}
+{{- $name = printf "%s/%s" .registry .repository -}}
+{{- else -}}
+{{- $online := get . "online" | default "" -}}
+{{- if $online -}}
+{{- $name = printf "%s/%s" $online .repository -}}
+{{- end -}}
+{{- $name = include "astronomer.rehost" (dict "ref" $name "local" (.fallback | default "")) -}}
 {{- end -}}
 {{- $digest := get . "digest" | default "" -}}
 {{- if $digest -}}

@@ -804,9 +804,9 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 		"frontend.image.tag=v-frontend",
 	))
 
-	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/astronomer-go-server:v-server", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "registry.example.com/platform/astronomer-go-worker:v-worker", "Always")
-	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/astronomer-frontend:v-frontend", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-server", "containers", "server", "registry.example.com/platform/alphabravo-oss/astronomer-go-server:v-server", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-worker", "containers", "worker", "registry.example.com/platform/alphabravo-oss/astronomer-go-worker:v-worker", "Always")
+	assertContainerImage(t, docs, "Deployment", "astronomer-frontend", "containers", "frontend", "registry.example.com/platform/alphabravo-oss/astronomer-frontend:v-frontend", "Always")
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-postgres", "containers", "postgres", "registry.example.com/platform/postgres:16-alpine", "Always")
 	// The bundled cache engine is Valkey (BSD-licensed Redis fork); the resource
 	// stays named "redis" but the image is valkey/valkey (see values.yaml).

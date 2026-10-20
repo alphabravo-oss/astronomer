@@ -85,6 +85,12 @@ data:
   # explicit config.agentImage* still overrides.
   AGENT_IMAGE_REPOSITORY: {{ .Values.config.agentImageRepository | default (include "astronomer.agentImageRepository" .) | quote }}
   AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | default .Values.image.agent.tag | quote }}
+  # Air-gap layered registry policy (internal/registry): layer 1 is the
+  # cluster-local registry (image.registry, else the in-cluster zot), layer 2
+  # the opt-in registry.fallbacks list (empty = fail closed). Unset = online.
+  REGISTRY_LOCAL: {{ include "astronomer.localRegistry" . | quote }}
+  REGISTRY_FALLBACKS: {{ join "," (.Values.registry.fallbacks | default list) | quote }}
+  REGISTRY_PLAIN_HTTP: {{ include "astronomer.registryPlainHTTP" . | quote }}
   # Flux-native delivery v2 is unconditional in v1. These are bounded runtime
   # controls and immutable artifact references, never inline credentials.
   DISTRIBUTION_DESTINATION_POLICY: {{ toJson .Values.delivery.distribution.destinationPolicy | quote }}
@@ -178,7 +184,7 @@ data:
   KUBECTL_SHELL_ENABLED: {{ .enabled | quote }}
   # Same astronomer-shell image as preflight, rendered registry-aware (GHCR
   # online, mirror in air-gap). An explicit kubectlShell.image overrides.
-  KUBECTL_SHELL_IMAGE: {{ .image | default (include "astronomer.thirdPartyImage" (dict "repository" $.Values.preflight.image.repository "tag" $.Values.preflight.image.tag "digest" $.Values.preflight.image.digest "registry" $.Values.preflight.image.registry "fallback" ($.Values.image.registry | default "ghcr.io/alphabravo-oss"))) | quote }}
+  KUBECTL_SHELL_IMAGE: {{ .image | default (include "astronomer.thirdPartyImage" (dict "repository" $.Values.preflight.image.repository "tag" $.Values.preflight.image.tag "digest" $.Values.preflight.image.digest "registry" $.Values.preflight.image.registry "fallback" (include "astronomer.localRegistry" $) "online" "ghcr.io/alphabravo-oss")) | quote }}
   {{- if .idleTimeoutMinutes }}
   KUBECTL_SHELL_IDLE_TIMEOUT_MINUTES: {{ .idleTimeoutMinutes | quote }}
   {{- end }}
@@ -237,5 +243,5 @@ data:
   # the DB; Helm S3 values are no longer required to turn dumps on.
   MANAGEMENT_BACKUP_ENABLED: {{ .Values.managementBackup.enabled | quote }}
   CRD_ENABLED: {{ .Values.crds.enabled | quote }}
-  MANAGEMENT_BACKUP_IMAGE: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementBackup.image.repository "tag" .Values.managementBackup.image.tag "digest" .Values.managementBackup.image.digest "registry" .Values.managementBackup.image.registry "fallback" .Values.image.registry) | quote }}
+  MANAGEMENT_BACKUP_IMAGE: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementBackup.image.repository "tag" .Values.managementBackup.image.tag "digest" .Values.managementBackup.image.digest "registry" .Values.managementBackup.image.registry "fallback" (include "astronomer.localRegistry" $)) | quote }}
   MANAGEMENT_BACKUP_SERVICE_ACCOUNT: {{ include "astronomer.serviceAccountName" . | quote }}
