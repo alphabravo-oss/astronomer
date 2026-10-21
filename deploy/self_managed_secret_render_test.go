@@ -160,7 +160,8 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 	}
 	for _, canonicalItem := range []string{
 		`find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
-		`cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/`,
+		`for key in /var/run/astronomer-keys-source/*; do`,
+		`if [ -s "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/; fi`,
 		`/var/run/astronomer-keys-source/SIGNING_KEY" /var/run/astronomer-keys/SECRET_KEY`,
 		`/var/run/astronomer-keys-source/AGE_KEYRING" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY`,
 	} {
@@ -169,7 +170,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		}
 	}
 	cleanup := strings.Index(rendered, `find /var/run/astronomer-keys -mindepth 1`)
-	copyAll := strings.Index(rendered, `cp -aL /var/run/astronomer-keys-source/.`)
+	copyAll := strings.Index(rendered, `for key in /var/run/astronomer-keys-source/*; do`)
 	if cleanup < 0 || copyAll < 0 || cleanup > copyAll {
 		t.Fatal("backup key staging is not cleaned before the complete Secret copy")
 	}
@@ -198,7 +199,8 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 	overrideRendered := overrideStdout.String()
 	for _, want := range []string{
 		`secretName: "independent-key-bundle"`,
-		`cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/`,
+		`for key in /var/run/astronomer-keys-source/*; do`,
+		`if [ -s "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/; fi`,
 		`cp -L /var/run/astronomer-keys-source/SECRET_KEY /var/run/astronomer-keys/SECRET_KEY`,
 		`cp -L /var/run/astronomer-keys-source/ASTRONOMER_ENCRYPTION_KEY /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY`,
 	} {
