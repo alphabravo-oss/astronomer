@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
 # Stage 1: build the SPA (Node 24 LTS, matching .node-version and CI).
-FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS build
+FROM node:26.12.0-alpine@sha256:6f08a523443ddedf52941874c203475b0ad503e859ad70cb26ab8be9a517dbd5 AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
