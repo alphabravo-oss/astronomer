@@ -181,7 +181,12 @@ func recordMandatoryRow(ctx context.Context, q Querier, event Event, row sqlc.Cr
 	if q == nil {
 		return ErrMandatoryPersistenceUnavailable
 	}
-	if err := q.CreateAuditLogV1(ctx, row); err != nil {
+	// Evidence already selected for persistence must survive a disconnected
+	// client. Bound the independent write so shutdown/database failure cannot
+	// leave request goroutines waiting indefinitely.
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := q.CreateAuditLogV1(writeCtx, row); err != nil {
 		return err
 	}
 	emitRecordedLog(row)

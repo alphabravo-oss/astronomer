@@ -218,18 +218,25 @@ spec:
 
         # ── Database pool exhaustion ────────────────────────────────────
         - alert: AstronomerDBPoolExhausted
-          expr: rate(astronomer_db_pool_empty_acquire_count_total[5m]) > 0
+          expr: |
+            (rate(astronomer_db_pool_empty_acquire_count_total[5m]) > 0)
+            and
+            (
+              rate(astronomer_db_pool_acquire_duration_seconds_total[5m])
+              / clamp_min(rate(astronomer_db_pool_acquire_count_total[5m]), 0.001)
+              > 0.05
+            )
           for: 5m
           labels:
             severity: warning
             component: server
           annotations:
-            summary: "Astronomer DB pool wait events firing"
+            summary: "Astronomer DB pool acquisition latency is sustained"
             description: |
-              Connection acquisitions are blocking on an empty pool.
-              Either bump database.maxConns (chart values), or hunt the
-              long-held conn (look for queries that hold an advisory lock,
-              especially around the leader election in periodic tasks).
+              Mean connection acquisition latency exceeds 50ms for five
+              minutes while requests are waiting for an empty pool. Inspect
+              query fan-out, long transactions and pgx pool statistics before
+              changing the pool size; brief burst queuing alone is healthy.
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/db-pool-exhausted.md
 
         - alert: AstronomerDBDeadlocks

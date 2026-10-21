@@ -23,7 +23,7 @@ const maximumManifestBytes = 1 << 20
 var (
 	digestPattern    = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 	referencePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$`)
-	versionPattern   = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
+	versionPattern   = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$`)
 	mappingIDPattern = regexp.MustCompile(`^[a-f0-9]{16}$`)
 )
 

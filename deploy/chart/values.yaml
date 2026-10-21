@@ -20,6 +20,8 @@ fullnameOverride: ""
 # allowed only for source-tree development. Server and worker validate the
 # mounted manifest before consuming any release artifact identity.
 release:
+  # Apply the release-values.yaml asset after installation values. It carries
+  # the signed manifest binding this exact chart and the built-in bundles.
   manifest: ""
   # Signed mirror mapping (formerly scripts/mirror-release.py; not yet ported
   # to `astro airgap`). It is accepted only alongside
@@ -632,7 +634,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 84
+    targetVersion: 85
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534

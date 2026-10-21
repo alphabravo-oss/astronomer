@@ -1,12 +1,12 @@
 # Runbook — Postgres connection pool exhausted
 
 **Alert**: `AstronomerDBPoolExhausted`
-**Severity**: warning (any acquire-on-empty events over 5m)
+**Severity**: warning (mean acquisition latency above 50ms for five minutes, with empty-pool waits)
 **Component**: `internal/db`, pgxpool
 
 ## Symptoms
 
-- PrometheusRule expr: `rate(astronomer_db_pool_empty_acquire_count_total[5m]) > 0` for 5m
+- Empty-pool waits occur and `rate(astronomer_db_pool_acquire_duration_seconds_total[5m]) / rate(astronomer_db_pool_acquire_count_total[5m]) > 0.05` for 5m. A brief queued acquisition alone does not indicate exhaustion.
 - HTTP requests slow / time out at the chi handler boundary
 - `astronomer_db_query_duration_seconds` p99 climbs disproportionately
   to query plan changes (the gap is wait-for-conn, not query time)
@@ -21,7 +21,7 @@
    astronomer_db_pool_total_connections - astronomer_db_pool_idle_connections
    rate(astronomer_db_pool_empty_acquire_count_total[5m])
    ```
-   - All conns held with active queries → real load; bump `postgres.pool.maxConns` (chart) and roll. For local qualification with bundled PostgreSQL, also keep `postgres.bundled.maxConnections` above the combined server and worker pool maxima. Production must use external managed/HA PostgreSQL.
+   - All conns held with active queries → measure query fan-out and hold time first; size `postgres.pool.maxConns` (chart) from the observed concurrency and latency budget. For local qualification with bundled PostgreSQL, also keep `postgres.bundled.maxConnections` above the combined server and worker pool maxima. Production must use external managed/HA PostgreSQL.
    - Active conns << maxConns but acquires still blocking → leaked
      conns (rare; bug); jump to step 3.
 
@@ -52,8 +52,7 @@ postgres:
     maxConns: 50          # server default 25; worker derives concurrency + headroom
     minConns: 10          # default 5
 ```
-Then run `helm upgrade` (or reconcile the owning Flux object). Watch the empty-acquire rate go
-to zero before declaring done.
+Then run `helm upgrade` (or reconcile the owning Flux object). Verify mean acquisition latency returns below 50ms and cancelled acquisitions stop.
 
 ### Kill stuck Postgres connections (immediate)
 
@@ -75,7 +74,7 @@ Use this only if (a) you can't identify a single stuck conn and
 
 ## Verify
 
-- `rate(astronomer_db_pool_empty_acquire_count_total[5m])` returns to 0
+- Mean connection acquisition latency remains below 50ms; brief empty-acquire events may occur during healthy bursts
 - `/readyz` clears the database-saturation 503
 - `AstronomerDBPoolExhausted` alert clears
 

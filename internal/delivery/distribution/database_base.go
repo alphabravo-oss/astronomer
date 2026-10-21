@@ -64,7 +64,7 @@ func databaseBaseScanner(catalog builtinbundles.Catalog, expected DatabaseScanne
 	var selected builtinbundles.Component
 	found, enabled := false, false
 	for _, component := range catalog.Components {
-		if component.Source.Chart != "trivy-operator" {
+		if component.Source.ChartName() != "trivy-operator" {
 			continue
 		}
 		if found {

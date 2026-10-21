@@ -38,7 +38,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
 COPY internal/dexconfig ./internal/dexconfig
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
+RUN CGO_ENABLED=0 go build -p 4 -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
 # kubectl is compiled from the upstream k8s.io/kubectl module (version pinned in
 # tools/imagebins/go.mod, main copied verbatim from k8s.io/kubernetes) with the
@@ -58,7 +58,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     && ldv="-X k8s.io/client-go/pkg/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION}" \
     && ldv="${ldv} -X k8s.io/client-go/pkg/version.gitMajor=1 -X k8s.io/client-go/pkg/version.gitMinor=${minor}" \
     && ldv="${ldv} -X k8s.io/component-base/version.gitMajor=1 -X k8s.io/component-base/version.gitMinor=${minor}" \
-    && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w ${ldv}" -o /kubectl ./kubectl \
+    && CGO_ENABLED=0 go build -p 4 -trimpath -ldflags "-s -w ${ldv}" -o /kubectl ./kubectl \
     && /kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
 
 FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS base

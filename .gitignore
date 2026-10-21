@@ -50,3 +50,6 @@ deploy/chart/charts/*
 /test-results/
 /frontend/e2e-results/
 /frontend/playwright/.auth/
+
+# Release producer output (OCI layouts, archives and generated manifests).
+/dist/

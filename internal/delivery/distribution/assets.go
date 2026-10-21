@@ -133,7 +133,7 @@ func ValidateAssetClosure(version int, assets []Asset, members map[string]string
 func RequiredBuiltinCapabilities(catalog builtinbundles.Catalog) ([]string, error) {
 	required := false
 	for _, component := range catalog.Components {
-		if component.Source.Chart != "trivy-operator" {
+		if component.Source.ChartName() != "trivy-operator" {
 			continue
 		}
 		enabled, _, err := ScannerValues(component.Values)
@@ -227,7 +227,7 @@ func validateScannerDatabaseBindings(catalog builtinbundles.Catalog, assets []As
 		subjects[asset.ID] = asset.ArtifactSubject
 	}
 	for _, component := range catalog.Components {
-		if component.Source.Chart != "trivy-operator" {
+		if component.Source.ChartName() != "trivy-operator" {
 			continue
 		}
 		enabled, trivy, err := ScannerValues(component.Values)

@@ -101,6 +101,10 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(req.Name, "astro-cli") && (req.ExpiresInDays <= 0 || req.ExpiresInDays > 30) {
+		req.ExpiresInDays = 30
+	}
+
 	plaintext, tokenHash, prefix, err := generateAPIToken()
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.TokenGenerationError, "Failed to generate token")

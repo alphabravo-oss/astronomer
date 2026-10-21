@@ -101,9 +101,10 @@ type rbacCacheEntry struct {
 // commit, so the next request sees the new bindings without waiting for the
 // TTL to expire.
 type RBACCache struct {
-	mu       sync.RWMutex
-	ttl      time.Duration
-	capacity int
+	generation atomic.Uint64
+	mu         sync.RWMutex
+	ttl        time.Duration
+	capacity   int
 	// maxBindings bounds the total number of bindings across all entries (0 =
 	// unbounded). bindingCount tracks the current running total, maintained
 	// under c.mu on every insert/replace/evict.
@@ -217,12 +218,15 @@ func (c *RBACCache) Get(userID string) ([]rbac.RoleBinding, bool) {
 
 // Put stores `bindings` for userID with a fresh TTL window. Safe to call
 // concurrently. Evicts the oldest entry when the cache is over capacity.
-func (c *RBACCache) Put(userID string, bindings []rbac.RoleBinding) {
+func (c *RBACCache) Put(userID string, bindings []rbac.RoleBinding, expectedGeneration ...uint64) {
 	if c == nil || userID == "" {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if len(expectedGeneration) > 0 && c.generation.Load() != expectedGeneration[0] {
+		return
+	}
 	if c.coordinator != nil && !c.coordinator.Healthy() {
 		return
 	}
@@ -292,6 +296,7 @@ func (c *RBACCache) InvalidateRBACUserLocal(userID string) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.generation.Add(1)
 	if entry, ok := c.entries[userID]; ok {
 		c.removeLocked(entry)
 	}
@@ -320,6 +325,7 @@ func (c *RBACCache) InvalidateRBACAllLocal() {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.generation.Add(1)
 	c.entries = make(map[string]*rbacCacheEntry, c.capacity)
 	c.lru.Init()
 	c.bindingCount = 0

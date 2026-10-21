@@ -16,6 +16,7 @@ func TestApplicationImageInventoryByRelease(t *testing.T) {
 		{name: "current", version: "v1.2.0", includeDR: true, wantValid: true},
 		{name: "patch", version: "v1.2.1", includeDR: true, wantValid: true},
 		{name: "future major", version: "v2.0.0", includeDR: true, wantValid: true},
+		{name: "release candidate", version: "v2.1.0-rc.12", includeDR: true, wantValid: true},
 		{name: "missing DR", version: "v1.2.0"},
 		{name: "unexpected legacy DR", version: "v1.1.0", includeDR: true},
 		{name: "duplicate", version: "v1.2.0", includeDR: true, replaceWorker: "server"},

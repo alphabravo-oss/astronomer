@@ -36,6 +36,7 @@ GOTESTSUM           ?= go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION)
 SQLC                ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 OAPI_CODEGEN        ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 TEST_RESULTS_DIR    ?= test-results
+GO_TEST_PARALLEL   ?= 4
 # envtest (kube-apiserver + etcd) for the operator integration tests.
 SETUP_ENVTEST       ?= go run sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.25.2
 ENVTEST_K8S_VERSION ?= 1.37.0
@@ -92,7 +93,7 @@ test: ## Unit tests (no Docker) with race detector, JUnit XML in test-results/
 test-integration: ## Unit + integration tests (`integration` build tag): testcontainers Postgres 17 + Redis, pgtestdb clone per test
 	@mkdir -p $(TEST_RESULTS_DIR)
 	KUBEBUILDER_ASSETS="$$($(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path)" \
-	  $(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration -p 8 ./...
+	  $(GOTESTSUM) --format pkgname --junitfile $(TEST_RESULTS_DIR)/integration.xml -- -race -count=1 -tags integration -p $(GO_TEST_PARALLEL) ./...
 
 envtest: ## Download the envtest kube-apiserver/etcd binaries and print KUBEBUILDER_ASSETS
 	@echo "KUBEBUILDER_ASSETS=$$($(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path)"

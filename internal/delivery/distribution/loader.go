@@ -187,6 +187,10 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 				component.Source.OriginalURL = component.Source.URL
 				component.Source.OriginalArchiveDigest = subject.ArchiveDigest
 				component.Source.URL = "oci://" + subject.Repository
+				if subject.RepositoryName != "" {
+					component.Source.OriginalChart = component.Source.Chart
+					component.Source.Chart = subject.RepositoryName
+				}
 				component.Source.Kind = "helm_oci"
 				for index, capability := range component.Requirements.Capabilities {
 					if capability == "delivery.source.helm_http" {

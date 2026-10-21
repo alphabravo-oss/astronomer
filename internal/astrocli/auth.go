@@ -37,6 +37,7 @@ func IssuePasswordAPIToken(
 	password string,
 	tokenName string,
 	expiresInDays int,
+	previousTokenIDs ...string,
 ) (*PasswordAPIToken, error) {
 	base, baseURL, err := normalizeAuthServer(server)
 	if err != nil {
@@ -93,6 +94,31 @@ func IssuePasswordAPIToken(
 	}
 	if csrfToken == "" {
 		return nil, fmt.Errorf("login established no CSRF-bound browser session; complete any required password or MFA flow in the web UI first")
+	}
+
+	// Password authentication has succeeded. Rotate the credential this
+	// installation owns before quota evaluation, using the cookie session
+	// rather than relying on an old (possibly expired) bearer credential.
+	for _, id := range previousTokenIDs {
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, base+"/api/v1/auth/tokens/"+url.PathEscape(id)+"/", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("X-CSRF-Token", csrfToken)
+		response, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("rotate previous CLI token: %w", err)
+		}
+		if response.StatusCode == http.StatusNotFound {
+			_ = response.Body.Close()
+			continue
+		}
+		if err := decodeAuthResponse(response, http.StatusNoContent, nil); err != nil {
+			return nil, fmt.Errorf("rotate previous CLI token: %w", err)
+		}
 	}
 
 	tokenBody, err := json.Marshal(map[string]any{

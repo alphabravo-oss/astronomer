@@ -15,7 +15,7 @@ import (
 const countActiveTokensForUser = `-- name: CountActiveTokensForUser :one
 SELECT count(*)::bigint AS count
 FROM api_tokens
-WHERE user_id = $1 AND is_revoked = false
+WHERE user_id = $1 AND is_revoked = false AND (expires_at IS NULL OR expires_at > now())
 `
 
 func (q *Queries) CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
@@ -431,7 +431,7 @@ SELECT
     p.max_tokens_per_user,
     p.max_streams_per_user,
     (SELECT count(DISTINCT project_id) FROM project_role_bindings WHERE user_id = u.id)::bigint AS projects_for_user,
-    (SELECT count(*) FROM api_tokens WHERE user_id = u.id AND is_revoked = false)::bigint        AS tokens_for_user
+    (SELECT count(*) FROM api_tokens WHERE user_id = u.id AND is_revoked = false AND (expires_at IS NULL OR expires_at > now()))::bigint        AS tokens_for_user
 FROM users u
 JOIN quota_plans p ON p.name = u.quota_plan
 WHERE u.is_active = true

@@ -110,7 +110,7 @@ func ValidateDatabaseScanImageProfile(catalog builtinbundles.Catalog, bom BOM, m
 	}
 	selectedCount := 0
 	for _, component := range catalog.Components {
-		if component.Source.Chart != "trivy-operator" {
+		if component.Source.ChartName() != "trivy-operator" {
 			continue
 		}
 		selectedCount++

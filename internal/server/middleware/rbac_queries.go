@@ -3,6 +3,10 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -32,6 +36,7 @@ type userBindingsQuerier interface {
 type SQLCRBACQuerier struct {
 	queries userBindingsQuerier
 	cache   *RBACCache
+	loads   singleflight.Group
 }
 
 // NewSQLCRBACQuerier builds the querier with a default cache (15s TTL,
@@ -113,6 +118,34 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 		}
 	}
 
+	// Coalesce cold/expired binding loads across a browser's parallel API
+	// requests. Cancellation of one navigation must not cancel the shared load.
+	generation := uint64(0)
+	if q.cache != nil {
+		generation = q.cache.generation.Load()
+	}
+	result := q.loads.DoChan(userID+":"+strconv.FormatUint(generation, 10), func() (any, error) {
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if q.cache != nil {
+			if cached, ok := q.cache.Get(userID); ok {
+				return cached, nil
+			}
+		}
+		return q.loadUserBindings(loadCtx, userID, generation)
+	})
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case loaded := <-result:
+		if loaded.Err != nil {
+			return nil, loaded.Err
+		}
+		return loaded.Val.([]rbac.RoleBinding), nil
+	}
+}
+
+func (q *SQLCRBACQuerier) loadUserBindings(ctx context.Context, userID string, generation uint64) ([]rbac.RoleBinding, error) {
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, err
@@ -124,7 +157,7 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 	if user, err := q.queries.GetUserByID(ctx, parsedUserID); err == nil && user.IsSuperuser {
 		bindings := []rbac.RoleBinding{{UserID: userID, IsSuperuser: true}}
 		if q.cache != nil {
-			q.cache.Put(userID, bindings)
+			q.cache.Put(userID, bindings, generation)
 		}
 		return bindings, nil
 	}
@@ -179,7 +212,7 @@ func (q *SQLCRBACQuerier) GetUserBindings(ctx context.Context, userID string) ([
 	results = expanded
 
 	if q.cache != nil {
-		q.cache.Put(userID, results)
+		q.cache.Put(userID, results, generation)
 	}
 	return results, nil
 }

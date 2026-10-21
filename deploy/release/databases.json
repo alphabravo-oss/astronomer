@@ -1,0 +1,4 @@
+{
+  "trivy-database": "ghcr.io/aquasecurity/trivy-db@sha256:d81ced6da55a1d5cfc90dd27edcf7634ae89bc8905f1f37ae17de5213e8223f1",
+  "trivy-java-database": "ghcr.io/aquasecurity/trivy-java-db@sha256:405c0be0fd334112806d50883df3299fe1769508eb45399c2cd8999229f345d8"
+}
