@@ -3,11 +3,11 @@ module github.com/alphabravocompany/astronomer-go
 go 1.27.3
 
 require (
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.21.1
 	filippo.io/age v1.3.2
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/ProtonMail/go-crypto v1.5.2
-	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/coder/websocket v1.8.15
 	github.com/distribution/reference v0.6.0
