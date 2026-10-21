@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.1.1 - 2026-10-21
+
+- Permit credential-stripped public CDN redirects when fetching release distributions in unrestricted installations. Restricted destination policies remain closed.
+- Read mounted delivery trust from the Secret projection's current data directory, preserving strict rejection of symlinked trust files and detecting concurrent rotation.
+
+
 ## 2.1.0 - 2026-10-21
 
 Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.

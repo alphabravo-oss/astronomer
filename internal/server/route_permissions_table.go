@@ -500,9 +500,9 @@ var routePermissions = map[string]Permission{
 	"GET /api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/":                 {Public: true}, // unauthenticated
 	"GET /health":  {Public: true}, // unauthenticated
 	"GET /health/": {Public: true}, // unauthenticated
-	"GET /helm-repo/astronomer-v2/astronomer-2.1.0.tgz":               {Public: true}, // unauthenticated
+	"GET /helm-repo/astronomer-v2/astronomer-2.1.1.tgz":               {Public: true}, // unauthenticated
 	"GET /helm-repo/astronomer-v2/index.yaml":                         {Public: true}, // unauthenticated
-	"GET /helm-repo/astronomer/astronomer-2.1.0.tgz":                  {Public: true}, // unauthenticated
+	"GET /helm-repo/astronomer/astronomer-2.1.1.tgz":                  {Public: true}, // unauthenticated
 	"GET /helm-repo/astronomer/index.yaml":                            {Public: true}, // unauthenticated
 	"GET /internal/tunnel/k8s/{cluster_id}/capabilities/{capability}": {Public: true}, // unauthenticated
 	"GET /readyz":                              {Public: true}, // unauthenticated

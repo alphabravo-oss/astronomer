@@ -44,6 +44,19 @@ func TestChartManagedDeliveryTrustedRootIsTheDefault(t *testing.T) {
 		t.Fatalf("chart-managed trusted_root.json does not carry the pinned root (err=%v)", err)
 	}
 	for _, deployment := range []string{"astronomer-server", "astronomer-worker"} {
+		containers := podSpecFor(findRenderedDoc(t, docs, "Deployment", deployment))["containers"].([]any)
+		found := false
+		for _, raw := range containers {
+			for _, item := range raw.(map[string]any)["env"].([]any) {
+				env := item.(map[string]any)
+				if env["name"] == "DELIVERY_SOURCE_TRUST_DIRECTORY" {
+					found = env["value"] == "/etc/astronomer/delivery-trust/..data"
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s does not read regular files from the projected Secret data directory", deployment)
+		}
 		if got := deliveryTrustVolume(t, docs, deployment); got != "astronomer-delivery-trust" {
 			t.Errorf("%s mounts delivery trust %q, want the chart-managed Secret", deployment, got)
 		}
