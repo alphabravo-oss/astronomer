@@ -32,7 +32,9 @@ func newDistributionLoader(cfg *config.Config, ca []byte) (*distribution.Loader,
 		}
 		trust.RootCAs = roots
 	}
-	client, err := httpclient.NewDestinationClient(policy, httpclient.DestinationOptions{TLSConfig: trust, MaxResponseBytes: distribution.MaximumArchiveBytes})
+	// Public registry blobs redirect to credential-free CDNs. Restricted
+	// installations retain their configured origin boundary.
+	client, err := httpclient.NewDestinationClient(policy, httpclient.DestinationOptions{TLSConfig: trust, MaxResponseBytes: distribution.MaximumArchiveBytes, AllowPublicCrossOriginRedirects: !policy.Restricted})
 	if err != nil {
 		return nil, err
 	}

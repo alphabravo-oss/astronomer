@@ -109,8 +109,9 @@ spec:
                   name: {{ include "astronomer.secretsSecretName" . }}
                   key: {{ .Values.secrets.internalPSKPreviousKey | quote }}
                   optional: true
+            # Secret key entries are symlinks; the verifier opens regular files.
             - name: DELIVERY_SOURCE_TRUST_DIRECTORY
-              value: /etc/astronomer/delivery-trust
+              value: /etc/astronomer/delivery-trust/..data
             {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
             - name: DELIVERY_SOURCE_CA_FILE
               value: /var/run/secrets/astronomer/delivery-source-ca/ca.pem
