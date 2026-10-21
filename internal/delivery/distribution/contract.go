@@ -138,10 +138,13 @@ func (b BOM) validate(release, catalogDigest string) error {
 // ChartSubject binds the archive bytes to the vendor-signed OCI subject used
 // by Flux chartRef. A mutable HTTP chart version cannot qualify this contract.
 type ChartSubject struct {
-	Component     string `json:"component"`
-	Repository    string `json:"repository"`
-	Digest        string `json:"digest"`
-	ArchiveDigest string `json:"archive_digest"`
+	// RepositoryName is the OCI lookup name when several chart subjects share
+	// one registry package. The catalog continues to bind the original archive.
+	RepositoryName string `json:"repository_name,omitempty"`
+	Component      string `json:"component"`
+	Repository     string `json:"repository"`
+	Digest         string `json:"digest"`
+	ArchiveDigest  string `json:"archive_digest"`
 }
 
 func categoryLimit(category string) int64 {

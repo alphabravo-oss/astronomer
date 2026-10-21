@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -85,9 +84,13 @@ the CLI.`,
 			previousServer := cfg.ServerURL
 			previousToken := cfg.AccessToken
 			previousTokenID := cfg.APITokenID
-			tokenName := "astro-cli-" + time.Now().UTC().Format("20060102T150405Z")
+			tokenName := "astro-cli-session"
+			previousID := ""
+			if strings.TrimRight(previousServer, "/") == strings.TrimRight(server, "/") {
+				previousID = previousTokenID
+			}
 			issued, err := astrocli.IssuePasswordAPIToken(
-				cmd.Context(), server, username, password, tokenName, cliTokenLifetimeDays,
+				cmd.Context(), server, username, password, tokenName, cliTokenLifetimeDays, previousID,
 			)
 			if err != nil {
 				return fmt.Errorf("login failed: %w", err)

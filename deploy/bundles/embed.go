@@ -51,6 +51,7 @@ type Component struct {
 }
 
 type Source struct {
+	OriginalChart         string `json:"-"`
 	OriginalURL           string `json:"-"`
 	OriginalArchiveDigest string `json:"-"`
 	Kind                  string `json:"kind"`
@@ -139,7 +140,7 @@ func NormalizeSourceURL(raw string) (string, error) {
 }
 
 func (c Catalog) Validate() error {
-	if c.SchemaVersion != 1 || !regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+$`).MatchString(c.Release) || len(c.Components) == 0 {
+	if c.SchemaVersion != 1 || !regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$`).MatchString(c.Release) || len(c.Components) == 0 {
 		return errors.New("built-in bundle catalog has invalid release metadata")
 	}
 	seen := make(map[string]struct{}, len(c.Components))
@@ -171,6 +172,11 @@ func (c Catalog) Validate() error {
 			return fmt.Errorf("component %q Helm source URL is ambiguous; canonical form is %q", component.Slug, normalizedSource)
 		}
 		artifactKey := strings.Join([]string{normalizedSource, component.Source.Chart, component.Source.Version}, "\x00")
+		// Digest-addressed OCI subjects may share a package and version label.
+		// HTTP repositories still bind one immutable archive per chart/version.
+		if component.Source.Kind == "helm_oci" {
+			artifactKey += "\x00" + component.Source.ChartDigest
+		}
 		if digest, exists := artifacts[artifactKey]; exists && digest != component.Source.ChartDigest {
 			return fmt.Errorf("component %q conflicts on immutable Helm artifact identity", component.Slug)
 		}
@@ -198,4 +204,13 @@ func (c Catalog) Validate() error {
 		}
 	}
 	return nil
+}
+
+// ChartName returns the signed catalog chart name independently of an OCI
+// repository lookup name projected by the distribution loader.
+func (s Source) ChartName() string {
+	if s.OriginalChart != "" {
+		return s.OriginalChart
+	}
+	return s.Chart
 }

@@ -234,6 +234,11 @@ func (queryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.Trac
 }
 
 func classifySQLOperation(sql string) string {
+	// sqlc prefixes statements with a query-name comment. Classify the SQL,
+	// rather than reporting all generated queries as "other".
+	for strings.HasPrefix(strings.TrimSpace(sql), "--") {
+		_, sql, _ = strings.Cut(strings.TrimSpace(sql), "\n")
+	}
 	fields := strings.Fields(strings.TrimSpace(sql))
 	if len(fields) == 0 {
 		return "other"

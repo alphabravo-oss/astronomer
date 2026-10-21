@@ -22,7 +22,7 @@ func projectArtifactValues(catalog *builtinbundles.Catalog, bom BOM) error {
 	}
 	for index := range catalog.Components {
 		component := &catalog.Components[index]
-		if component.Source.Chart != "trivy-operator" {
+		if component.Source.ChartName() != "trivy-operator" {
 			continue
 		}
 		enabled, trivy, err := ScannerValues(component.Values)

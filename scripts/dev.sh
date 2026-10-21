@@ -27,7 +27,7 @@ USAGE
 
 require_dev_tools() {
   local missing=0
-  for tool in docker go air node npx; do
+  for tool in docker go node npx; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       missing=1
       case "$tool" in
@@ -67,7 +67,7 @@ start_bg() { # name command...
 
 wait_for() { # name url
   local i
-  for i in $(seq 1 60); do curl -fsS -o /dev/null "$2" 2>/dev/null && { echo "$1 ready"; return 0; }; sleep 1; done
+  for i in $(seq 1 300); do curl -fsS -o /dev/null "$2" 2>/dev/null && { echo "$1 ready"; return 0; }; sleep 1; done
   echo "$1 did not become ready at $2 (see tmp/logs)" >&2; return 1
 }
 
@@ -93,12 +93,22 @@ cmd_up() {
   docker compose -f "$COMPOSE_FILE" up -d --wait >>"$LOG_DIR/compose.log" 2>&1
   echo "compose services up (postgres:${DEV_PG_PORT}, redis:${DEV_REDIS_PORT}, grafana:${DEV_GRAFANA_PORT})"
   migrate_db
-  start_bg server air -c .air.server.toml
-  start_bg worker air -c .air.worker.toml
+  if [ "${DEV_WATCH:-1}" = "0" ]; then
+    # CI needs one deterministic build before readiness polling starts. Two
+    # concurrent cold Air builds used to consume the entire startup deadline.
+    go build -trimpath -o tmp/server/server ./cmd/server
+    go build -trimpath -o tmp/worker/worker ./cmd/worker
+    start_bg server env ENV=development tmp/server/server
+    start_bg worker env ENV=development tmp/worker/worker
+  else
+    command -v air >/dev/null || { echo "air is required when DEV_WATCH=1" >&2; exit 2; }
+    start_bg server air -c .air.server.toml
+    start_bg worker air -c .air.worker.toml
+  fi
   [ "${DEV_START_AGENT:-0}" = "1" ] && start_bg agent air -c .air.agent.toml
   (cd frontend && [ -d node_modules ] || npm ci --no-audit --no-fund)
   start_bg web bash -c "cd frontend && BACKEND_URL=http://127.0.0.1${SERVER_ADDR} exec npx vite --host 0.0.0.0 --port ${DEV_WEB_PORT} --strictPort"
-  wait_for server "http://127.0.0.1${SERVER_ADDR}/health/"
+  wait_for server "http://127.0.0.1${SERVER_ADDR}/readyz"
   wait_for web "http://127.0.0.1:${DEV_WEB_PORT}/"
   cmd_status
 }

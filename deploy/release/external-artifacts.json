@@ -1,0 +1,21 @@
+{
+  "charlie": {
+    "artifact": {
+      "content_digest": "sha256:59896880ef7bb5793f870fa33ad6b4bd07fcd39d321510e8cb92fd8f37e81d7a",
+      "evidence": {
+        "provenance": "cosign-attestation://ghcr.io/alphabravocompany/charlie@sha256:59896880ef7bb5793f870fa33ad6b4bd07fcd39d321510e8cb92fd8f37e81d7a#slsaprovenance",
+        "sbom": "cosign-attestation://ghcr.io/alphabravocompany/charlie@sha256:59896880ef7bb5793f870fa33ad6b4bd07fcd39d321510e8cb92fd8f37e81d7a#spdxjson",
+        "signature": "cosign://ghcr.io/alphabravocompany/charlie@sha256:59896880ef7bb5793f870fa33ad6b4bd07fcd39d321510e8cb92fd8f37e81d7a"
+      },
+      "kind": "container_image",
+      "name": "charlie",
+      "reference": "ghcr.io/alphabravocompany/charlie@sha256:59896880ef7bb5793f870fa33ad6b4bd07fcd39d321510e8cb92fd8f37e81d7a"
+    },
+    "artifact_signing_policy": {
+      "certificate_identity": "https://github.com/AlphaBravoCompany/charlie/.github/workflows/release-live.yml@refs/tags/v1.0.63",
+      "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"
+    },
+    "capability_disclosure_digest": "sha256:eaab6e4c8c3bd843d78ce587a8827d51c882ce9c51692a37c3775da9f5507ddc",
+    "qualified_version": "v1.0.63"
+  }
+}

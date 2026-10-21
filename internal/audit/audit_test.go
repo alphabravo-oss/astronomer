@@ -235,3 +235,28 @@ func TestRecordOversizedDetailRejectedBeforeDBOrBus(t *testing.T) {
 		t.Errorf("oversized detail reached database/bus: db=%t bus=%d outbox=%t", writer.last != nil, bus.calls, q.arg.Action != "")
 	}
 }
+
+type cancellationWriter struct{ called bool }
+
+func (w *cancellationWriter) CreateAuditLogV1(ctx context.Context, _ sqlc.CreateAuditLogV1Params) error {
+	w.called = true
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if _, bounded := ctx.Deadline(); !bounded {
+		return errors.New("unbounded audit write")
+	}
+	return nil
+}
+func TestMandatoryEvidenceSurvivesRequestCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	writer := &cancellationWriter{}
+	if err := RecordMandatory(ctx, writer, Event{Action: "cluster.secret.read", ResourceType: "cluster"}); err != nil {
+		t.Fatal(err)
+	}
+	if !writer.called {
+		t.Fatal("cancelled request lost mandatory evidence")
+	}
+}

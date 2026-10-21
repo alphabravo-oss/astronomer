@@ -135,6 +135,8 @@ func TestUpdateAuditOutboxMetrics(t *testing.T) {
 
 func TestClassifySQLOperation(t *testing.T) {
 	tests := map[string]string{
+		"-- name: GetCluster :one\nSELECT 1":                  "select",
+		"-- comment\n-- name: Update :exec\nUPDATE t SET x=1": "update",
 		"SELECT 1":              "select",
 		" insert into t values": "insert",
 		"UPDATE t SET x = 1":    "update",

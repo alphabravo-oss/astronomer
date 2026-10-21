@@ -179,6 +179,15 @@ func (r registryRoutingTransport) RoundTrip(request *http.Request) (*http.Respon
 // verifier and payload reader, and an actual HTTP registry fixture. It is not
 // vendor publication or a disconnected cluster qualification.
 func TestVerifiedRegistryParentAndEveryChildBeforeCache(t *testing.T) {
+	t.Parallel()
+	testVerifiedRegistryParentAndEveryChild(t, false)
+}
+func TestVerifiedRegistrySharedRepositoryBeforeCache(t *testing.T) {
+	t.Parallel()
+	testVerifiedRegistryParentAndEveryChild(t, true)
+}
+func testVerifiedRegistryParentAndEveryChild(t *testing.T, shared bool) {
+	t.Helper()
 	signer, key, err := signature.NewDefaultECDSASignerVerifier()
 	if err != nil {
 		t.Fatal(err)
@@ -196,6 +205,10 @@ func TestVerifiedRegistryParentAndEveryChildBeforeCache(t *testing.T) {
 		for index := range bom.Charts {
 			subject := &bom.Charts[index]
 			repository := "charts/" + subject.Component
+			if shared {
+				repository = "charts/platform-bundles"
+				subject.RepositoryName = "platform-bundles"
+			}
 			subject.Repository = "1.1.1.1/charts"
 			subject.Digest = f.addArtifact(repository, "application/vnd.cncf.helm.chart.content.v1.tar+gzip", members["charts/"+subject.Component+".tgz"])
 			f.sign(t, repository, subject.Digest, signer)
@@ -219,6 +232,9 @@ func TestVerifiedRegistryParentAndEveryChildBeforeCache(t *testing.T) {
 		t.Fatal("QA signed chain incomplete or contacted external trust")
 	}
 	for _, component := range catalog.Components {
+		if shared && (component.Source.Chart != "platform-bundles" || component.Source.ChartName() != component.Slug) {
+			t.Fatal("shared repository name was not projected")
+		}
 		if component.Source.Kind != "helm_oci" || component.Source.OriginalURL == "" || component.Source.OriginalArchiveDigest == "" || component.Source.ChartDigest == component.Source.OriginalArchiveDigest {
 			t.Fatal("child content identity was not projected")
 		}

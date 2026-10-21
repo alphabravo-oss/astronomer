@@ -259,6 +259,11 @@ func validateChartSubjects(bom BOM, catalog builtinbundles.Catalog) error {
 			return errors.New("distribution child chart subject is invalid")
 		}
 		seen[subject.Component] = true
+		if subject.RepositoryName != "" {
+			if _, err := builtinbundles.NormalizeOCISourceURL("oci://" + subject.Repository + "/" + subject.RepositoryName); err != nil {
+				return errors.New("distribution child chart repository name invalid")
+			}
+		}
 		if _, err := builtinbundles.NormalizeOCISourceURL("oci://" + subject.Repository); err != nil {
 			return err
 		}

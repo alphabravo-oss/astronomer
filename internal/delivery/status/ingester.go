@@ -168,16 +168,18 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			return fmt.Errorf("persist delivery controller inventory: %w", err)
 		}
 		semanticChanged := accepted.StatusChanged
-		if !semanticChanged {
-			statusResults = append(statusResults, "coalesced")
-			return refreshDeploymentSourceTimes(ctx, tx, payload, authenticatedCluster, sessionID)
-		}
-		if systemTx, ok := tx.(systemInventoryTransaction); ok {
-			if local, ok := tx.(localSystemRetargeter); ok {
-				if _, err := local.RetargetLocalDeliverySystemAssignment(ctx, authenticatedCluster); err != nil {
-					return fmt.Errorf("retarget local delivery system assignment: %w", err)
-				}
+		// Promotion can happen after this exact inventory was first accepted.
+		// Retarget before semantic coalescing, but avoid replaying observation
+		// writes for unchanged assignments on every periodic heartbeat.
+		systemNeedsObservation := semanticChanged
+		if local, ok := tx.(localSystemRetargeter); ok {
+			retargeted, err := local.RetargetLocalDeliverySystemAssignment(ctx, authenticatedCluster)
+			if err != nil {
+				return fmt.Errorf("retarget local delivery system assignment: %w", err)
 			}
+			systemNeedsObservation = systemNeedsObservation || retargeted > 0
+		}
+		if systemTx, ok := tx.(systemInventoryTransaction); ok && systemNeedsObservation {
 			observedAt := time.Now().UTC()
 			observed, err := systemTx.ObserveDeliverySystemAssignment(ctx, sqlc.ObserveDeliverySystemAssignmentParams{
 				ClusterID: authenticatedCluster, ObservedDistributionDigest: payload.ControllerInventory.DistributionDigest,
@@ -209,6 +211,11 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 					return fmt.Errorf("append delivery system event: %w", err)
 				}
 			}
+		}
+
+		if !semanticChanged {
+			statusResults = append(statusResults, "coalesced")
+			return refreshDeploymentSourceTimes(ctx, tx, payload, authenticatedCluster, sessionID)
 		}
 
 		for index := range payload.Deployments {

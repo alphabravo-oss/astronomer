@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 2.1.0 - 2026-10-20
+## 2.1.0 - 2026-10-21
 
 Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
 **This release has breaking deploy changes — read "Upgrading to 2.1.0" first.**
@@ -38,6 +38,22 @@ Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
   (`--new-bundle-format=false`) because policy-controller 0.13.1 cannot
   verify Sigstore bundles; the chart is signed after a `cosign login`.
 
+### Release follow-up fixes
+
+- Restore the keyless-signed release manifest, chart values overlay, Flux and
+  closed built-in bundle distributions with a Go producer. All child charts
+  and scanner database subjects are independently signed and digest-pinned.
+- Reconcile the management cluster's system assignment even when its new
+  inventory arrived before promotion and later reports are coalesced.
+- Coalesce concurrent RBAC cache misses without allowing invalidation races to
+  repopulate stale permissions. Keep the measured 12-connection live pool;
+  alert on sustained acquisition latency rather than brief healthy queuing.
+- Persist mandatory audit evidence with a bounded context that survives client
+  navigation, and verify the transactional outbox drains under bursts.
+- Build the CI live harness deterministically before polling readiness.
+- Rotate the CLI-owned API token before quota checks, exclude expired tokens
+  from quota, and cap CLI credentials at 30 days (including legacy credentials).
+
 ### Upgrading to 2.1.0 (breaking)
 
 - **Migrations run inside the server at boot** (goose, embedded, advisory
@@ -46,7 +62,7 @@ Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
   values are gone. Bookkeeping moves from golang-migrate `schema_migrations`
   to `goose_db_version`; an existing 2.0.x database (schema 81) needs a
   one-time baseline before the first 2.1.0 boot —
-  `docs/runbooks/upgrade-2.1.md`. Preflight target schema is **84**.
+  `docs/runbooks/upgrade-2.1.md`. Preflight target schema is **85**.
 - **Encryption key format changed to age.** `secrets.encryptionKey` /
   `ASTRONOMER_ENCRYPTION_KEY` must be an age keyring
   (`[label:]AGE-SECRET-KEY-1…`, current first); Fernet keys are rejected.
