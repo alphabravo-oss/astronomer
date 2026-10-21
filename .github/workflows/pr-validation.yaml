@@ -19,6 +19,7 @@ concurrency:
 
 env:
   GOTOOLCHAIN: local
+  GOFLAGS: -p=4
 
 jobs:
   go-check:

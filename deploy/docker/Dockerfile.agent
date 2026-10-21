@@ -21,7 +21,7 @@ ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build \
+    CGO_ENABLED=0 go build -p 4 \
     -trimpath \
     -ldflags "-s -w \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \

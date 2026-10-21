@@ -12,13 +12,13 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/dr-crypto ./cmd/dr-crypto
+    CGO_ENABLED=0 go build -p 4 -trimpath -ldflags "-s -w" -o /out/dr-crypto ./cmd/dr-crypto
 # The age CLI (restore drill decrypt check) is built from filippo.io/age with the
 # pinned Go toolchain (tools/imagebins), not taken from Alpine's Go build.
 WORKDIR /src/tools/imagebins
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/age filippo.io/age/cmd/age \
-    && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/age-keygen filippo.io/age/cmd/age-keygen
+    CGO_ENABLED=0 go build -p 4 -trimpath -ldflags "-s -w" -o /out/age filippo.io/age/cmd/age \
+    && CGO_ENABLED=0 go build -p 4 -trimpath -ldflags "-s -w" -o /out/age-keygen filippo.io/age/cmd/age-keygen
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 # pg_dump/pg_restore and the AWS CLI run the backup/restore shell steps; all
