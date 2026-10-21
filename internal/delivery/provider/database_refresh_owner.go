@@ -125,7 +125,7 @@ func (owner *DatabaseRefreshOwner) refreshClusters(ctx context.Context, coordina
 	}
 	slug := ""
 	for _, component := range catalog.Components {
-		if component.Source.Chart == "trivy-operator" {
+		if component.Source.ChartName() == "trivy-operator" {
 			if slug != "" {
 				return errors.New("database refresh scanner component ambiguous")
 			}

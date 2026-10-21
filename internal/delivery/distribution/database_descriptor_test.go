@@ -29,6 +29,10 @@ func descriptorFixture(t *testing.T, fixture *registryFixture, signer signature.
 		for index := range bom.Charts {
 			chart := &bom.Charts[index]
 			repository := "charts/" + chart.Component
+			if mutation == "shared-package" {
+				repository = "charts/platform-bundles"
+				chart.RepositoryName = "platform-bundles"
+			}
 			chart.Digest = fixture.addArtifact(repository, "application/vnd.cncf.helm.chart.content.v1.tar+gzip", members["charts/"+chart.Component+".tgz"])
 			fixture.sign(t, repository, chart.Digest, signer)
 		}
@@ -66,6 +70,9 @@ func descriptorFixture(t *testing.T, fixture *registryFixture, signer signature.
 				bom.Members = append(bom.Members, Member{Path: name, Category: "vulnerability_database", Digest: contentDigest(data), Size: int64(len(data))})
 			}
 			repository := "assets/" + role
+			if mutation == "shared-package" {
+				repository = "charts/platform-bundles"
+			}
 			fixture.setManifest(repository+"/"+subject, manifestBytes)
 			fixture.setBlob(contentDigest(config), config)
 			fixture.sign(t, repository, subject, signer)
@@ -118,7 +125,7 @@ func TestDescriptorContractAuthenticatesRuntimeChildrenWithoutPayloadQualificati
 	if err := os.WriteFile(filepath.Join(trust, "qa.pub"), public, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"valid", "inline-config", "inline-data", "inline-size", "inline-media", "inline-url", "missing-claim", "changed-layer", "changed-size", "oversized", "wrong-media", "member-collision", "embedded-in-v2", "changed-config", "changed-source", "untrusted-child"} {
+	for _, name := range []string{"valid", "shared-package", "inline-config", "inline-data", "inline-size", "inline-media", "inline-url", "missing-claim", "changed-layer", "changed-size", "oversized", "wrong-media", "member-collision", "embedded-in-v2", "changed-config", "changed-source", "untrusted-child"} {
 		t.Run(name, func(t *testing.T) {
 			fixture := &registryFixture{manifests: map[string][]byte{}, blobs: map[string][]byte{}}
 			archive, release, catalogDigest, payloads := descriptorFixture(t, fixture, signer, name)
@@ -134,7 +141,7 @@ func TestDescriptorContractAuthenticatesRuntimeChildrenWithoutPayloadQualificati
 				t.Fatal(err)
 			}
 			catalog, err := loader.Load(t.Context())
-			if name == "valid" || name == "inline-config" {
+			if name == "valid" || name == "shared-package" || name == "inline-config" {
 				if err != nil || len(catalog.Components) != 3 || loader.Status().Verification != "verified" || loader.Status().DatabasePayloadVerification != "descriptor-only" || loader.Status().DatabaseFreshness != "not-assessed" {
 					t.Fatalf("metadata-only consumer positive: %+v %v", loader.Status(), err)
 				}

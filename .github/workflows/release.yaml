@@ -260,5 +260,7 @@ jobs:
           go run ./cmd/release-assets -phase manifest -version "$VERSION" -commit "$GITHUB_SHA" -source-date-epoch "$(git show -s --format=%ct HEAD)" -chart-reference "${REGISTRY}/${IMAGE_OWNER}/charts/astronomer@${digest}"
           scripts/cosign-release.sh sign-blob --yes --bundle dist/release/release-manifest.sigstore.json dist/release/release-manifest.json
           scripts/cosign-release.sh verify-blob --bundle dist/release/release-manifest.sigstore.json --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@refs/tags/${VERSION}" --certificate-oidc-issuer https://token.actions.githubusercontent.com dist/release/release-manifest.json
-          helm template astronomer "dist/astronomer-${VERSION#v}.tgz" -f dist/release/release-values.yaml >/dev/null
+          helm template astronomer "dist/astronomer-${VERSION#v}.tgz" --kube-version 1.35.0 \
+            -f deploy/chart/values-dev.yaml -f dist/release/release-values.yaml \
+            --set-string secrets.existingSecret=release-render-check >/dev/null
           gh release create "$VERSION" --verify-tag --title "Astronomer $VERSION" --generate-notes "dist/astronomer-${VERSION#v}.tgz" dist/release/release-manifest.json dist/release/release-manifest.sigstore.json dist/release/release-values.yaml dist/release/subjects.json dist/release/platform-bundles.tgz dist/release/flux-distribution.tgz

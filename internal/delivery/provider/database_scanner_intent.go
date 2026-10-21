@@ -29,7 +29,7 @@ type databaseScannerIntent struct {
 func lockDatabaseScannerIntent(ctx context.Context, queries *sqlc.Queries, cluster uuid.UUID, catalog builtinbundles.Catalog) (databaseScannerIntent, error) {
 	slug := ""
 	for _, component := range catalog.Components {
-		if component.Source.Chart == "trivy-operator" {
+		if component.Source.ChartName() == "trivy-operator" {
 			slug = component.Slug
 		}
 	}

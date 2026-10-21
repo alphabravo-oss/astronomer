@@ -105,8 +105,10 @@ the CLI.`,
 				_ = astrocli.RevokeAPIToken(cmd.Context(), server, issued.Token, issued.ID)
 				return fmt.Errorf("persist config: %w", err)
 			}
-			if err := astrocli.RevokeAPIToken(cmd.Context(), previousServer, previousToken, previousTokenID); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: previous CLI token could not be revoked: %v\n", err)
+			if previousID == "" {
+				if err := astrocli.RevokeAPIToken(cmd.Context(), previousServer, previousToken, previousTokenID); err != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: previous CLI token could not be revoked: %v\n", err)
+				}
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Logged in to %s as %s (API token expires in %d days)\n",
 				server, issued.Username, cliTokenLifetimeDays)
