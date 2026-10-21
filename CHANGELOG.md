@@ -80,6 +80,13 @@ Technology-guide realignment (Phase 0 + Phase 1) and the A1 Operator Console UI.
   before the instance id is resolved (it kept `AstronomerAgentDisconnected`
   firing for connected clusters after the 2.1.0 boot-order change).
 
+- Management backup and restore drill run end to end on the chart's own
+  CNPG 17: the wrapping passphrase and key Secret are dereferenced from their
+  Secret-volume symlinks (dr-crypto accepts only regular files), only
+  non-empty top-level keys are bundled, and the schema version is read from
+  `goose_db_version` (first successful backup + drill on astronomer-dev,
+  2026-10-20T23:59Z).
+
 ### Phase 1 — backend
 
 - Testing: testcontainers + pgtestdb substrate; every DB test is a

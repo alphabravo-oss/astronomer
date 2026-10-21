@@ -66,6 +66,11 @@ spec:
                   RELEASE="${MANAGEMENT_BACKUP_RELEASE}"
                   BASE="${PREFIX}/${RELEASE}"
                   KEY_OBJECT="${BASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.aead"
+                  # Secret volume files are symlinks (..data); dr-crypto accepts only
+                  # regular files, so dereference the wrapping passphrase once.
+                  PASSPHRASE_FILE=/tmp/wrap-passphrase
+                  cp -L /var/run/astronomer-wrap/passphrase "${PASSPHRASE_FILE}"
+                  chmod 0400 "${PASSPHRASE_FILE}"
                   DUMP_PATH="/tmp/${STAMP}.pgcustom"
                   DUMP_ENVELOPE="${DUMP_PATH}.aead"
                   KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
@@ -112,11 +117,17 @@ spec:
                   echo "Starting authenticated management backup ${STAMP} (schema=${SCHEMA_VERSION})"
                   pg_dump --dbname="${DATABASE_URL}" --format=custom --no-owner --no-acl --file="${DUMP_PATH}"
                   dr-crypto encrypt --input "${DUMP_PATH}" --output "${DUMP_ENVELOPE}" \
-                    --passphrase-file /var/run/astronomer-wrap/passphrase \
+                    --passphrase-file "${PASSPHRASE_FILE}" \
                     --purpose database-dump --context "${CONTEXT}"
                   rm -f "${DUMP_PATH}"
 
-                  cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/
+                  # Top-level, non-empty Secret keys only: the Secret volume's
+                  # ..data/..<ts> directories and unset optional keys (e.g. an
+                  # empty ASTRONOMER_INTERNAL_PSK_PREVIOUS) are not bundled;
+                  # dr-crypto accepts only non-empty top-level regular files.
+                  for key in /var/run/astronomer-keys-source/*; do
+                    if [ -s "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/; fi
+                  done
                   {{- if .Values.managementBackup.encryptionKeyBackup.secretName }}
                   cp -L /var/run/astronomer-keys-source/SECRET_KEY /var/run/astronomer-keys/SECRET_KEY
                   cp -L /var/run/astronomer-keys-source/ASTRONOMER_ENCRYPTION_KEY /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
@@ -136,7 +147,7 @@ spec:
                   {{- end }}
                   dr-crypto key-bundle-create --source /var/run/astronomer-keys --output "${KEY_BUNDLE}"
                   dr-crypto encrypt --input "${KEY_BUNDLE}" --output "${KEY_ENVELOPE}" \
-                    --passphrase-file /var/run/astronomer-wrap/passphrase \
+                    --passphrase-file "${PASSPHRASE_FILE}" \
                     --purpose key-bundle --context "${CONTEXT}"
                   rm -f "${KEY_BUNDLE}"
 
@@ -151,7 +162,7 @@ spec:
                     dr-crypto manifest-create \
                       --archive "${DUMP_ENVELOPE}" --archive-key "${ARCHIVE_OBJECT}" \
                       --key-bundle "${KEY_ENVELOPE}" --key-bundle-key "${KEY_OBJECT}" \
-                      --passphrase-file /var/run/astronomer-wrap/passphrase \
+                      --passphrase-file "${PASSPHRASE_FILE}" \
                       --release-name "${RELEASE}" --release-namespace "${MANAGEMENT_BACKUP_NAMESPACE}" \
                       --chart-version "${MANAGEMENT_BACKUP_CHART_VERSION}" \
                       --source-identity "${MANAGEMENT_BACKUP_SOURCE_IDENTITY}" \
