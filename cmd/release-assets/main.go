@@ -72,7 +72,12 @@ func main() {
 func hash(data []byte) string          { return fmt.Sprintf("sha256:%x", sha256.Sum256(data)) }
 func encode(value any) ([]byte, error) { return json.MarshalIndent(value, "", "  ") }
 func (p producer) write(name string, data []byte) error {
-	return os.WriteFile(filepath.Join(p.out, name), data, 0600)
+	root, err := os.OpenRoot(p.out)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return root.WriteFile(name, data, 0600)
 }
 func (p producer) command(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
