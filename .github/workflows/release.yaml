@@ -262,5 +262,6 @@ jobs:
           scripts/cosign-release.sh verify-blob --bundle dist/release/release-manifest.sigstore.json --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@refs/tags/${VERSION}" --certificate-oidc-issuer https://token.actions.githubusercontent.com dist/release/release-manifest.json
           helm template astronomer "dist/astronomer-${VERSION#v}.tgz" --kube-version 1.35.0 \
             -f deploy/chart/values-dev.yaml -f dist/release/release-values.yaml \
-            --set-string secrets.existingSecret=release-render-check >/dev/null
+            --set-string secrets.secretKey=helm-lint-only-jwt-signing-key-0000 \
+            --set-string secrets.encryptionKey=AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9 >/dev/null
           gh release create "$VERSION" --verify-tag --title "Astronomer $VERSION" --generate-notes "dist/astronomer-${VERSION#v}.tgz" dist/release/release-manifest.json dist/release/release-manifest.sigstore.json dist/release/release-values.yaml dist/release/subjects.json dist/release/platform-bundles.tgz dist/release/flux-distribution.tgz
