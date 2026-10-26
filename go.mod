@@ -3,12 +3,12 @@ module github.com/alphabravocompany/astronomer-go
 go 1.27.3
 
 require (
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.21.1
 	filippo.io/age v1.3.2
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/ProtonMail/go-crypto v1.5.2
-	github.com/alicebob/miniredis/v2 v2.39.0
-	github.com/aws/aws-sdk-go-v2 v1.47.3
+	github.com/alicebob/miniredis/v2 v2.40.0
+	github.com/aws/aws-sdk-go-v2 v1.47.4
 	github.com/coder/websocket v1.8.15
 	github.com/distribution/reference v0.6.0
 	github.com/evanphx/json-patch/v5 v5.9.11
@@ -25,7 +25,7 @@ require (
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/hibiken/asynq v0.26.0
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/oapi-codegen/runtime v1.7.0
+	github.com/oapi-codegen/runtime v1.8.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/peterldowns/pgtestdb v0.1.1
@@ -73,7 +73,7 @@ require (
 	k8s.io/client-go v0.37.1
 	k8s.io/metrics v0.37.1
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
-	oras.land/oras-go/v2 v2.6.4
+	oras.land/oras-go/v2 v2.7.0
 	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -92,7 +92,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/smithy-go v1.28.5 // indirect
+	github.com/aws/smithy-go v1.28.6 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/boombuler/barcode v1.1.0 // indirect
