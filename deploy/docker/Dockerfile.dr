@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 # pg_dump/pg_restore and the AWS CLI run the backup/restore shell steps; all
 # cryptography is the static Go dr-crypto binary (no Python in the image).
-FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+FROM docker.io/library/alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 ARG VERSION=2.1.1
 ARG GIT_COMMIT=unknown
