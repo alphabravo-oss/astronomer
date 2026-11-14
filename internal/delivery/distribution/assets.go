@@ -27,7 +27,7 @@ type Asset struct {
 var assetRoles = map[string]string{
 	"cnpg-operator": "operator", "cnpg-crds": "crd", "postgres-server": "database",
 	"barman-cloud-plugin": "plugin", "barman-cloud-tools": "tool", "object-store": "runtime_image",
-	"dr-shell": "tool", "valkey": "runtime_image", "dex": "runtime_image", "fluent-bit": "runtime_image",
+	"dr-shell": "tool", "valkey": "runtime_image", "fluent-bit": "runtime_image",
 	"charlie": "runtime_image", "trivy-database": "vulnerability_database", "trivy-java-database": "vulnerability_database",
 	"application-catalog": "application_catalog", "distribution-registry": "runtime_image", "database-scan-helper": "runtime_image",
 }
@@ -35,9 +35,9 @@ var capabilityRoles = map[string][]string{
 	"database-cnpg":                   {"cnpg-operator", "cnpg-crds", "postgres-server", "barman-cloud-plugin", "barman-cloud-tools", "object-store", "dr-shell"},
 	"vulnerability-scanning":          {"trivy-database", "trivy-java-database"},
 	"measured-vulnerability-scanning": {"trivy-database", "trivy-java-database", "database-scan-helper"},
-	"cache-valkey":                    {"valkey"}, "identity-dex": {"dex"}, "logs-fluent-bit": {"fluent-bit"},
+	"cache-valkey":                    {"valkey"}, "logs-fluent-bit": {"fluent-bit"},
 	"charlie": {"charlie"}, "application-catalog": {"application-catalog"}, "distribution-registry": {"distribution-registry"},
-	"platform-core": {"cnpg-operator", "cnpg-crds", "postgres-server", "barman-cloud-plugin", "barman-cloud-tools", "object-store", "dr-shell", "valkey", "dex", "fluent-bit", "charlie"},
+	"platform-core": {"cnpg-operator", "cnpg-crds", "postgres-server", "barman-cloud-plugin", "barman-cloud-tools", "object-store", "dr-shell", "valkey", "fluent-bit", "charlie"},
 }
 
 func validateAssetDeclarations(version int, assets []Asset, members map[string]string) error {

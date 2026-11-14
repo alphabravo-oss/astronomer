@@ -13,11 +13,11 @@ import (
 func TestSSORoutesAcceptNoTrailingSlash(t *testing.T) {
 	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{SSO: handler.NewSSOHandler(nil, nil, "/")}})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/dex", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/identity", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusServiceUnavailable {
+	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "sso_not_configured") {

@@ -188,7 +188,6 @@ func TestEveryChartImageIsCoveredBySignaturePolicy(t *testing.T) {
 			"postgres.mode=cloudNativePG",
 			"postgres.cloudNativePG.barmanCloud.enabled=true",
 			"postgres.cloudNativePG.barmanCloud.objectStoreName=store",
-			"dex.enabled=true",
 			"managementLogging.enabled=true",
 			"managementLogging.endpoint=http://loki.observability.svc:3100",
 			"managementLogging.auth.bearerSecretRef.name=loki-creds",
@@ -222,7 +221,7 @@ func TestEveryChartImageIsCoveredBySignaturePolicy(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"index.docker.io/library/busybox", "ghcr.io/dexidp/dex", "index.docker.io/fluent/fluent-bit", "ghcr.io/cloudnative-pg/postgresql"} {
+	for _, want := range []string{"index.docker.io/library/busybox", "index.docker.io/fluent/fluent-bit", "ghcr.io/cloudnative-pg/postgresql"} {
 		found := false
 		for image := range seen {
 			found = found || strings.HasPrefix(canonicalImage(image), want)
@@ -242,7 +241,6 @@ func TestSignaturePoliciesUseVendorAuthorities(t *testing.T) {
 		"ghcr.io/alphabravo-oss/astronomer-go-server":        "keyless",
 		"ghcr.io/cloudnative-pg/cloudnative-pg":              "static",
 		"ghcr.io/cloudnative-pg/postgresql":                  "static",
-		"ghcr.io/dexidp/dex":                                 "static",
 		"index.docker.io/fluent/fluent-bit":                  "static",
 		"quay.io/jetstack/cert-manager-acmesolver":           "key",
 		"index.docker.io/library/busybox":                    "static",

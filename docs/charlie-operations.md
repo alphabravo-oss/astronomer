@@ -10,10 +10,13 @@ service never run in the Astronomer release.
 
 - `feature.charlie=false` is the default. A never-onboarded installation creates
   no Charlie runtime resources. Disabling an existing installation closes write
-  admission, cancels/drains in-flight writes, stops the private listener and
-  agent workload, and removes the MCP Service plus exact access NetworkPolicy.
-  It deliberately retains the namespace, installation Secrets, owner-bound
-  resume state, metadata, and audit/history for a safe re-enable.
+  admission and cancels/drains in-flight writes. Local runtime shutdown follows
+  agent-ceiling confirmation. A pending confirmation leaves suspension incomplete.
+  Full operational suspension also requires separate proof that the agent workload,
+  MCP Service and exact access NetworkPolicy are stopped/removed through their
+  delivery owner; the feature flag alone does not establish that result.
+  Retain the namespace, installation Secrets, owner-bound resume state, metadata,
+  and audit/history for a safe re-enable.
 - Onboarding installs the two-replica product agent as a control-only runtime:
   `runtime.enabled=true` with product-owned `runtime.modeCeiling=disabled`.
   Configuration with `runtime.enabled=false` renders no workload or listener.
@@ -23,7 +26,9 @@ service never run in the Astronomer release.
   one private mTLS Product MCP configuration surface for initialization and
   `tools/list` so an administrator can review a changed connector catalog.
   `tools/call`, events, triggers, receipts, and writes remain stopped. Emergency
-  disable and feature/connection disable remove this listener too.
+  disable blocks product calls immediately; successful feature runtime shutdown
+  closes the local listener. Pending ceiling confirmation retains the control
+  runtime needed to finish reconciliation.
 - Effective authority is the least privilege of current product feature state,
   connection state, emergency latch, Charlie-verified mode, current Astronomer
   RBAC, affected-resource scope, disclosure digest, action classification,
@@ -43,8 +48,8 @@ service never run in the Astronomer release.
 
 Emergency response always starts with **Settings → Charlie → Mode → Emergency
 Disable**. The local latch commits first, stops new sessions/triggers/MCP calls,
-and tears down bridge transports even when the agent or Charlie Central is
-unavailable. Admin status, emergency mode, uninstall, and disconnect endpoints
+even when the agent or Charlie Central is unavailable. The authenticated control
+transport remains available while ceiling confirmation is pending. Admin status, emergency mode, uninstall, and disconnect endpoints
 remain available while the feature is off. Non-emergency mode changes remain
 feature-gated in the handler. If the API
 reports a write drain still in progress, the latch remains closed and disable
@@ -323,3 +328,20 @@ replica identity reuse, multiple leaders, stale fencing accepted, missing audit
 or receipt, disclosure of a destructive/downstream/open-ended tool, direct
 server/worker egress to Charlie Central, credential/content leakage, cross-user
 or cross-deployment visibility, or a write whose result cannot be reconciled.
+
+### Pending feature suspension
+
+A feature-disable request can return HTTP 409 with `agent ceiling confirmation
+is pending`. The durable emergency latch already blocks product writes, but
+`feature.charlie` remains enabled until the supported agent-ceiling confirmation
+succeeds. This is incomplete suspension, even if every displayed mode is
+`disabled`. Preserve the control runtime needed for reconciliation; do not force
+the feature flag in PostgreSQL or remove the agent workload to bypass the check.
+
+Recover agent readiness and its authenticated bridge through the normal delivery
+and enrollment workflows, then retry disabling the feature through Platform
+Settings. Verify the feature readback, private listener, and workload separately.
+The feature lifecycle's local `Shutdown` is not proof that Flux has suspended or
+removed the deployed agent. Keep identity, credentials and history for reversible
+recovery. If the agent cannot recover, offline suspension needs a separately
+reviewed distributed-fencing and delivery design; it is not an existing bypass.

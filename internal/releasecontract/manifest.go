@@ -304,7 +304,7 @@ func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
 		return Projection{}, errors.New("release manifest compatibility is invalid")
 	}
 	if manifest.Flux.Version == "" || len(manifest.Flux.Controllers) != 3 || len(manifest.Flux.APIs) < 3 ||
-		!validApplicationImages(manifest.Release.Version, manifest.Astronomer.Images) || len(manifest.Astronomer.RuntimeImages) < 6 || len(manifest.BuiltInBundles.Components) == 0 ||
+		!validApplicationImages(manifest.Release.Version, manifest.Astronomer.Images) || len(manifest.Astronomer.RuntimeImages) < 5 || len(manifest.BuiltInBundles.Components) == 0 ||
 		!digestPattern.MatchString(manifest.BuiltInBundles.CatalogDigest) || !digestPattern.MatchString(manifest.Charlie.CapabilityDisclosureDigest) {
 		return Projection{}, errors.New("release manifest artifact inventory is incomplete")
 	}

@@ -188,9 +188,6 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		if !DSNEnforcesTLS(cfg.DatabaseURL) {
 			errs = append(errs, "database_url does not enforce TLS")
 		}
-		if !cfg.DexBundledEnabled && !cfg.AuthLocalPasswordOnly {
-			errs = append(errs, "dex_bundled_enabled is false and auth_local_password_only is not acknowledged")
-		}
 		serverURL := strings.TrimSpace(cfg.ServerURL)
 		if serverURL == "" {
 			errs = append(errs, "server_url is empty")

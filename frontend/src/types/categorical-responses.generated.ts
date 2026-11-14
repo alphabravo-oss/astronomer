@@ -1004,16 +1004,6 @@ export const categoricalDefinitions: Record<string, CategoricalNode> = {
       },
     },
   },
-  DexOperation: {
-    properties: {
-      status: {
-        required: true,
-        node: {
-          ref: "DurableOperationStatus",
-        },
-      },
-    },
-  },
   DurableOperationStatus: {
     category: "DurableOperationStatus",
   },
@@ -2112,42 +2102,6 @@ export const categoricalResponses: Record<
           required: false,
           node: {
             ref: "RegistrationStatus",
-          },
-        },
-      },
-    },
-  },
-  postAuthDexApply: {
-    "202": {
-      properties: {
-        data: {
-          required: false,
-          node: {
-            ref: "DexOperation",
-          },
-        },
-      },
-    },
-  },
-  postAuthDexRegisterAsSso: {
-    "202": {
-      properties: {
-        data: {
-          required: false,
-          node: {
-            ref: "DexOperation",
-          },
-        },
-      },
-    },
-  },
-  getAuthDexOperation: {
-    "200": {
-      properties: {
-        data: {
-          required: false,
-          node: {
-            ref: "DexOperation",
           },
         },
       },

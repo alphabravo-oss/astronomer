@@ -214,7 +214,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	// Build the RP-initiated logout redirect when an upstream SSO
 	// session is present for this JTI. The frontend follows the URL
-	// with a top-level navigation so Dex (and any back-channel-SLO
+	// with a top-level navigation so the legacy provider (and any back-channel-SLO
 	// connector behind it — SAML, certain OIDC providers) tears down
 	// the user's session everywhere. Best-effort: every failure path
 	// degrades to "no redirect_url" → local logout only.

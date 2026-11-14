@@ -62,8 +62,8 @@ func TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode(t
 				t.Fatal("pre-backup failure created a public report", readErr)
 			}
 			imageReads := reads()
-			if len(imageReads) != 7 {
-				t.Fatal("legacy runner bypassed actual seven-image crypto verification")
+			if len(imageReads) != 6 {
+				t.Fatal("legacy runner bypassed actual six-image crypto verification")
 			}
 			for _, count := range imageReads {
 				if count < 1 {

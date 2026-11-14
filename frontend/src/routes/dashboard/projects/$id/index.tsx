@@ -65,11 +65,10 @@ function ProjectOverviewPage() {
           the operator explicitly pins something here. */}
       {project?.id ? (
         <section className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Widgets
-          </h3>
+          <h3 className="text-sm font-medium text-muted-foreground">Widgets</h3>
           <WidgetGrid
-            fetcher={() => renderForProject(project.id)}
+            scope={["project", project.id]}
+            fetcher={(signal) => renderForProject(project.id, signal)}
             emptyHint=""
           />
         </section>

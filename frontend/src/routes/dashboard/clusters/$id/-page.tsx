@@ -262,7 +262,8 @@ export function ClusterDetailPage() {
           above an empty placeholder. */}
       {cluster?.id ? (
         <WidgetGrid
-          fetcher={() => renderForCluster(cluster.id)}
+          scope={["cluster", cluster.id]}
+          fetcher={(signal) => renderForCluster(cluster.id, signal)}
           title="Widgets"
           hideWhenEmpty
         />

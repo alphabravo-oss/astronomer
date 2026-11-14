@@ -77,7 +77,8 @@ type CatalogQuerier interface {
 	// Sprint 082 — lazy hydration writeback for default_values + readme.
 	UpdateHelmChartVersionContent(ctx context.Context, arg sqlc.UpdateHelmChartVersionContentParams) error
 	// Sprint 082 — joined Apps tab listing (chart name/icon/version + repo).
-	ListInstalledChartsWithMetadataByCluster(ctx context.Context, arg sqlc.ListInstalledChartsWithMetadataByClusterParams) ([]sqlc.InstalledChartWithMetadata, error)
+	ListProjectedClusterApps(context.Context, sqlc.ListProjectedClusterAppsParams) ([]sqlc.ListProjectedClusterAppsRow, error)
+	CountProjectedClusterApps(context.Context, uuid.UUID) (int64, error)
 	// Installed Charts
 	ListInstalledCharts(ctx context.Context, arg sqlc.ListInstalledChartsParams) ([]sqlc.InstalledChart, error)
 	ListInstalledChartsByCluster(ctx context.Context, arg sqlc.ListInstalledChartsByClusterParams) ([]sqlc.InstalledChart, error)

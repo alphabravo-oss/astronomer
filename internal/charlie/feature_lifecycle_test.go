@@ -109,3 +109,26 @@ func TestFeatureDisableStopsRuntimeForInactiveConnection(t *testing.T) {
 		t.Fatalf("inactive shutdowns=%d", runtime.shutdowns)
 	}
 }
+
+// Losing the control transport while the agent ceiling is unconfirmed would
+// prevent the supported disable path from converging. The durable emergency
+// latch is not permission to tear this transport down prematurely.
+func TestFeatureDisableRetainsControlRuntimeWhileAgentCeilingPending(t *testing.T) {
+	t.Parallel()
+	runtime := &featureRuntimeFake{}
+	fence := NewWriteFence()
+	lifecycle := &FeatureLifecycle{
+		connection: func(context.Context) (sqlc.CharlieConnection, error) {
+			return sqlc.CharlieConnection{ID: uuid.New(), Active: true}, nil
+		},
+		mode:    featureModeFake{err: errors.New("Charlie is locally disabled; agent ceiling confirmation is pending")},
+		runtime: runtime, writes: fence, timeout: time.Second, auditor: &authorityAuditFake{},
+	}
+	err := lifecycle.Disable(t.Context(), uuid.NewString())
+	if err == nil || !strings.Contains(err.Error(), "agent ceiling confirmation is pending") {
+		t.Fatalf("pending ceiling was acknowledged: %v", err)
+	}
+	if runtime.shutdowns != 0 {
+		t.Fatal("pending ceiling lost its control runtime")
+	}
+}

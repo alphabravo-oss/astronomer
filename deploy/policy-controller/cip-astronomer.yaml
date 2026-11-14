@@ -8,7 +8,6 @@
 #   ghcr.io/alphabravo-oss/astronomer-*      first-party, keyless (release workflow)
 #   ghcr.io/cloudnative-pg/cloudnative-pg    CNPG operator (bootstrap init container), bundle-signed: static pass
 #   ghcr.io/cloudnative-pg/postgresql        CNPG PostgreSQL, bundle-signed: static pass
-#   ghcr.io/dexidp/dex                       Dex, bundle-signed: static pass
 #   index.docker.io/fluent/fluent-bit        management logging, bundle-signed: static pass
 #   quay.io/jetstack/cert-manager-acmesolver HTTP-01 solver pods, cert-manager key
 #   unsigned upstreams, digest-pinned        see astronomer-unsigned-digest-pinned
@@ -91,28 +90,6 @@ spec:
   mode: enforce
   images:
     - glob: "ghcr.io/cloudnative-pg/postgresql**"
-  authorities:
-    - name: bundle-signed-digest-pinned
-      static:
-        action: pass
----
-# Signed upstream, bundle format: this vendor signs with Sigstore *bundles*
-# (OCI referrers). policy-controller 0.13.1 reports "no signatures found" for
-# the legacy format and "bundle support for image signatures is not yet
-# implemented" with signatureFormat: bundle, so admission cannot verify it.
-# The digest pinned by the chart was verified out of band with cosign 3.1.3
-# (`cosign verify --certificate-identity-regexp <subject below>`); the subject
-# is kept here for that check. Replace the static pass with the keyless
-# authority once policy-controller verifies bundles.
-#   subject: ^https://github\.com/dexidp/dex/\.github/workflows/[a-z-]+\.ya?ml@refs/tags/v[0-9.]+$
-apiVersion: policy.sigstore.dev/v1beta1
-kind: ClusterImagePolicy
-metadata:
-  name: vendor-dex
-spec:
-  mode: enforce
-  images:
-    - glob: "ghcr.io/dexidp/dex**"
   authorities:
     - name: bundle-signed-digest-pinned
       static:

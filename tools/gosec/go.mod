@@ -3,7 +3,7 @@
 // can be newer than gosec's own pin: the Go 1.27 export-data format needs it.
 module github.com/alphabravocompany/astronomer-go/tools/gosec
 
-go 1.27.3
+go 1.27.4
 
 tool github.com/securego/gosec/v2/cmd/gosec
 

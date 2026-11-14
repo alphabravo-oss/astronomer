@@ -43,46 +43,6 @@ func CISOperatorChartCoordinates() toolChart {
 	}
 }
 
-// Phase B4 — Dex
-//
-// Catalog entry for `dex` from the dexidp Helm repo. Single-instance install
-// in the management cluster; we don't run Dex per-tenant. Once the release is
-// rolled out, the operator's flow is:
-//
-//  1. PUT /api/v1/auth/dex/settings/ with the public issuer URL Astronomer
-//     should treat as the OIDC provider (e.g. https://dex.example.com).
-//  2. POST /api/v1/auth/dex/connectors/ for each upstream IdP (Azure AD,
-//     LDAP, SAML, ...).
-//  3. POST /api/v1/auth/dex/apply/ to reconcile the retained runtime Secret
-//     that the chart's Deployment mounts read-only.
-//  4. POST /api/v1/auth/dex/register-as-sso/ to add a `dex` row in
-//     sso_configurations so A1's generic OIDC path treats Dex as a regular
-//     /auth/login/dex/ provider.
-//
-// The `cluster_tools` row is seeded in the canonical v1 initial schema
-// alongside the dex_connectors / dex_settings tables. Chart coordinates
-// stay here as Go constants so handlers/tests have one source of truth.
-const (
-	DexToolSlug          = "dex"
-	DexToolName          = "Dex Identity Broker"
-	DexChartName         = "dex"
-	DexChartRepoURL      = "https://charts.dexidp.io"
-	DexChartCategory     = "auth"
-	DexDefaultNamespace  = "dex"
-	DexRuntimeSecretName = "astronomer-dex-runtime"
-)
-
-// DexChartCoordinates returns the chart coordinates for dex as the same
-// struct shape stored under `cluster_tools.charts`.
-func DexChartCoordinates() toolChart {
-	return toolChart{
-		ChartName: DexChartName,
-		RepoURL:   DexChartRepoURL,
-		Namespace: DexDefaultNamespace,
-		Order:     0,
-	}
-}
-
 // Phase B2 — Velero backup engine
 //
 // Catalog entry for `velero` from the vmware-tanzu Helm repo. Per-cluster
@@ -184,7 +144,7 @@ type ToolScope string
 
 const (
 	// ToolScopeControlPlane means the tool is part of the management plane
-	// and should only be installed on the local Astronomer cluster (Dex).
+	// and should only be installed on the local Astronomer cluster.
 	// Installing it on a workload cluster is almost always a
 	// mistake — nothing on the workload cluster consumes it.
 	ToolScopeControlPlane ToolScope = "control-plane"
@@ -201,7 +161,6 @@ const (
 // to ToolScopeAny rather than blocking, which keeps the catalog extensible
 // without requiring every tool to be classified.
 var toolScopes = map[string]ToolScope{
-	DexToolSlug:         ToolScopeControlPlane,
 	VeleroToolSlug:      ToolScopeWorkload,
 	CISOperatorToolSlug: ToolScopeWorkload,
 }

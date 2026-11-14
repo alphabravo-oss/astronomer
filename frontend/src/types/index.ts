@@ -53,8 +53,6 @@ export * from "@/types/tools";
 
 export * from "@/types/events";
 
-export * from "@/types/dex";
-
 export * from "@/types/velero";
 
 export * from "@/types/cis";

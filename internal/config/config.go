@@ -15,6 +15,17 @@ import (
 
 // Config holds all configuration for the application.
 type Config struct {
+	IdentityCAFile           string `mapstructure:"identity_ca_file"`
+	IdentityMode             string `mapstructure:"identity_mode"`
+	IdentityIssuer           string `mapstructure:"identity_issuer"`
+	IdentityClientID         string `mapstructure:"identity_client_id"`
+	IdentityClientSecret     string `mapstructure:"identity_client_secret"`
+	IdentityJWKSURL          string `mapstructure:"identity_jwks_url"`
+	IdentityAuthorizationURL string `mapstructure:"identity_authorization_url"`
+	IdentityTokenURL         string `mapstructure:"identity_token_url"`
+	IdentityRedirectURI      string `mapstructure:"identity_redirect_uri"`
+	IdentityRolesClaim       string `mapstructure:"identity_roles_claim"`
+
 	DatabaseURL string `mapstructure:"database_url"`
 	RedisURL    string `mapstructure:"redis_url"`
 	// EventRelayQueueCapacity bounds local events waiting for cross-replica
@@ -316,19 +327,6 @@ type Config struct {
 	KubectlShellIdleTimeoutMinutes  int    `mapstructure:"kubectl_shell_idle_timeout_minutes"`
 	KubectlShellSessionHardCapHours int    `mapstructure:"kubectl_shell_session_hard_cap_hours"`
 
-	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
-	// AuthLocalPasswordOnly is the production acknowledgement required when no
-	// bundled Dex is deployed.
-	DexBundledEnabled           bool   `mapstructure:"dex_bundled_enabled"`
-	AuthLocalPasswordOnly       bool   `mapstructure:"auth_local_password_only"`
-	DexBundledNamespace         string `mapstructure:"dex_bundled_namespace"`
-	DexBundledReleaseName       string `mapstructure:"dex_bundled_release_name"`
-	DexBundledDeploymentName    string `mapstructure:"dex_bundled_deployment_name"`
-	DexBundledServiceName       string `mapstructure:"dex_bundled_service_name"`
-	DexBundledRuntimeSecretName string `mapstructure:"dex_bundled_runtime_secret_name"`
-	DexBundledMigrationPhase    string `mapstructure:"dex_bundled_migration_phase"`
-	DexBundledIssuerURL         string `mapstructure:"dex_bundled_issuer_url"`
-
 	CRDWatchNamespace string `mapstructure:"crd_watch_namespace"`
 
 	ManagementBackupImage          string `mapstructure:"management_backup_image"`
@@ -539,14 +537,6 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "otel_traces_sampler_arg", Value: 0.05},
 		envconfig.Default{Key: "agent_otel_traces_sampler_arg", Value: 0.05},
-		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
-		envconfig.Default{Key: "dex_bundled_namespace", Value: "astronomer"},
-		envconfig.Default{Key: "dex_bundled_release_name", Value: "astronomer"},
-		envconfig.Default{Key: "dex_bundled_deployment_name", Value: "astronomer-dex"},
-		envconfig.Default{Key: "dex_bundled_service_name", Value: "astronomer-dex"},
-		envconfig.Default{Key: "dex_bundled_runtime_secret_name", Value: "astronomer-dex-runtime"},
-		envconfig.Default{Key: "dex_bundled_migration_phase", Value: "fresh"},
-		envconfig.Default{Key: "auth_local_password_only", Value: false},
 		envconfig.Default{Key: "chart_rating_bayesian_avg", Value: 4.0},
 		envconfig.Default{Key: "chart_rating_bayesian_weight", Value: 10.0},
 		envconfig.Default{Key: "crd_watch_namespace", Value: "astronomer-mgmt"},
@@ -566,6 +556,9 @@ func Load() (*Config, error) {
 
 	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {
+		return nil, err
+	}
+	if _, err := cfg.SharedIdentity(); err != nil {
 		return nil, err
 	}
 	captureHelmOperatorProxy(cfg, v.IsSet("helm_repository_no_proxy"))

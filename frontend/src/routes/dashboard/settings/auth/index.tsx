@@ -1,306 +1,179 @@
 import { createFileRoute } from "@tanstack/react-router";
-/**
- * /dashboard/settings/auth/ — overview page.
- *
- * Three concerns:
- *   1. Identity Broker card — reflects the bundled Dex settings contract.
- *      Deployment is owned by the management Helm chart, never the remote
- *      cluster-tools catalog.
- *   2. Configured connectors table — DataTable over /auth/dex/connectors/.
- *      Row actions: edit, delete (with ConfirmDialog), apply.
- *   3. Register-as-SSO callout — only after at least one connector exists,
- *      because there's no point flipping the SSO row on without an upstream.
- */
 import { useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  Plus,
-  ShieldCheck,
-  Wrench,
-  RefreshCw,
-  ArrowRight,
-  KeyRound,
-} from "lucide-react";
-import { DataTable } from "@/components/ui/data-table";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ActionButton } from "@/components/ui/action-button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { FormShell } from "@/components/ui/form-shell";
+import { useAppForm } from "@/lib/form";
+import { queryKeys } from "@/lib/query-keys";
+import { ActionButton as Button } from "@/components/ui/action-button";
 import {
-  useDexConnectors,
-  useDeleteDexConnector,
-  useApplyDexConfig,
-  useDexSettings,
-} from "@/components/auth/hooks";
-import type { DexConnector } from "@/types";
-import { connectorColumns } from "./-columns";
+  getSettingsIdentityBindings,
+  postSettingsIdentityBindings,
+  deleteSettingsIdentityBindings,
+} from "@/lib/api/generated/client";
+import { toastError } from "@/lib/toast";
+import { useSSOProviders } from "@/lib/hooks/user-settings";
 
-function dexInstallState(settings: ReturnType<typeof useDexSettings>["data"]) {
-  return {
-    installed: Boolean(settings?.configured),
-    clusterName: undefined,
-    loading: false,
-  };
-}
-
-function AuthOverviewPage() {
-  const navigate = useNavigate();
-  const { data: connectors = [], isLoading: connectorsLoading } =
-    useDexConnectors();
-  const { data: settings } = useDexSettings();
-  const deleteMutation = useDeleteDexConnector();
-  const applyMutation = useApplyDexConfig();
-
-  const [deleteTarget, setDeleteTarget] = useState<DexConnector | null>(null);
-
-  const dexInstall = dexInstallState(settings);
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      await deleteMutation.mutateAsync(deleteTarget.id);
-      setDeleteTarget(null);
-    } catch {
-      /* mutation toasts on error */
-    }
-  };
-
-  const columns = connectorColumns({
-    onEdit: (row) =>
-      void navigate({ to: `/dashboard/settings/auth/connectors/${row.id}` }),
-    onDelete: setDeleteTarget,
+type Binding = { issuer: string; subject: string; user_id: string };
+function IdentitySettings() {
+  const { data: providers } = useSSOProviders();
+  const enabled = providers?.some((p) => p.enabled) ?? false;
+  const [offset, setOffset] = useState(0);
+  const cache = useQueryClient();
+  const bindings = useQuery({
+    queryKey: queryKeys.settings.identityBindings(offset),
+    enabled,
+    queryFn: async () => {
+      const r = await getSettingsIdentityBindings({ query: { offset } });
+      return (r.data ?? []) as Binding[];
+    },
   });
-
+  const change = useMutation({
+    mutationFn: async ({
+      method,
+      user_id,
+      subject,
+    }: {
+      method: "post" | "delete";
+      user_id: string;
+      subject: string;
+    }) =>
+      (method === "post"
+        ? postSettingsIdentityBindings
+        : deleteSettingsIdentityBindings)({ body: { user_id, subject } }),
+    onError: () =>
+      toastError(
+        "The identity binding could not be changed. Check the account, subject and existing bindings.",
+      ),
+    onSuccess: () => {
+      void cache.invalidateQueries({
+        queryKey: queryKeys.settings.identityBindingsAll,
+      });
+    },
+  });
+  const form = useAppForm({
+    defaultValues: { user_id: "", subject: "" },
+    onSubmit: async ({ value }) => {
+      try {
+        await change.mutateAsync({ method: "post", ...value });
+        form.reset();
+      } catch {
+        /* Mutation state renders the error. */
+      }
+    },
+  });
   return (
     <PageShell>
-      {settings?.runtimePhase === "prepare" && (
-        <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 text-sm text-status-warning">
-          Dex is in prepare: Apply stages and validates the retained Secret
-          without rolling the Deployment. Review and sync the cutover revision
-          before registration can be verified.
-        </div>
-      )}
       <PageHeader
         title="Authentication"
-        description="Astronomer brokers enterprise IdPs through Dex. Configure upstream connectors (Azure AD, Okta, LDAP, SAML, …) here; once applied, register Dex as the platform's SSO provider with one click."
-        actions={
-          connectors.length > 0 ? (
-            <ActionButton
-              intent="primary"
-              icon={<ShieldCheck className="h-4 w-4" />}
-              onClick={() =>
-                void navigate({ to: "/dashboard/settings/auth/register-sso" })
-              }
-            >
-              Register Dex as SSO
-            </ActionButton>
-          ) : undefined
-        }
+        description="Local login is always available. Single sign-on is optional."
       />
-
-      {/* Identity broker card */}
-      <DexInstallCard
-        installed={dexInstall.installed}
-        clusterName={dexInstall.clusterName}
-        loading={dexInstall.loading}
-        issuerUrl={settings?.issuerUrl}
-      />
-
-      {/* Connector table */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">
-              Configured Connectors
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Each row becomes a `connectors` entry in the rendered Dex config.
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Local accounts</h2>
+        <p>
+          Password login, MFA, recovery and API tokens remain available
+          regardless of SSO.
+        </p>
+        <h2 className="text-lg font-semibold">Single sign-on</h2>
+        <p>
+          {enabled
+            ? "An external identity provider is configured."
+            : "Single sign-on is not configured. Configure a trusted provider in the deployment settings to enable it."}
+        </p>
+        {enabled && (
+          <>
+            <p>
+              Link an existing account using the exact subject supplied by your
+              identity provider. Email addresses never link accounts
+              automatically.
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <ActionButton
-              onClick={() => applyMutation.mutate()}
-              disabled={applyMutation.isPending || connectors.length === 0}
-              loading={applyMutation.isPending}
-              icon={<RefreshCw className="h-3.5 w-3.5" />}
-              tooltip="Reconcile the retained runtime Secret and roll Dex when changed"
+            <FormShell
+              form={form}
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!change.isPending) void form.handleSubmit();
+              }}
             >
-              Apply to Dex
-            </ActionButton>
-            <ActionButton
-              intent="primary"
-              icon={<Plus className="h-4 w-4" />}
-              onClick={() =>
-                void navigate({ to: "/dashboard/settings/auth/connectors/new" })
-              }
-            >
-              Add Connector
-            </ActionButton>
-          </div>
-        </div>
-
-        <DataTable
-          data={connectors}
-          columns={columns}
-          keyExtractor={(row) => row.id}
-          searchPlaceholder="Search connectors..."
-          loading={connectorsLoading}
-          emptyState={{
-            title: "No identity connectors configured",
-            description:
-              "Connect your identity provider to enable single sign-on.",
-            action: {
-              label: "Add connector",
-              href: "/dashboard/settings/auth/connectors/new",
-            },
-          }}
-        />
-      </div>
-
-      {/* Quick links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <RouterLink
-          to="/dashboard/settings/auth/settings"
-          className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
-        >
-          <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
-            <KeyRound className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Dex Settings</p>
-            <p className="text-xs text-muted-foreground">
-              Issuer URL, public clients, token expiry.
-            </p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        </RouterLink>
-        <RouterLink
-          to="/dashboard/settings/auth/register-sso"
-          className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
-        >
-          <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Register as SSO
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Wire Dex as the platform's OIDC SSO provider.
-            </p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        </RouterLink>
-        <RouterLink
-          to="/dashboard/settings/auth/scim-tokens"
-          className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
-        >
-          <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
-            <KeyRound className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              SCIM Provisioning Tokens
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Mint / revoke bearer tokens for IdP SCIM 2.0 sync.
-            </p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        </RouterLink>
-      </div>
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete connector"
-        description={`This will remove the "${deleteTarget?.name}" connector. Apply the changes to Dex afterwards to roll out the update.`}
-        confirmText="Delete"
-        confirmValue={deleteTarget?.name}
-        variant="destructive"
-        loading={deleteMutation.isPending}
-      />
+              <form.AppForm>
+                <form.FormErrorSummary
+                  serverError={
+                    change.isError
+                      ? "The identity binding could not be changed. Check the account, subject and existing bindings."
+                      : undefined
+                  }
+                />
+              </form.AppForm>
+              <form.AppField name="user_id">
+                {(field) => <field.TextField label="Local user ID" required />}
+              </form.AppField>
+              <form.AppField name="subject">
+                {(field) => (
+                  <field.TextField label="External subject" required />
+                )}
+              </form.AppField>
+              <Button intent="primary" type="submit" loading={change.isPending}>
+                Link account
+              </Button>
+            </FormShell>
+            {change.isError && (
+              <p role="alert">
+                The binding could not be changed. Check the account, subject and
+                existing bindings.
+              </p>
+            )}
+            {bindings.isError && (
+              <p role="alert">Could not load identity bindings.</p>
+            )}
+            <ul className="space-y-3">
+              {bindings.data?.map((b) => (
+                <li key={b.subject} className="flex items-center gap-3">
+                  <span>
+                    {b.subject} → {b.user_id}
+                  </span>
+                  <Button
+                    intent="default"
+                    disabled={change.isPending}
+                    onClick={() =>
+                      change.mutate({
+                        method: "delete",
+                        user_id: b.user_id,
+                        subject: b.subject,
+                      })
+                    }
+                  >
+                    Unlink
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-3">
+              <Button
+                intent="default"
+                disabled={offset === 0}
+                onClick={() => setOffset(Math.max(0, offset - 100))}
+              >
+                Previous
+              </Button>
+              <Button
+                intent="default"
+                disabled={(bindings.data?.length ?? 0) < 100}
+                onClick={() => setOffset(offset + 100)}
+              >
+                Next
+              </Button>
+            </div>
+          </>
+        )}
+      </section>
     </PageShell>
   );
 }
-
-function DexInstallCard({
-  installed,
-  clusterName,
-  loading,
-  issuerUrl,
-}: {
-  installed: boolean;
-  clusterName?: string;
-  loading: boolean;
-  issuerUrl?: string;
-}) {
-  const navigate = useNavigate();
-  return (
-    <div className="rounded-xl border border-border bg-card p-(--card-p)">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-            <Wrench className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-foreground">Dex</p>
-              <StatusBadge
-                status={
-                  installed ? "active" : loading ? "connecting" : "disconnected"
-                }
-                label={
-                  installed
-                    ? "Configured"
-                    : loading
-                      ? "Checking…"
-                      : "Not configured"
-                }
-                size="sm"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {installed
-                ? `Bundled runtime configured${clusterName ? ` on ${clusterName}` : ""}.`
-                : "Enable bundled Dex in the management Helm chart, then bind its settings here."}
-            </p>
-            {issuerUrl && (
-              <p className="text-2xs font-mono text-muted-foreground mt-1.5 truncate">
-                Issuer · {issuerUrl}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="shrink-0">
-          {installed ? (
-            <ActionButton
-              size="sm"
-              onClick={() =>
-                void navigate({ to: "/dashboard/settings/auth/settings" })
-              }
-            >
-              Configure
-            </ActionButton>
-          ) : (
-            <ActionButton
-              size="sm"
-              intent="primary"
-              onClick={() =>
-                void navigate({ to: "/dashboard/settings/auth/install" })
-              }
-            >
-              Configure bundled Dex
-            </ActionButton>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export const Route = createFileRoute("/dashboard/settings/auth/")({
-  component: AuthOverviewPage,
+  component: () => (
+    <SettingsAuthGate>
+      <IdentitySettings />
+    </SettingsAuthGate>
+  ),
 });

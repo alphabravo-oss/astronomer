@@ -291,9 +291,6 @@ func (h *ToolHandler) EnsureInstalled(ctx context.Context, clusterID uuid.UUID, 
 	if h == nil || h.queries == nil {
 		return sqlc.InstalledChart{}, errors.New("tool handler not configured")
 	}
-	if slug == DexToolSlug {
-		return sqlc.InstalledChart{}, errors.New("Dex is bundled with the Astronomer management chart and cannot be installed from the remote tools catalog")
-	}
 	tool, err := h.queries.GetToolBySlug(ctx, slug)
 	if err != nil {
 		return sqlc.InstalledChart{}, err

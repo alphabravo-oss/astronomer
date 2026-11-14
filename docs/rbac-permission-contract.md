@@ -31,7 +31,7 @@ server through this resource/action contract.
 | `security` | Scans, compliance posture, CIS results, vulnerabilities, policy evidence, and security reports. |
 | `rbac` | Roles, role templates, bindings, group mappings, permission previews, and effective permission inspection. |
 | `settings` | Global platform settings that are not covered by a narrower resource. |
-| `sso` | SSO/OIDC/SAML/Dex connector and authentication provider configuration. |
+| `sso` | Optional OIDC identity bindings; local accounts remain independently administered. |
 | `users` | Local users, activation, password reset, locking, and user lifecycle. |
 | `audit_logs` | Audit search, export, detail, and read-audit evidence. |
 | `agents` | Cluster-agent inventory, diagnostics, self-test, lifecycle operations, compatibility, and upgrade queueing. |
@@ -108,7 +108,7 @@ server through this resource/action contract.
 | Manage scans, compliance, or security evidence | `security:create/read/update/delete/list` |
 | Manage roles, bindings, templates, and permission previews | `rbac:create/read/update/delete/list` |
 | Manage users | `users:create/read/update/delete/list` |
-| Manage SSO and Dex connectors | `sso:create/read/update/delete/list` |
+| Manage optional SSO identity bindings | `sso:create/read/update/delete/list` |
 | Manage global settings | `settings:read/update/manage` |
 | Search/export audit logs | `audit_logs:read` and `audit_logs:list` |
 | View logging destinations and pipelines | `logging:read` and `logging:list` on the cluster |

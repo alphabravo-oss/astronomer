@@ -76,7 +76,6 @@ func chartRuntimeSources(ctx context.Context, raw []byte, manifest releasecontra
 		"utilities.busybox":              {"utilities", "busybox"},
 		"postgres":                       {"postgres", "image"},
 		"redis":                          {"redis", "image"},
-		"dex":                            {"dex", "image"},
 		"managementRestoreDrill.sidecar": {"managementRestoreDrill", "sidecar", "image"},
 		"managementLogging":              {"managementLogging", "image"},
 	}

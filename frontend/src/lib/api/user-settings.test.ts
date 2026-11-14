@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as generated from "@/lib/api/generated/client";
 import {
-  createSSOProvider,
   createUser,
   getAPITokens,
   getUsers,
@@ -120,15 +119,6 @@ describe("user/settings generated API boundary", () => {
         next_offset: null,
       },
     });
-    vi.mocked(generated.postSettingsSso).mockResolvedValueOnce({
-      data: {
-        id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        type: "oidc",
-        name: "Corporate",
-        enabled: true,
-        config: {},
-      },
-    });
 
     await expect(resetUserPassword(userWire.id)).resolves.toEqual({
       temporaryPassword: "generated-secret",
@@ -140,25 +130,5 @@ describe("user/settings generated API boundary", () => {
         scopes: ["read"],
       }),
     ]);
-    await createSSOProvider({
-      type: "oidc",
-      name: "Corporate",
-      enabled: true,
-      config: {
-        clientId: "client-id",
-        clientSecret: "client-secret",
-        metadataUrl: "https://issuer.example/.well-known/openid-configuration",
-      },
-    });
-    expect(generated.postSettingsSso).toHaveBeenCalledWith({
-      body: expect.objectContaining({
-        config: expect.objectContaining({
-          client_id: "client-id",
-          client_secret: "client-secret",
-          metadata_url:
-            "https://issuer.example/.well-known/openid-configuration",
-        }),
-      }),
-    });
   });
 });

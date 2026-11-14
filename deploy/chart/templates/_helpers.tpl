@@ -469,22 +469,8 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 {{- end -}}
 {{- end }}
 
-{{/*
-Issuer URL for the in-chart Dex deployment. Operators can override
-via .Values.dex.issuerURL; otherwise we derive it from .Values.config.serverURL
-+ "/dex". This is also the value the server's dex bootstrap seeds into the
-dex_settings.issuer_url column on first boot. Falls back to a localtest.me
-default to keep `helm template` clean for local dev.
-*/}}
-{{- define "astronomer.dex.issuerURL" -}}
-{{- if .Values.dex.issuerURL -}}
-{{- .Values.dex.issuerURL -}}
-{{- else if .Values.config.serverURL -}}
-{{- printf "%s/dex" (trimSuffix "/" .Values.config.serverURL) -}}
-{{- else -}}
-http://astronomer.localtest.me/dex
-{{- end -}}
-{{- end }}
+
+
 
 {{/*
 astronomer.validateInputs runs on every render (any env), catching misconfig
@@ -676,7 +662,7 @@ rendered manifest.
           "postgres.image.digest" .Values.postgres.image.digest
           "preflight.image.digest" .Values.preflight.image.digest -}}
     {{- if .Values.frontend.enabled }}{{- $_ := set $immutableImages "frontend.image.digest" .Values.frontend.image.digest -}}{{- end }}
-    {{- if .Values.dex.enabled }}{{- $_ := set $immutableImages "dex.image.digest" .Values.dex.image.digest -}}{{- end }}
+
     {{- if ne (include "astronomer.redisMode" .) "external" }}{{- $_ := set $immutableImages "redis.image.digest" .Values.redis.image.digest -}}{{- end }}
     {{- if .Values.managementBackup.enabled }}
       {{- $_ := set $immutableImages "managementBackup.image.digest" .Values.managementBackup.image.digest -}}
@@ -694,13 +680,8 @@ rendered manifest.
     {{- if and .Values.kubectlShell.enabled .Values.kubectlShell.image (not (regexMatch "^[^[:space:]]+@sha256:[a-f0-9]{64}$" .Values.kubectlShell.image)) }}
       {{- $errs = append $errs "  - kubectlShell.image must be repository@sha256:digest when explicitly overridden in production" }}
     {{- end }}
-    {{- /* Migration 045 soft check: production posture is "Dex on" unless
-           the operator explicitly opts into local-password-only auth. The
-           default chart value of config.auth.localPasswordOnly=false makes
-           the misconfigured-install path fail closed. */ -}}
-    {{- if and (not .Values.dex.enabled) (not (and .Values.config.auth (and .Values.config.auth.localPasswordOnly)) ) }}
-      {{- $errs = append $errs "  - dex.enabled=false but config.auth.localPasswordOnly is not true. Either flip dex.enabled=true (recommended) or set config.auth.localPasswordOnly=true to confirm the install will only ever use local passwords (no SSO)." }}
-    {{- end }}
+
+
     {{- /* Management-plane backups must be wired in production or the DR story
            is a no-op (RPO silently becomes infinite). managementBackup.enabled
            defaults true but the S3 target is empty, so a plain production render

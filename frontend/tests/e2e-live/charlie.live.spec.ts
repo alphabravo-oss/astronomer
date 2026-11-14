@@ -8,7 +8,8 @@ test("Charlie is a header icon + drawer, never a FAB", async ({ page }) => {
   await expect(page.getByTestId("app-shell")).toBeVisible();
   await expect(page.locator("button.fixed.bottom-5")).toHaveCount(0);
 
-  const flags = await page.context().request.get("/api/v1/settings/feature-flags/");
+  const flags = await page.context().request.get("/api/v1/settings/features/");
+  expect(flags.status()).toBe(200);
   const body = flags.ok()
     ? ((await flags.json()) as { data?: Record<string, boolean> })
     : { data: undefined };

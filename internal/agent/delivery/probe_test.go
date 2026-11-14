@@ -33,7 +33,7 @@ func readyController(t *testing.T, name string, remoteBases bool) *appsv1.Deploy
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: DeliverySystemNamespace, Generation: 2, Labels: map[string]string{"app.kubernetes.io/version": fluxdistribution.Version()}},
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: images[name].Reference + "@" + images[name].Digest, Args: args}}}}},
-		Status:     appsv1.DeploymentStatus{ObservedGeneration: 2, AvailableReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}},
+		Status:     appsv1.DeploymentStatus{ObservedGeneration: 2, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}},
 	}
 }
 
@@ -41,6 +41,8 @@ func TestDeploymentReadyAllowsSourceControllerWarmStandby(t *testing.T) {
 	controller := readyController(t, "source-controller", false)
 	replicas := int32(2)
 	controller.Spec.Replicas = &replicas
+	controller.Status.Replicas = replicas
+	controller.Status.UpdatedReplicas = replicas
 	controller.Status.ReadyReplicas = 1
 	controller.Status.AvailableReplicas = 1
 	controller.Status.Conditions = []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionFalse}}

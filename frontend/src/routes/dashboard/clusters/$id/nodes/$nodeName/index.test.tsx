@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { NodeDetail } from "@/types";
-import { NodeDetailPageBody } from "./index";
+import { NodeDetailPageBody } from "./-page";
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -112,6 +112,8 @@ describe("NodeDetailPageBody per-action pending", () => {
     expect(screen.getByRole("button", { name: /drain/i })).toBeDisabled();
     // ...but the unrelated "Add label" control in the Overview tab must stay
     // enabled — this is the bug the per-action pending fix closes.
-    expect(screen.getByRole("button", { name: "Add label" })).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Add label" }),
+    ).not.toBeDisabled();
   });
 });

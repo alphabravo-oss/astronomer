@@ -18,7 +18,7 @@ func renderedImageRefs(rendered string) []string {
 
 func TestZotRegistryRendersEveryImageFromClusterLocalHost(t *testing.T) {
 	const zotHost = "astronomer-zot.default.svc.cluster.local:5000"
-	rendered := helmTemplate(t, "registry.zot.enabled=true", "dex.enabled=true", "postgres.mode=cloudNativePG", "postgres.bundled.enabled=false")
+	rendered := helmTemplate(t, "registry.zot.enabled=true", "postgres.mode=cloudNativePG", "postgres.bundled.enabled=false")
 	images := renderedImageRefs(rendered)
 	if len(images) < 6 {
 		t.Fatalf("expected the full image set, got %v", images)
@@ -35,7 +35,6 @@ func TestZotRegistryRendersEveryImageFromClusterLocalHost(t *testing.T) {
 	for _, want := range []string{
 		zotHost + "/alphabravo-oss/astronomer-go-server:",
 		zotHost + "/busybox:",
-		zotHost + "/dexidp/dex:",
 		zotHost + "/cloudnative-pg/postgresql:17.11",
 		`REGISTRY_LOCAL: "` + zotHost + `"`,
 		`REGISTRY_PLAIN_HTTP: "` + zotHost + `"`,

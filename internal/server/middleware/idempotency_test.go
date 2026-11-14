@@ -294,3 +294,41 @@ func TestIdempotency_IsolatesAuthenticatedUsers(t *testing.T) {
 		t.Fatalf("handler calls = %d, want one per user", got)
 	}
 }
+
+func TestIdempotencyKeySeparatesPathAndHeader(t *testing.T) {
+	t.Parallel()
+	first := httptest.NewRequest(http.MethodPost, "/items/a:b", nil)
+	first.Header.Set("Idempotency-Key", "c")
+	second := httptest.NewRequest(http.MethodPost, "/items/a", nil)
+	second.Header.Set("Idempotency-Key", "b:c")
+	if idempotencyKey(first) == idempotencyKey(second) {
+		t.Fatal("path and header delimiters conflated two requests")
+	}
+}
+
+func TestIdempotencyTransientFailureAllowsRetry(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	calls := 0
+	handler := idempotencyWith(ctx, time.Minute, time.Now)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	for attempt, status := range []int{http.StatusServiceUnavailable, http.StatusNoContent, http.StatusNoContent} {
+		request := httptest.NewRequest(http.MethodPost, "/items", nil)
+		request.Header.Set("Idempotency-Key", "retry")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != status || (response.Header().Get("Idempotent-Replayed") == "true") != (attempt == 2) {
+			t.Fatalf("attempt=%d status=%d replay=%q", attempt, response.Code, response.Header().Get("Idempotent-Replayed"))
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("handler ran %d times, want 2", calls)
+	}
+}

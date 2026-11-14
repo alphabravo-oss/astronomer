@@ -20,7 +20,6 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 		"delivery.DeploymentHandler":    {"Reconcile", "Suspend"},
 		"handler.BackupHandler":         {"CreateStorageConfig", "DeleteStorageConfig", "UpdateStorageConfig", "CreateBackup", "DeleteBackup", "CreateSchedule", "DeleteSchedule", "UpdateSchedule", "TriggerSchedule", "CreateRestoreByBackup"},
 		"handler.ClusterHandler":        {"Create", "Update", "Delete", "UpdateRegistryConfig"},
-		"handler.DexHandler":            {"CreateConnector", "UpdateConnector", "DeleteConnector", "UpdateSettings", "Apply", "RegisterAsSSO"},
 		"handler.GroupMappingsHandler":  {"Create", "Delete", "ResyncUser"},
 		"handler.ProjectHandler":        {"Create", "Update", "Delete", "AddNamespace", "RemoveNamespace"},
 		"handler.RBACHandler":           {"CreateGlobalRole", "UpdateGlobalRole", "DeleteGlobalRole", "CreateClusterRole", "UpdateClusterRole", "DeleteClusterRole", "CreateProjectRole", "UpdateProjectRole", "DeleteProjectRole", "CreateGlobalRoleBinding", "DeleteGlobalRoleBinding", "CreateClusterRoleBinding", "DeleteClusterRoleBinding", "CreateProjectRoleBinding", "DeleteProjectRoleBinding"},
@@ -52,7 +51,6 @@ func TestKeyMutatingHandlersEmitAudit(t *testing.T) {
 	// Keep this allow-list handler-scoped: globally accepting recordAuditOutbox
 	// would let an unrelated mutator satisfy the contract accidentally.
 	atomicAuditOutboxHandlers := map[string]map[string]struct{}{
-		"handler.DexHandler":            {"Apply": {}, "RegisterAsSSO": {}},
 		"delivery.SourceHandler":        {"Verify": {}},
 		"delivery.TargetHandler":        {"Delete": {}},
 		"handler.CatalogHandler":        {"SyncRepo": {}},

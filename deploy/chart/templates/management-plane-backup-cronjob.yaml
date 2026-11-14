@@ -124,7 +124,8 @@ spec:
                   # Top-level, non-empty Secret keys only: the Secret volume's
                   # ..data/..<ts> directories and unset optional keys (e.g. an
                   # empty ASTRONOMER_INTERNAL_PSK_PREVIOUS) are not bundled;
-                  # dr-crypto accepts only non-empty top-level regular files.
+                  # dr-crypto accepts non-empty regular files and the two
+                  # explicitly supported catalog trust directories below.
                   for key in /var/run/astronomer-keys-source/*; do
                     if [ -s "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/; fi
                   done
@@ -139,11 +140,17 @@ spec:
                   # Preserve the private catalog trust roots alongside the
                   # database policy that references them.
                   mkdir -p /var/run/astronomer-keys/catalog-ca
-                  cp -aL /var/run/catalog-ca/. /var/run/astronomer-keys/catalog-ca/
+                  # Copy actual Secret keys, not Kubernetes' ..data links or
+                  # timestamp directories. Include ordinary dot-prefixed keys.
+                  for key in /var/run/catalog-ca/* /var/run/catalog-ca/.[!.]*; do
+                    if [ -f "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/catalog-ca/; fi
+                  done
                   {{- end }}
                   {{- if .Values.catalog.signature.trustKeys.existingSecret }}
                   mkdir -p /var/run/astronomer-keys/catalog-signature-trust
-                  cp -aL /var/run/catalog-signature-trust/. /var/run/astronomer-keys/catalog-signature-trust/
+                  for key in /var/run/catalog-signature-trust/* /var/run/catalog-signature-trust/.[!.]*; do
+                    if [ -f "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/catalog-signature-trust/; fi
+                  done
                   {{- end }}
                   dr-crypto key-bundle-create --source /var/run/astronomer-keys --output "${KEY_BUNDLE}"
                   dr-crypto encrypt --input "${KEY_BUNDLE}" --output "${KEY_ENVELOPE}" \

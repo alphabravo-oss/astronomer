@@ -1,3 +1,4 @@
+import { verifyEditorBuild } from "./verify-editor-build.mjs";
 import { access, readFile, readdir } from "node:fs/promises";
 
 const distDirectory = new URL("../dist/", import.meta.url);
@@ -24,7 +25,7 @@ if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(index)) {
 await Promise.all([
   access(new URL("theme-bootstrap.js", distDirectory)),
   access(new URL("wterm.wasm", distDirectory)),
-  access(new URL("monaco/vs/loader.js", distDirectory)),
+  access(new URL("monaco/editor.js", distDirectory)),
 ]);
 
 const textAssets = (await filesBelow(distDirectory)).filter((url) =>
@@ -33,7 +34,7 @@ const textAssets = (await filesBelow(distDirectory)).filter((url) =>
 let hasSameOriginMonacoConfig = false;
 for (const asset of textAssets) {
   const content = await readFile(asset, "utf8");
-  hasSameOriginMonacoConfig ||= content.includes("/monaco/vs");
+  hasSameOriginMonacoConfig ||= content.includes("/monaco/editor.js");
   if (content.includes("data:font/")) {
     throw new Error(`${asset.pathname} embeds a font blocked by CSP`);
   }
@@ -57,3 +58,5 @@ if (/\s'unsafe-(?:inline|eval)'(?:\s|$)/.test(scriptSources)) {
 if (!nginx.includes("worker-src 'self' blob:")) {
   throw new Error("frontend CSP does not permit same-origin Monaco workers");
 }
+
+await verifyEditorBuild(new URL("monaco/", distDirectory));

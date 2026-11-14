@@ -166,7 +166,7 @@ func deploymentReady(deployment *appsv1.Deployment, name string) bool {
 	// controller. Other controllers must satisfy their Deployment availability
 	// condition normally.
 	if name == "source-controller" {
-		return true
+		return sourceControllerWarmStandbyReady(deployment)
 	}
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type == appsv1.DeploymentAvailable && condition.Status == "True" {

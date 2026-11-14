@@ -30,7 +30,7 @@ func Egress(cfg *config.Config) *egress.Set {
 		set.Add(cfg.CatalogURL)
 	}
 	for _, endpoint := range []string{
-		cfg.OTELExporterEndpoint, cfg.OIDCIssuer, cfg.DexBundledIssuerURL,
+		cfg.OTELExporterEndpoint, cfg.OIDCIssuer, cfg.IdentityIssuer,
 		cfg.HelmRepositoryProxyURL, cfg.DeliverySourceProxyURL,
 		cfg.DeliveryDatabaseReadRegistry, cfg.DeliveryDatabaseReadRealmURL, cfg.DeliveryDatabaseUpdateRepository,
 	} {
@@ -47,7 +47,7 @@ func Egress(cfg *config.Config) *egress.Set {
 	for _, category := range []string{
 		"smtp:platform_settings", "siem:destinations", "webhooks:subscriptions", "notifications:channels",
 		"helm_repositories:database", "catalog_mirrors:ASTRONOMER_CATALOG_MIRRORS", "backup_s3:destinations",
-		"monitoring_backends:database", "auth_connectors:dex", "adopted_clusters:tunnel_inbound",
+		"monitoring_backends:database", "adopted_clusters:tunnel_inbound",
 	} {
 		set.Dynamic(category)
 	}

@@ -3002,141 +3002,6 @@ export interface OpenAPIComponents {
           "renderer"?: OpenAPIComponents['schemas']['DeliveryRendererSpec'];
           "configuration_digest"?: string;
         };
-    DexConnector: {
-          "id": string;
-          "name": string;
-          "type": string;
-          "display_name": string;
-          "config": Record<string, unknown>;
-          "enabled": boolean;
-          "created_at": string;
-          "updated_at": string;
-        } & Record<string, unknown>;
-    DexConnectorRequest: {
-          "name"?: string;
-          "type"?: string;
-          "display_name"?: string;
-          "config"?: Record<string, unknown>;
-          "enabled"?: boolean;
-        };
-    DexConnectorType: {
-          "type": string;
-          "display_hint": string;
-          "required": string[];
-          "optional": string[];
-          "secret": string[];
-          "nested": Array<{
-            "parent": string;
-            "keys": string[];
-          }>;
-        };
-    DexExpiry: {
-          "idTokens"?: string;
-          "signingKeys"?: string;
-          "refreshTokens"?: {
-            "reuseInterval"?: string;
-            "validIfNotUsedFor"?: string;
-            "absoluteLifetime"?: string;
-          };
-        };
-    DexExtra: {
-          "logger"?: {
-            "level"?: string;
-            "format"?: string;
-          };
-          "frontend"?: {
-            "issuer"?: string;
-            "logoURL"?: string;
-            "dir"?: string;
-            "theme"?: string;
-          };
-          "grpc"?: {
-            "addr"?: string;
-          };
-          "telemetry"?: {
-            "http"?: string;
-          };
-        };
-    DexOperation: {
-          "operation_id": string;
-          "action": "apply" | "register_sso";
-          "target_id": string;
-          "runtime_generation": number;
-          "status": OpenAPIComponents['schemas']['DurableOperationStatus'];
-          "phase": "queued" | "reconciling" | "finalizing" | "completed";
-          "attempt_count": number;
-          "error_code"?: string;
-          "status_url": string;
-          "created_at": string;
-          "updated_at": string;
-          "completed_at"?: string;
-        };
-    DexRegisterSSOResult: {
-          "id"?: string;
-          "provider"?: string;
-          "client_id"?: string;
-          "display_name"?: string;
-          "issuer_url"?: string;
-          "is_enabled"?: boolean;
-          "verified"?: boolean;
-          "staged"?: boolean;
-          "applied"?: boolean;
-          "runtime_state"?: "staged" | "applied";
-          "secret_resource_version"?: string;
-          "runtime_changed"?: boolean;
-          "runtime_generation"?: number;
-          "created"?: boolean;
-          "updated"?: boolean;
-        };
-    DexSettings: {
-          "configured"?: boolean;
-          "issuer_url"?: string;
-          "namespace"?: string;
-          "release_name"?: string;
-          "chart_release_name"?: string;
-          "deployment_name"?: string;
-          "service_name"?: string;
-          "runtime_secret_name"?: string;
-          "public_clients"?: Array<{
-            "id"?: string;
-            "name"?: string;
-            "redirectURIs"?: string[];
-            "secret"?: string;
-            "secret_configured"?: boolean;
-            "public"?: boolean;
-            "trustedPeers"?: string[];
-          }>;
-          "cluster_id"?: string | null;
-          "updated_at"?: string;
-          "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
-          "extra"?: OpenAPIComponents['schemas']['DexExtra'];
-          "runtime_generation"?: number;
-          "runtime_phase"?: "fresh" | "prepare" | "cutover";
-          "runtime_staged_generation"?: number;
-          "runtime_applied_generation"?: number;
-        } & Record<string, unknown>;
-    DexSettingsRequest: {
-          "issuer_url": string;
-          "namespace"?: string;
-          "release_name"?: string;
-          "chart_release_name"?: string;
-          "deployment_name"?: string;
-          "service_name"?: string;
-          "runtime_secret_name"?: string;
-          "public_clients"?: Array<{
-            "id": string;
-            "name"?: string;
-            "redirectURIs"?: string[];
-            "secret"?: string;
-            "secret_configured"?: boolean;
-            "secretConfigured"?: boolean;
-            "public"?: boolean;
-            "trustedPeers"?: string[];
-          }>;
-          "cluster_id"?: string;
-          "expiry"?: OpenAPIComponents['schemas']['DexExpiry'];
-          "extra"?: OpenAPIComponents['schemas']['DexExtra'];
-        };
     DurableOperationStatus: "pending" | "running" | "retrying" | "failed" | "succeeded";
     Error: {
           "error": {
@@ -3478,6 +3343,17 @@ export interface OpenAPIComponents {
           "token"?: string;
           "charts"?: string[];
         } & Record<string, unknown>;
+    IdentityBinding: {
+          "issuer": string;
+          "subject": string;
+          "user_id": string;
+          "created_at"?: string;
+          "linked_by"?: string;
+        };
+    IdentityBindingRequest: {
+          "user_id": string;
+          "subject": string;
+        };
     ImageDatabaseJavaApplicability: "needed" | "not_needed" | "unknown";
     ImageDatabasePostureState: "fresh" | "stale" | "unknown" | "unavailable" | "mirror_unreachable" | "not_needed" | "feed_expired";
     ImageDatabaseScanState: "pending" | "failed" | "complete" | "unavailable";
@@ -4637,21 +4513,8 @@ export interface OpenAPIComponents {
           "supported": boolean;
           "error"?: string;
         };
-    PrincipalMaterializeRequest: {
-          "connector_id": string;
-          "subject": string;
-        };
-    PrincipalMaterialized: {
-          "id": string;
-          "user_id": string;
-          "kind": "pending";
-          "connector_id": string;
-          "email": string;
-          "username": string;
-          "display_name": string;
-        };
     PrincipalSearchItem: {
-          "kind": "local" | "pending" | "external";
+          "kind": "local";
           "user_id"?: string;
           "principal_id"?: string;
           "connector_id"?: string;
@@ -6333,7 +6196,7 @@ export interface OpenAPIComponents {
 }
 
 export interface OpenAPIReadComponents {
-  schemas: Omit<OpenAPIComponents['schemas'], "AdminQueueOperation" | "AdminQueueOperationEnvelope" | "AgentCredentialState" | "AgentLifecycleOperation" | "AgentLifecycleOperationState" | "AgentLifecycleOperationsResponse" | "AgentRegistrationState" | "AgentUpgradeOperationResponse" | "AuditExportOperation" | "BackupKnownStatus" | "CISScan" | "CISScanEnvelope" | "CISScanListEnvelope" | "CharlieAdminAgent" | "CharlieAdminAgentReplica" | "CharlieAdminAgentReplicaStateValue" | "CharlieAdminAlertDeliveryProof" | "CharlieAdminAlertDeliveryProofStatusValue" | "CharlieAdminAlertDeliveryProofView" | "CharlieAdminDiagnosticCheck" | "CharlieAdminDiagnosticCheckStateValue" | "CharlieAdminDiagnostics" | "CharlieAdminStatus" | "CharlieAdminTriggerEvent" | "CharlieAdminTriggerEventStateValue" | "CharlieApprovalState" | "CharlieApprovalSummary" | "CharlieApprovalSummaryStateValue" | "CharlieConnectionOnboardingState" | "CharlieFindingDetail" | "CharlieFindingSummary" | "CharlieFindingSummaryStateValue" | "CharlieFindingSummaryWorkflowStateValue" | "CharlieKubernetesVisibility" | "CharlieKubernetesVisibilityStateValue" | "CharlieOnboardingStatus" | "CharlieOnboardingStatusStateValue" | "CharlieReceiptState" | "CharlieSessionMetadata" | "CharlieSessionMetadataStateValue" | "CharlieThreadMetadata" | "CharlieThreadMetadataStateValue" | "CharlieTriggerRetryReceipt" | "Cluster" | "ClusterConnectionStatus" | "ClusterDeployment" | "ClusterDeploymentControl" | "ClusterDeploymentControlEnvelope" | "ClusterDeploymentDetail" | "ClusterDeploymentDetailEnvelope" | "ClusterDeploymentPage" | "ClusterRegistrationPhaseValue" | "ClusterResponse" | "ClusterSecurityPolicy" | "ClusterSecurityPolicyEnvelope" | "ClusterSecurityPolicySyncStatusValue" | "ClusterToolStatus" | "DeliveryApprovalDecision" | "DeliveryBundleState" | "DeliveryBundleVersion" | "DeliveryBundleVersionDraft" | "DeliveryBundleVersionEnvelope" | "DeliveryBundleVersionPage" | "DeliveryBundleVersionWrite" | "DeliveryClusterInventory" | "DeliveryClusterInventoryEnvelope" | "DeliveryConfigurationTemplate" | "DeliveryConfigurationTemplateEnvelope" | "DeliveryConfigurationTemplatePage" | "DeliveryConfigurationTemplateWrite" | "DeliveryDeploymentPhase" | "DeliveryFailureAction" | "DeliveryFrozenRollout" | "DeliveryFrozenRolloutEnvelope" | "DeliveryPlannedCluster" | "DeliveryPreviousDeployment" | "DeliveryRendererKind" | "DeliveryRendererSpec" | "DeliveryResolvedSource" | "DeliveryRollout" | "DeliveryRolloutApproval" | "DeliveryRolloutApprovalRecord" | "DeliveryRolloutCluster" | "DeliveryRolloutClusterPage" | "DeliveryRolloutClusterState" | "DeliveryRolloutControl" | "DeliveryRolloutControlEnvelope" | "DeliveryRolloutDetail" | "DeliveryRolloutDetailEnvelope" | "DeliveryRolloutPage" | "DeliveryRolloutStart" | "DeliveryRolloutState" | "DeliveryRolloutStrategy" | "DeliveryRolloutStrategyInput" | "DeliverySource" | "DeliverySourceAuthModeValue" | "DeliverySourceEnvelope" | "DeliverySourceKind" | "DeliverySourcePage" | "DeliverySourceStatusValue" | "DeliverySourceWrite" | "DeliveryStrategyKind" | "DeliverySystemAssignmentPhase" | "DeliverySystemCompatibility" | "DeliverySystemCompatibilityEnvelope" | "DeliverySystemRelease" | "DeliverySystemReleaseState" | "DeliverySystemRollout" | "DeliverySystemRolloutState" | "DeliveryVerificationStatus" | "DeliveryVersionIdentity" | "DexOperation" | "DurableOperationStatus" | "ImageDatabaseJavaApplicability" | "ImageDatabasePostureState" | "ImageDatabaseScanState" | "ImageDatabaseStatusV1" | "ImageDatabaseStatusV1Envelope" | "LoggingAttachMutationReceipt" | "LoggingAttachMutationReceiptEnvelope" | "LoggingControllerStatusEnvelope" | "LoggingOperation" | "LoggingOperationEnvelope" | "LoggingOperationListEnvelope" | "LoggingOutputMutationReceipt" | "LoggingOutputMutationReceiptEnvelope" | "LoggingPipelineMutationReceipt" | "LoggingPipelineMutationReceiptEnvelope" | "LoggingTestEnvelope" | "LoggingTestResult" | "LoggingTokenRotation" | "LoggingTokenRotationEnvelope" | "MonitoringOperation" | "MonitoringOperationEnvelope" | "MonitoringOperationPage" | "MonitoringStackStatus" | "MonitoringStackStatusEnvelope" | "NodeOperation" | "NodeOperationEnvelope" | "NodeOperationState" | "PaginatedClusters" | "PollingOperationStatus" | "RegistrationStatus" | "ResourceOperation" | "ResourceOperationEnvelope" | "RestoreKnownStatus" | "SecurityScannerState" | "SupportBundleOperation" | "ToolOperation"> & {
+  schemas: Omit<OpenAPIComponents['schemas'], "AdminQueueOperation" | "AdminQueueOperationEnvelope" | "AgentCredentialState" | "AgentLifecycleOperation" | "AgentLifecycleOperationState" | "AgentLifecycleOperationsResponse" | "AgentRegistrationState" | "AgentUpgradeOperationResponse" | "AuditExportOperation" | "BackupKnownStatus" | "CISScan" | "CISScanEnvelope" | "CISScanListEnvelope" | "CharlieAdminAgent" | "CharlieAdminAgentReplica" | "CharlieAdminAgentReplicaStateValue" | "CharlieAdminAlertDeliveryProof" | "CharlieAdminAlertDeliveryProofStatusValue" | "CharlieAdminAlertDeliveryProofView" | "CharlieAdminDiagnosticCheck" | "CharlieAdminDiagnosticCheckStateValue" | "CharlieAdminDiagnostics" | "CharlieAdminStatus" | "CharlieAdminTriggerEvent" | "CharlieAdminTriggerEventStateValue" | "CharlieApprovalState" | "CharlieApprovalSummary" | "CharlieApprovalSummaryStateValue" | "CharlieConnectionOnboardingState" | "CharlieFindingDetail" | "CharlieFindingSummary" | "CharlieFindingSummaryStateValue" | "CharlieFindingSummaryWorkflowStateValue" | "CharlieKubernetesVisibility" | "CharlieKubernetesVisibilityStateValue" | "CharlieOnboardingStatus" | "CharlieOnboardingStatusStateValue" | "CharlieReceiptState" | "CharlieSessionMetadata" | "CharlieSessionMetadataStateValue" | "CharlieThreadMetadata" | "CharlieThreadMetadataStateValue" | "CharlieTriggerRetryReceipt" | "Cluster" | "ClusterConnectionStatus" | "ClusterDeployment" | "ClusterDeploymentControl" | "ClusterDeploymentControlEnvelope" | "ClusterDeploymentDetail" | "ClusterDeploymentDetailEnvelope" | "ClusterDeploymentPage" | "ClusterRegistrationPhaseValue" | "ClusterResponse" | "ClusterSecurityPolicy" | "ClusterSecurityPolicyEnvelope" | "ClusterSecurityPolicySyncStatusValue" | "ClusterToolStatus" | "DeliveryApprovalDecision" | "DeliveryBundleState" | "DeliveryBundleVersion" | "DeliveryBundleVersionDraft" | "DeliveryBundleVersionEnvelope" | "DeliveryBundleVersionPage" | "DeliveryBundleVersionWrite" | "DeliveryClusterInventory" | "DeliveryClusterInventoryEnvelope" | "DeliveryConfigurationTemplate" | "DeliveryConfigurationTemplateEnvelope" | "DeliveryConfigurationTemplatePage" | "DeliveryConfigurationTemplateWrite" | "DeliveryDeploymentPhase" | "DeliveryFailureAction" | "DeliveryFrozenRollout" | "DeliveryFrozenRolloutEnvelope" | "DeliveryPlannedCluster" | "DeliveryPreviousDeployment" | "DeliveryRendererKind" | "DeliveryRendererSpec" | "DeliveryResolvedSource" | "DeliveryRollout" | "DeliveryRolloutApproval" | "DeliveryRolloutApprovalRecord" | "DeliveryRolloutCluster" | "DeliveryRolloutClusterPage" | "DeliveryRolloutClusterState" | "DeliveryRolloutControl" | "DeliveryRolloutControlEnvelope" | "DeliveryRolloutDetail" | "DeliveryRolloutDetailEnvelope" | "DeliveryRolloutPage" | "DeliveryRolloutStart" | "DeliveryRolloutState" | "DeliveryRolloutStrategy" | "DeliveryRolloutStrategyInput" | "DeliverySource" | "DeliverySourceAuthModeValue" | "DeliverySourceEnvelope" | "DeliverySourceKind" | "DeliverySourcePage" | "DeliverySourceStatusValue" | "DeliverySourceWrite" | "DeliveryStrategyKind" | "DeliverySystemAssignmentPhase" | "DeliverySystemCompatibility" | "DeliverySystemCompatibilityEnvelope" | "DeliverySystemRelease" | "DeliverySystemReleaseState" | "DeliverySystemRollout" | "DeliverySystemRolloutState" | "DeliveryVerificationStatus" | "DeliveryVersionIdentity" | "DurableOperationStatus" | "ImageDatabaseJavaApplicability" | "ImageDatabasePostureState" | "ImageDatabaseScanState" | "ImageDatabaseStatusV1" | "ImageDatabaseStatusV1Envelope" | "LoggingAttachMutationReceipt" | "LoggingAttachMutationReceiptEnvelope" | "LoggingControllerStatusEnvelope" | "LoggingOperation" | "LoggingOperationEnvelope" | "LoggingOperationListEnvelope" | "LoggingOutputMutationReceipt" | "LoggingOutputMutationReceiptEnvelope" | "LoggingPipelineMutationReceipt" | "LoggingPipelineMutationReceiptEnvelope" | "LoggingTestEnvelope" | "LoggingTestResult" | "LoggingTokenRotation" | "LoggingTokenRotationEnvelope" | "MonitoringOperation" | "MonitoringOperationEnvelope" | "MonitoringOperationPage" | "MonitoringStackStatus" | "MonitoringStackStatusEnvelope" | "NodeOperation" | "NodeOperationEnvelope" | "NodeOperationState" | "PaginatedClusters" | "PollingOperationStatus" | "RegistrationStatus" | "ResourceOperation" | "ResourceOperationEnvelope" | "RestoreKnownStatus" | "SecurityScannerState" | "SupportBundleOperation" | "ToolOperation"> & {
     AdminQueueOperation: {
           "id": string;
           "action": "retry" | "discard";
@@ -7114,20 +6977,6 @@ export interface OpenAPIReadComponents {
           "renderer"?: OpenAPIReadComponents['schemas']['DeliveryRendererSpec'];
           "configuration_digest"?: string;
         };
-    DexOperation: {
-          "operation_id": string;
-          "action": "apply" | "register_sso";
-          "target_id": string;
-          "runtime_generation": number;
-          "status": OpenAPIReadComponents['schemas']['DurableOperationStatus'];
-          "phase": "queued" | "reconciling" | "finalizing" | "completed";
-          "attempt_count": number;
-          "error_code"?: string;
-          "status_url": string;
-          "created_at": string;
-          "updated_at": string;
-          "completed_at"?: string;
-        };
     DurableOperationStatus: "pending" | "running" | "retrying" | "failed" | "succeeded" | "unsupported";
     ImageDatabaseJavaApplicability: "needed" | "not_needed" | "unknown" | "unsupported";
     ImageDatabasePostureState: "fresh" | "stale" | "unknown" | "unavailable" | "mirror_unreachable" | "not_needed" | "feed_expired" | "unsupported";
@@ -7382,6 +7231,42 @@ export interface OpenAPIReadComponents {
 }
 
 export interface OpenAPIOperations {
+  "getSettingsIdentityBindings": {
+    method: "GET";
+    path: "/api/v1/settings/identity/bindings";
+    arguments: {
+        "query"?: {
+          "offset"?: number;
+        };
+      };
+    response: {
+        "data"?: OpenAPIComponents['schemas']['IdentityBinding'][];
+      };
+  };
+  "postSettingsIdentityBindings": {
+    method: "POST";
+    path: "/api/v1/settings/identity/bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['IdentityBindingRequest'];
+      };
+    response: {
+        "data"?: {
+          "ok"?: boolean;
+        };
+      };
+  };
+  "deleteSettingsIdentityBindings": {
+    method: "DELETE";
+    path: "/api/v1/settings/identity/bindings";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['IdentityBindingRequest'];
+      };
+    response: {
+        "data"?: {
+          "ok"?: boolean;
+        };
+      };
+  };
   "deleteClustersByIdObservabilityGrafana": {
     method: "DELETE";
     path: "/api/v1/clusters/{id}/observability/grafana";
@@ -15081,16 +14966,6 @@ export interface OpenAPIOperations {
         "data"?: OpenAPIComponents['schemas']['PrincipalSearchResponse'];
       };
   };
-  "postRbacPrincipalsMaterialize": {
-    method: "POST";
-    path: "/api/v1/rbac/principals/materialize";
-    arguments: {
-        "body": OpenAPIComponents['schemas']['PrincipalMaterializeRequest'];
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['PrincipalMaterialized'];
-      };
-  };
   "getRbacMyRoles": {
     method: "GET";
     path: "/api/v1/rbac/my-roles";
@@ -15381,130 +15256,6 @@ export interface OpenAPIOperations {
         "detail"?: string;
       };
   };
-  "getAuthDexConnectorTypes": {
-    method: "GET";
-    path: "/api/v1/auth/dex/connector-types/";
-    arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexConnectorType'][];
-      };
-  };
-  "getAuthDexConnectors": {
-    method: "GET";
-    path: "/api/v1/auth/dex/connectors/";
-    arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexConnector'][];
-      };
-  };
-  "postAuthDexConnectors": {
-    method: "POST";
-    path: "/api/v1/auth/dex/connectors/";
-    arguments: {
-        "body": OpenAPIComponents['schemas']['DexConnectorRequest'];
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexConnector'];
-      };
-  };
-  "getAuthDexConnectorsById": {
-    method: "GET";
-    path: "/api/v1/auth/dex/connectors/{id}/";
-    arguments: {
-        "path": {
-          "id": string;
-        };
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexConnector'];
-      };
-  };
-  "patchAuthDexConnectorsById": {
-    method: "PATCH";
-    path: "/api/v1/auth/dex/connectors/{id}/";
-    arguments: {
-        "path": {
-          "id": string;
-        };
-        "body": OpenAPIComponents['schemas']['DexConnectorRequest'];
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexConnector'];
-      };
-  };
-  "deleteAuthDexConnectorsById": {
-    method: "DELETE";
-    path: "/api/v1/auth/dex/connectors/{id}/";
-    arguments: {
-        "path": {
-          "id": string;
-        };
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: {
-          "deleted"?: string;
-        };
-      };
-  };
-  "getAuthDexSettings": {
-    method: "GET";
-    path: "/api/v1/auth/dex/settings/";
-    arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexSettings'];
-      };
-  };
-  "putAuthDexSettings": {
-    method: "PUT";
-    path: "/api/v1/auth/dex/settings/";
-    arguments: {
-        "body": OpenAPIComponents['schemas']['DexSettingsRequest'];
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexSettings'];
-      };
-  };
-  "postAuthDexApply": {
-    method: "POST";
-    path: "/api/v1/auth/dex/apply/";
-    arguments: {
-        "headerParams": {
-          "Idempotency-Key": string;
-        };
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexOperation'];
-      };
-  };
-  "postAuthDexRegisterAsSso": {
-    method: "POST";
-    path: "/api/v1/auth/dex/register-as-sso/";
-    arguments: {
-        "headerParams": {
-          "Idempotency-Key": string;
-        };
-        "body"?: {
-          "client_id"?: string;
-          "client_secret"?: string;
-          "display_name"?: string;
-        };
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexOperation'];
-      };
-  };
-  "getAuthDexOperation": {
-    method: "GET";
-    path: "/api/v1/auth/dex/operations/{operation_id}/";
-    arguments: {
-        "path": {
-          "operation_id": string;
-        };
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['DexOperation'];
-      };
-  };
   "getUsers": {
     method: "GET";
     path: "/api/v1/users";
@@ -15733,37 +15484,6 @@ export interface OpenAPIOperations {
     path: "/api/v1/settings/sso";
     arguments: Record<string, never>;
     response: OpenAPIComponents['schemas']['UsersSettingsSSOProvider'][];
-  };
-  "postSettingsSso": {
-    method: "POST";
-    path: "/api/v1/settings/sso";
-    arguments: {
-        "body": {
-          "type": "github" | "google" | "oidc";
-          "name": string;
-          "enabled"?: boolean | null;
-          "config": {
-            "client_id": string;
-            "client_secret": string;
-            "metadata_url"?: string;
-            "allowed_organizations"?: string;
-            "auto_create_users"?: boolean | null;
-          };
-        };
-      };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIComponents['schemas']['UsersSettingsSSOProvider'];
-      };
-  };
-  "deleteSettingsSsoById": {
-    method: "DELETE";
-    path: "/api/v1/settings/sso/{id}";
-    arguments: {
-        "path": {
-          "id": string;
-        };
-      };
-    response: void;
   };
   "getSettingsTokens": {
     method: "GET";
@@ -17935,6 +17655,19 @@ export interface OpenAPIOperations {
 }
 
 export interface OpenAPIReadOperations {
+  "getSettingsIdentityBindings": { response: {
+        "data"?: OpenAPIReadComponents['schemas']['IdentityBinding'][];
+      } };
+  "postSettingsIdentityBindings": { response: {
+        "data"?: {
+          "ok"?: boolean;
+        };
+      } };
+  "deleteSettingsIdentityBindings": { response: {
+        "data"?: {
+          "ok"?: boolean;
+        };
+      } };
   "deleteClustersByIdObservabilityGrafana": { response: void };
   "getClustersByIdObservabilityGrafana": { response: string };
   "headClustersByIdObservabilityGrafana": { response: string };
@@ -19205,9 +18938,6 @@ export interface OpenAPIReadOperations {
   "getRbacPrincipals": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['PrincipalSearchResponse'];
       } };
-  "postRbacPrincipalsMaterialize": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['PrincipalMaterialized'];
-      } };
   "getRbacMyRoles": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
         "data"?: {
           "user_id"?: string;
@@ -19295,41 +19025,6 @@ export interface OpenAPIReadOperations {
   "postAdminUsersByIdDisableTotp": { response: {
         "detail"?: string;
       } };
-  "getAuthDexConnectorTypes": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexConnectorType'][];
-      } };
-  "getAuthDexConnectors": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexConnector'][];
-      } };
-  "postAuthDexConnectors": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexConnector'];
-      } };
-  "getAuthDexConnectorsById": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexConnector'];
-      } };
-  "patchAuthDexConnectorsById": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexConnector'];
-      } };
-  "deleteAuthDexConnectorsById": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: {
-          "deleted"?: string;
-        };
-      } };
-  "getAuthDexSettings": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexSettings'];
-      } };
-  "putAuthDexSettings": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexSettings'];
-      } };
-  "postAuthDexApply": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexOperation'];
-      } };
-  "postAuthDexRegisterAsSso": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexOperation'];
-      } };
-  "getAuthDexOperation": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['DexOperation'];
-      } };
   "getUsers": { response: OpenAPIReadComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['UsersSettingsUserListItem'][];
       } };
@@ -19388,10 +19083,6 @@ export interface OpenAPIReadOperations {
         "data"?: OpenAPIReadComponents['schemas']['UsersSettingsAuditLogEntry'][];
       } };
   "getSettingsSso": { response: OpenAPIReadComponents['schemas']['UsersSettingsSSOProvider'][] };
-  "postSettingsSso": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
-        "data"?: OpenAPIReadComponents['schemas']['UsersSettingsSSOProvider'];
-      } };
-  "deleteSettingsSsoById": { response: void };
   "getSettingsTokens": { response: OpenAPIReadComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['UsersSettingsTokenListItem'][];
       } };
@@ -20261,15 +19952,6 @@ export type DeliveryTargetWrite = OpenAPIComponents['schemas']['DeliveryTargetWr
 export type DeliveryTrustPolicy = OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
 export type DeliveryVerificationStatus = OpenAPIComponents['schemas']['DeliveryVerificationStatus'];
 export type DeliveryVersionIdentity = OpenAPIComponents['schemas']['DeliveryVersionIdentity'];
-export type DexConnector = OpenAPIComponents['schemas']['DexConnector'];
-export type DexConnectorRequest = OpenAPIComponents['schemas']['DexConnectorRequest'];
-export type DexConnectorType = OpenAPIComponents['schemas']['DexConnectorType'];
-export type DexExpiry = OpenAPIComponents['schemas']['DexExpiry'];
-export type DexExtra = OpenAPIComponents['schemas']['DexExtra'];
-export type DexOperation = OpenAPIComponents['schemas']['DexOperation'];
-export type DexRegisterSSOResult = OpenAPIComponents['schemas']['DexRegisterSSOResult'];
-export type DexSettings = OpenAPIComponents['schemas']['DexSettings'];
-export type DexSettingsRequest = OpenAPIComponents['schemas']['DexSettingsRequest'];
 export type DurableOperationStatus = OpenAPIComponents['schemas']['DurableOperationStatus'];
 export type Error = OpenAPIComponents['schemas']['Error'];
 export type ErrorEnvelope = OpenAPIComponents['schemas']['ErrorEnvelope'];
@@ -20314,6 +19996,8 @@ export type HelmReleaseHistoryEnvelope = OpenAPIComponents['schemas']['HelmRelea
 export type HelmReleaseRevision = OpenAPIComponents['schemas']['HelmReleaseRevision'];
 export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];
 export type HelmRepositoryAuthConfig = OpenAPIComponents['schemas']['HelmRepositoryAuthConfig'];
+export type IdentityBinding = OpenAPIComponents['schemas']['IdentityBinding'];
+export type IdentityBindingRequest = OpenAPIComponents['schemas']['IdentityBindingRequest'];
 export type ImageDatabaseJavaApplicability = OpenAPIComponents['schemas']['ImageDatabaseJavaApplicability'];
 export type ImageDatabasePostureState = OpenAPIComponents['schemas']['ImageDatabasePostureState'];
 export type ImageDatabaseScanState = OpenAPIComponents['schemas']['ImageDatabaseScanState'];
@@ -20472,8 +20156,6 @@ export type PodSecurityTemplate = OpenAPIComponents['schemas']['PodSecurityTempl
 export type PodSecurityTemplateWriteRequest = OpenAPIComponents['schemas']['PodSecurityTemplateWriteRequest'];
 export type PollingOperationStatus = OpenAPIComponents['schemas']['PollingOperationStatus'];
 export type PrincipalConnectorStatus = OpenAPIComponents['schemas']['PrincipalConnectorStatus'];
-export type PrincipalMaterializeRequest = OpenAPIComponents['schemas']['PrincipalMaterializeRequest'];
-export type PrincipalMaterialized = OpenAPIComponents['schemas']['PrincipalMaterialized'];
 export type PrincipalSearchItem = OpenAPIComponents['schemas']['PrincipalSearchItem'];
 export type PrincipalSearchResponse = OpenAPIComponents['schemas']['PrincipalSearchResponse'];
 export type Project = OpenAPIComponents['schemas']['Project'];

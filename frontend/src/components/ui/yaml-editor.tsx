@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { lazy, Suspense, useRef, useCallback } from "react";
 import { CheckCircle2, Copy, Download, Save, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -137,7 +138,11 @@ export function YamlEditor({
             language="yaml"
             theme="vs-dark"
             value={value}
-            onChange={(v) => onChange?.(v || "")}
+            onChange={(v) => {
+              // Monaco owns an imperative model. Commit its edit before the next
+              // input event so a stale controlled value cannot overwrite typing.
+              flushSync(() => onChange?.(v || ""));
+            }}
             onMount={handleEditorDidMount}
             options={{
               readOnly,

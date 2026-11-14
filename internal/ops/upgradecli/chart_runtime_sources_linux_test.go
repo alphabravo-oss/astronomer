@@ -22,10 +22,6 @@ redis:
   image:
     repository: fixture.invalid/redis
     tag: exact
-dex:
-  image:
-    repository: fixture.invalid/dex
-    tag: exact
 managementRestoreDrill:
   sidecar:
     image:

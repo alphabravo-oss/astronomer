@@ -7,7 +7,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/principal"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
@@ -33,9 +32,7 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 		rbacHandler.SetTemplateCatalog(roleCatalog)
 	}
 
-	principals := handler.NewPrincipalHandler(queries, principal.NewDirectory(principal.NewLDAPAdapter()))
-	principals.SetEncryptor(c.encryptor)
-	principals.SetRunTx(sqlcMutationTxRunner[handler.PrincipalMutationTx](database))
+	principals := handler.NewPrincipalHandler(queries)
 
 	gatekeeper := handler.NewGatekeeperConstraintsHandler(queries, requester)
 	gatekeeper.SetAuthorization(rbacEngine, rbacQuerier)
@@ -165,7 +162,6 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 			ChartRatings:   chartRatings,
 			PlatformCharts: c.platformCharts,
 			Security:       c.securityHandler,
-			DexConfig:      c.dexHandler,
 		},
 		StreamingInternal: StreamingInternalDependencies{
 			Hub:               hub,

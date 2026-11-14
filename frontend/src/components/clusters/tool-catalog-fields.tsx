@@ -3,7 +3,7 @@ import { CatalogResourceContext } from "@/components/catalog/catalog-resource-fi
 import {
   catalogConfigurationSchema,
   mergeCatalogValues,
-  changedValuePaths,
+  changedValueSegments,
 } from "@/lib/catalog-configuration";
 import { catalogValueErrors } from "@/lib/catalog-values-validation";
 import {
@@ -54,13 +54,9 @@ export function ToolCatalogFields({
             value={values}
             onChange={(next) =>
               onChange(
-                changedValuePaths(values, next).reduce(
+                changedValueSegments(values, next).reduce(
                   (result, path) =>
-                    setValueAtPath(
-                      result,
-                      path.split("."),
-                      getValueAtPath(next, path.split(".")),
-                    ),
+                    setValueAtPath(result, path, getValueAtPath(next, path)),
                   overrides,
                 ),
               )

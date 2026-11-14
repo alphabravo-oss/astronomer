@@ -134,7 +134,6 @@ export const operationMetadata = {
   "deleteAlertingChannelsById": { method: "DELETE", path: "/api/v1/alerting/channels/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAlertingRulesById": { method: "DELETE", path: "/api/v1/alerting/rules/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAlertingSilencesById": { method: "DELETE", path: "/api/v1/alerting/silences/{id}", pathParameters: ["id"], responseType: "json" },
-  "deleteAuthDexConnectorsById": { method: "DELETE", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteAuthMeTableViewsById": { method: "DELETE", path: "/api/v1/auth/me/table-views/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteAuthTokensById": { method: "DELETE", path: "/api/v1/auth/tokens/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteBackupsById": { method: "DELETE", path: "/api/v1/backups/{id}", pathParameters: ["id"], responseType: "json" },
@@ -192,11 +191,11 @@ export const operationMetadata = {
   "deleteScimUsersById": { method: "DELETE", path: "/scim/v2/Users/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteSecurityPoliciesById": { method: "DELETE", path: "/api/v1/security/policies/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteSecurityTemplatesById": { method: "DELETE", path: "/api/v1/security/templates/{id}", pathParameters: ["id"], responseType: "json" },
+  "deleteSettingsIdentityBindings": { method: "DELETE", path: "/api/v1/settings/identity/bindings", pathParameters: [], responseType: "json" },
   "deleteSettingsMonitoringAlertmanagerUninstall": { method: "DELETE", path: "/api/v1/settings/monitoring/alertmanager/uninstall", pathParameters: [], responseType: "json" },
   "deleteSettingsMonitoringGrafanaUninstall": { method: "DELETE", path: "/api/v1/settings/monitoring/grafana/uninstall", pathParameters: [], responseType: "json" },
   "deleteSettingsMonitoringLokiUninstall": { method: "DELETE", path: "/api/v1/settings/monitoring/loki/uninstall", pathParameters: [], responseType: "json" },
   "deleteSettingsMonitoringThanosUninstall": { method: "DELETE", path: "/api/v1/settings/monitoring/thanos/uninstall", pathParameters: [], responseType: "json" },
-  "deleteSettingsSsoById": { method: "DELETE", path: "/api/v1/settings/sso/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteSettingsTokensById": { method: "DELETE", path: "/api/v1/settings/tokens/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteToolsBySlugUninstall": { method: "DELETE", path: "/api/v1/tools/{slug}/uninstall", pathParameters: ["slug"], responseType: "json" },
   "deleteUsersById": { method: "DELETE", path: "/api/v1/users/{id}", pathParameters: ["id"], responseType: "json" },
@@ -258,11 +257,6 @@ export const operationMetadata = {
   "getAuditExportsByIdDownload": { method: "GET", path: "/api/v1/audit/exports/{id}/download", pathParameters: ["id"], responseType: "blob" },
   "getAuditLog": { method: "GET", path: "/api/v1/audit/{id}/", pathParameters: ["id"], responseType: "json" },
   "getAuthCallbackByProvider": { method: "GET", path: "/api/v1/auth/callback/{provider}", pathParameters: ["provider"], responseType: "json" },
-  "getAuthDexConnectors": { method: "GET", path: "/api/v1/auth/dex/connectors/", pathParameters: [], responseType: "json" },
-  "getAuthDexConnectorsById": { method: "GET", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
-  "getAuthDexConnectorTypes": { method: "GET", path: "/api/v1/auth/dex/connector-types/", pathParameters: [], responseType: "json" },
-  "getAuthDexOperation": { method: "GET", path: "/api/v1/auth/dex/operations/{operation_id}/", pathParameters: ["operation_id"], responseType: "json" },
-  "getAuthDexSettings": { method: "GET", path: "/api/v1/auth/dex/settings/", pathParameters: [], responseType: "json" },
   "getAuthLoginByProvider": { method: "GET", path: "/api/v1/auth/login/{provider}", pathParameters: ["provider"], responseType: "json" },
   "getAuthLogoutDone": { method: "GET", path: "/api/v1/auth/logout-done/", pathParameters: [], responseType: "json" },
   "getAuthMe": { method: "GET", path: "/api/v1/auth/me/", pathParameters: [], responseType: "json" },
@@ -507,6 +501,7 @@ export const operationMetadata = {
   "getSettingsBranding": { method: "GET", path: "/api/v1/settings/branding", pathParameters: [], responseType: "json" },
   "getSettingsFeatures": { method: "GET", path: "/api/v1/settings/features/", pathParameters: [], responseType: "json" },
   "getSettingsGeneral": { method: "GET", path: "/api/v1/settings/general", pathParameters: [], responseType: "json" },
+  "getSettingsIdentityBindings": { method: "GET", path: "/api/v1/settings/identity/bindings", pathParameters: [], responseType: "json" },
   "getSettingsMonitoringAlertmanagerStatus": { method: "GET", path: "/api/v1/settings/monitoring/alertmanager/status", pathParameters: [], responseType: "json" },
   "getSettingsMonitoringBackend": { method: "GET", path: "/api/v1/settings/monitoring/backend", pathParameters: [], responseType: "json" },
   "getSettingsMonitoringGrafanaStatus": { method: "GET", path: "/api/v1/settings/monitoring/grafana/status", pathParameters: [], responseType: "json" },
@@ -566,7 +561,6 @@ export const operationMetadata = {
   "optionsClustersByIdObservabilityGrafanaProxy": { method: "OPTIONS", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
   "optionsObservabilityGrafana": { method: "OPTIONS", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
   "optionsObservabilityGrafanaProxy": { method: "OPTIONS", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
-  "patchAuthDexConnectorsById": { method: "PATCH", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchAuthMeTableViewsById": { method: "PATCH", path: "/api/v1/auth/me/table-views/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchClusterGroupsById": { method: "PATCH", path: "/api/v1/cluster-groups/{id}", pathParameters: ["id"], responseType: "json" },
   "patchClustersByClusterIdK8sProxy": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
@@ -621,9 +615,6 @@ export const operationMetadata = {
   "postAlertingSilences": { method: "POST", path: "/api/v1/alerting/silences", pathParameters: [], responseType: "json" },
   "postAlertingSilencesByIdExpire": { method: "POST", path: "/api/v1/alerting/silences/{id}/expire", pathParameters: ["id"], responseType: "json" },
   "postAuthChangePassword": { method: "POST", path: "/api/v1/auth/change-password/", pathParameters: [], responseType: "json" },
-  "postAuthDexApply": { method: "POST", path: "/api/v1/auth/dex/apply/", pathParameters: [], responseType: "json" },
-  "postAuthDexConnectors": { method: "POST", path: "/api/v1/auth/dex/connectors/", pathParameters: [], responseType: "json" },
-  "postAuthDexRegisterAsSso": { method: "POST", path: "/api/v1/auth/dex/register-as-sso/", pathParameters: [], responseType: "json" },
   "postAuthLogin": { method: "POST", path: "/api/v1/auth/login/", pathParameters: [], responseType: "json" },
   "postAuthLogout": { method: "POST", path: "/api/v1/auth/logout/", pathParameters: [], responseType: "json" },
   "postAuthMeTableViews": { method: "POST", path: "/api/v1/auth/me/table-views/", pathParameters: [], responseType: "json" },
@@ -769,7 +760,6 @@ export const operationMetadata = {
   "postRbacGlobalRoleBindings": { method: "POST", path: "/api/v1/rbac/global-role-bindings", pathParameters: [], responseType: "json" },
   "postRbacGlobalRoles": { method: "POST", path: "/api/v1/rbac/global-roles", pathParameters: [], responseType: "json" },
   "postRbacPermissionPreview": { method: "POST", path: "/api/v1/rbac/permission-preview", pathParameters: [], responseType: "json" },
-  "postRbacPrincipalsMaterialize": { method: "POST", path: "/api/v1/rbac/principals/materialize", pathParameters: [], responseType: "json" },
   "postRbacProjectBindings": { method: "POST", path: "/api/v1/rbac/project-bindings", pathParameters: [], responseType: "json" },
   "postRbacProjectRoleBindings": { method: "POST", path: "/api/v1/rbac/project-role-bindings", pathParameters: [], responseType: "json" },
   "postRbacProjectRoles": { method: "POST", path: "/api/v1/rbac/project-roles", pathParameters: [], responseType: "json" },
@@ -779,6 +769,7 @@ export const operationMetadata = {
   "postSecurityPoliciesByIdApply": { method: "POST", path: "/api/v1/security/policies/{id}/apply", pathParameters: ["id"], responseType: "json" },
   "postSecurityScans": { method: "POST", path: "/api/v1/security/scans", pathParameters: [], responseType: "json" },
   "postSecurityTemplates": { method: "POST", path: "/api/v1/security/templates", pathParameters: [], responseType: "json" },
+  "postSettingsIdentityBindings": { method: "POST", path: "/api/v1/settings/identity/bindings", pathParameters: [], responseType: "json" },
   "postSettingsMonitoringAlertmanagerInstall": { method: "POST", path: "/api/v1/settings/monitoring/alertmanager/install", pathParameters: [], responseType: "json" },
   "postSettingsMonitoringAlertmanagerPreview": { method: "POST", path: "/api/v1/settings/monitoring/alertmanager/preview", pathParameters: [], responseType: "json" },
   "postSettingsMonitoringAlertmanagerReplace": { method: "POST", path: "/api/v1/settings/monitoring/alertmanager/replace", pathParameters: [], responseType: "json" },
@@ -792,7 +783,6 @@ export const operationMetadata = {
   "postSettingsMonitoringThanosInstall": { method: "POST", path: "/api/v1/settings/monitoring/thanos/install", pathParameters: [], responseType: "json" },
   "postSettingsMonitoringThanosPreview": { method: "POST", path: "/api/v1/settings/monitoring/thanos/preview", pathParameters: [], responseType: "json" },
   "postSettingsMonitoringThanosReplace": { method: "POST", path: "/api/v1/settings/monitoring/thanos/replace", pathParameters: [], responseType: "json" },
-  "postSettingsSso": { method: "POST", path: "/api/v1/settings/sso", pathParameters: [], responseType: "json" },
   "postSettingsTokens": { method: "POST", path: "/api/v1/settings/tokens", pathParameters: [], responseType: "json" },
   "postStreamsTickets": { method: "POST", path: "/api/v1/streams/tickets", pathParameters: [], responseType: "json" },
   "postToolsBySlugAdopt": { method: "POST", path: "/api/v1/tools/{slug}/adopt", pathParameters: ["slug"], responseType: "json" },
@@ -816,7 +806,6 @@ export const operationMetadata = {
   "putAdminSettingsByKey": { method: "PUT", path: "/api/v1/admin/settings/{key}", pathParameters: ["key"], responseType: "json" },
   "putAlertingChannelsById": { method: "PUT", path: "/api/v1/alerting/channels/{id}", pathParameters: ["id"], responseType: "json" },
   "putAlertingRulesById": { method: "PUT", path: "/api/v1/alerting/rules/{id}", pathParameters: ["id"], responseType: "json" },
-  "putAuthDexSettings": { method: "PUT", path: "/api/v1/auth/dex/settings/", pathParameters: [], responseType: "json" },
   "putAuthMePreferences": { method: "PUT", path: "/api/v1/auth/me/preferences/", pathParameters: [], responseType: "json" },
   "putBackupsSchedulesById": { method: "PUT", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
   "putBackupsStorageById": { method: "PUT", path: "/api/v1/backups/storage/{id}", pathParameters: ["id"], responseType: "json" },
@@ -1423,11 +1412,6 @@ export function deleteAlertingSilencesById(args: OpenAPIArguments<"deleteAlertin
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function deleteAuthDexConnectorsById(args: OpenAPIArguments<"deleteAuthDexConnectorsById">) {
-  const operationId = "deleteAuthDexConnectorsById" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
 export function deleteAuthMeTableViewsById(args: OpenAPIArguments<"deleteAuthMeTableViewsById">) {
   const operationId = "deleteAuthMeTableViewsById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -1713,6 +1697,11 @@ export function deleteSecurityTemplatesById(args: OpenAPIArguments<"deleteSecuri
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function deleteSettingsIdentityBindings(args: OpenAPIArguments<"deleteSettingsIdentityBindings">) {
+  const operationId = "deleteSettingsIdentityBindings" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function deleteSettingsMonitoringAlertmanagerUninstall(args: OpenAPIArguments<"deleteSettingsMonitoringAlertmanagerUninstall">) {
   const operationId = "deleteSettingsMonitoringAlertmanagerUninstall" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -1730,11 +1719,6 @@ export function deleteSettingsMonitoringLokiUninstall(args: OpenAPIArguments<"de
 
 export function deleteSettingsMonitoringThanosUninstall(args: OpenAPIArguments<"deleteSettingsMonitoringThanosUninstall">) {
   const operationId = "deleteSettingsMonitoringThanosUninstall" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function deleteSettingsSsoById(args: OpenAPIArguments<"deleteSettingsSsoById">) {
-  const operationId = "deleteSettingsSsoById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -2041,31 +2025,6 @@ export function getAuditLog(args: OpenAPIArguments<"getAuditLog">) {
 export function getAuthCallbackByProvider(args: OpenAPIArguments<"getAuthCallbackByProvider">) {
   const operationId = "getAuthCallbackByProvider" as const;
   return executeOpenAPIOperation(operationId, args);
-}
-
-export function getAuthDexConnectors(args?: OpenAPIArguments<"getAuthDexConnectors">) {
-  const operationId = "getAuthDexConnectors" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
-}
-
-export function getAuthDexConnectorsById(args: OpenAPIArguments<"getAuthDexConnectorsById">) {
-  const operationId = "getAuthDexConnectorsById" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function getAuthDexConnectorTypes(args?: OpenAPIArguments<"getAuthDexConnectorTypes">) {
-  const operationId = "getAuthDexConnectorTypes" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
-}
-
-export function getAuthDexOperation(args: OpenAPIArguments<"getAuthDexOperation">) {
-  const operationId = "getAuthDexOperation" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function getAuthDexSettings(args?: OpenAPIArguments<"getAuthDexSettings">) {
-  const operationId = "getAuthDexSettings" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function getAuthLoginByProvider(args: OpenAPIArguments<"getAuthLoginByProvider">) {
@@ -3288,6 +3247,11 @@ export function getSettingsGeneral(args?: OpenAPIArguments<"getSettingsGeneral">
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
+export function getSettingsIdentityBindings(args?: OpenAPIArguments<"getSettingsIdentityBindings">) {
+  const operationId = "getSettingsIdentityBindings" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getSettingsMonitoringAlertmanagerStatus(args?: OpenAPIArguments<"getSettingsMonitoringAlertmanagerStatus">) {
   const operationId = "getSettingsMonitoringAlertmanagerStatus" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -3583,11 +3547,6 @@ export function optionsObservabilityGrafanaProxy(args?: OpenAPIArguments<"option
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
-export function patchAuthDexConnectorsById(args: OpenAPIArguments<"patchAuthDexConnectorsById">) {
-  const operationId = "patchAuthDexConnectorsById" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
 export function patchAuthMeTableViewsById(args: OpenAPIArguments<"patchAuthMeTableViewsById">) {
   const operationId = "patchAuthMeTableViewsById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3855,21 +3814,6 @@ export function postAlertingSilencesByIdExpire(args: OpenAPIArguments<"postAlert
 
 export function postAuthChangePassword(args: OpenAPIArguments<"postAuthChangePassword">) {
   const operationId = "postAuthChangePassword" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postAuthDexApply(args: OpenAPIArguments<"postAuthDexApply">) {
-  const operationId = "postAuthDexApply" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postAuthDexConnectors(args: OpenAPIArguments<"postAuthDexConnectors">) {
-  const operationId = "postAuthDexConnectors" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postAuthDexRegisterAsSso(args: OpenAPIArguments<"postAuthDexRegisterAsSso">) {
-  const operationId = "postAuthDexRegisterAsSso" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4598,11 +4542,6 @@ export function postRbacPermissionPreview(args: OpenAPIArguments<"postRbacPermis
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function postRbacPrincipalsMaterialize(args: OpenAPIArguments<"postRbacPrincipalsMaterialize">) {
-  const operationId = "postRbacPrincipalsMaterialize" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
 export function postRbacProjectBindings(args: OpenAPIArguments<"postRbacProjectBindings">) {
   const operationId = "postRbacProjectBindings" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4645,6 +4584,11 @@ export function postSecurityScans(args: OpenAPIArguments<"postSecurityScans">) {
 
 export function postSecurityTemplates(args: OpenAPIArguments<"postSecurityTemplates">) {
   const operationId = "postSecurityTemplates" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postSettingsIdentityBindings(args: OpenAPIArguments<"postSettingsIdentityBindings">) {
+  const operationId = "postSettingsIdentityBindings" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4710,11 +4654,6 @@ export function postSettingsMonitoringThanosPreview(args: OpenAPIArguments<"post
 
 export function postSettingsMonitoringThanosReplace(args: OpenAPIArguments<"postSettingsMonitoringThanosReplace">) {
   const operationId = "postSettingsMonitoringThanosReplace" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postSettingsSso(args: OpenAPIArguments<"postSettingsSso">) {
-  const operationId = "postSettingsSso" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4830,11 +4769,6 @@ export function putAlertingChannelsById(args: OpenAPIArguments<"putAlertingChann
 
 export function putAlertingRulesById(args: OpenAPIArguments<"putAlertingRulesById">) {
   const operationId = "putAlertingRulesById" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function putAuthDexSettings(args: OpenAPIArguments<"putAuthDexSettings">) {
-  const operationId = "putAuthDexSettings" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 

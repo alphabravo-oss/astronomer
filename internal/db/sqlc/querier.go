@@ -103,9 +103,8 @@ type Querier interface {
 	ClaimDeliveryRollouts(ctx context.Context, arg ClaimDeliveryRolloutsParams) ([]DeliveryRollout, error)
 	ClaimDeliverySourceResolution(ctx context.Context, arg ClaimDeliverySourceResolutionParams) (DeliverySourceResolution, error)
 	ClaimDeliverySourceResolutions(ctx context.Context, arg ClaimDeliverySourceResolutionsParams) ([]DeliverySourceResolution, error)
-	ClaimDexOperation(ctx context.Context, arg ClaimDexOperationParams) (DexOperation, error)
 	ClaimDueAuditOutbox(ctx context.Context, arg ClaimDueAuditOutboxParams) ([]AuditOutbox, error)
-	ClaimExternalPrincipal(ctx context.Context, arg ClaimExternalPrincipalParams) (User, error)
+	ClaimIdentityProvisioning(ctx context.Context, arg ClaimIdentityProvisioningParams) (IdentityProvisioningOperation, error)
 	// The 3-minute stale lease exceeds the task's 2-minute hard timeout, so a
 	// healthy execution cannot be reclaimed concurrently. Retrying rows are
 	// reclaimable by Asynq retry; stale running rows recover after process loss.
@@ -152,6 +151,7 @@ type Querier interface {
 	// OnTemplateApplyStart before the new row is written.
 	CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error
 	CompleteDeliverySourceResolution(ctx context.Context, arg CompleteDeliverySourceResolutionParams) (DeliverySourceResolution, error)
+	CompleteIdentityProvisioning(ctx context.Context, arg CompleteIdentityProvisioningParams) (IdentityProvisioningOperation, error)
 	CompleteManagementBackupDestinationGeneration(ctx context.Context, arg CompleteManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error)
 	CompleteVulnerabilityDatabaseScanClaim(ctx context.Context, arg CompleteVulnerabilityDatabaseScanClaimParams) (int64, error)
 	ConfirmCharlieKubernetesVisibilityRediscovery(ctx context.Context, arg ConfirmCharlieKubernetesVisibilityRediscoveryParams) (CharlieConnection, error)
@@ -183,12 +183,6 @@ type Querier interface {
 	CountActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountActiveSystemRollouts(ctx context.Context) (int64, error)
 	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	// Drives the startup-time deprecation warning (migration 045). Counts
-	// enabled sso_configurations rows that have NOT been stamped as migrated
-	// to dex_connectors — i.e. rows the operator added AFTER cutover. When > 0
-	// we log a warn-level line at boot so the drift is visible without burying
-	// the migration story.
-	CountActiveUnmigratedSSORows(ctx context.Context) (int64, error)
 	CountAlertEvents(ctx context.Context) (int64, error)
 	// Total matching the same status/severity/cluster filters as
 	// ListAlertEventsFiltered, so pagination reports a correct total.
@@ -307,6 +301,7 @@ type Querier interface {
 	CountPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountPodSecurityTemplates(ctx context.Context) (int64, error)
 	CountProjectRoles(ctx context.Context) (int64, error)
+	CountProjectedClusterApps(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountProjects(ctx context.Context) (int64, error)
 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountProjectsByClusterFiltered(ctx context.Context, arg CountProjectsByClusterFilteredParams) (int64, error)
@@ -536,6 +531,9 @@ type Querier interface {
 	// operator/SCIM reconcile) that deactivated the row would otherwise wedge
 	// ingest forever, since auth rejects tokens whose owner is inactive.
 	CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error)
+	// Caller must authorize and audit this mutation in the same transaction.
+	// A conflict is an error: never silently transfer an existing external identity.
+	CreateSharedIdentityBinding(ctx context.Context, arg CreateSharedIdentityBindingParams) (SharedIdentityBinding, error)
 	CreateSupportBundleOperation(ctx context.Context, arg CreateSupportBundleOperationParams) (CreateSupportBundleOperationRow, error)
 	CreateSystemRollout(ctx context.Context, arg CreateSystemRolloutParams) (DeliverySystemRollout, error)
 	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
@@ -751,6 +749,8 @@ type Querier interface {
 	// firing the back-channel end-session POSTs. Matches the semantics of
 	// InvalidateAllTokens: the user is logged out everywhere.
 	DeleteSSOSessionsByUser(ctx context.Context, userID uuid.UUID) error
+	// Caller must authorize and audit this mutation in the same transaction.
+	DeleteSharedIdentityBinding(ctx context.Context, arg DeleteSharedIdentityBindingParams) (int64, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	// Disables 2FA. The handler that wraps this query ALSO deletes the
 	// recovery codes so a lost-device admin force-disable doesn't leave
@@ -768,10 +768,6 @@ type Querier interface {
 	DisableSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
 	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
 	DisconnectCharlieConnection(ctx context.Context, id uuid.UUID) (CharlieConnection, error)
-	// The generation predicate is evaluated in the same statement that enables
-	// the provider. A stale reconcile can therefore never win a check-then-write
-	// race against a newer settings/register mutation.
-	EnableDexSSOForGeneration(ctx context.Context, arg EnableDexSSOForGenerationParams) (EnableDexSSOForGenerationRow, error)
 	// Bus-tap insert. Called once per (forwarder, event) pair that matched
 	// at least one filter glob. The dispatcher picks rows up in batch
 	// order via the (forwarder_id, id) index.
@@ -1014,15 +1010,6 @@ type Querier interface {
 	GetDeliverySystemBootstrapReleaseByVersion(ctx context.Context, version string) (GetDeliverySystemBootstrapReleaseByVersionRow, error)
 	GetDeliveryTarget(ctx context.Context, arg GetDeliveryTargetParams) (DeliveryTarget, error)
 	GetDeliveryTargetByName(ctx context.Context, arg GetDeliveryTargetByNameParams) (DeliveryTarget, error)
-	// Phase B4: Dex shim CRUD.
-	// The Dex install itself is just a normal cluster_tools row (see migration
-	// 023). Sensitive fields inside `config` are encrypted by the handler before
-	// they ever land here; sqlc passes the JSONB through unchanged.
-	GetDexConnectorByID(ctx context.Context, id uuid.UUID) (DexConnector, error)
-	GetDexConnectorByName(ctx context.Context, name string) (DexConnector, error)
-	GetDexOperation(ctx context.Context, id uuid.UUID) (DexOperation, error)
-	GetDexSettings(ctx context.Context, id uuid.UUID) (DexSetting, error)
-	GetDexSettingsForGeneration(ctx context.Context, arg GetDexSettingsForGenerationParams) (DexSetting, error)
 	GetEffectiveQuotaForProject(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForProjectRow, error)
 	// Effective quota lookups ------------------------------------------------
 	GetEffectiveQuotaForUser(ctx context.Context, id uuid.UUID) (GetEffectiveQuotaForUserRow, error)
@@ -1042,6 +1029,8 @@ type Querier interface {
 	// Helm Repositories
 	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (HelmRepository, error)
 	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (HelmRepository, error)
+	GetIdentityProvisioningOperation(ctx context.Context, id uuid.UUID) (IdentityProvisioningOperation, error)
+	GetIdentityProvisioningScope(ctx context.Context, arg GetIdentityProvisioningScopeParams) (IdentityProvisioningOperation, error)
 	GetImageVulnerabilityObservation(ctx context.Context, reportID uuid.UUID) (ImageVulnerabilityObservation, error)
 	GetImageVulnerabilityReportByID(ctx context.Context, id uuid.UUID) (ImageVulnerabilityReport, error)
 	// Indexed lookup (cluster_id + tool_slug) for the duplicate-install guard.
@@ -1310,7 +1299,7 @@ type Querier interface {
 	// The Astronomer JWT is revoked locally on Logout (migration 039); this
 	// table additionally holds the upstream id_token + cached
 	// end_session_endpoint so the Logout HTTP response can drive
-	// RP-initiated logout at Dex / the upstream IdP.
+	// RP-initiated logout at the upstream IdP.
 	//
 	// Lifetime is bounded by expires_at (= the Astronomer JWT's exp). The
 	// nightly retention worker piggy-backs on the jwt_revocations purge.
@@ -1677,14 +1666,12 @@ type Querier interface {
 	// Public projections deliberately omit registry_credential_{key_id,algorithm,ciphertext,nonce}.
 	ListDeliverySystemReleases(ctx context.Context, arg ListDeliverySystemReleasesParams) ([]ListDeliverySystemReleasesRow, error)
 	ListDeliveryTargets(ctx context.Context, arg ListDeliveryTargetsParams) ([]DeliveryTarget, error)
-	ListDexConnectors(ctx context.Context) ([]DexConnector, error)
 	// Admin audit view. Paginated, newest-first. The handler redacts the
 	// body_text/body_html before returning the rows so a sensitive reset
 	// link or recovery-code email doesn't appear in the admin UI.
 	ListEmailMessages(ctx context.Context, arg ListEmailMessagesParams) ([]EmailMessage, error)
 	ListEnabledAlertInhibitions(ctx context.Context) ([]AlertInhibition, error)
 	ListEnabledCharlieTriggerRules(ctx context.Context, connectionID uuid.UUID) ([]CharlieTriggerRule, error)
-	ListEnabledDexConnectors(ctx context.Context) ([]DexConnector, error)
 	ListEnabledGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
 	ListEnabledHelmRepositories(ctx context.Context) ([]HelmRepository, error)
 	ListEnabledMaintenanceWindows(ctx context.Context) ([]MaintenanceWindow, error)
@@ -1936,6 +1923,9 @@ type Querier interface {
 	ListProjectRoleBindingsByProject(ctx context.Context, arg ListProjectRoleBindingsByProjectParams) ([]ProjectRoleBinding, error)
 	ListProjectRoles(ctx context.Context, arg ListProjectRolesParams) ([]ProjectRole, error)
 	ListProjectSubscriptions(ctx context.Context, projectID uuid.UUID) ([]ProjectCatalogSubscription, error)
+	// The Apps read model projects durable Delivery state before pagination. It
+	// never mutates/deletes compatibility rows while serving a read.
+	ListProjectedClusterApps(ctx context.Context, arg ListProjectedClusterAppsParams) ([]ListProjectedClusterAppsRow, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
 	ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error)
 	// Scope-filtered ListProjects: the projects the caller is bound to directly,
@@ -2009,6 +1999,7 @@ type Querier interface {
 	ListScansByCluster(ctx context.Context, arg ListScansByClusterParams) ([]SecurityScanResult, error)
 	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
 	ListSecurityScanResultsForScopes(ctx context.Context, arg ListSecurityScanResultsForScopesParams) ([]SecurityScanResult, error)
+	ListSharedIdentityBindings(ctx context.Context, arg ListSharedIdentityBindingsParams) ([]SharedIdentityBinding, error)
 	ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
 	ListSystemRolloutAssignments(ctx context.Context, rolloutID pgtype.UUID) ([]ListSystemRolloutAssignmentsRow, error)
 	ListSystemRolloutEligibleClusters(ctx context.Context) ([]uuid.UUID, error)
@@ -2076,6 +2067,9 @@ type Querier interface {
 	// Trusted startup release bootstrap. Every call is bound to the same existing
 	// Serializable transaction; the advisory lock is transaction-scoped.
 	LockDeliverySystemReleaseBootstrap(ctx context.Context) error
+	// All generations of an installation share one transaction-scoped lock.
+	// Hash collisions only serialize unrelated work; they do not authorize it.
+	LockIdentityProvisioning(ctx context.Context, scope string) error
 	// A row lock cannot serialize two concurrent creates when the provider row
 	// does not exist yet. This transaction-scoped advisory lock gives each
 	// canonical provider key a stable lock before the transaction re-reads it.
@@ -2146,11 +2140,6 @@ type Querier interface {
 	MarkDeferredExpired(ctx context.Context, arg MarkDeferredExpiredParams) error
 	MarkDeferredFailed(ctx context.Context, arg MarkDeferredFailedParams) error
 	MarkDeliveryTargetOrphaned(ctx context.Context, arg MarkDeliveryTargetOrphanedParams) (MarkDeliveryTargetOrphanedRow, error)
-	MarkDexOperationFailed(ctx context.Context, arg MarkDexOperationFailedParams) error
-	MarkDexOperationRetrying(ctx context.Context, arg MarkDexOperationRetryingParams) error
-	MarkDexOperationSucceeded(ctx context.Context, id uuid.UUID) error
-	MarkDexRuntimeApplied(ctx context.Context, arg MarkDexRuntimeAppliedParams) (DexSetting, error)
-	MarkDexRuntimeStaged(ctx context.Context, arg MarkDexRuntimeStagedParams) (DexSetting, error)
 	// Records a delivery failure. attempts is the NEW count (caller computes
 	// prev+1) so the dispatcher can decide whether to mark the row 'failed'
 	// (still retryable) or escalate to a final state. last_error is kept
@@ -2219,10 +2208,10 @@ type Querier interface {
 	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
 	MarkWorkloadOperationRunning(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	MarkWorkloadOperationSuperseded(ctx context.Context, arg MarkWorkloadOperationSupersededParams) (WorkloadOperation, error)
-	MaterializeExternalPrincipal(ctx context.Context, arg MaterializeExternalPrincipalParams) (MaterializeExternalPrincipalRow, error)
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
 	NextCharlieThreadSessionSequence(ctx context.Context, threadID uuid.UUID) (int32, error)
 	ObserveDeliverySystemAssignment(ctx context.Context, arg ObserveDeliverySystemAssignmentParams) (ObserveDeliverySystemAssignmentRow, error)
+	PrepareIdentityProvisioning(ctx context.Context, arg PrepareIdentityProvisioningParams) (IdentityProvisioningOperation, error)
 	PromoteDeliverySystemBootstrapRelease(ctx context.Context, releaseID string) error
 	PromoteSystemRolloutRelease(ctx context.Context, arg PromoteSystemRolloutReleaseParams) (int64, error)
 	// Only the owning constructor transaction supplies a newly authenticated base
@@ -2257,7 +2246,6 @@ type Querier interface {
 	// row's id_token_hint is moot too.
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
 	PutOwnedDatabasePodDiscoveryCursor(ctx context.Context, arg PutOwnedDatabasePodDiscoveryCursorParams) error
-	QueueDexOperation(ctx context.Context, arg QueueDexOperationParams) (QueueDexOperationRow, error)
 	// No cluster session locks or assignment writes after global authority lock.
 	// Pending intents are not report/job witnesses and grant no scan authority.
 	QueueVulnerabilityDatabaseBaseRevocationIntents(ctx context.Context, baseID uuid.UUID) error
@@ -2291,7 +2279,9 @@ type Querier interface {
 	RecordOwnedDatabaseScanJob(ctx context.Context, arg RecordOwnedDatabaseScanJobParams) (int64, error)
 	RecordOwnedDatabaseScanPod(ctx context.Context, arg RecordOwnedDatabaseScanPodParams) (int64, error)
 	RecoverAuditExportOperationOutbox(ctx context.Context, staleBefore time.Time) (int64, error)
-	RecoverDexOperationOutbox(ctx context.Context, staleBefore time.Time) (int64, error)
+	// There is deliberately no transition back to pending: an interrupted creation
+	// might already have succeeded at the issuer. Retrying creation loses secrets.
+	RecoverIdentityProvisioning(ctx context.Context, arg RecoverIdentityProvisioningParams) (IdentityProvisioningOperation, error)
 	RecoverSupportBundleOperationOutbox(ctx context.Context, staleBefore time.Time) (int64, error)
 	// This rebinds only the exact current accepted feed. The owning provider
 	// finalization transaction revalidates physical trust, base, source credentials,
@@ -2333,7 +2323,6 @@ type Querier interface {
 	RequeueWorkloadOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	RescheduleSecurityScanPoll(ctx context.Context, arg RescheduleSecurityScanPollParams) (int64, error)
 	ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharlieAutoBudgetParams) (CharlieActionReceipt, error)
-	ReserveDexOperation(ctx context.Context, arg ReserveDexOperationParams) (ReserveDexOperationRow, error)
 	ReserveVulnerabilityDatabaseGeneration(ctx context.Context, arg ReserveVulnerabilityDatabaseGenerationParams) (int64, error)
 	// Only a complete authenticated import owner calls this under the current
 	// authority lock. A signed external generation cannot replace any newer or
@@ -2351,7 +2340,7 @@ type Querier interface {
 	ResolveCatalogApplicationProject(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ResolveComponentBundleVersion(ctx context.Context, arg ResolveComponentBundleVersionParams) (ComponentBundleVersion, error)
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
-	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
+	ResolveSharedIdentityUser(ctx context.Context, arg ResolveSharedIdentityUserParams) (User, error)
 	// The management-plane cluster (is_local) never joins a system rollout: it
 	// upgrades with the server. Its assignment is seeded once, so without this it
 	// keeps targeting the release that was current at enrollment and, once the
@@ -2412,7 +2401,6 @@ type Querier interface {
 	RotateDeliverySourceCredential(ctx context.Context, arg RotateDeliverySourceCredentialParams) (RotateDeliverySourceCredentialRow, error)
 	RotateRefreshSession(ctx context.Context, arg RotateRefreshSessionParams) (string, error)
 	SCIMGroupExists(ctx context.Context, groupName string) (bool, error)
-	SearchPrincipalUsers(ctx context.Context, arg SearchPrincipalUsersParams) ([]SearchPrincipalUsersRow, error)
 	// Server-side human-user lookup for RBAC subject pickers. Keep the expression
 	// aligned with idx_users_directory_search_trgm in migration 032.
 	SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error)
@@ -2431,7 +2419,6 @@ type Querier interface {
 	SetClusterDecommissionForce(ctx context.Context, id uuid.UUID) (ClusterDecommission, error)
 	SetClusterInstallBaseline(ctx context.Context, arg SetClusterInstallBaselineParams) (SetClusterInstallBaselineRow, error)
 	SetClusterOwnership(ctx context.Context, arg SetClusterOwnershipParams) (SetClusterOwnershipRow, error)
-	SetDexOperationPhase(ctx context.Context, arg SetDexOperationPhaseParams) error
 	// Explicit ::text casts on status keep pgx happy. Without them pgx infers
 	// two different types for the same parameter (one for SET status, one
 	// inside the CASE WHEN literal IN list) and rejects the query with
@@ -2449,15 +2436,6 @@ type Querier interface {
 	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
 	SetUserTableViewDefault(ctx context.Context, arg SetUserTableViewDefaultParams) (UserTableView, error)
 	StageCatalogApplicationRollbackTarget(ctx context.Context, arg StageCatalogApplicationRollbackTargetParams) (int64, error)
-	// All logical connector mutations stage a new runtime generation and disable
-	// SSO under the same transaction-scoped advisory lock used by activation.
-	StageCreateDexConnector(ctx context.Context, arg StageCreateDexConnectorParams) (StageCreateDexConnectorRow, error)
-	StageDeleteDexConnector(ctx context.Context, connectorID uuid.UUID) (int64, error)
-	// The previous SSO state, new settings generation, and fail-closed provider
-	// disablement are one PostgreSQL statement. No process-local pre-snapshot can
-	// race a concurrent stage.
-	StageDexSettingsAndDisableSSO(ctx context.Context, arg StageDexSettingsAndDisableSSOParams) (int64, error)
-	StageUpdateDexConnector(ctx context.Context, arg StageUpdateDexConnectorParams) (StageUpdateDexConnectorRow, error)
 	// Stamped on a hard sync failure (clone error, walk error, etc).
 	StampGitOpsSourceError(ctx context.Context, arg StampGitOpsSourceErrorParams) error
 	// Called by the sync worker after every successful tick. Clearing

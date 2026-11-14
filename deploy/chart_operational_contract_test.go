@@ -63,7 +63,6 @@ var productionWiringSets = []string{
 	"redis.image.digest=" + productionTestImageDigest,
 	"preflight.image.digest=" + productionTestImageDigest,
 	"frontend.image.digest=" + productionTestImageDigest,
-	"dex.image.digest=" + productionTestImageDigest,
 	"managementBackup.image.digest=" + productionTestImageDigest,
 	"managementRestoreDrill.image.digest=" + productionTestImageDigest,
 	"managementRestoreDrill.sidecar.image.digest=" + productionTestImageDigest,
@@ -312,7 +311,6 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
 			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"trusted-ca", "astronomer-postgres-dsn"}, verbs: []string{"get"}},
 			{apiGroups: []string{""}, resources: []string{"persistentvolumeclaims"}, resourceNames: []string{"data-astronomer-postgres-0"}, verbs: []string{"get"}},
-			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config"}, verbs: []string{"get"}},
 		})
 	})
 
@@ -322,16 +320,6 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), nil)
 	})
 
-	t.Run("Dex cutover exact Secret and legacy ConfigMap", func(t *testing.T) {
-		docs := parseRenderedDocs(t, helmTemplate(t,
-			"gateway.enabled=false", "tls.source=none", "dex.enabled=true",
-			"dex.migration.phase=cutover", "dex.runtimeSecretName=dex-runtime-contract"))
-		assertExactRBACRules(t, findRenderedDoc(t, docs, "ClusterRole", "astronomer-preflight"), nil)
-		assertExactRBACRules(t, findRenderedDoc(t, docs, "Role", "astronomer-preflight"), []rbacRuleContract{
-			{apiGroups: []string{""}, resources: []string{"secrets"}, resourceNames: []string{"dex-runtime-contract"}, verbs: []string{"get"}},
-			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config-retained"}, verbs: []string{"get"}},
-		})
-	})
 }
 
 func TestTLSCertificateOnlyIncludesConfiguredListenerHosts(t *testing.T) {
@@ -437,7 +425,7 @@ func TestPreflightKubernetesReadsUseBoundedExplicitSemantics(t *testing.T) {
 func TestPreflightBoundedReadRuntimeScenarios(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 	prodSets := append([]string{}, productionWiringSets...)
-	prodSets = append(prodSets, "managementBackup.enabled=false", "dex.enabled=false", "config.auth.localPasswordOnly=true")
+	prodSets = append(prodSets, "managementBackup.enabled=false", "config.auth.localPasswordOnly=true")
 
 	tests := []struct {
 		name        string
@@ -773,7 +761,6 @@ func TestRenderedContainersDeclareImagePullPolicy(t *testing.T) {
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
 		"managementRestoreDrill.enabled=true",
-		"dex.enabled=true",
 	))
 
 	for _, doc := range docs {
@@ -868,7 +855,7 @@ func TestProductionCoreWorkloadsHaveNodeLevelHAContracts(t *testing.T) {
 	sets = append(sets, "managementBackup.enabled=false")
 	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{"chart/values-production.yaml"}, sets...))
 
-	for _, workload := range []string{"astronomer-server", "astronomer-worker", "astronomer-frontend", "astronomer-dex"} {
+	for _, workload := range []string{"astronomer-server", "astronomer-worker", "astronomer-frontend"} {
 		deployment := findRenderedDoc(t, docs, "Deployment", workload)
 		constraints, _ := podSpecFor(deployment)["topologySpreadConstraints"].([]any)
 		if len(constraints) != 1 {
@@ -889,9 +876,6 @@ func TestProductionCoreWorkloadsHaveNodeLevelHAContracts(t *testing.T) {
 		pdb := findRenderedDoc(t, docs, "PodDisruptionBudget", workload)
 		minAvailable := nestedMap(pdb, "spec")["minAvailable"]
 		want := "2"
-		if workload == "astronomer-dex" {
-			want = "1"
-		}
 		if got := fmt.Sprint(minAvailable); got != want {
 			t.Fatalf("PodDisruptionBudget/%s minAvailable = %q, want %s", workload, got, want)
 		}

@@ -1350,42 +1350,6 @@ const (
 	DeliveryTrustPolicyProviderGit           DeliveryTrustPolicyProvider = "git"
 )
 
-// Defines values for DexOperationAction.
-const (
-	DexOperationActionApply       DexOperationAction = "apply"
-	DexOperationActionRegisterSso DexOperationAction = "register_sso"
-)
-
-// Defines values for DexOperationPhase.
-const (
-	DexOperationPhaseCompleted   DexOperationPhase = "completed"
-	DexOperationPhaseFinalizing  DexOperationPhase = "finalizing"
-	DexOperationPhaseQueued      DexOperationPhase = "queued"
-	DexOperationPhaseReconciling DexOperationPhase = "reconciling"
-)
-
-// Defines values for DexOperationStatus.
-const (
-	DexOperationStatusFailed    DexOperationStatus = "failed"
-	DexOperationStatusPending   DexOperationStatus = "pending"
-	DexOperationStatusRetrying  DexOperationStatus = "retrying"
-	DexOperationStatusRunning   DexOperationStatus = "running"
-	DexOperationStatusSucceeded DexOperationStatus = "succeeded"
-)
-
-// Defines values for DexRegisterSSOResultRuntimeState.
-const (
-	DexRegisterSSOResultRuntimeStateApplied DexRegisterSSOResultRuntimeState = "applied"
-	DexRegisterSSOResultRuntimeStateStaged  DexRegisterSSOResultRuntimeState = "staged"
-)
-
-// Defines values for DexSettingsRuntimePhase.
-const (
-	DexSettingsRuntimePhaseCutover DexSettingsRuntimePhase = "cutover"
-	DexSettingsRuntimePhaseFresh   DexSettingsRuntimePhase = "fresh"
-	DexSettingsRuntimePhasePrepare DexSettingsRuntimePhase = "prepare"
-)
-
 // Defines values for ExtensionManifestApiVersion.
 const (
 	ExtensionManifestApiVersionExtensionsAstronomerIov1alpha1 ExtensionManifestApiVersion = "extensions.astronomer.io/v1alpha1"
@@ -1840,16 +1804,9 @@ const (
 	PodSecurityTemplateWriteRequestWarnLevelRestricted PodSecurityTemplateWriteRequestWarnLevel = "restricted"
 )
 
-// Defines values for PrincipalMaterializedKind.
-const (
-	PrincipalMaterializedKindPending PrincipalMaterializedKind = "pending"
-)
-
 // Defines values for PrincipalSearchItemKind.
 const (
-	PrincipalSearchItemKindExternal PrincipalSearchItemKind = "external"
-	PrincipalSearchItemKindLocal    PrincipalSearchItemKind = "local"
-	PrincipalSearchItemKindPending  PrincipalSearchItemKind = "pending"
+	PrincipalSearchItemKindLocal PrincipalSearchItemKind = "local"
 )
 
 // Defines values for ProjectNetworkPolicyMode.
@@ -2572,13 +2529,6 @@ const (
 	GetSettingsMonitoringOperationsParamsStatusPending    GetSettingsMonitoringOperationsParamsStatus = "pending"
 	GetSettingsMonitoringOperationsParamsStatusRunning    GetSettingsMonitoringOperationsParamsStatus = "running"
 	GetSettingsMonitoringOperationsParamsStatusSuperseded GetSettingsMonitoringOperationsParamsStatus = "superseded"
-)
-
-// Defines values for PostSettingsSsoJSONBodyType.
-const (
-	PostSettingsSsoJSONBodyTypeGithub PostSettingsSsoJSONBodyType = "github"
-	PostSettingsSsoJSONBodyTypeGoogle PostSettingsSsoJSONBodyType = "google"
-	PostSettingsSsoJSONBodyTypeOidc   PostSettingsSsoJSONBodyType = "oidc"
 )
 
 // Defines values for PodLogsWebSocketParamsFollow.
@@ -7050,180 +7000,6 @@ type DeliveryVersionIdentity struct {
 	SpecDigest string                  `json:"spec_digest"`
 }
 
-// DexConnector defines model for DexConnector.
-type DexConnector struct {
-	Config               map[string]interface{} `json:"config"`
-	CreatedAt            time.Time              `json:"created_at"`
-	DisplayName          string                 `json:"display_name"`
-	Enabled              bool                   `json:"enabled"`
-	Id                   openapi_types.UUID     `json:"id"`
-	Name                 string                 `json:"name"`
-	Type                 string                 `json:"type"`
-	UpdatedAt            time.Time              `json:"updated_at"`
-	AdditionalProperties map[string]interface{} `json:"-"`
-}
-
-// DexConnectorRequest defines model for DexConnectorRequest.
-type DexConnectorRequest struct {
-	Config      *map[string]interface{} `json:"config,omitempty"`
-	DisplayName *string                 `json:"display_name,omitempty"`
-	Enabled     *bool                   `json:"enabled,omitempty"`
-	Name        *string                 `json:"name,omitempty"`
-	Type        *string                 `json:"type,omitempty"`
-}
-
-// DexConnectorType defines model for DexConnectorType.
-type DexConnectorType struct {
-	DisplayHint string `json:"display_hint"`
-	Nested      []struct {
-		Keys   []string `json:"keys"`
-		Parent string   `json:"parent"`
-	} `json:"nested"`
-	Optional []string `json:"optional"`
-	Required []string `json:"required"`
-	Secret   []string `json:"secret"`
-	Type     string   `json:"type"`
-}
-
-// DexExpiry defines model for DexExpiry.
-type DexExpiry struct {
-	IdTokens      *string `json:"idTokens,omitempty"`
-	RefreshTokens *struct {
-		AbsoluteLifetime  *string `json:"absoluteLifetime,omitempty"`
-		ReuseInterval     *string `json:"reuseInterval,omitempty"`
-		ValidIfNotUsedFor *string `json:"validIfNotUsedFor,omitempty"`
-	} `json:"refreshTokens,omitempty"`
-	SigningKeys *string `json:"signingKeys,omitempty"`
-}
-
-// DexExtra defines model for DexExtra.
-type DexExtra struct {
-	Frontend *struct {
-		Dir     *string `json:"dir,omitempty"`
-		Issuer  *string `json:"issuer,omitempty"`
-		LogoURL *string `json:"logoURL,omitempty"`
-		Theme   *string `json:"theme,omitempty"`
-	} `json:"frontend,omitempty"`
-	Grpc *struct {
-		Addr *string `json:"addr,omitempty"`
-	} `json:"grpc,omitempty"`
-	Logger *struct {
-		Format *string `json:"format,omitempty"`
-		Level  *string `json:"level,omitempty"`
-	} `json:"logger,omitempty"`
-	Telemetry *struct {
-		Http *string `json:"http,omitempty"`
-	} `json:"telemetry,omitempty"`
-}
-
-// DexOperation defines model for DexOperation.
-type DexOperation struct {
-	Action            DexOperationAction `json:"action"`
-	AttemptCount      int                `json:"attempt_count"`
-	CompletedAt       *time.Time         `json:"completed_at,omitempty"`
-	CreatedAt         time.Time          `json:"created_at"`
-	ErrorCode         *string            `json:"error_code,omitempty"`
-	OperationId       openapi_types.UUID `json:"operation_id"`
-	Phase             DexOperationPhase  `json:"phase"`
-	RuntimeGeneration int64              `json:"runtime_generation"`
-	Status            DexOperationStatus `json:"status"`
-	StatusUrl         string             `json:"status_url"`
-	TargetId          openapi_types.UUID `json:"target_id"`
-	UpdatedAt         time.Time          `json:"updated_at"`
-}
-
-// DexOperationAction defines model for DexOperation.Action.
-type DexOperationAction string
-
-// DexOperationPhase defines model for DexOperation.Phase.
-type DexOperationPhase string
-
-// DexOperationStatus defines model for DexOperation.Status.
-type DexOperationStatus string
-
-// DexRegisterSSOResult defines model for DexRegisterSSOResult.
-type DexRegisterSSOResult struct {
-	Applied               *bool                             `json:"applied,omitempty"`
-	ClientId              *string                           `json:"client_id,omitempty"`
-	Created               *bool                             `json:"created,omitempty"`
-	DisplayName           *string                           `json:"display_name,omitempty"`
-	Id                    *openapi_types.UUID               `json:"id,omitempty"`
-	IsEnabled             *bool                             `json:"is_enabled,omitempty"`
-	IssuerUrl             *string                           `json:"issuer_url,omitempty"`
-	Provider              *string                           `json:"provider,omitempty"`
-	RuntimeChanged        *bool                             `json:"runtime_changed,omitempty"`
-	RuntimeGeneration     *int64                            `json:"runtime_generation,omitempty"`
-	RuntimeState          *DexRegisterSSOResultRuntimeState `json:"runtime_state,omitempty"`
-	SecretResourceVersion *string                           `json:"secret_resource_version,omitempty"`
-	Staged                *bool                             `json:"staged,omitempty"`
-	Updated               *bool                             `json:"updated,omitempty"`
-	Verified              *bool                             `json:"verified,omitempty"`
-}
-
-// DexRegisterSSOResultRuntimeState defines model for DexRegisterSSOResult.RuntimeState.
-type DexRegisterSSOResultRuntimeState string
-
-// DexSettings defines model for DexSettings.
-type DexSettings struct {
-	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
-	ClusterId        *openapi_types.UUID `json:"cluster_id"`
-	Configured       *bool               `json:"configured,omitempty"`
-	DeploymentName   *string             `json:"deployment_name,omitempty"`
-	Expiry           *DexExpiry          `json:"expiry,omitempty"`
-	Extra            *DexExtra           `json:"extra,omitempty"`
-	IssuerUrl        *string             `json:"issuer_url,omitempty"`
-	Namespace        *string             `json:"namespace,omitempty"`
-	PublicClients    *[]struct {
-		Id           *string   `json:"id,omitempty"`
-		Name         *string   `json:"name,omitempty"`
-		Public       *bool     `json:"public,omitempty"`
-		RedirectURIs *[]string `json:"redirectURIs,omitempty"`
-
-		// Secret Always redacted to an empty string on reads.
-		Secret           *string   `json:"secret,omitempty"`
-		SecretConfigured *bool     `json:"secret_configured,omitempty"`
-		TrustedPeers     *[]string `json:"trustedPeers,omitempty"`
-	} `json:"public_clients,omitempty"`
-	ReleaseName              *string                  `json:"release_name,omitempty"`
-	RuntimeAppliedGeneration *int64                   `json:"runtime_applied_generation,omitempty"`
-	RuntimeGeneration        *int64                   `json:"runtime_generation,omitempty"`
-	RuntimePhase             *DexSettingsRuntimePhase `json:"runtime_phase,omitempty"`
-	RuntimeSecretName        *string                  `json:"runtime_secret_name,omitempty"`
-	RuntimeStagedGeneration  *int64                   `json:"runtime_staged_generation,omitempty"`
-	ServiceName              *string                  `json:"service_name,omitempty"`
-	UpdatedAt                *time.Time               `json:"updated_at,omitempty"`
-	AdditionalProperties     map[string]interface{}   `json:"-"`
-}
-
-// DexSettingsRuntimePhase defines model for DexSettings.RuntimePhase.
-type DexSettingsRuntimePhase string
-
-// DexSettingsRequest defines model for DexSettingsRequest.
-type DexSettingsRequest struct {
-	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
-	ClusterId        *openapi_types.UUID `json:"cluster_id,omitempty"`
-	DeploymentName   *string             `json:"deployment_name,omitempty"`
-	Expiry           *DexExpiry          `json:"expiry,omitempty"`
-	Extra            *DexExtra           `json:"extra,omitempty"`
-	IssuerUrl        string              `json:"issuer_url"`
-	Namespace        *string             `json:"namespace,omitempty"`
-	PublicClients    *[]struct {
-		Id           string    `json:"id"`
-		Name         *string   `json:"name,omitempty"`
-		Public       *bool     `json:"public,omitempty"`
-		RedirectURIs *[]string `json:"redirectURIs,omitempty"`
-		Secret       *string   `json:"secret,omitempty"`
-		// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-		SecretConfiguredLegacy *bool `json:"secretConfigured,omitempty"`
-		// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-		SecretConfigured *bool     `json:"secret_configured,omitempty"`
-		TrustedPeers     *[]string `json:"trustedPeers,omitempty"`
-	} `json:"public_clients,omitempty"`
-	ReleaseName       *string `json:"release_name,omitempty"`
-	RuntimeSecretName *string `json:"runtime_secret_name,omitempty"`
-	ServiceName       *string `json:"service_name,omitempty"`
-}
-
 // DurableOperationStatus defines model for DurableOperationStatus.
 type DurableOperationStatus = string
 
@@ -7767,6 +7543,21 @@ type HelmRepositoryAuthConfig struct {
 	Token                *string                `json:"token,omitempty"`
 	Username             *string                `json:"username,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// IdentityBinding defines model for IdentityBinding.
+type IdentityBinding struct {
+	CreatedAt *time.Time          `json:"created_at,omitempty"`
+	Issuer    string              `json:"issuer"`
+	LinkedBy  *openapi_types.UUID `json:"linked_by,omitempty"`
+	Subject   string              `json:"subject"`
+	UserId    openapi_types.UUID  `json:"user_id"`
+}
+
+// IdentityBindingRequest defines model for IdentityBindingRequest.
+type IdentityBindingRequest struct {
+	Subject string             `json:"subject"`
+	UserId  openapi_types.UUID `json:"user_id"`
 }
 
 // ImageDatabaseJavaApplicability defines model for ImageDatabaseJavaApplicability.
@@ -9434,26 +9225,6 @@ type PrincipalConnectorStatus struct {
 	Error         *string            `json:"error,omitempty"`
 	Supported     bool               `json:"supported"`
 }
-
-// PrincipalMaterializeRequest defines model for PrincipalMaterializeRequest.
-type PrincipalMaterializeRequest struct {
-	ConnectorId openapi_types.UUID `json:"connector_id"`
-	Subject     string             `json:"subject"`
-}
-
-// PrincipalMaterialized defines model for PrincipalMaterialized.
-type PrincipalMaterialized struct {
-	ConnectorId openapi_types.UUID        `json:"connector_id"`
-	DisplayName string                    `json:"display_name"`
-	Email       openapi_types.Email       `json:"email"`
-	Id          openapi_types.UUID        `json:"id"`
-	Kind        PrincipalMaterializedKind `json:"kind"`
-	UserId      openapi_types.UUID        `json:"user_id"`
-	Username    string                    `json:"username"`
-}
-
-// PrincipalMaterializedKind defines model for PrincipalMaterialized.Kind.
-type PrincipalMaterializedKind string
 
 // PrincipalSearchItem defines model for PrincipalSearchItem.
 type PrincipalSearchItem struct {
@@ -12353,27 +12124,6 @@ type PostAuthChangePasswordJSONBody struct {
 	NewPassword     string `json:"new_password"`
 }
 
-// PostAuthDexApplyParams defines parameters for PostAuthDexApply.
-type PostAuthDexApplyParams struct {
-	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
-	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
-}
-
-// PostAuthDexRegisterAsSsoJSONBody defines parameters for PostAuthDexRegisterAsSso.
-type PostAuthDexRegisterAsSsoJSONBody struct {
-	ClientId *string `json:"client_id,omitempty"`
-
-	// ClientSecret Plaintext; encrypted before storage.
-	ClientSecret *string `json:"client_secret,omitempty"`
-	DisplayName  *string `json:"display_name,omitempty"`
-}
-
-// PostAuthDexRegisterAsSsoParams defines parameters for PostAuthDexRegisterAsSso.
-type PostAuthDexRegisterAsSsoParams struct {
-	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
-	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
-}
-
 // GetAuthMeTableViewsParams defines parameters for GetAuthMeTableViews.
 type GetAuthMeTableViewsParams struct {
 	TableKey string `form:"table_key" json:"table_key"`
@@ -14257,6 +14007,11 @@ type PutSettingsGeneralJSONBody struct {
 	PlatformName           *string `json:"platformName,omitempty"`
 }
 
+// GetSettingsIdentityBindingsParams defines parameters for GetSettingsIdentityBindings.
+type GetSettingsIdentityBindingsParams struct {
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // PostSettingsMonitoringAlertmanagerInstallParams defines parameters for PostSettingsMonitoringAlertmanagerInstall.
 type PostSettingsMonitoringAlertmanagerInstallParams struct {
 	// ClusterId Management-cluster target; used when managementClusterId is omitted from the request body.
@@ -14445,30 +14200,6 @@ type PutSettingsMonitoringThanosUpgradeParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
-
-// PostSettingsSsoJSONBody defines parameters for PostSettingsSso.
-type PostSettingsSsoJSONBody struct {
-	Config struct {
-		// AllowedOrganizations Comma-separated.
-		AllowedOrganizations *string `json:"allowed_organizations,omitempty"`
-
-		// AutoCreateUsers Defaults to true.
-		AutoCreateUsers *bool  `json:"auto_create_users"`
-		ClientId        string `json:"client_id"`
-		ClientSecret    string `json:"client_secret"`
-
-		// MetadataUrl Required for oidc.
-		MetadataUrl *string `json:"metadata_url,omitempty"`
-	} `json:"config"`
-
-	// Enabled Defaults to true.
-	Enabled *bool                       `json:"enabled"`
-	Name    string                      `json:"name"`
-	Type    PostSettingsSsoJSONBodyType `json:"type"`
-}
-
-// PostSettingsSsoJSONBodyType defines parameters for PostSettingsSso.
-type PostSettingsSsoJSONBodyType string
 
 // GetSettingsTokensParams defines parameters for GetSettingsTokens.
 type GetSettingsTokensParams struct {
@@ -14902,18 +14633,6 @@ type PostAlertingSilencesJSONRequestBody = AlertSilenceRequest
 
 // PostAuthChangePasswordJSONRequestBody defines body for PostAuthChangePassword for application/json ContentType.
 type PostAuthChangePasswordJSONRequestBody PostAuthChangePasswordJSONBody
-
-// PostAuthDexConnectorsJSONRequestBody defines body for PostAuthDexConnectors for application/json ContentType.
-type PostAuthDexConnectorsJSONRequestBody = DexConnectorRequest
-
-// PatchAuthDexConnectorsByIdJSONRequestBody defines body for PatchAuthDexConnectorsById for application/json ContentType.
-type PatchAuthDexConnectorsByIdJSONRequestBody = DexConnectorRequest
-
-// PostAuthDexRegisterAsSsoJSONRequestBody defines body for PostAuthDexRegisterAsSso for application/json ContentType.
-type PostAuthDexRegisterAsSsoJSONRequestBody PostAuthDexRegisterAsSsoJSONBody
-
-// PutAuthDexSettingsJSONRequestBody defines body for PutAuthDexSettings for application/json ContentType.
-type PutAuthDexSettingsJSONRequestBody = DexSettingsRequest
 
 // PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
 type PostAuthLoginJSONRequestBody = LoginRequest
@@ -15470,9 +15189,6 @@ type PutRbacGlobalRolesByIdJSONRequestBody = RBACRoleRequest
 // PostRbacPermissionPreviewJSONRequestBody defines body for PostRbacPermissionPreview for application/json ContentType.
 type PostRbacPermissionPreviewJSONRequestBody = RBACPermissionPreviewRequest
 
-// PostRbacPrincipalsMaterializeJSONRequestBody defines body for PostRbacPrincipalsMaterialize for application/json ContentType.
-type PostRbacPrincipalsMaterializeJSONRequestBody = PrincipalMaterializeRequest
-
 // PostRbacProjectBindingsJSONRequestBody defines body for PostRbacProjectBindings for application/json ContentType.
 type PostRbacProjectBindingsJSONRequestBody = RBACProjectBindingRequest
 
@@ -15502,6 +15218,12 @@ type PutSecurityTemplatesByIdJSONRequestBody = PodSecurityTemplateWriteRequest
 
 // PutSettingsGeneralJSONRequestBody defines body for PutSettingsGeneral for application/json ContentType.
 type PutSettingsGeneralJSONRequestBody PutSettingsGeneralJSONBody
+
+// DeleteSettingsIdentityBindingsJSONRequestBody defines body for DeleteSettingsIdentityBindings for application/json ContentType.
+type DeleteSettingsIdentityBindingsJSONRequestBody = IdentityBindingRequest
+
+// PostSettingsIdentityBindingsJSONRequestBody defines body for PostSettingsIdentityBindings for application/json ContentType.
+type PostSettingsIdentityBindingsJSONRequestBody = IdentityBindingRequest
 
 // PostSettingsMonitoringAlertmanagerInstallJSONRequestBody defines body for PostSettingsMonitoringAlertmanagerInstall for application/json ContentType.
 type PostSettingsMonitoringAlertmanagerInstallJSONRequestBody = SharedAlertmanagerStackRequest
@@ -15553,9 +15275,6 @@ type PostSettingsMonitoringThanosReplaceJSONRequestBody = SharedThanosStackReque
 
 // PutSettingsMonitoringThanosUpgradeJSONRequestBody defines body for PutSettingsMonitoringThanosUpgrade for application/json ContentType.
 type PutSettingsMonitoringThanosUpgradeJSONRequestBody = SharedThanosStackRequest
-
-// PostSettingsSsoJSONRequestBody defines body for PostSettingsSso for application/json ContentType.
-type PostSettingsSsoJSONRequestBody PostSettingsSsoJSONBody
 
 // PostSettingsTokensJSONRequestBody defines body for PostSettingsTokens for application/json ContentType.
 type PostSettingsTokensJSONRequestBody PostSettingsTokensJSONBody
@@ -16465,471 +16184,6 @@ func (a ClusterEvent) MarshalJSON() ([]byte, error) {
 		object["type"], err = json.Marshal(a.Type)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'type': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for DexConnector. Returns the specified
-// element and whether it was found
-func (a DexConnector) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for DexConnector
-func (a *DexConnector) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for DexConnector to handle AdditionalProperties
-func (a *DexConnector) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["config"]; found {
-		err = json.Unmarshal(raw, &a.Config)
-		if err != nil {
-			return fmt.Errorf("error reading 'config': %w", err)
-		}
-		delete(object, "config")
-	}
-
-	if raw, found := object["created_at"]; found {
-		err = json.Unmarshal(raw, &a.CreatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'created_at': %w", err)
-		}
-		delete(object, "created_at")
-	}
-
-	if raw, found := object["display_name"]; found {
-		err = json.Unmarshal(raw, &a.DisplayName)
-		if err != nil {
-			return fmt.Errorf("error reading 'display_name': %w", err)
-		}
-		delete(object, "display_name")
-	}
-
-	if raw, found := object["enabled"]; found {
-		err = json.Unmarshal(raw, &a.Enabled)
-		if err != nil {
-			return fmt.Errorf("error reading 'enabled': %w", err)
-		}
-		delete(object, "enabled")
-	}
-
-	if raw, found := object["id"]; found {
-		err = json.Unmarshal(raw, &a.Id)
-		if err != nil {
-			return fmt.Errorf("error reading 'id': %w", err)
-		}
-		delete(object, "id")
-	}
-
-	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
-		if err != nil {
-			return fmt.Errorf("error reading 'name': %w", err)
-		}
-		delete(object, "name")
-	}
-
-	if raw, found := object["type"]; found {
-		err = json.Unmarshal(raw, &a.Type)
-		if err != nil {
-			return fmt.Errorf("error reading 'type': %w", err)
-		}
-		delete(object, "type")
-	}
-
-	if raw, found := object["updated_at"]; found {
-		err = json.Unmarshal(raw, &a.UpdatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'updated_at': %w", err)
-		}
-		delete(object, "updated_at")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for DexConnector to handle AdditionalProperties
-func (a DexConnector) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	object["config"], err = json.Marshal(a.Config)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'config': %w", err)
-	}
-
-	object["created_at"], err = json.Marshal(a.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'created_at': %w", err)
-	}
-
-	object["display_name"], err = json.Marshal(a.DisplayName)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'display_name': %w", err)
-	}
-
-	object["enabled"], err = json.Marshal(a.Enabled)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'enabled': %w", err)
-	}
-
-	object["id"], err = json.Marshal(a.Id)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'id': %w", err)
-	}
-
-	object["name"], err = json.Marshal(a.Name)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'name': %w", err)
-	}
-
-	object["type"], err = json.Marshal(a.Type)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'type': %w", err)
-	}
-
-	object["updated_at"], err = json.Marshal(a.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for DexSettings. Returns the specified
-// element and whether it was found
-func (a DexSettings) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for DexSettings
-func (a *DexSettings) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for DexSettings to handle AdditionalProperties
-func (a *DexSettings) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["chart_release_name"]; found {
-		err = json.Unmarshal(raw, &a.ChartReleaseName)
-		if err != nil {
-			return fmt.Errorf("error reading 'chart_release_name': %w", err)
-		}
-		delete(object, "chart_release_name")
-	}
-
-	if raw, found := object["cluster_id"]; found {
-		err = json.Unmarshal(raw, &a.ClusterId)
-		if err != nil {
-			return fmt.Errorf("error reading 'cluster_id': %w", err)
-		}
-		delete(object, "cluster_id")
-	}
-
-	if raw, found := object["configured"]; found {
-		err = json.Unmarshal(raw, &a.Configured)
-		if err != nil {
-			return fmt.Errorf("error reading 'configured': %w", err)
-		}
-		delete(object, "configured")
-	}
-
-	if raw, found := object["deployment_name"]; found {
-		err = json.Unmarshal(raw, &a.DeploymentName)
-		if err != nil {
-			return fmt.Errorf("error reading 'deployment_name': %w", err)
-		}
-		delete(object, "deployment_name")
-	}
-
-	if raw, found := object["expiry"]; found {
-		err = json.Unmarshal(raw, &a.Expiry)
-		if err != nil {
-			return fmt.Errorf("error reading 'expiry': %w", err)
-		}
-		delete(object, "expiry")
-	}
-
-	if raw, found := object["extra"]; found {
-		err = json.Unmarshal(raw, &a.Extra)
-		if err != nil {
-			return fmt.Errorf("error reading 'extra': %w", err)
-		}
-		delete(object, "extra")
-	}
-
-	if raw, found := object["issuer_url"]; found {
-		err = json.Unmarshal(raw, &a.IssuerUrl)
-		if err != nil {
-			return fmt.Errorf("error reading 'issuer_url': %w", err)
-		}
-		delete(object, "issuer_url")
-	}
-
-	if raw, found := object["namespace"]; found {
-		err = json.Unmarshal(raw, &a.Namespace)
-		if err != nil {
-			return fmt.Errorf("error reading 'namespace': %w", err)
-		}
-		delete(object, "namespace")
-	}
-
-	if raw, found := object["public_clients"]; found {
-		err = json.Unmarshal(raw, &a.PublicClients)
-		if err != nil {
-			return fmt.Errorf("error reading 'public_clients': %w", err)
-		}
-		delete(object, "public_clients")
-	}
-
-	if raw, found := object["release_name"]; found {
-		err = json.Unmarshal(raw, &a.ReleaseName)
-		if err != nil {
-			return fmt.Errorf("error reading 'release_name': %w", err)
-		}
-		delete(object, "release_name")
-	}
-
-	if raw, found := object["runtime_applied_generation"]; found {
-		err = json.Unmarshal(raw, &a.RuntimeAppliedGeneration)
-		if err != nil {
-			return fmt.Errorf("error reading 'runtime_applied_generation': %w", err)
-		}
-		delete(object, "runtime_applied_generation")
-	}
-
-	if raw, found := object["runtime_generation"]; found {
-		err = json.Unmarshal(raw, &a.RuntimeGeneration)
-		if err != nil {
-			return fmt.Errorf("error reading 'runtime_generation': %w", err)
-		}
-		delete(object, "runtime_generation")
-	}
-
-	if raw, found := object["runtime_phase"]; found {
-		err = json.Unmarshal(raw, &a.RuntimePhase)
-		if err != nil {
-			return fmt.Errorf("error reading 'runtime_phase': %w", err)
-		}
-		delete(object, "runtime_phase")
-	}
-
-	if raw, found := object["runtime_secret_name"]; found {
-		err = json.Unmarshal(raw, &a.RuntimeSecretName)
-		if err != nil {
-			return fmt.Errorf("error reading 'runtime_secret_name': %w", err)
-		}
-		delete(object, "runtime_secret_name")
-	}
-
-	if raw, found := object["runtime_staged_generation"]; found {
-		err = json.Unmarshal(raw, &a.RuntimeStagedGeneration)
-		if err != nil {
-			return fmt.Errorf("error reading 'runtime_staged_generation': %w", err)
-		}
-		delete(object, "runtime_staged_generation")
-	}
-
-	if raw, found := object["service_name"]; found {
-		err = json.Unmarshal(raw, &a.ServiceName)
-		if err != nil {
-			return fmt.Errorf("error reading 'service_name': %w", err)
-		}
-		delete(object, "service_name")
-	}
-
-	if raw, found := object["updated_at"]; found {
-		err = json.Unmarshal(raw, &a.UpdatedAt)
-		if err != nil {
-			return fmt.Errorf("error reading 'updated_at': %w", err)
-		}
-		delete(object, "updated_at")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for DexSettings to handle AdditionalProperties
-func (a DexSettings) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.ChartReleaseName != nil {
-		object["chart_release_name"], err = json.Marshal(a.ChartReleaseName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'chart_release_name': %w", err)
-		}
-	}
-
-	if a.ClusterId != nil {
-		object["cluster_id"], err = json.Marshal(a.ClusterId)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'cluster_id': %w", err)
-		}
-	}
-
-	if a.Configured != nil {
-		object["configured"], err = json.Marshal(a.Configured)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'configured': %w", err)
-		}
-	}
-
-	if a.DeploymentName != nil {
-		object["deployment_name"], err = json.Marshal(a.DeploymentName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'deployment_name': %w", err)
-		}
-	}
-
-	if a.Expiry != nil {
-		object["expiry"], err = json.Marshal(a.Expiry)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'expiry': %w", err)
-		}
-	}
-
-	if a.Extra != nil {
-		object["extra"], err = json.Marshal(a.Extra)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'extra': %w", err)
-		}
-	}
-
-	if a.IssuerUrl != nil {
-		object["issuer_url"], err = json.Marshal(a.IssuerUrl)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'issuer_url': %w", err)
-		}
-	}
-
-	if a.Namespace != nil {
-		object["namespace"], err = json.Marshal(a.Namespace)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'namespace': %w", err)
-		}
-	}
-
-	if a.PublicClients != nil {
-		object["public_clients"], err = json.Marshal(a.PublicClients)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'public_clients': %w", err)
-		}
-	}
-
-	if a.ReleaseName != nil {
-		object["release_name"], err = json.Marshal(a.ReleaseName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'release_name': %w", err)
-		}
-	}
-
-	if a.RuntimeAppliedGeneration != nil {
-		object["runtime_applied_generation"], err = json.Marshal(a.RuntimeAppliedGeneration)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'runtime_applied_generation': %w", err)
-		}
-	}
-
-	if a.RuntimeGeneration != nil {
-		object["runtime_generation"], err = json.Marshal(a.RuntimeGeneration)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'runtime_generation': %w", err)
-		}
-	}
-
-	if a.RuntimePhase != nil {
-		object["runtime_phase"], err = json.Marshal(a.RuntimePhase)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'runtime_phase': %w", err)
-		}
-	}
-
-	if a.RuntimeSecretName != nil {
-		object["runtime_secret_name"], err = json.Marshal(a.RuntimeSecretName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'runtime_secret_name': %w", err)
-		}
-	}
-
-	if a.RuntimeStagedGeneration != nil {
-		object["runtime_staged_generation"], err = json.Marshal(a.RuntimeStagedGeneration)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'runtime_staged_generation': %w", err)
-		}
-	}
-
-	if a.ServiceName != nil {
-		object["service_name"], err = json.Marshal(a.ServiceName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'service_name': %w", err)
-		}
-	}
-
-	if a.UpdatedAt != nil {
-		object["updated_at"], err = json.Marshal(a.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'updated_at': %w", err)
 		}
 	}
 
@@ -21378,47 +20632,6 @@ type ClientInterface interface {
 
 	PostAuthChangePassword(ctx context.Context, body PostAuthChangePasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostAuthDexApply request
-	PostAuthDexApply(ctx context.Context, params *PostAuthDexApplyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetAuthDexConnectorTypes request
-	GetAuthDexConnectorTypes(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetAuthDexConnectors request
-	GetAuthDexConnectors(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostAuthDexConnectorsWithBody request with any body
-	PostAuthDexConnectorsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostAuthDexConnectors(ctx context.Context, body PostAuthDexConnectorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteAuthDexConnectorsById request
-	DeleteAuthDexConnectorsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetAuthDexConnectorsById request
-	GetAuthDexConnectorsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PatchAuthDexConnectorsByIdWithBody request with any body
-	PatchAuthDexConnectorsByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PatchAuthDexConnectorsById(ctx context.Context, id openapi_types.UUID, body PatchAuthDexConnectorsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetAuthDexOperation request
-	GetAuthDexOperation(ctx context.Context, operationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostAuthDexRegisterAsSsoWithBody request with any body
-	PostAuthDexRegisterAsSsoWithBody(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostAuthDexRegisterAsSso(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, body PostAuthDexRegisterAsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetAuthDexSettings request
-	GetAuthDexSettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PutAuthDexSettingsWithBody request with any body
-	PutAuthDexSettingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PutAuthDexSettings(ctx context.Context, body PutAuthDexSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// PostAuthLoginWithBody request with any body
 	PostAuthLoginWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -23352,11 +22565,6 @@ type ClientInterface interface {
 	// GetRbacPrincipals request
 	GetRbacPrincipals(ctx context.Context, params *GetRbacPrincipalsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostRbacPrincipalsMaterializeWithBody request with any body
-	PostRbacPrincipalsMaterializeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostRbacPrincipalsMaterialize(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetRbacProjectBindings request
 	GetRbacProjectBindings(ctx context.Context, params *GetRbacProjectBindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -23509,6 +22717,19 @@ type ClientInterface interface {
 
 	PutSettingsGeneral(ctx context.Context, body PutSettingsGeneralJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteSettingsIdentityBindingsWithBody request with any body
+	DeleteSettingsIdentityBindingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DeleteSettingsIdentityBindings(ctx context.Context, body DeleteSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSettingsIdentityBindings request
+	GetSettingsIdentityBindings(ctx context.Context, params *GetSettingsIdentityBindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSettingsIdentityBindingsWithBody request with any body
+	PostSettingsIdentityBindingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostSettingsIdentityBindings(ctx context.Context, body PostSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostSettingsMonitoringAlertmanagerInstallWithBody request with any body
 	PostSettingsMonitoringAlertmanagerInstallWithBody(ctx context.Context, params *PostSettingsMonitoringAlertmanagerInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -23639,16 +22860,8 @@ type ClientInterface interface {
 	// GetSettingsSso request
 	GetSettingsSso(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostSettingsSsoWithBody request with any body
-	PostSettingsSsoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostSettingsSso(ctx context.Context, body PostSettingsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetSettingsSsoPresets request
 	GetSettingsSsoPresets(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteSettingsSsoById request
-	DeleteSettingsSsoById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSettingsTokens request
 	GetSettingsTokens(ctx context.Context, params *GetSettingsTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -26744,186 +25957,6 @@ func (c *Client) PostAuthChangePasswordWithBody(ctx context.Context, contentType
 
 func (c *Client) PostAuthChangePassword(ctx context.Context, body PostAuthChangePasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAuthChangePasswordRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthDexApply(ctx context.Context, params *PostAuthDexApplyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthDexApplyRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetAuthDexConnectorTypes(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAuthDexConnectorTypesRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetAuthDexConnectors(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAuthDexConnectorsRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthDexConnectorsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthDexConnectorsRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthDexConnectors(ctx context.Context, body PostAuthDexConnectorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthDexConnectorsRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) DeleteAuthDexConnectorsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteAuthDexConnectorsByIdRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetAuthDexConnectorsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAuthDexConnectorsByIdRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PatchAuthDexConnectorsByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchAuthDexConnectorsByIdRequestWithBody(c.Server, id, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PatchAuthDexConnectorsById(ctx context.Context, id openapi_types.UUID, body PatchAuthDexConnectorsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPatchAuthDexConnectorsByIdRequest(c.Server, id, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetAuthDexOperation(ctx context.Context, operationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAuthDexOperationRequest(c.Server, operationId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthDexRegisterAsSsoWithBody(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthDexRegisterAsSsoRequestWithBody(c.Server, params, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthDexRegisterAsSso(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, body PostAuthDexRegisterAsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthDexRegisterAsSsoRequest(c.Server, params, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetAuthDexSettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAuthDexSettingsRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PutAuthDexSettingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutAuthDexSettingsRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PutAuthDexSettings(ctx context.Context, body PutAuthDexSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutAuthDexSettingsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -35406,30 +34439,6 @@ func (c *Client) GetRbacPrincipals(ctx context.Context, params *GetRbacPrincipal
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostRbacPrincipalsMaterializeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostRbacPrincipalsMaterializeRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostRbacPrincipalsMaterialize(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostRbacPrincipalsMaterializeRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetRbacProjectBindings(ctx context.Context, params *GetRbacProjectBindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetRbacProjectBindingsRequest(c.Server, params)
 	if err != nil {
@@ -36078,6 +35087,66 @@ func (c *Client) PutSettingsGeneral(ctx context.Context, body PutSettingsGeneral
 	return c.Client.Do(req)
 }
 
+func (c *Client) DeleteSettingsIdentityBindingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSettingsIdentityBindingsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteSettingsIdentityBindings(ctx context.Context, body DeleteSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteSettingsIdentityBindingsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSettingsIdentityBindings(ctx context.Context, params *GetSettingsIdentityBindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSettingsIdentityBindingsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSettingsIdentityBindingsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSettingsIdentityBindingsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSettingsIdentityBindings(ctx context.Context, body PostSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSettingsIdentityBindingsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostSettingsMonitoringAlertmanagerInstallWithBody(ctx context.Context, params *PostSettingsMonitoringAlertmanagerInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostSettingsMonitoringAlertmanagerInstallRequestWithBody(c.Server, params, contentType, body)
 	if err != nil {
@@ -36666,44 +35735,8 @@ func (c *Client) GetSettingsSso(ctx context.Context, reqEditors ...RequestEditor
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostSettingsSsoWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostSettingsSsoRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostSettingsSso(ctx context.Context, body PostSettingsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostSettingsSsoRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetSettingsSsoPresets(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSettingsSsoPresetsRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) DeleteSettingsSsoById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteSettingsSsoByIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -46232,409 +45265,6 @@ func NewPostAuthChangePasswordRequestWithBody(server string, contentType string,
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewPostAuthDexApplyRequest generates requests for PostAuthDexApply
-func NewPostAuthDexApplyRequest(server string, params *PostAuthDexApplyParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/apply/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-
-		var headerParam0 string
-
-		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
-		if err != nil {
-			return nil, err
-		}
-
-		req.Header.Set("Idempotency-Key", headerParam0)
-
-	}
-
-	return req, nil
-}
-
-// NewGetAuthDexConnectorTypesRequest generates requests for GetAuthDexConnectorTypes
-func NewGetAuthDexConnectorTypesRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/connector-types/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetAuthDexConnectorsRequest generates requests for GetAuthDexConnectors
-func NewGetAuthDexConnectorsRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/connectors/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostAuthDexConnectorsRequest calls the generic PostAuthDexConnectors builder with application/json body
-func NewPostAuthDexConnectorsRequest(server string, body PostAuthDexConnectorsJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostAuthDexConnectorsRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostAuthDexConnectorsRequestWithBody generates requests for PostAuthDexConnectors with any type of body
-func NewPostAuthDexConnectorsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/connectors/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewDeleteAuthDexConnectorsByIdRequest generates requests for DeleteAuthDexConnectorsById
-func NewDeleteAuthDexConnectorsByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/connectors/%s/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetAuthDexConnectorsByIdRequest generates requests for GetAuthDexConnectorsById
-func NewGetAuthDexConnectorsByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/connectors/%s/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPatchAuthDexConnectorsByIdRequest calls the generic PatchAuthDexConnectorsById builder with application/json body
-func NewPatchAuthDexConnectorsByIdRequest(server string, id openapi_types.UUID, body PatchAuthDexConnectorsByIdJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPatchAuthDexConnectorsByIdRequestWithBody(server, id, "application/json", bodyReader)
-}
-
-// NewPatchAuthDexConnectorsByIdRequestWithBody generates requests for PatchAuthDexConnectorsById with any type of body
-func NewPatchAuthDexConnectorsByIdRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/connectors/%s/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PATCH", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetAuthDexOperationRequest generates requests for GetAuthDexOperation
-func NewGetAuthDexOperationRequest(server string, operationId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "operation_id", runtime.ParamLocationPath, operationId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/operations/%s/", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostAuthDexRegisterAsSsoRequest calls the generic PostAuthDexRegisterAsSso builder with application/json body
-func NewPostAuthDexRegisterAsSsoRequest(server string, params *PostAuthDexRegisterAsSsoParams, body PostAuthDexRegisterAsSsoJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostAuthDexRegisterAsSsoRequestWithBody(server, params, "application/json", bodyReader)
-}
-
-// NewPostAuthDexRegisterAsSsoRequestWithBody generates requests for PostAuthDexRegisterAsSso with any type of body
-func NewPostAuthDexRegisterAsSsoRequestWithBody(server string, params *PostAuthDexRegisterAsSsoParams, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/register-as-sso/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	if params != nil {
-
-		var headerParam0 string
-
-		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
-		if err != nil {
-			return nil, err
-		}
-
-		req.Header.Set("Idempotency-Key", headerParam0)
-
-	}
-
-	return req, nil
-}
-
-// NewGetAuthDexSettingsRequest generates requests for GetAuthDexSettings
-func NewGetAuthDexSettingsRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/settings/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPutAuthDexSettingsRequest calls the generic PutAuthDexSettings builder with application/json body
-func NewPutAuthDexSettingsRequest(server string, body PutAuthDexSettingsJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPutAuthDexSettingsRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPutAuthDexSettingsRequestWithBody generates requests for PutAuthDexSettings with any type of body
-func NewPutAuthDexSettingsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/dex/settings/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -73209,46 +71839,6 @@ func NewGetRbacPrincipalsRequest(server string, params *GetRbacPrincipalsParams)
 	return req, nil
 }
 
-// NewPostRbacPrincipalsMaterializeRequest calls the generic PostRbacPrincipalsMaterialize builder with application/json body
-func NewPostRbacPrincipalsMaterializeRequest(server string, body PostRbacPrincipalsMaterializeJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostRbacPrincipalsMaterializeRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostRbacPrincipalsMaterializeRequestWithBody generates requests for PostRbacPrincipalsMaterialize with any type of body
-func NewPostRbacPrincipalsMaterializeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/rbac/principals/materialize")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewGetRbacProjectBindingsRequest generates requests for GetRbacProjectBindings
 func NewGetRbacProjectBindingsRequest(server string, params *GetRbacProjectBindingsParams) (*http.Request, error) {
 	var err error
@@ -75286,6 +73876,135 @@ func NewPutSettingsGeneralRequestWithBody(server string, contentType string, bod
 	return req, nil
 }
 
+// NewDeleteSettingsIdentityBindingsRequest calls the generic DeleteSettingsIdentityBindings builder with application/json body
+func NewDeleteSettingsIdentityBindingsRequest(server string, body DeleteSettingsIdentityBindingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteSettingsIdentityBindingsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewDeleteSettingsIdentityBindingsRequestWithBody generates requests for DeleteSettingsIdentityBindings with any type of body
+func NewDeleteSettingsIdentityBindingsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/settings/identity/bindings")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetSettingsIdentityBindingsRequest generates requests for GetSettingsIdentityBindings
+func NewGetSettingsIdentityBindingsRequest(server string, params *GetSettingsIdentityBindingsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/settings/identity/bindings")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostSettingsIdentityBindingsRequest calls the generic PostSettingsIdentityBindings builder with application/json body
+func NewPostSettingsIdentityBindingsRequest(server string, body PostSettingsIdentityBindingsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostSettingsIdentityBindingsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostSettingsIdentityBindingsRequestWithBody generates requests for PostSettingsIdentityBindings with any type of body
+func NewPostSettingsIdentityBindingsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/settings/identity/bindings")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPostSettingsMonitoringAlertmanagerInstallRequest calls the generic PostSettingsMonitoringAlertmanagerInstall builder with application/json body
 func NewPostSettingsMonitoringAlertmanagerInstallRequest(server string, params *PostSettingsMonitoringAlertmanagerInstallParams, body PostSettingsMonitoringAlertmanagerInstallJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -77132,46 +75851,6 @@ func NewGetSettingsSsoRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
-// NewPostSettingsSsoRequest calls the generic PostSettingsSso builder with application/json body
-func NewPostSettingsSsoRequest(server string, body PostSettingsSsoJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostSettingsSsoRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostSettingsSsoRequestWithBody generates requests for PostSettingsSso with any type of body
-func NewPostSettingsSsoRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/settings/sso")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewGetSettingsSsoPresetsRequest generates requests for GetSettingsSsoPresets
 func NewGetSettingsSsoPresetsRequest(server string) (*http.Request, error) {
 	var err error
@@ -77192,40 +75871,6 @@ func NewGetSettingsSsoPresetsRequest(server string) (*http.Request, error) {
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewDeleteSettingsSsoByIdRequest generates requests for DeleteSettingsSsoById
-func NewDeleteSettingsSsoByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/settings/sso/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80733,47 +79378,6 @@ type ClientWithResponsesInterface interface {
 
 	PostAuthChangePasswordWithResponse(ctx context.Context, body PostAuthChangePasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthChangePasswordResponse, error)
 
-	// PostAuthDexApplyWithResponse request
-	PostAuthDexApplyWithResponse(ctx context.Context, params *PostAuthDexApplyParams, reqEditors ...RequestEditorFn) (*PostAuthDexApplyResponse, error)
-
-	// GetAuthDexConnectorTypesWithResponse request
-	GetAuthDexConnectorTypesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthDexConnectorTypesResponse, error)
-
-	// GetAuthDexConnectorsWithResponse request
-	GetAuthDexConnectorsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthDexConnectorsResponse, error)
-
-	// PostAuthDexConnectorsWithBodyWithResponse request with any body
-	PostAuthDexConnectorsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthDexConnectorsResponse, error)
-
-	PostAuthDexConnectorsWithResponse(ctx context.Context, body PostAuthDexConnectorsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthDexConnectorsResponse, error)
-
-	// DeleteAuthDexConnectorsByIdWithResponse request
-	DeleteAuthDexConnectorsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAuthDexConnectorsByIdResponse, error)
-
-	// GetAuthDexConnectorsByIdWithResponse request
-	GetAuthDexConnectorsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuthDexConnectorsByIdResponse, error)
-
-	// PatchAuthDexConnectorsByIdWithBodyWithResponse request with any body
-	PatchAuthDexConnectorsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchAuthDexConnectorsByIdResponse, error)
-
-	PatchAuthDexConnectorsByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PatchAuthDexConnectorsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchAuthDexConnectorsByIdResponse, error)
-
-	// GetAuthDexOperationWithResponse request
-	GetAuthDexOperationWithResponse(ctx context.Context, operationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuthDexOperationResponse, error)
-
-	// PostAuthDexRegisterAsSsoWithBodyWithResponse request with any body
-	PostAuthDexRegisterAsSsoWithBodyWithResponse(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthDexRegisterAsSsoResponse, error)
-
-	PostAuthDexRegisterAsSsoWithResponse(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, body PostAuthDexRegisterAsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthDexRegisterAsSsoResponse, error)
-
-	// GetAuthDexSettingsWithResponse request
-	GetAuthDexSettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthDexSettingsResponse, error)
-
-	// PutAuthDexSettingsWithBodyWithResponse request with any body
-	PutAuthDexSettingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAuthDexSettingsResponse, error)
-
-	PutAuthDexSettingsWithResponse(ctx context.Context, body PutAuthDexSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAuthDexSettingsResponse, error)
-
 	// PostAuthLoginWithBodyWithResponse request with any body
 	PostAuthLoginWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error)
 
@@ -82707,11 +81311,6 @@ type ClientWithResponsesInterface interface {
 	// GetRbacPrincipalsWithResponse request
 	GetRbacPrincipalsWithResponse(ctx context.Context, params *GetRbacPrincipalsParams, reqEditors ...RequestEditorFn) (*GetRbacPrincipalsResponse, error)
 
-	// PostRbacPrincipalsMaterializeWithBodyWithResponse request with any body
-	PostRbacPrincipalsMaterializeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error)
-
-	PostRbacPrincipalsMaterializeWithResponse(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error)
-
 	// GetRbacProjectBindingsWithResponse request
 	GetRbacProjectBindingsWithResponse(ctx context.Context, params *GetRbacProjectBindingsParams, reqEditors ...RequestEditorFn) (*GetRbacProjectBindingsResponse, error)
 
@@ -82864,6 +81463,19 @@ type ClientWithResponsesInterface interface {
 
 	PutSettingsGeneralWithResponse(ctx context.Context, body PutSettingsGeneralJSONRequestBody, reqEditors ...RequestEditorFn) (*PutSettingsGeneralResponse, error)
 
+	// DeleteSettingsIdentityBindingsWithBodyWithResponse request with any body
+	DeleteSettingsIdentityBindingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteSettingsIdentityBindingsResponse, error)
+
+	DeleteSettingsIdentityBindingsWithResponse(ctx context.Context, body DeleteSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteSettingsIdentityBindingsResponse, error)
+
+	// GetSettingsIdentityBindingsWithResponse request
+	GetSettingsIdentityBindingsWithResponse(ctx context.Context, params *GetSettingsIdentityBindingsParams, reqEditors ...RequestEditorFn) (*GetSettingsIdentityBindingsResponse, error)
+
+	// PostSettingsIdentityBindingsWithBodyWithResponse request with any body
+	PostSettingsIdentityBindingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSettingsIdentityBindingsResponse, error)
+
+	PostSettingsIdentityBindingsWithResponse(ctx context.Context, body PostSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSettingsIdentityBindingsResponse, error)
+
 	// PostSettingsMonitoringAlertmanagerInstallWithBodyWithResponse request with any body
 	PostSettingsMonitoringAlertmanagerInstallWithBodyWithResponse(ctx context.Context, params *PostSettingsMonitoringAlertmanagerInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSettingsMonitoringAlertmanagerInstallResponse, error)
 
@@ -82994,16 +81606,8 @@ type ClientWithResponsesInterface interface {
 	// GetSettingsSsoWithResponse request
 	GetSettingsSsoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSettingsSsoResponse, error)
 
-	// PostSettingsSsoWithBodyWithResponse request with any body
-	PostSettingsSsoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSettingsSsoResponse, error)
-
-	PostSettingsSsoWithResponse(ctx context.Context, body PostSettingsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSettingsSsoResponse, error)
-
 	// GetSettingsSsoPresetsWithResponse request
 	GetSettingsSsoPresetsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSettingsSsoPresetsResponse, error)
-
-	// DeleteSettingsSsoByIdWithResponse request
-	DeleteSettingsSsoByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteSettingsSsoByIdResponse, error)
 
 	// GetSettingsTokensWithResponse request
 	GetSettingsTokensWithResponse(ctx context.Context, params *GetSettingsTokensParams, reqEditors ...RequestEditorFn) (*GetSettingsTokensResponse, error)
@@ -88337,293 +86941,6 @@ func (r PostAuthChangePasswordResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostAuthChangePasswordResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostAuthDexApplyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		Data DexOperation `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON500 *ErrorEnvelope
-	JSON503 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostAuthDexApplyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostAuthDexApplyResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetAuthDexConnectorTypesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data []DexConnectorType `json:"data"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetAuthDexConnectorTypesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetAuthDexConnectorTypesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetAuthDexConnectorsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data []DexConnector `json:"data"`
-	}
-	JSON500 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GetAuthDexConnectorsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetAuthDexConnectorsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostAuthDexConnectorsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *struct {
-		Data DexConnector `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON409 *ErrorEnvelope
-	JSON500 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostAuthDexConnectorsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostAuthDexConnectorsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DeleteAuthDexConnectorsByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data struct {
-			Deleted *openapi_types.UUID `json:"deleted,omitempty"`
-		} `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON404 *ErrorEnvelope
-	JSON500 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteAuthDexConnectorsByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteAuthDexConnectorsByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetAuthDexConnectorsByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data DexConnector `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GetAuthDexConnectorsByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetAuthDexConnectorsByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PatchAuthDexConnectorsByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data DexConnector `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON404 *ErrorEnvelope
-	JSON500 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PatchAuthDexConnectorsByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PatchAuthDexConnectorsByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetAuthDexOperationResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data DexOperation `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GetAuthDexOperationResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetAuthDexOperationResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostAuthDexRegisterAsSsoResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *struct {
-		Data DexOperation `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON500 *ErrorEnvelope
-	JSON503 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostAuthDexRegisterAsSsoResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostAuthDexRegisterAsSsoResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetAuthDexSettingsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data DexSettings `json:"data"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetAuthDexSettingsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetAuthDexSettingsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PutAuthDexSettingsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data DexSettings `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON500 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PutAuthDexSettingsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PutAuthDexSettingsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -102350,37 +100667,6 @@ func (r GetRbacPrincipalsResponse) StatusCode() int {
 	return 0
 }
 
-type PostRbacPrincipalsMaterializeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *struct {
-		Data PrincipalMaterialized `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON401 *ErrorEnvelope
-	JSON403 *ErrorEnvelope
-	JSON404 *ErrorEnvelope
-	JSON422 *ErrorEnvelope
-	JSON429 *ErrorEnvelope
-	JSON502 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostRbacPrincipalsMaterializeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostRbacPrincipalsMaterializeResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetRbacProjectBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -103574,6 +101860,82 @@ func (r PutSettingsGeneralResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteSettingsIdentityBindingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *struct {
+			Ok *bool `json:"ok,omitempty"`
+		} `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteSettingsIdentityBindingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteSettingsIdentityBindingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetSettingsIdentityBindingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *[]IdentityBinding `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSettingsIdentityBindingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSettingsIdentityBindingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostSettingsIdentityBindingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data *struct {
+			Ok *bool `json:"ok,omitempty"`
+		} `json:"data,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSettingsIdentityBindingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSettingsIdentityBindingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostSettingsMonitoringAlertmanagerInstallResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -104434,32 +102796,6 @@ func (r GetSettingsSsoResponse) StatusCode() int {
 	return 0
 }
 
-type PostSettingsSsoResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *struct {
-		Data UsersSettingsSSOProvider `json:"data"`
-	}
-	JSON400 *ErrorEnvelope
-	JSON409 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r PostSettingsSsoResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostSettingsSsoResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetSettingsSsoPresetsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -104481,28 +102817,6 @@ func (r GetSettingsSsoPresetsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetSettingsSsoPresetsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DeleteSettingsSsoByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteSettingsSsoByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteSettingsSsoByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -108104,137 +106418,6 @@ func (c *ClientWithResponses) PostAuthChangePasswordWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParsePostAuthChangePasswordResponse(rsp)
-}
-
-// PostAuthDexApplyWithResponse request returning *PostAuthDexApplyResponse
-func (c *ClientWithResponses) PostAuthDexApplyWithResponse(ctx context.Context, params *PostAuthDexApplyParams, reqEditors ...RequestEditorFn) (*PostAuthDexApplyResponse, error) {
-	rsp, err := c.PostAuthDexApply(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthDexApplyResponse(rsp)
-}
-
-// GetAuthDexConnectorTypesWithResponse request returning *GetAuthDexConnectorTypesResponse
-func (c *ClientWithResponses) GetAuthDexConnectorTypesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthDexConnectorTypesResponse, error) {
-	rsp, err := c.GetAuthDexConnectorTypes(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetAuthDexConnectorTypesResponse(rsp)
-}
-
-// GetAuthDexConnectorsWithResponse request returning *GetAuthDexConnectorsResponse
-func (c *ClientWithResponses) GetAuthDexConnectorsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthDexConnectorsResponse, error) {
-	rsp, err := c.GetAuthDexConnectors(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetAuthDexConnectorsResponse(rsp)
-}
-
-// PostAuthDexConnectorsWithBodyWithResponse request with arbitrary body returning *PostAuthDexConnectorsResponse
-func (c *ClientWithResponses) PostAuthDexConnectorsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthDexConnectorsResponse, error) {
-	rsp, err := c.PostAuthDexConnectorsWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthDexConnectorsResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostAuthDexConnectorsWithResponse(ctx context.Context, body PostAuthDexConnectorsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthDexConnectorsResponse, error) {
-	rsp, err := c.PostAuthDexConnectors(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthDexConnectorsResponse(rsp)
-}
-
-// DeleteAuthDexConnectorsByIdWithResponse request returning *DeleteAuthDexConnectorsByIdResponse
-func (c *ClientWithResponses) DeleteAuthDexConnectorsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAuthDexConnectorsByIdResponse, error) {
-	rsp, err := c.DeleteAuthDexConnectorsById(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteAuthDexConnectorsByIdResponse(rsp)
-}
-
-// GetAuthDexConnectorsByIdWithResponse request returning *GetAuthDexConnectorsByIdResponse
-func (c *ClientWithResponses) GetAuthDexConnectorsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuthDexConnectorsByIdResponse, error) {
-	rsp, err := c.GetAuthDexConnectorsById(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetAuthDexConnectorsByIdResponse(rsp)
-}
-
-// PatchAuthDexConnectorsByIdWithBodyWithResponse request with arbitrary body returning *PatchAuthDexConnectorsByIdResponse
-func (c *ClientWithResponses) PatchAuthDexConnectorsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchAuthDexConnectorsByIdResponse, error) {
-	rsp, err := c.PatchAuthDexConnectorsByIdWithBody(ctx, id, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePatchAuthDexConnectorsByIdResponse(rsp)
-}
-
-func (c *ClientWithResponses) PatchAuthDexConnectorsByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PatchAuthDexConnectorsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchAuthDexConnectorsByIdResponse, error) {
-	rsp, err := c.PatchAuthDexConnectorsById(ctx, id, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePatchAuthDexConnectorsByIdResponse(rsp)
-}
-
-// GetAuthDexOperationWithResponse request returning *GetAuthDexOperationResponse
-func (c *ClientWithResponses) GetAuthDexOperationWithResponse(ctx context.Context, operationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuthDexOperationResponse, error) {
-	rsp, err := c.GetAuthDexOperation(ctx, operationId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetAuthDexOperationResponse(rsp)
-}
-
-// PostAuthDexRegisterAsSsoWithBodyWithResponse request with arbitrary body returning *PostAuthDexRegisterAsSsoResponse
-func (c *ClientWithResponses) PostAuthDexRegisterAsSsoWithBodyWithResponse(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthDexRegisterAsSsoResponse, error) {
-	rsp, err := c.PostAuthDexRegisterAsSsoWithBody(ctx, params, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthDexRegisterAsSsoResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostAuthDexRegisterAsSsoWithResponse(ctx context.Context, params *PostAuthDexRegisterAsSsoParams, body PostAuthDexRegisterAsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthDexRegisterAsSsoResponse, error) {
-	rsp, err := c.PostAuthDexRegisterAsSso(ctx, params, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthDexRegisterAsSsoResponse(rsp)
-}
-
-// GetAuthDexSettingsWithResponse request returning *GetAuthDexSettingsResponse
-func (c *ClientWithResponses) GetAuthDexSettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthDexSettingsResponse, error) {
-	rsp, err := c.GetAuthDexSettings(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetAuthDexSettingsResponse(rsp)
-}
-
-// PutAuthDexSettingsWithBodyWithResponse request with arbitrary body returning *PutAuthDexSettingsResponse
-func (c *ClientWithResponses) PutAuthDexSettingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAuthDexSettingsResponse, error) {
-	rsp, err := c.PutAuthDexSettingsWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutAuthDexSettingsResponse(rsp)
-}
-
-func (c *ClientWithResponses) PutAuthDexSettingsWithResponse(ctx context.Context, body PutAuthDexSettingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAuthDexSettingsResponse, error) {
-	rsp, err := c.PutAuthDexSettings(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutAuthDexSettingsResponse(rsp)
 }
 
 // PostAuthLoginWithBodyWithResponse request with arbitrary body returning *PostAuthLoginResponse
@@ -114406,23 +112589,6 @@ func (c *ClientWithResponses) GetRbacPrincipalsWithResponse(ctx context.Context,
 	return ParseGetRbacPrincipalsResponse(rsp)
 }
 
-// PostRbacPrincipalsMaterializeWithBodyWithResponse request with arbitrary body returning *PostRbacPrincipalsMaterializeResponse
-func (c *ClientWithResponses) PostRbacPrincipalsMaterializeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error) {
-	rsp, err := c.PostRbacPrincipalsMaterializeWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostRbacPrincipalsMaterializeResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostRbacPrincipalsMaterializeWithResponse(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error) {
-	rsp, err := c.PostRbacPrincipalsMaterialize(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostRbacPrincipalsMaterializeResponse(rsp)
-}
-
 // GetRbacProjectBindingsWithResponse request returning *GetRbacProjectBindingsResponse
 func (c *ClientWithResponses) GetRbacProjectBindingsWithResponse(ctx context.Context, params *GetRbacProjectBindingsParams, reqEditors ...RequestEditorFn) (*GetRbacProjectBindingsResponse, error) {
 	rsp, err := c.GetRbacProjectBindings(ctx, params, reqEditors...)
@@ -114899,6 +113065,49 @@ func (c *ClientWithResponses) PutSettingsGeneralWithResponse(ctx context.Context
 	return ParsePutSettingsGeneralResponse(rsp)
 }
 
+// DeleteSettingsIdentityBindingsWithBodyWithResponse request with arbitrary body returning *DeleteSettingsIdentityBindingsResponse
+func (c *ClientWithResponses) DeleteSettingsIdentityBindingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteSettingsIdentityBindingsResponse, error) {
+	rsp, err := c.DeleteSettingsIdentityBindingsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteSettingsIdentityBindingsResponse(rsp)
+}
+
+func (c *ClientWithResponses) DeleteSettingsIdentityBindingsWithResponse(ctx context.Context, body DeleteSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteSettingsIdentityBindingsResponse, error) {
+	rsp, err := c.DeleteSettingsIdentityBindings(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteSettingsIdentityBindingsResponse(rsp)
+}
+
+// GetSettingsIdentityBindingsWithResponse request returning *GetSettingsIdentityBindingsResponse
+func (c *ClientWithResponses) GetSettingsIdentityBindingsWithResponse(ctx context.Context, params *GetSettingsIdentityBindingsParams, reqEditors ...RequestEditorFn) (*GetSettingsIdentityBindingsResponse, error) {
+	rsp, err := c.GetSettingsIdentityBindings(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSettingsIdentityBindingsResponse(rsp)
+}
+
+// PostSettingsIdentityBindingsWithBodyWithResponse request with arbitrary body returning *PostSettingsIdentityBindingsResponse
+func (c *ClientWithResponses) PostSettingsIdentityBindingsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSettingsIdentityBindingsResponse, error) {
+	rsp, err := c.PostSettingsIdentityBindingsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSettingsIdentityBindingsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostSettingsIdentityBindingsWithResponse(ctx context.Context, body PostSettingsIdentityBindingsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSettingsIdentityBindingsResponse, error) {
+	rsp, err := c.PostSettingsIdentityBindings(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSettingsIdentityBindingsResponse(rsp)
+}
+
 // PostSettingsMonitoringAlertmanagerInstallWithBodyWithResponse request with arbitrary body returning *PostSettingsMonitoringAlertmanagerInstallResponse
 func (c *ClientWithResponses) PostSettingsMonitoringAlertmanagerInstallWithBodyWithResponse(ctx context.Context, params *PostSettingsMonitoringAlertmanagerInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSettingsMonitoringAlertmanagerInstallResponse, error) {
 	rsp, err := c.PostSettingsMonitoringAlertmanagerInstallWithBody(ctx, params, contentType, body, reqEditors...)
@@ -115323,23 +113532,6 @@ func (c *ClientWithResponses) GetSettingsSsoWithResponse(ctx context.Context, re
 	return ParseGetSettingsSsoResponse(rsp)
 }
 
-// PostSettingsSsoWithBodyWithResponse request with arbitrary body returning *PostSettingsSsoResponse
-func (c *ClientWithResponses) PostSettingsSsoWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSettingsSsoResponse, error) {
-	rsp, err := c.PostSettingsSsoWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostSettingsSsoResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostSettingsSsoWithResponse(ctx context.Context, body PostSettingsSsoJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSettingsSsoResponse, error) {
-	rsp, err := c.PostSettingsSso(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostSettingsSsoResponse(rsp)
-}
-
 // GetSettingsSsoPresetsWithResponse request returning *GetSettingsSsoPresetsResponse
 func (c *ClientWithResponses) GetSettingsSsoPresetsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSettingsSsoPresetsResponse, error) {
 	rsp, err := c.GetSettingsSsoPresets(ctx, reqEditors...)
@@ -115347,15 +113539,6 @@ func (c *ClientWithResponses) GetSettingsSsoPresetsWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseGetSettingsSsoPresetsResponse(rsp)
-}
-
-// DeleteSettingsSsoByIdWithResponse request returning *DeleteSettingsSsoByIdResponse
-func (c *ClientWithResponses) DeleteSettingsSsoByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteSettingsSsoByIdResponse, error) {
-	rsp, err := c.DeleteSettingsSsoById(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteSettingsSsoByIdResponse(rsp)
 }
 
 // GetSettingsTokensWithResponse request returning *GetSettingsTokensResponse
@@ -126352,463 +124535,6 @@ func ParsePostAuthChangePasswordResponse(rsp *http.Response) (*PostAuthChangePas
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostAuthDexApplyResponse parses an HTTP response from a PostAuthDexApplyWithResponse call
-func ParsePostAuthDexApplyResponse(rsp *http.Response) (*PostAuthDexApplyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostAuthDexApplyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			Data DexOperation `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetAuthDexConnectorTypesResponse parses an HTTP response from a GetAuthDexConnectorTypesWithResponse call
-func ParseGetAuthDexConnectorTypesResponse(rsp *http.Response) (*GetAuthDexConnectorTypesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetAuthDexConnectorTypesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data []DexConnectorType `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetAuthDexConnectorsResponse parses an HTTP response from a GetAuthDexConnectorsWithResponse call
-func ParseGetAuthDexConnectorsResponse(rsp *http.Response) (*GetAuthDexConnectorsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetAuthDexConnectorsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data []DexConnector `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostAuthDexConnectorsResponse parses an HTTP response from a PostAuthDexConnectorsWithResponse call
-func ParsePostAuthDexConnectorsResponse(rsp *http.Response) (*PostAuthDexConnectorsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostAuthDexConnectorsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest struct {
-			Data DexConnector `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteAuthDexConnectorsByIdResponse parses an HTTP response from a DeleteAuthDexConnectorsByIdWithResponse call
-func ParseDeleteAuthDexConnectorsByIdResponse(rsp *http.Response) (*DeleteAuthDexConnectorsByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteAuthDexConnectorsByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data struct {
-				Deleted *openapi_types.UUID `json:"deleted,omitempty"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetAuthDexConnectorsByIdResponse parses an HTTP response from a GetAuthDexConnectorsByIdWithResponse call
-func ParseGetAuthDexConnectorsByIdResponse(rsp *http.Response) (*GetAuthDexConnectorsByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetAuthDexConnectorsByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data DexConnector `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePatchAuthDexConnectorsByIdResponse parses an HTTP response from a PatchAuthDexConnectorsByIdWithResponse call
-func ParsePatchAuthDexConnectorsByIdResponse(rsp *http.Response) (*PatchAuthDexConnectorsByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PatchAuthDexConnectorsByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data DexConnector `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetAuthDexOperationResponse parses an HTTP response from a GetAuthDexOperationWithResponse call
-func ParseGetAuthDexOperationResponse(rsp *http.Response) (*GetAuthDexOperationResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetAuthDexOperationResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data DexOperation `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostAuthDexRegisterAsSsoResponse parses an HTTP response from a PostAuthDexRegisterAsSsoWithResponse call
-func ParsePostAuthDexRegisterAsSsoResponse(rsp *http.Response) (*PostAuthDexRegisterAsSsoResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostAuthDexRegisterAsSsoResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest struct {
-			Data DexOperation `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON202 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetAuthDexSettingsResponse parses an HTTP response from a GetAuthDexSettingsWithResponse call
-func ParseGetAuthDexSettingsResponse(rsp *http.Response) (*GetAuthDexSettingsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetAuthDexSettingsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data DexSettings `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePutAuthDexSettingsResponse parses an HTTP response from a PutAuthDexSettingsWithResponse call
-func ParsePutAuthDexSettingsResponse(rsp *http.Response) (*PutAuthDexSettingsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PutAuthDexSettingsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data DexSettings `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
 
 	}
 
@@ -151393,83 +149119,6 @@ func ParseGetRbacPrincipalsResponse(rsp *http.Response) (*GetRbacPrincipalsRespo
 	return response, nil
 }
 
-// ParsePostRbacPrincipalsMaterializeResponse parses an HTTP response from a PostRbacPrincipalsMaterializeWithResponse call
-func ParsePostRbacPrincipalsMaterializeResponse(rsp *http.Response) (*PostRbacPrincipalsMaterializeResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostRbacPrincipalsMaterializeResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest struct {
-			Data PrincipalMaterialized `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON422 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON429 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetRbacProjectBindingsResponse parses an HTTP response from a GetRbacProjectBindingsWithResponse call
 func ParseGetRbacProjectBindingsResponse(rsp *http.Response) (*GetRbacProjectBindingsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -153841,6 +151490,94 @@ func ParsePutSettingsGeneralResponse(rsp *http.Response) (*PutSettingsGeneralRes
 	return response, nil
 }
 
+// ParseDeleteSettingsIdentityBindingsResponse parses an HTTP response from a DeleteSettingsIdentityBindingsWithResponse call
+func ParseDeleteSettingsIdentityBindingsResponse(rsp *http.Response) (*DeleteSettingsIdentityBindingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteSettingsIdentityBindingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *struct {
+				Ok *bool `json:"ok,omitempty"`
+			} `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSettingsIdentityBindingsResponse parses an HTTP response from a GetSettingsIdentityBindingsWithResponse call
+func ParseGetSettingsIdentityBindingsResponse(rsp *http.Response) (*GetSettingsIdentityBindingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSettingsIdentityBindingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *[]IdentityBinding `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostSettingsIdentityBindingsResponse parses an HTTP response from a PostSettingsIdentityBindingsWithResponse call
+func ParsePostSettingsIdentityBindingsResponse(rsp *http.Response) (*PostSettingsIdentityBindingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSettingsIdentityBindingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data *struct {
+				Ok *bool `json:"ok,omitempty"`
+			} `json:"data,omitempty"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostSettingsMonitoringAlertmanagerInstallResponse parses an HTTP response from a PostSettingsMonitoringAlertmanagerInstallWithResponse call
 func ParsePostSettingsMonitoringAlertmanagerInstallResponse(rsp *http.Response) (*PostSettingsMonitoringAlertmanagerInstallResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -155765,48 +153502,6 @@ func ParseGetSettingsSsoResponse(rsp *http.Response) (*GetSettingsSsoResponse, e
 	return response, nil
 }
 
-// ParsePostSettingsSsoResponse parses an HTTP response from a PostSettingsSsoWithResponse call
-func ParsePostSettingsSsoResponse(rsp *http.Response) (*PostSettingsSsoResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostSettingsSsoResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest struct {
-			Data UsersSettingsSSOProvider `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetSettingsSsoPresetsResponse parses an HTTP response from a GetSettingsSsoPresetsWithResponse call
 func ParseGetSettingsSsoPresetsResponse(rsp *http.Response) (*GetSettingsSsoPresetsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -155862,32 +153557,6 @@ func ParseGetSettingsSsoPresetsResponse(rsp *http.Response) (*GetSettingsSsoPres
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteSettingsSsoByIdResponse parses an HTTP response from a DeleteSettingsSsoByIdWithResponse call
-func ParseDeleteSettingsSsoByIdResponse(rsp *http.Response) (*DeleteSettingsSsoByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteSettingsSsoByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	}
 

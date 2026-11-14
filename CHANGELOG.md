@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Keep local login available and replace the bundled Dex implementation with optional shared Identity/customer OIDC integration. Schema 87 retires broker state; schema 88 adds the provisioning recovery journal. Follow the coordinated cutover runbook before deployment.
+- Preserve runtime authentication, scoped idempotency, backup trust, standby health, catalog status and frontend editor fixes.
+- Consolidate historical plans and evidence under `advisor-plans/archive/`; `advisor-plans/CURRENT.md` is the sole working plan.
+- Build with Go 1.27.4, including the pinned builder and tool modules, to address GO-2026-6859. The upstream [Go release history](https://go.dev/doc/devel/release#go1.27.4) records the security patch.
+- Update `follow-redirects` to 1.16.3 and scope the TypeScript lint parser's `minimatch` dependency to patched 11.0.1; retain deterministic frontend lockfile resolution.
+
 ## 2.1.1 - 2026-10-21
 
 - Permit credential-stripped public CDN redirects when fetching release distributions in unrestricted installations. Restricted destination policies remain closed.

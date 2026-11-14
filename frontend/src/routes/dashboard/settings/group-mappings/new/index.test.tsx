@@ -17,9 +17,6 @@ vi.mock("@/components/settings/auth-gate", () => ({
 vi.mock("@/components/settings/hooks", () => ({
   useCreateGroupMapping: () => ({ mutateAsync: create, isPending: false }),
 }));
-vi.mock("@/components/auth/hooks", () => ({
-  useDexConnectors: () => ({ data: [] }),
-}));
 vi.mock("@/lib/permission-hooks", () => ({
   usePermissionDecision: () => ({ allowed: true }),
 }));

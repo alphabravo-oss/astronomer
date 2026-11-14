@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -323,8 +324,8 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 	if got.Data[2].OfflineBehavior.LastKnownAt == nil || *got.Data[2].OfflineBehavior.LastKnownAt != now.Add(-30*time.Minute).UTC().Format(time.RFC3339) {
 		t.Fatalf("third last known = %v", got.Data[2].OfflineBehavior.LastKnownAt)
 	}
-	if !containsString(got.Data[2].OfflineBehavior.BlockedOperations, "kubernetes_proxy") ||
-		!containsString(got.Data[2].OfflineBehavior.PermittedQueuedOperations, "cluster_metadata_updates") {
+	if !slices.Contains(got.Data[2].OfflineBehavior.BlockedOperations, "kubernetes_proxy") ||
+		!slices.Contains(got.Data[2].OfflineBehavior.PermittedQueuedOperations, "cluster_metadata_updates") {
 		t.Fatalf("third offline operations = %+v", got.Data[2].OfflineBehavior)
 	}
 	if got.Summary.Compatibility["supported"] != 1 || got.Summary.Compatibility["deprecated"] != 1 || got.Summary.Compatibility["blocked"] != 1 {

@@ -8,7 +8,6 @@ import {
   getGlobalRoles,
   getMyEffectivePermissions,
   listRoleTemplates,
-  materializePrincipal,
   searchPrincipals,
   updateRole,
 } from "./rbac";
@@ -239,7 +238,7 @@ describe("RBAC generated API boundary", () => {
       data: {
         principals: [
           {
-            kind: "external",
+            kind: "local",
             connector_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             connector_name: "employees",
             connector_type: "ldap",
@@ -253,33 +252,11 @@ describe("RBAC generated API boundary", () => {
       },
     });
     await expect(searchPrincipals("ada")).resolves.toMatchObject({
-      principals: [{ kind: "external", subject: "stable-42" }],
+      principals: [{ kind: "local", subject: "stable-42" }],
     });
     expect(generated.getRbacPrincipals).toHaveBeenCalledWith({
       query: { q: "ada" },
       signal: undefined,
-    });
-
-    vi.mocked(generated.postRbacPrincipalsMaterialize).mockResolvedValueOnce({
-      data: {
-        id: "4fa85f64-5717-4562-b3fc-2c963f66afa6",
-        user_id: "5fa85f64-5717-4562-b3fc-2c963f66afa6",
-        connector_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        kind: "pending",
-        email: "ada@example.com",
-        username: "ada",
-        display_name: "Ada Lovelace",
-      },
-    });
-    await materializePrincipal({
-      connectorId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      subject: "stable-42",
-    });
-    expect(generated.postRbacPrincipalsMaterialize).toHaveBeenCalledWith({
-      body: {
-        connector_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        subject: "stable-42",
-      },
     });
   });
 

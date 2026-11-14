@@ -15,6 +15,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // API token scope vocabulary. The CRUD UI surfaces these as a checkbox
@@ -213,6 +215,21 @@ func IPAllowed(nets []*net.IPNet, remote net.IP) bool {
 		}
 	}
 	return false
+}
+
+// APITokenIPAllowed applies the same token restriction to REST and streams.
+// ClientIP uses only the canonical address established by trusted proxy
+// middleware; arbitrary forwarding headers must never grant token access.
+func APITokenIPAllowed(r *http.Request, allowedCIDRs string) bool {
+	if strings.TrimSpace(allowedCIDRs) == "" {
+		return true
+	}
+	nets, err := ParseAllowedCIDRs(allowedCIDRs)
+	client := reqctx.ClientIP(r)
+	if err != nil || client == nil {
+		return false
+	}
+	return IPAllowed(nets, net.IP(client.AsSlice()))
 }
 
 // cidrParseError mirrors net.ParseError shape so callers can switch on

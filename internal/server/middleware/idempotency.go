@@ -43,8 +43,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -339,6 +337,7 @@ func idempotencyRequestDigest(r *http.Request) (string, error) {
 	writeDigestPart("astronomer-idempotency-request-v1")
 	writeDigestPart(strings.ToUpper(r.Method))
 	writeDigestPart(canonicalRequestRoute(r))
+	writeDigestPart(idempotencyProjectScope(r))
 	writeDigestPart(canonicalQuery(r))
 	_, _ = fmt.Fprintf(hash, "%d:", len(body))
 	_, _ = hash.Write(body)
@@ -349,12 +348,19 @@ func canonicalRequestRoute(r *http.Request) string {
 	if r == nil || r.URL == nil {
 		return ""
 	}
-	if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
-		if pattern := strings.TrimSpace(routeContext.RoutePattern()); pattern != "" {
-			return pattern
-		}
-	}
+	// A router pattern discards concrete resource IDs and can replay one
+	// target's response for a different target matched by the same route.
 	return r.URL.EscapedPath()
+}
+
+func idempotencyProjectScope(r *http.Request) string {
+	// Scope resolution and authorization must run before this middleware.
+	// Delivery normalizes header/query/body scope into this route parameter;
+	// never derive a replay scope from an unvalidated client header.
+	if projectID, err := reqctx.ProjectID(r); err == nil {
+		return projectID.String()
+	}
+	return ""
 }
 
 func canonicalQuery(r *http.Request) string {
@@ -404,7 +410,7 @@ func cloneIdempotentHeaders(h http.Header) http.Header {
 
 // idempotencyKey derives the dedup key for a request, or "" when the request
 // is not a dedup candidate (read method, or no header). The key is scoped by
-// authenticated user + method + path so one client's key can never collide
+// authenticated user + method + concrete path + resolved project so one client's key can never collide
 // with another's, mirroring the domain:user:method:path scope the DB-backed
 // handler-layer flow uses.
 func idempotencyKey(r *http.Request) string {
@@ -419,5 +425,12 @@ func idempotencyKey(r *http.Request) string {
 	if u, ok := reqctx.AuthenticatedUser(r.Context()); ok && u != nil {
 		userScope = "u:" + u.ID
 	}
-	return strings.Join([]string{userScope, strings.ToUpper(r.Method), canonicalRequestRoute(r), hdr}, ":")
+	hash := sha256.New()
+	for _, part := range []string{userScope, strings.ToUpper(r.Method), canonicalRequestRoute(r), idempotencyProjectScope(r), hdr} {
+		// Length framing prevents ':' in a path/header from shifting field
+		// boundaries. The cache is process-local, so no persisted-key migration
+		// is needed when its scope changes.
+		_, _ = fmt.Fprintf(hash, "%d:%s", len(part), part)
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }

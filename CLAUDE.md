@@ -63,8 +63,7 @@ Prometheus `:9092`, Tempo OTLP gRPC `:4317`.
 
 ## Architecture
 
-- `cmd/{server,worker,agent,astro}` are composition roots and nothing else
-  (`dexconfigcheck` remains until Phase 1 replaces it).
+- `cmd/{server,worker,agent,astro}` are composition roots and nothing else.
 - `internal/<domain>` owns a domain; `internal/handler` is the legacy flat
   handler package being split domain by domain (ADR-0007).
 - `internal/db`: pgx v5 pool with the composite otelpgx + metrics tracer,

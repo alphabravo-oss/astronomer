@@ -1599,45 +1599,6 @@
         {
           "kind": "regex",
           "path": "deploy/chart/values.yaml",
-          "selector": "    repository: dexidp/dex\\n    tag: v([0-9.]+)",
-          "value": "{version}"
-        }
-      ],
-      "discovery": {
-        "observedAt": "2026-10-09T19:48:21.069528+00:00",
-        "provenance": "sha256:312feafb5aa036145c9a1d9c03150d21f0d9726626a25b70f0238279b879b4e9",
-        "releasedAt": "2026-10-07T23:17:38Z",
-        "stable": true,
-        "version": "2.46.0"
-      },
-      "ecosystem": "github",
-      "exception": {
-        "createdAt": "2026-10-09T19:22:39Z",
-        "evidence": "docs/assurance/technology-guide/w01/manual-tool-discovery.json",
-        "exitCondition": "Dex issuer/JWKS/connector configuration and callbacks must pass actual trust/authentication conformance; W12 qualifies latest Dex image and callback behavior before replacing the source baseline. Daily discovery rechecks the current final target.",
-        "owner": "platform/auth (W12)",
-        "reason": "Dex issuer/JWKS/connector configuration and callbacks must pass actual trust/authentication conformance; W12 qualifies latest Dex image and callback behavior before replacing the source baseline.",
-        "reviewBy": "2026-10-16T00:00:00Z"
-      },
-      "id": "dex",
-      "owner": "platform/auth (W12)",
-      "platforms": [
-        "linux/amd64",
-        "linux/arm64"
-      ],
-      "qualification": "Dex issuer/JWKS/connector configuration and callbacks must pass actual trust/authentication conformance; W12 qualifies latest Dex image and callback behavior before replacing the source baseline.",
-      "selected": "2.45.1",
-      "upstream": {
-        "kind": "github",
-        "url": "https://api.github.com/repos/dexidp/dex/releases"
-      }
-    },
-    {
-      "artifacts": [],
-      "consumers": [
-        {
-          "kind": "regex",
-          "path": "deploy/chart/values.yaml",
           "selector": "    repository: fluent/fluent-bit\\n    tag: \"([0-9.]+)\"",
           "value": "{version}"
         }
@@ -9426,17 +9387,6 @@
       "state": "release-identity",
       "value": "v2.0.1",
       "workPackage": "W17"
-    },
-    {
-      "component": "dex",
-      "count": 1,
-      "kind": "tag",
-      "owner": "platform/auth (W12)",
-      "path": "deploy/chart/values.yaml",
-      "reason": "Selectedsourcepin is bound to a declaredcomponentconsumer; any newer target has its separate owned component exception.",
-      "state": "managed",
-      "value": "v2.45.1",
-      "workPackage": "W01"
     },
     {
       "component": "grafana",

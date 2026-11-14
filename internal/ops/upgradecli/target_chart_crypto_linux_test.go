@@ -36,7 +36,7 @@ func TestTargetChartActualLocalOCIAuthenticatesExactArchiveAndRuntimeSources(t *
 		t.Fatal("actual local OCI chart verification failed", err)
 	}
 	sources, err := fixture.chart.RuntimeSources(context.Background())
-	if err != nil || len(sources) != 6 || sources["postgres"] != "fixture.invalid/postgres:exact" {
+	if err != nil || len(sources) != 5 || sources["postgres"] != "fixture.invalid/postgres:exact" {
 		t.Fatal("runtime roles did not originate in authenticated chart", err)
 	}
 	manifest, err := fixture.chart.metadata.Verify(context.Background())

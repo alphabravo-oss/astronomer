@@ -64,7 +64,9 @@ type Claims struct {
 	// thing that should accept a non-empty Purpose; the regular auth
 	// middleware rejects any token whose TokenType is PurposeToken so
 	// the challenge can't be replayed as a session.
-	Purpose string `json:"purpose,omitempty"`
+	Purpose         string `json:"purpose,omitempty"`
+	IdentityIssuer  string `json:"identity_issuer,omitempty"`
+	IdentitySubject string `json:"identity_subject,omitempty"`
 }
 
 // RevocationChecker is the optional dependency the JWTManager consults on
@@ -111,8 +113,9 @@ type JWTManager struct {
 	// signature + expiry checks run. The HTTP layer attaches it via
 	// SetRevocationChecker after construction so the auth package
 	// doesn't need to depend on sqlc.
-	revMu       sync.RWMutex
-	revocations RevocationChecker
+	revMu             sync.RWMutex
+	revocations       RevocationChecker
+	identityValidator func(context.Context, uuid.UUID, string, string, time.Time) error
 
 	// Validation result cache. ValidateToken is on the hot path (every
 	// authenticated request) and would otherwise add a DB round-trip
@@ -545,6 +548,17 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 		}
 		// Revocation checks — only run when a checker is attached AND
 		// the cache says we haven't recently validated this JTI.
+		if claims.IdentityIssuer != "" || claims.IdentitySubject != "" {
+			m.revMu.RLock()
+			validate := m.identityValidator
+			m.revMu.RUnlock()
+			if validate == nil || claims.TokenType != AccessToken || claims.IssuedAt == nil || claims.IdentityIssuer == "" || claims.IdentitySubject == "" {
+				return nil, errors.New("invalid identity session")
+			}
+			if err := validate(ctx, claims.UserID, claims.IdentityIssuer, claims.IdentitySubject, claims.IssuedAt.Time); err != nil {
+				return nil, err
+			}
+		}
 		if err := m.checkRevocations(ctx, claims); err != nil {
 			return nil, err
 		}

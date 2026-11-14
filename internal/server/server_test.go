@@ -103,7 +103,6 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		EncryptionKey:                      validKey,
 		InternalPSK:                        "dedicated-internal-signing-key-with-at-least-32-chars",
 		ServerURL:                          "https://astronomer.example.com",
-		DexBundledEnabled:                  true,
 		DeliveryEnabled:                    true,
 		DeliveryLocalFluxBootstrap:         true,
 		AgentImageRepository:               "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
@@ -126,7 +125,6 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		EncryptionKey:                      validKey,
 		InternalPSK:                        "dedicated-internal-signing-key-with-at-least-32-chars",
 		ServerURL:                          "https://astronomer.example.com",
-		AuthLocalPasswordOnly:              true,
 		DeliveryEnabled:                    true,
 		DeliveryLocalFluxBootstrap:         true,
 		AgentImageRepository:               "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
@@ -139,7 +137,7 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		DeliveryBundleCertificateIdentity:           "https://github.com/example/release@refs/tags/v1.0.0",
 		DeliveryBundleOIDCIssuer:                    "https://token.actions.githubusercontent.com",
 	}, enc); err != nil {
-		t.Fatalf("local-password-only acknowledgement rejected: %v", err)
+		t.Fatalf("local login production configuration rejected: %v", err)
 	}
 
 	err = validateProductionSecurityConfig(&config.Config{
@@ -150,7 +148,7 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		ServerURL:     "https://astronomer.example.com",
 	}, enc)
 	if err == nil {
-		t.Fatal("expected production config without Dex or local-password acknowledgement to be rejected")
+		t.Fatal("incomplete production security configuration accepted")
 	}
 
 	err = validateProductionSecurityConfig(&config.Config{
@@ -172,12 +170,11 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 	} {
 		t.Run("server_url_"+tc.name, func(t *testing.T) {
 			err := validateProductionSecurityConfig(&config.Config{
-				Env:               "production",
-				DatabaseURL:       "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
-				SecretKey:         "production-jwt-signing-key",
-				EncryptionKey:     validKey,
-				ServerURL:         tc.serverURL,
-				DexBundledEnabled: true,
+				Env:           "production",
+				DatabaseURL:   "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
+				SecretKey:     "production-jwt-signing-key",
+				EncryptionKey: validKey,
+				ServerURL:     tc.serverURL,
 			}, enc)
 			if err == nil {
 				t.Fatalf("expected server_url %q to be rejected", tc.serverURL)

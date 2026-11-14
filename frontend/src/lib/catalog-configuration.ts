@@ -50,19 +50,36 @@ export function initialCatalogValues(
     ),
   );
 }
-export function changedValuePaths(
+/** Machine paths retain literal property names; arrays are atomic overrides. */
+export function changedValueSegments(
   before: HelmValuesObject,
   after: HelmValuesObject,
-  prefix = "",
-): string[] {
+  prefix: string[] = [],
+): string[][] {
   return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap(
     (key) => {
-      const path = prefix ? `${prefix}.${key}` : key;
+      const path = [...prefix, key];
       if (isObject(before[key]) && isObject(after[key]))
-        return changedValuePaths(before[key], after[key], path);
+        return changedValueSegments(before[key], after[key], path);
       return JSON.stringify(before[key]) === JSON.stringify(after[key])
         ? []
         : [path];
     },
+  );
+}
+
+/** Display labels only; never split these labels back into machine paths. */
+export function changedValuePaths(
+  before: HelmValuesObject,
+  after: HelmValuesObject,
+): string[] {
+  return changedValueSegments(before, after).map((path) =>
+    path
+      .map((part, index) =>
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(part)
+          ? `${index ? "." : ""}${part}`
+          : `[${JSON.stringify(part)}]`,
+      )
+      .join(""),
   );
 }

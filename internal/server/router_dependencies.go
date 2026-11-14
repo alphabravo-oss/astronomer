@@ -135,7 +135,6 @@ type AdminPlatformDependencies struct {
 	ChartRatings             *handler.ChartRatingsHandler
 	PlatformCharts           *handler.PlatformChartRepoHandler
 	Security                 *handler.SecurityHandler
-	DexConfig                *handler.DexHandler
 	SupportBundle            *handler.SupportBundleHandler
 	Compliance               *handler.ComplianceHandler
 	CompliancePosture        *handler.CompliancePostureHandler

@@ -23,7 +23,7 @@ func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
 	}{
 		{file: "auth.go", receiver: "AuthHandler", function: "Login"},
 		{file: "auth.go", receiver: "AuthHandler", function: "Refresh"},
-		{file: "sso_tx.go", receiver: "SSOHandler", function: "commitSSOCallback"},
+		{file: "sso.go", receiver: "SSOHandler", function: "Callback"},
 		{file: "totp.go", receiver: "TOTPHandler", function: "EnrollConfirm"},
 		{file: "totp_verify.go", receiver: "TOTPHandler", function: "Verify"},
 	}
@@ -48,7 +48,7 @@ func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
 					return true
 				}
 				switch sel.Sel.Name {
-				case "GenerateTokenPairContext", "PrepareTokenPairContext", "PrepareRotationContext":
+				case "GenerateTokenPairContext", "PrepareTokenPairContext", "PrepareRotationContext", "GenerateIdentitySession":
 					contextCalls++
 				case "GenerateTokenPair", "GenerateAccessToken", "GenerateAccessTokenContext":
 					legacyCalls++

@@ -38,13 +38,6 @@ delivery:
   sourceResolution:
     trustKeys:
       existingSecret: astronomer-delivery-trust
-dex:
-  image:
-    digest: sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462
-    pullPolicy: IfNotPresent
-    registry: ""
-    repository: docker.io/dexidp/dex
-    tag: v2.45.1
 frontend:
   enabled: true
   image:
@@ -215,8 +208,8 @@ postgres:
 preflight:
   databaseSchema:
     minimumUpgradeVersion: 1
-    # live captured 81; the chart pins this to the embedded schema (deploy: drop it or set 85)
-    targetVersion: 85
+    # live captured 81; the chart pins this to the embedded schema (deploy: drop it or set 88)
+    targetVersion: 88
   enabled: true
   image:
     digest: sha256:1e939126481e0a6c46c2fc78c9e991cdb450c6ce22c9f1d7b2a1d745bc145cd8

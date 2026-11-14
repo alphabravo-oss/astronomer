@@ -4,15 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -98,38 +93,6 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 		requireSessionCookieTTL(t, manager, w.Result())
 	})
 
-	t.Run("sso callback", func(t *testing.T) {
-		manager := newExplicitSessionJWT()
-		user := makeTestUser(t, true)
-		flow := &fakeTTLSSOFlow{info: &auth.SSOUserInfo{Email: user.Email, Username: user.Username, ConnectorID: "test"}}
-		queries := &fakeTTLSSOQueries{user: user}
-		h := &SSOHandler{
-			manager:  flow,
-			jwt:      manager,
-			frontend: "/",
-			now:      time.Now,
-			states:   make(map[string]ssoState),
-		}
-		h.SetRunTx(func(ctx context.Context, fn func(SSOCallbackTx) error) error { return fn(queries) })
-		h.SetEncryptor(newTestEncryptor(t))
-		h.SetRBACCacheInvalidator(&ssoTestInvalidator{})
-		state := "ttl-state"
-		cookie, err := h.signStateCookie("test", state)
-		if err != nil {
-			t.Fatalf("signStateCookie: %v", err)
-		}
-		req := withProvider(httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/test/?code=ok&state="+state, nil), "test")
-		req.AddCookie(&http.Cookie{Name: ssoStateCookieName("test"), Value: cookie})
-		w := httptest.NewRecorder()
-
-		h.Callback(w, req)
-
-		if w.Code != http.StatusFound {
-			t.Fatalf("Callback status = %d; body=%s", w.Code, w.Body.String())
-		}
-		requireSessionCookieTTL(t, manager, w.Result())
-	})
-
 	t.Run("totp completion", func(t *testing.T) {
 		manager := newExplicitSessionJWT()
 		user := makeTestUser(t, true)
@@ -170,82 +133,3 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 		requireSessionCookieTTL(t, manager, w.Result())
 	})
 }
-
-type fakeTTLSSOFlow struct {
-	info *auth.SSOUserInfo
-}
-
-func (f *fakeTTLSSOFlow) HasProvider(string) bool { return true }
-func (f *fakeTTLSSOFlow) GetAuthorizationURL(string) (string, string, error) {
-	return "https://idp.example.test", "state", nil
-}
-func (f *fakeTTLSSOFlow) HandleCallback(context.Context, string, string, string) (*auth.SSOUserInfo, error) {
-	return f.info, nil
-}
-
-type fakeTTLSSOQueries struct {
-	user      sqlc.User
-	claimUser sqlc.User
-	claimErr  error
-}
-
-func (f *fakeTTLSSOQueries) GetUserByEmail(context.Context, string) (sqlc.User, error) {
-	return f.user, nil
-}
-func (f *fakeTTLSSOQueries) GetUserByUsername(context.Context, string) (sqlc.User, error) {
-	return f.user, nil
-}
-func (f *fakeTTLSSOQueries) CreateUser(context.Context, sqlc.CreateUserParams) (sqlc.User, error) {
-	return sqlc.User{}, errors.New("unexpected CreateUser")
-}
-func (f *fakeTTLSSOQueries) UpdateUserLastLogin(context.Context, uuid.UUID) error { return nil }
-func (f *fakeTTLSSOQueries) GetDexConnectorByName(context.Context, string) (sqlc.DexConnector, error) {
-	return sqlc.DexConnector{ID: uuid.New(), Enabled: true}, nil
-}
-func (f *fakeTTLSSOQueries) ClaimExternalPrincipal(context.Context, sqlc.ClaimExternalPrincipalParams) (sqlc.User, error) {
-	if f.claimErr != nil {
-		return sqlc.User{}, f.claimErr
-	}
-	if f.claimUser.ID != uuid.Nil {
-		return f.claimUser, nil
-	}
-	return sqlc.User{}, pgx.ErrNoRows
-}
-func (f *fakeTTLSSOQueries) UpsertUserIDPGroups(context.Context, sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
-	return sqlc.UserIdpGroup{}, nil
-}
-func (f *fakeTTLSSOQueries) GetUserIDPGroups(context.Context, uuid.UUID) (sqlc.UserIdpGroup, error) {
-	return sqlc.UserIdpGroup{}, nil
-}
-func (f *fakeTTLSSOQueries) ListGroupMappingsForConnector(context.Context, pgtype.UUID) ([]sqlc.IdentityGroupMapping, error) {
-	return nil, nil
-}
-func (f *fakeTTLSSOQueries) ListGroupSyncGlobalBindingsForConnector(context.Context, sqlc.ListGroupSyncGlobalBindingsForConnectorParams) ([]sqlc.GlobalRoleBinding, error) {
-	return nil, nil
-}
-func (f *fakeTTLSSOQueries) ListGroupSyncClusterBindingsForConnector(context.Context, sqlc.ListGroupSyncClusterBindingsForConnectorParams) ([]sqlc.ClusterRoleBinding, error) {
-	return nil, nil
-}
-func (f *fakeTTLSSOQueries) ListGroupSyncProjectBindingsForConnector(context.Context, sqlc.ListGroupSyncProjectBindingsForConnectorParams) ([]sqlc.ProjectRoleBinding, error) {
-	return nil, nil
-}
-func (f *fakeTTLSSOQueries) CreateGroupSyncGlobalBindingForConnector(context.Context, sqlc.CreateGroupSyncGlobalBindingForConnectorParams) (sqlc.GlobalRoleBinding, error) {
-	return sqlc.GlobalRoleBinding{}, nil
-}
-func (f *fakeTTLSSOQueries) CreateGroupSyncClusterBindingForConnector(context.Context, sqlc.CreateGroupSyncClusterBindingForConnectorParams) (sqlc.ClusterRoleBinding, error) {
-	return sqlc.ClusterRoleBinding{}, nil
-}
-func (f *fakeTTLSSOQueries) CreateGroupSyncProjectBindingForConnector(context.Context, sqlc.CreateGroupSyncProjectBindingForConnectorParams) (sqlc.ProjectRoleBinding, error) {
-	return sqlc.ProjectRoleBinding{}, nil
-}
-func (f *fakeTTLSSOQueries) DeleteGroupSyncGlobalBinding(context.Context, uuid.UUID) error {
-	return nil
-}
-func (f *fakeTTLSSOQueries) DeleteGroupSyncClusterBinding(context.Context, uuid.UUID) error {
-	return nil
-}
-func (f *fakeTTLSSOQueries) DeleteGroupSyncProjectBinding(context.Context, uuid.UUID) error {
-	return nil
-}
-
-var _ SSOQuerier = (*fakeTTLSSOQueries)(nil)

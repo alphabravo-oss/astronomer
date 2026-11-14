@@ -110,7 +110,7 @@ project RBAC roles and bindings; administrative user lifecycle, password, and
 session invalidation; self-service password changes, API-token lifecycle,
 logout revocation, and race-safe failed-login lockout transitions; cluster
 create/update/ownership/decommission, registration-token, and agent-token
-operations; legacy and multi-registry configuration; Dex connector/settings
+operations; legacy and multi-registry configuration; shared Identity binding
 and SSO stage transitions; SMTP settings; SIEM forwarder and synthetic-test
 intents; webhook subscription/test/retry intents; Vault connection/default and
 health-result persistence; and encrypted cloud-credential lifecycle.

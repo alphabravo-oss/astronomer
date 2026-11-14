@@ -196,7 +196,6 @@ type TunnelRuntime struct {
 	KubectlSessionReap   tasks.KubectlSessionReapRuntime
 	SecurityIngest       tasks.SecurityIngestRuntime
 	CRDOwnership         tasks.CRDOwnershipRuntime
-	Dex                  tasks.DexOperationRuntime
 	SupportBundle        tasks.SupportBundleRuntime
 	AuditExport          tasks.AuditExportRuntime
 }
@@ -205,16 +204,6 @@ func (runtime TunnelRuntime) handlerBindings() (map[string]asynq.HandlerFunc, er
 	bindings, err := runtime.ToolDrift.HandlerBindings()
 	if err != nil {
 		return nil, err
-	}
-	dexBindings, err := runtime.Dex.HandlerBindings()
-	if err != nil {
-		return nil, err
-	}
-	for taskType, handler := range dexBindings {
-		if _, exists := bindings[taskType]; exists {
-			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
-		}
-		bindings[taskType] = handler
 	}
 	supportBundleBindings, err := runtime.SupportBundle.HandlerBindings()
 	if err != nil {

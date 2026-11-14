@@ -244,7 +244,7 @@ export const globalNavGroups: NavGroup[] = [
     icon: Settings,
     href: "/dashboard/settings",
     items: [
-      // Superuser-only. Prefix-match so Dex/SSO under /settings/auth
+      // Superuser-only. Prefix-match so Identity under /settings/auth
       // highlights Settings instead of a sibling Auth row.
       {
         label: "Settings",

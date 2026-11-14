@@ -3,7 +3,7 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { Check, LoaderCircle, Search, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useMaterializePrincipal, usePrincipalSearch } from "@/lib/hooks/rbac";
+import { usePrincipalSearch } from "@/lib/hooks/rbac";
 import type { PrincipalSearchItem } from "@/lib/api/rbac";
 import { cn } from "@/lib/utils";
 import { BareButton } from "@/components/form/bare-button";
@@ -14,56 +14,18 @@ interface PrincipalPickerProps {
   id?: string;
 }
 
-function kindLabel(kind: PrincipalSearchItem["kind"]): string {
-  switch (kind) {
-    case "external":
-      return "External";
-    case "pending":
-      return "Pending sign-in";
-    default:
-      return "Local";
-  }
-}
-
 export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
   const [input, setInput] = useState("");
   const [selected, setSelected] = useState<PrincipalSearchItem | null>(null);
   const [debouncedQuery] = useDebouncedValue(input.trim(), { wait: 250 });
   const search = usePrincipalSearch(debouncedQuery);
-  const materialize = useMaterializePrincipal();
   const queryReady = input.trim().length >= 3;
 
-  const choose = async (principal: PrincipalSearchItem) => {
-    if (principal.kind === "external") {
-      if (!principal.connector_id || !principal.subject) return;
-      let pending;
-      try {
-        pending = await materialize.mutateAsync({
-          connectorId: principal.connector_id,
-          subject: principal.subject,
-        });
-      } catch {
-        return;
-      }
-      const materialized: PrincipalSearchItem = {
-        ...principal,
-        kind: "pending",
-        user_id: pending.user_id,
-        principal_id: pending.id,
-      };
-      setSelected(materialized);
-      onChange(pending.user_id);
-      return;
-    }
+  const choose = (principal: PrincipalSearchItem) => {
     if (!principal.user_id) return;
     setSelected(principal);
     onChange(principal.user_id);
   };
-
-  const connectors = search.data?.connectors ?? [];
-  const unavailable = connectors.filter(
-    (connector) => !connector.supported || connector.error,
-  );
 
   return (
     <div className="space-y-2">
@@ -78,7 +40,7 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           placeholder="Search people by name, username, or email…"
-          aria-label="Search local and external identities"
+          aria-label="Search local accounts"
           className="pl-9"
         />
       </div>
@@ -96,11 +58,7 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
               {selected.email}
             </p>
           </div>
-          <Badge
-            variant={selected.kind === "pending" ? "warning" : "secondary"}
-          >
-            {kindLabel(selected.kind)}
-          </Badge>
+          <Badge variant="secondary">Local</Badge>
         </div>
       )}
 
@@ -110,13 +68,12 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
       >
         {!queryReady ? (
           <p className="px-3 py-4 text-sm text-muted-foreground">
-            Enter at least 3 characters to search every available identity
-            directory.
+            Enter at least 3 characters to search local accounts.
           </p>
         ) : search.isFetching ? (
           <p className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            Searching identity directories…
+            Searching local accounts…
           </p>
         ) : search.isError ? (
           <p className="px-3 py-4 text-sm text-status-error">
@@ -138,7 +95,6 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
               return (
                 <li key={key}>
                   <BareButton
-                    disabled={materialize.isPending}
                     onClick={() => void choose(principal)}
                     className={cn(
                       "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60",
@@ -146,15 +102,7 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
                     )}
                   >
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      {materialize.isPending &&
-                      principal.kind === "external" ? (
-                        <LoaderCircle
-                          className="size-4 animate-spin"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <UserRound className="size-4" aria-hidden="true" />
-                      )}
+                      <UserRound className="size-4" aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-foreground">
@@ -167,17 +115,7 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
                           : ""}
                       </span>
                     </span>
-                    <Badge
-                      variant={
-                        principal.kind === "external"
-                          ? "info"
-                          : principal.kind === "pending"
-                            ? "warning"
-                            : "secondary"
-                      }
-                    >
-                      {kindLabel(principal.kind)}
-                    </Badge>
+                    <Badge variant="secondary">Local</Badge>
                   </BareButton>
                 </li>
               );
@@ -185,17 +123,6 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
           </ul>
         )}
       </div>
-
-      {unavailable.length > 0 && queryReady && (
-        <p className="text-xs text-muted-foreground">
-          {unavailable
-            .map(
-              (connector) =>
-                `${connector.connector_name}: ${connector.error || "directory search unsupported"}`,
-            )
-            .join(" · ")}
-        </p>
-      )}
     </div>
   );
 }

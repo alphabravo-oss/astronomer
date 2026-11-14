@@ -38,8 +38,6 @@ func prodBase() *Config {
 		EncryptionKey:                      "a-real-unique-encryption-key",
 		InternalPSK:                        "a-dedicated-internal-signing-key-with-32-chars",
 		DatabaseURL:                        "postgres://u:p@db/astronomer?sslmode=require",
-		DexBundledEnabled:                  true,
-		AuthLocalPasswordOnly:              false,
 		ServerURL:                          "https://astronomer.example.com",
 		DeliveryEnabled:                    true,
 		DeliveryLocalFluxBootstrap:         true,

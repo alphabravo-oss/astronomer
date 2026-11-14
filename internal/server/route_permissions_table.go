@@ -35,7 +35,6 @@ var routePermissions = map[string]Permission{
 	"DELETE /api/v1/alerting/channels/{id}/":                                                       {Resource: rbac.ResourceAlerts, Verb: rbac.VerbDelete},
 	"DELETE /api/v1/alerting/rules/{id}/":                                                          {Resource: rbac.ResourceAlerts, Verb: rbac.VerbDelete},
 	"DELETE /api/v1/alerting/silences/{id}/":                                                       {Resource: rbac.ResourceAlerts, Verb: rbac.VerbDelete},
-	"DELETE /api/v1/auth/dex/connectors/{id}/":                                                     {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
 	"DELETE /api/v1/auth/me/table-views/{id}/":                                                     {Authenticated: true},
 	"DELETE /api/v1/auth/tokens/{id}/":                                                             {Authenticated: true},
 	"DELETE /api/v1/backups/schedules/{id}/":                                                       {Authenticated: true},
@@ -98,7 +97,6 @@ var routePermissions = map[string]Permission{
 	"DELETE /api/v1/settings/monitoring/grafana/uninstall/":                                                                                            {Authenticated: true},
 	"DELETE /api/v1/settings/monitoring/loki/uninstall/":                                                                                               {Authenticated: true},
 	"DELETE /api/v1/settings/monitoring/thanos/uninstall/":                                                                                             {Authenticated: true},
-	"DELETE /api/v1/settings/sso/{id}/":                                                                                                                {Resource: rbac.ResourceSSO, Verb: rbac.VerbDelete},
 	"DELETE /api/v1/settings/tokens/{id}/":                                                                                                             {Authenticated: true},
 	"DELETE /api/v1/tools/{slug}/uninstall/":                                                                                                           {Authenticated: true},
 	"DELETE /api/v1/users/{id}/":                                                                                                                       {Resource: rbac.ResourceUsers, Verb: rbac.VerbDelete},
@@ -198,11 +196,6 @@ var routePermissions = map[string]Permission{
 	"GET /api/v1/audit/{id}/":                                                          {Resource: rbac.ResourceAuditLogs, Verb: rbac.VerbRead},
 	"GET /api/v1/auth/callback/{provider}":                                             {Public: true}, // unauthenticated
 	"GET /api/v1/auth/callback/{provider}/":                                            {Public: true}, // unauthenticated
-	"GET /api/v1/auth/dex/connector-types/":                                            {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
-	"GET /api/v1/auth/dex/connectors/":                                                 {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
-	"GET /api/v1/auth/dex/connectors/{id}/":                                            {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
-	"GET /api/v1/auth/dex/operations/{operation_id}/":                                  {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
-	"GET /api/v1/auth/dex/settings/":                                                   {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
 	"GET /api/v1/auth/login/{provider}":                                                {Public: true}, // unauthenticated
 	"GET /api/v1/auth/login/{provider}/":                                               {Public: true}, // unauthenticated
 	"GET /api/v1/auth/logout-done":                                                     {Public: true}, // unauthenticated
@@ -475,6 +468,9 @@ var routePermissions = map[string]Permission{
 	"GET /api/v1/settings/monitoring/sizer/":                                          {Authenticated: true},
 	"GET /api/v1/settings/monitoring/thanos/status/":                                  {Authenticated: true},
 	"GET /api/v1/settings/registration/":                                              {Public: true}, // unauthenticated
+	"GET /api/v1/settings/identity/bindings/":                                         {Resource: rbac.ResourceSSO, Verb: rbac.VerbRead},
+	"POST /api/v1/settings/identity/bindings/":                                        {Resource: rbac.ResourceSSO, Verb: rbac.VerbCreate},
+	"DELETE /api/v1/settings/identity/bindings/":                                      {Resource: rbac.ResourceSSO, Verb: rbac.VerbDelete},
 	"GET /api/v1/settings/sso/":                                                       {Public: true}, // unauthenticated
 	"GET /api/v1/settings/sso/presets/":                                               {Public: true}, // unauthenticated
 	"GET /api/v1/settings/tokens/":                                                    {Authenticated: true},
@@ -538,7 +534,6 @@ var routePermissions = map[string]Permission{
 	"OPTIONS /readyz/":                                                                    {Public: true}, // unauthenticated
 	"PATCH /api/v1/admin/charlie/mode/":                                                   {Resource: rbac.ResourceCharlie, Verb: rbac.VerbManage},
 	"PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/":                                {Resource: rbac.ResourceCharlie, Verb: rbac.VerbManage},
-	"PATCH /api/v1/auth/dex/connectors/{id}/":                                             {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
 	"PATCH /api/v1/auth/me/table-views/{id}/":                                             {Authenticated: true},
 	"PATCH /api/v1/cluster-groups/{id}/":                                                  {Resource: rbac.ResourceClusters, Verb: rbac.VerbUpdate},
 	"PATCH /api/v1/cluster-templates/{id}/":                                               {Resource: rbac.ResourceClusterTemplates, Verb: rbac.VerbUpdate},
@@ -617,9 +612,6 @@ var routePermissions = map[string]Permission{
 	"POST /api/v1/alerting/silences/{id}/expire/":                                         {Resource: rbac.ResourceAlerts, Verb: rbac.VerbUpdate},
 	"POST /api/v1/audit/exports/":                                                         {Scope: ScopeAnyOf, Requirements: []Requirement{{rbac.ResourceAuditLogs, rbac.VerbRead}, {rbac.ResourceAuditLogs, rbac.VerbList}}},
 	"POST /api/v1/auth/change-password/":                                                  {Authenticated: true},
-	"POST /api/v1/auth/dex/apply/":                                                        {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
-	"POST /api/v1/auth/dex/connectors/":                                                   {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
-	"POST /api/v1/auth/dex/register-as-sso/":                                              {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
 	"POST /api/v1/auth/login/":                                                            {Public: true}, // unauthenticated
 	"POST /api/v1/auth/logout/":                                                           {Public: true}, // unauthenticated
 	"POST /api/v1/auth/me/table-views/":                                                   {Authenticated: true},
@@ -789,7 +781,6 @@ var routePermissions = map[string]Permission{
 	"POST /api/v1/rbac/global-role-bindings/":                                                                                     {Resource: rbac.ResourceRBAC, Verb: rbac.VerbCreate},
 	"POST /api/v1/rbac/global-roles/":                                                                                             {Resource: rbac.ResourceRBAC, Verb: rbac.VerbCreate},
 	"POST /api/v1/rbac/permission-preview/":                                                                                       {Resource: rbac.ResourceRBAC, Verb: rbac.VerbRead},
-	"POST /api/v1/rbac/principals/materialize/":                                                                                   {Resource: rbac.ResourceRBAC, Verb: rbac.VerbCreate, Also: []Permission{{Resource: rbac.ResourceUsers, Verb: rbac.VerbCreate}}},
 	"POST /api/v1/rbac/project-bindings/":                                                                                         {Resource: rbac.ResourceRBAC, Verb: rbac.VerbCreate},
 	"POST /api/v1/rbac/project-role-bindings/":                                                                                    {Resource: rbac.ResourceRBAC, Verb: rbac.VerbCreate},
 	"POST /api/v1/rbac/project-roles/":                                                                                            {Resource: rbac.ResourceRBAC, Verb: rbac.VerbCreate},
@@ -810,7 +801,6 @@ var routePermissions = map[string]Permission{
 	"POST /api/v1/settings/monitoring/thanos/install/":                                                                            {Authenticated: true},
 	"POST /api/v1/settings/monitoring/thanos/preview/":                                                                            {Authenticated: true},
 	"POST /api/v1/settings/monitoring/thanos/replace/":                                                                            {Authenticated: true},
-	"POST /api/v1/settings/sso/":                                                                                                  {Resource: rbac.ResourceSSO, Verb: rbac.VerbCreate},
 	"POST /api/v1/settings/tokens/":                                                                                               {Authenticated: true},
 	"POST /api/v1/streams/tickets/":                                                                                               {Authenticated: true},
 	"POST /api/v1/support-bundles/":                                                                                               {Authenticated: true},
@@ -851,7 +841,6 @@ var routePermissions = map[string]Permission{
 	"PUT /api/v1/admin/webhooks/{id}/":                                                                                            {Authenticated: true},
 	"PUT /api/v1/alerting/channels/{id}/":                                                                                         {Resource: rbac.ResourceAlerts, Verb: rbac.VerbUpdate},
 	"PUT /api/v1/alerting/rules/{id}/":                                                                                            {Resource: rbac.ResourceAlerts, Verb: rbac.VerbUpdate},
-	"PUT /api/v1/auth/dex/settings/":                                                                                              {Resource: rbac.ResourceSSO, Verb: rbac.VerbUpdate},
 	"PUT /api/v1/auth/me/preferences/":                                                                                            {Authenticated: true},
 	"PUT /api/v1/backups/schedules/{id}/":                                                                                         {Authenticated: true},
 	"PUT /api/v1/backups/storage/{id}/":                                                                                           {Authenticated: true},

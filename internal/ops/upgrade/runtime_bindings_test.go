@@ -11,7 +11,7 @@ func TestRuntimeBindingsUseExactHistoricalOrCandidateChartSources(t *testing.T) 
 	for _, postgres := range []string{"postgres:16-alpine", "postgres:18.6-alpine"} {
 		t.Run(postgres, func(t *testing.T) {
 			var manifest releasecontract.Manifest
-			sources := map[string]string{"utilities.busybox": "busybox:owned", "postgres": postgres, "redis": "valkey/valkey:owned", "dex": "dexidp/dex:owned", "managementRestoreDrill.sidecar": postgres, "managementLogging": "fluent/fluent-bit:owned"}
+			sources := map[string]string{"utilities.busybox": "busybox:owned", "postgres": postgres, "redis": "valkey/valkey:owned", "managementRestoreDrill.sidecar": postgres, "managementLogging": "fluent/fluent-bit:owned"}
 			seen := map[string]bool{}
 			for _, source := range sources {
 				if !seen[source] {
@@ -20,7 +20,7 @@ func TestRuntimeBindingsUseExactHistoricalOrCandidateChartSources(t *testing.T) 
 				}
 			}
 			binding, err := RuntimeBindings(manifest, sources)
-			if err != nil || len(binding) != 6 || binding["postgres"] != binding["managementRestoreDrill.sidecar"] {
+			if err != nil || len(binding) != 5 || binding["postgres"] != binding["managementRestoreDrill.sidecar"] {
 				t.Fatal("exact chart sources did not resolve")
 			}
 			sources["postgres"] = "postgres:latest"
@@ -31,7 +31,7 @@ func TestRuntimeBindingsUseExactHistoricalOrCandidateChartSources(t *testing.T) 
 	}
 }
 func TestRuntimeBindingsRejectDuplicateMissingMutableOrMalformedDigest(t *testing.T) {
-	sources := map[string]string{"utilities.busybox": "owned", "postgres": "owned", "redis": "owned", "dex": "owned", "managementRestoreDrill.sidecar": "owned", "managementLogging": "owned"}
+	sources := map[string]string{"utilities.busybox": "owned", "postgres": "owned", "redis": "owned", "managementRestoreDrill.sidecar": "owned", "managementLogging": "owned"}
 	for _, kind := range []string{"duplicate", "missing", "mutable", "digest"} {
 		t.Run(kind, func(t *testing.T) {
 			var manifest releasecontract.Manifest
@@ -55,7 +55,7 @@ func TestRuntimeBindingsRejectDuplicateMissingMutableOrMalformedDigest(t *testin
 }
 
 func TestRuntimeBindingsRejectInvalidRepositoryEvenWithValidDigestSuffix(t *testing.T) {
-	sources := map[string]string{"utilities.busybox": "owned", "postgres": "owned", "redis": "owned", "dex": "owned", "managementRestoreDrill.sidecar": "owned", "managementLogging": "owned"}
+	sources := map[string]string{"utilities.busybox": "owned", "postgres": "owned", "redis": "owned", "managementRestoreDrill.sidecar": "owned", "managementLogging": "owned"}
 	for _, prefix := range []string{"https://example.invalid/owned", "user:secret@example.invalid/owned", "example.invalid/../owned", "example.invalid/Owned", "example.invalid/owned:unchecked-tag"} {
 		var manifest releasecontract.Manifest
 		manifest.Astronomer.RuntimeImages = []releasecontract.RuntimeImage{{SourceReference: "owned", Reference: prefix + "@sha256:" + strings.Repeat("a", 64)}}

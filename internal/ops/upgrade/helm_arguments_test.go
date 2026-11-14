@@ -21,7 +21,7 @@ func helmFixture(t *testing.T, historical bool) HelmInputs {
 	if !historical {
 		input.Manifest.Astronomer.Images = append(input.Manifest.Astronomer.Images, releasecontract.Artifact{Name: "dr", Kind: "container_image", Reference: "ghcr.io/alphabravo-oss/astronomer-dr@sha256:" + strings.Repeat("b", 64)})
 	}
-	for _, role := range []string{"utilities.busybox", "postgres", "redis", "dex", "managementRestoreDrill.sidecar", "managementLogging"} {
+	for _, role := range []string{"utilities.busybox", "postgres", "redis", "managementRestoreDrill.sidecar", "managementLogging"} {
 		source := "example.invalid/fixture/" + strings.ToLower(strings.ReplaceAll(role, ".", "-")) + ":qualified"
 		input.RuntimeSources[role] = source
 		input.Manifest.Astronomer.RuntimeImages = append(input.Manifest.Astronomer.RuntimeImages, releasecontract.RuntimeImage{SourceReference: source, Reference: strings.TrimSuffix(source, ":qualified") + "@sha256:" + strings.Repeat("c", 64)})

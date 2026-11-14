@@ -14,9 +14,9 @@
 #
 # The script renders the chart three times:
 #   1) base values plus the explicit local-development profile
-#   2) production-like optional components (Dex, management backup with a
+#   2) production-like optional components (management backup with a
 #      dummy S3 target + key wrap, management logging) so air-gapped prod
-#      installs don't miss dex / astronomer-dr / fluent-bit.
+#      installs don't miss astronomer-dr / fluent-bit.
 #   3) the optional CloudNativePG database profile, whose CRD uses imageName
 #      instead of a Pod-spec image field.
 # Results are unioned. The agent image and digest-pinned downstream controller
@@ -89,7 +89,6 @@ prod_like_images="$(
     extract_images \
         -f "$CHART_DIR/values.yaml" \
         -f "$CHART_DIR/values-dev.yaml" \
-        --set dex.enabled=true \
         --set managementLogging.enabled=true \
         --set managementLogging.endpoint=http://loki.observability.svc:3100 \
         --set managementBackup.s3.bucket=image-inventory \

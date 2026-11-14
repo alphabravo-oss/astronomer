@@ -254,21 +254,31 @@ export async function testDatasource(
 // Render endpoints
 // ============================================================
 
-export async function renderGlobal(): Promise<RenderedWidget[]> {
-  const response = await getDashboardsGlobal();
+export async function renderGlobal(
+  signal?: AbortSignal,
+): Promise<RenderedWidget[]> {
+  const response = await getDashboardsGlobal({ signal });
   return response.data.map(mapRenderedWidget);
 }
 
 export async function renderForCluster(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<RenderedWidget[]> {
-  const response = await getDashboardsClustersById({ path: { id: clusterId } });
+  const response = await getDashboardsClustersById({
+    signal,
+    path: { id: clusterId },
+  });
   return response.data.map(mapRenderedWidget);
 }
 
 export async function renderForProject(
   projectId: string,
+  signal?: AbortSignal,
 ): Promise<RenderedWidget[]> {
-  const response = await getDashboardsProjectsById({ path: { id: projectId } });
+  const response = await getDashboardsProjectsById({
+    signal,
+    path: { id: projectId },
+  });
   return response.data.map(mapRenderedWidget);
 }

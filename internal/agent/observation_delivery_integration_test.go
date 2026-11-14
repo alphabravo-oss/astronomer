@@ -33,7 +33,7 @@ func TestSharedDeliveryRealInformerReadsAndControllerChanges(t *testing.T) {
 	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller"} {
 		image := images[name]
 		args := []string{"--no-cross-namespace-refs=true", "--no-remote-bases=true"}
-		objects = append(objects, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: agentdelivery.DeliverySystemNamespace, Generation: 1, ResourceVersion: "1", Labels: map[string]string{"app.kubernetes.io/version": fluxdistribution.Version()}}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: image.Reference + "@" + image.Digest, Args: args}}}}}, Status: appsv1.DeploymentStatus{ObservedGeneration: 1, AvailableReplicas: 1, ReadyReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}}})
+		objects = append(objects, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: agentdelivery.DeliverySystemNamespace, Generation: 1, ResourceVersion: "1", Labels: map[string]string{"app.kubernetes.io/version": fluxdistribution.Version()}}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: image.Reference + "@" + image.Digest, Args: args}}}}}, Status: appsv1.DeploymentStatus{ObservedGeneration: 1, Replicas: 1, UpdatedReplicas: 1, AvailableReplicas: 1, ReadyReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}}})
 	}
 	client := fake.NewClientset(objects...)
 	subscriber, _, _ := startObservationSubscriber(t, client)

@@ -20,7 +20,6 @@ import {
   postRbacGlobalRoleBindings,
   postRbacGlobalRoles,
   postRbacPermissionPreview,
-  postRbacPrincipalsMaterialize,
   postRbacProjectRoleBindings,
   postRbacProjectRoles,
   postProjectsByIdApplyRbacTemplate,
@@ -44,7 +43,6 @@ import type {
 } from "@/types";
 import type {
   OpenAPIComponents,
-  PrincipalMaterialized,
   PrincipalSearchResponse,
 } from "@/types/openapi.generated";
 
@@ -65,16 +63,6 @@ export async function searchPrincipals(
 ): Promise<PrincipalSearchResponse> {
   const response = await getRbacPrincipals({ query: { q: query }, signal });
   return requireData(response, "searchPrincipals");
-}
-
-export async function materializePrincipal(input: {
-  connectorId: string;
-  subject: string;
-}): Promise<PrincipalMaterialized> {
-  const response = await postRbacPrincipalsMaterialize({
-    body: { connector_id: input.connectorId, subject: input.subject },
-  });
-  return requireData(response, "materializePrincipal");
 }
 
 // Exported so callers that need to detect a possibly-truncated list (e.g. the

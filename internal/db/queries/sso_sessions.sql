@@ -3,7 +3,7 @@
 -- The Astronomer JWT is revoked locally on Logout (migration 039); this
 -- table additionally holds the upstream id_token + cached
 -- end_session_endpoint so the Logout HTTP response can drive
--- RP-initiated logout at Dex / the upstream IdP.
+-- RP-initiated logout at the upstream IdP.
 --
 -- Lifetime is bounded by expires_at (= the Astronomer JWT's exp). The
 -- nightly retention worker piggy-backs on the jwt_revocations purge.

@@ -337,7 +337,7 @@ Controls:
 - Production values clear broad legacy egress and expose narrow CIDR buckets for HTTPS, Postgres, Redis, Kubernetes API, and identity-provider traffic.
 - App pods, hook jobs, and backup jobs run non-root, drop capabilities, block privilege escalation, use seccomp, and use read-only root filesystems where possible.
 - Writable scratch space is mounted as `emptyDir` only where required, such as `/tmp` for backup/preflight/migrate workflows and Postgres/Redis data volumes.
-- Production preflight refuses missing external Postgres/Redis, weak Dex secrets, missing backup credentials, or invalid TLS posture.
+- Production preflight refuses missing external Postgres/Redis, invalid optional Identity configuration, missing backup credentials, or invalid TLS posture.
 
 Review checks:
 

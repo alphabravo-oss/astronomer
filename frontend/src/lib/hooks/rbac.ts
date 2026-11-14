@@ -20,7 +20,6 @@ import {
   listGlobalRoleBindings,
   listProjectRoleBindings,
   listRoleTemplates,
-  materializePrincipal,
   searchPrincipals,
   updateRole,
   type EffectivePermissionParams,
@@ -143,20 +142,6 @@ export function usePrincipalSearch(query: string) {
     queryFn: ({ signal }) => searchPrincipals(normalized, signal),
     enabled: normalized.length >= 3 && normalized.length <= 128,
     staleTime: 30_000,
-  });
-}
-
-export function useMaterializePrincipal() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: materializePrincipal,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.rbac.principalsAll,
-      });
-    },
-    onError: (error: Error) =>
-      toastApiError("Failed to verify external identity", error),
   });
 }
 

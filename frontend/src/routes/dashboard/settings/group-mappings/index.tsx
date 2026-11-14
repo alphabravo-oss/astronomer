@@ -7,7 +7,7 @@ import { createFileRoute } from "@tanstack/react-router";
  *   - `cluster` — role applies inside one cluster (target = cluster UUID).
  *   - `project` — role applies inside one project (target = project name).
  *
- * Connectors come from the Dex connector list; an empty / "any" value
+ * An empty / "any" source value
  * matches mappings regardless of source. Roles come from `useGlobalRoles`.
  */
 import { useState } from "react";

@@ -48,7 +48,7 @@ var openSourceFeatures = []string{
 	"cluster-templates",
 	"compliance-posture",
 	"cluster-explorer",
-	"dex-sso",
+	"external-sso",
 	"flux-delivery",
 	"image-vulnerability-scans",
 	"kubectl-shell",

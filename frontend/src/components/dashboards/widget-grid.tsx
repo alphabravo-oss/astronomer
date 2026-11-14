@@ -20,83 +20,48 @@
  *   - url_iframe: same as grafana_panel but no panel-id postfix.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { queryKeys } from "@/lib/query-keys";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import type { RenderedWidget, WidgetSpec } from "@/lib/api/dashboards";
 import { Tooltip } from "@/components/ui/tooltip";
 import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
-export type WidgetFetcher = () => Promise<RenderedWidget[]>;
+export type WidgetFetcher = (signal?: AbortSignal) => Promise<RenderedWidget[]>;
 
 export function WidgetGrid({
   fetcher,
+  scope,
   emptyHint,
   hideWhenEmpty,
   title,
 }: {
   fetcher: WidgetFetcher;
+  scope: readonly string[];
   emptyHint?: string;
   hideWhenEmpty?: boolean;
   title?: string;
 }) {
-  const [widgets, setWidgets] = useState<RenderedWidget[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Keep the latest fetcher in a ref so parent re-renders (which hand us a new
-  // `fetcher` identity on every render — the cluster detail page re-renders on
-  // each SSE metrics tick) do NOT tear down the effect and reschedule every
-  // widget timer. The effect below runs once and reads fetcherRef.current, so
-  // polling stays on each widget's own refreshSeconds cadence instead of
-  // firing the full /render fan-out on every parent render.
-  const fetcherRef = useRef(fetcher);
-  useEffect(() => {
-    fetcherRef.current = fetcher;
-  }, [fetcher]);
-
-  useEffect(() => {
-    let mounted = true;
-    let timers: ReturnType<typeof setTimeout>[] = [];
-
-    // Refresh on a per-widget cadence. We schedule one timer per widget
-    // based on its refreshSeconds; consecutive client polls inside the
-    // server's 30s cache window share an upstream fetch. Scheduling is
-    // driven off the freshly fetched list (not the `widgets` state, which
-    // is null at mount and stale inside this effect closure), so the
-    // interval actually keeps firing after the first load.
-    const schedule = (list: RenderedWidget[]) => {
-      timers.forEach(clearTimeout);
-      timers = [];
-      list.forEach((w) => {
-        const sec = Math.max(5, w.refreshSeconds || 60);
-        timers.push(setTimeout(load, sec * 1000));
-      });
-    };
-
-    const load = async () => {
-      try {
-        const list = await fetcherRef.current();
-        if (!mounted) return;
-        setWidgets(list);
-        setError(null);
-        schedule(list);
-      } catch (e) {
-        if (!mounted) return;
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void load();
-
-    return () => {
-      mounted = false;
-      timers.forEach(clearTimeout);
-    };
-    // Intentionally empty deps: the fetcher is read through fetcherRef so a new
-    // fetcher identity from a parent re-render doesn't reschedule the grid.
-  }, []);
+  // The endpoint renders the entire grid. Poll once at its fastest requested
+  // cadence, sharing requests/cache per scope and aborting unused requests.
+  const query = useQuery({
+    queryKey: queryKeys.dashboardWidgets(scope),
+    queryFn: ({ signal }) => fetcher(signal),
+    staleTime: 5_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchInterval: ({ state }) => {
+      const list = state.data;
+      return list?.length
+        ? Math.min(
+            ...list.map((widget) => Math.max(5, widget.refreshSeconds || 60)),
+          ) * 1000
+        : 60_000;
+    },
+  });
+  const widgets = query.data;
+  const error = query.error?.message;
+  const loading = query.isPending;
 
   if (loading && !widgets) {
     return (
@@ -127,9 +92,7 @@ export function WidgetGrid({
   return (
     <section className="space-y-2">
       {title ? (
-        <h3 className="text-sm font-medium text-muted-foreground">
-          {title}
-        </h3>
+        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
       ) : null}
       <div className="grid grid-cols-12 gap-3 auto-rows-[80px]">
         {widgets.map((w) => (

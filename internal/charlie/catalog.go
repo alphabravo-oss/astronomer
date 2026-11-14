@@ -135,7 +135,7 @@ func ReadCapabilityCatalog() []CapabilityDescriptor {
 			"Monitoring and dashboard data-source posture with backend types, default selection, endpoint presence, credential sealing, TLS verification, and alert evaluation counts; queries and credentials are withheld.",
 			SourceAstronomerDatabase, "monitoring", nil, max),
 		readDesc("astronomer.identity.health",
-			"Global-administrator management identity health across local accounts, SSO, Dex connectors/runtime generations, group mappings, and SCIM token use. User identities, claims, token values, and connector configuration are withheld.",
+			"Global-administrator management identity health across local accounts, shared Identity account bindings, group mappings, and SCIM token use. User identities, claims, token values, and connector configuration are withheld.",
 			SourceAstronomerDatabase, "*", nil, max),
 		readDesc("astronomer.authentication.health",
 			"Global-administrator authentication-session and account-recovery posture, including active/expired SSO sessions, TOTP enrollment and recovery-code coverage, and password-reset token lifecycle. Identities, tokens, labels, providers, and secret material are withheld.",

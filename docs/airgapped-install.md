@@ -146,7 +146,7 @@ acceptance requirements, not an unqualified bundled registry deployment.
 
 The selected platform profile must identify the exact operator-owned CNPG
 operator/CRDs, PostgreSQL server, Barman plugin/tools, object store and DR shell
-assets. Valkey, Dex, Fluent Bit, Charlie and supported integrations must likewise
+assets. Valkey, Fluent Bit, Charlie and supported integrations must likewise
 close under their enabled capabilities. A generic operator category or an
 upstream image digest alone does not qualify this profile. Trivy DB and Java DB
 payloads are separate OCI artifacts; retain manifest, config and layer bytes.

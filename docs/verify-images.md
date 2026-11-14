@@ -159,19 +159,36 @@ kubectl label ns astronomer policy.sigstore.dev/include=true
 
 With `no-match-policy: deny` every image in an opted-in namespace must match a
 policy; an image that matches a policy must satisfy one of its authorities.
-The authorities, each proven with cosign 3.1.3 against the digests the chart
-pins (2026-10-20):
+The checked-in authorities below are the current admission contract (reviewed
+2026-10-23). Historical cosign 3.1.3 checks of pinned digests on 2026-10-20
+were out-of-band verification; they are not admission verification:
 
 | Images (glob) | Authority |
 |---------------|-----------|
 | `ghcr.io/alphabravo-oss/astronomer-**` | keyless, issuer `https://token.actions.githubusercontent.com`, subject `^https://github\.com/alphabravo-oss/astronomer/\.github/workflows/release\.yaml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$` |
-| `ghcr.io/cloudnative-pg/cloudnative-pg**` (operator; bootstrap init container of every instance pod) | keyless, `cloudnative-pg/cloudnative-pg` `release-publish.yml@refs/tags/v*` |
-| `ghcr.io/cloudnative-pg/postgresql**` | keyless, `cloudnative-pg/postgres-containers` workflows |
-| `ghcr.io/dexidp/dex**` | keyless, `dexidp/dex` workflows at release tags. The chart now defaults Dex to `ghcr.io/dexidp/dex` (same digest as Docker Hub, which carries no signature). |
-| `index.docker.io/fluent/fluent-bit**` | keyless, `fluent/fluent-bit` workflows on `master` (`Release from staging`) |
+| `ghcr.io/cloudnative-pg/cloudnative-pg**` (operator and bootstrap init container) | `static: pass` — upstream bundle-signature compatibility exception |
+| `ghcr.io/cloudnative-pg/postgresql**` | `static: pass` — upstream bundle-signature compatibility exception |
+| `index.docker.io/fluent/fluent-bit**` | `static: pass` — upstream bundle-signature compatibility exception |
 | `quay.io/jetstack/cert-manager-**` (HTTP-01 solver pods) | cert-manager's long-lived key `cert-manager-pubkey-2021-09-20.pem`, `hashAlgorithm: sha512`, no Rekor entry (cert-manager does **not** sign keyless) |
 | `index.docker.io/library/{busybox,postgres}**`, `index.docker.io/valkey/valkey**`, `ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar**` | `static: pass` — these upstreams publish no cosign signature at all, so no authority can verify them. The chart pins them by digest (`image.requireDigest`); to close the gap mirror them into a registry you sign and replace the pass with a key authority. |
-| `localhost/**`, `127.0.0.1/**` | `static: fail` (unsigned local builds) |
+| `localhost/**`, `localhost:*/**`, `127.0.0.1/**`, `127.0.0.1:*/**` | `static: fail` (unsigned local builds) |
+
+The four bundle-signature exceptions exist because the pinned policy-controller
+0.13.1 could not verify their OCI-referrer bundles. The separate unsigned-upstream
+exception covers BusyBox, Docker PostgreSQL, Valkey and the Barman sidecar. None
+of these static passes verifies a signature or enforces a particular digest.
+Chart digest pinning constrains chart output; it does not constrain other Pods
+created in the namespace. The actual `**` globs are repository-prefix matches,
+not exact repository allowlists.
+
+Release/platform maintainers (ADR owner: AlphaBravoCompany) own these exceptions.
+Review them for every release, image-pin change and verifier upgrade. Before
+removing an exception, qualify a compatible verifier or a signed mirror with
+positive signed-image admission and negative unsigned/wrong-identity/wrong-digest
+admission tests, including controller-created Pods. Narrow the prefix globs with
+matching tests in the same policy change. Record the tested digests, identities,
+verifier version and next review in release evidence. These are open policy
+remediation tasks; this documentation correction changes no live authority.
 
 `deploy/policy_controller_test.go` renders the chart (live astronomer-dev
 values, every optional component, bundled defaults) and fails when any image
@@ -277,7 +294,6 @@ and moves every other reference onto the zot host, so two changes are needed.
      - glob: astronomer-zot.astronomer.svc.cluster.local:5000/busybox**
      - glob: astronomer-zot.astronomer.svc.cluster.local:5000/valkey/valkey**
      - glob: astronomer-zot.astronomer.svc.cluster.local:5000/postgres**
-     - glob: astronomer-zot.astronomer.svc.cluster.local:5000/dexidp/dex**
      - glob: astronomer-zot.astronomer.svc.cluster.local:5000/fluent/fluent-bit**
      - glob: astronomer-zot.astronomer.svc.cluster.local:5000/cloudnative-pg/**
      ```

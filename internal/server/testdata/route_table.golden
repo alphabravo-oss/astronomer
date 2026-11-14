@@ -21,7 +21,6 @@ DELETE /api/v1/admin/webhooks/{id}
 DELETE /api/v1/alerting/channels/{id}
 DELETE /api/v1/alerting/rules/{id}
 DELETE /api/v1/alerting/silences/{id}
-DELETE /api/v1/auth/dex/connectors/{id}
 DELETE /api/v1/auth/me/table-views/{id}
 DELETE /api/v1/auth/tokens/{id}
 DELETE /api/v1/backups/schedules/{id}
@@ -78,11 +77,11 @@ DELETE /api/v1/rbac/project-roles/{id}
 DELETE /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}
 DELETE /api/v1/security/policies/{id}
 DELETE /api/v1/security/templates/{id}
+DELETE /api/v1/settings/identity/bindings
 DELETE /api/v1/settings/monitoring/alertmanager/uninstall
 DELETE /api/v1/settings/monitoring/grafana/uninstall
 DELETE /api/v1/settings/monitoring/loki/uninstall
 DELETE /api/v1/settings/monitoring/thanos/uninstall
-DELETE /api/v1/settings/sso/{id}
 DELETE /api/v1/settings/tokens/{id}
 DELETE /api/v1/tools/{slug}/uninstall
 DELETE /api/v1/users/{id}
@@ -175,11 +174,6 @@ GET /api/v1/audit/exports/{id}
 GET /api/v1/audit/exports/{id}/download
 GET /api/v1/audit/{id}
 GET /api/v1/auth/callback/{provider}
-GET /api/v1/auth/dex/connector-types
-GET /api/v1/auth/dex/connectors
-GET /api/v1/auth/dex/connectors/{id}
-GET /api/v1/auth/dex/operations/{operation_id}
-GET /api/v1/auth/dex/settings
 GET /api/v1/auth/login/{provider}
 GET /api/v1/auth/logout-done
 GET /api/v1/auth/me
@@ -431,6 +425,7 @@ GET /api/v1/settings/banner
 GET /api/v1/settings/branding
 GET /api/v1/settings/features
 GET /api/v1/settings/general
+GET /api/v1/settings/identity/bindings
 GET /api/v1/settings/monitoring/alertmanager/status
 GET /api/v1/settings/monitoring/backend
 GET /api/v1/settings/monitoring/grafana/status
@@ -487,7 +482,6 @@ OPTIONS /api/v1/observability/grafana
 OPTIONS /api/v1/observability/grafana/*
 PATCH /api/v1/admin/charlie/mode
 PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}
-PATCH /api/v1/auth/dex/connectors/{id}
 PATCH /api/v1/auth/me/table-views/{id}
 PATCH /api/v1/cluster-groups/{id}
 PATCH /api/v1/cluster-templates/{id}
@@ -561,9 +555,6 @@ POST /api/v1/alerting/silences
 POST /api/v1/alerting/silences/{id}/expire
 POST /api/v1/audit/exports
 POST /api/v1/auth/change-password
-POST /api/v1/auth/dex/apply
-POST /api/v1/auth/dex/connectors
-POST /api/v1/auth/dex/register-as-sso
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
 POST /api/v1/auth/me/table-views
@@ -722,7 +713,6 @@ POST /api/v1/rbac/global-bindings
 POST /api/v1/rbac/global-role-bindings
 POST /api/v1/rbac/global-roles
 POST /api/v1/rbac/permission-preview
-POST /api/v1/rbac/principals/materialize
 POST /api/v1/rbac/project-bindings
 POST /api/v1/rbac/project-role-bindings
 POST /api/v1/rbac/project-roles
@@ -730,6 +720,7 @@ POST /api/v1/security/policies
 POST /api/v1/security/policies/{id}/apply
 POST /api/v1/security/scans
 POST /api/v1/security/templates
+POST /api/v1/settings/identity/bindings
 POST /api/v1/settings/monitoring/alertmanager/install
 POST /api/v1/settings/monitoring/alertmanager/preview
 POST /api/v1/settings/monitoring/alertmanager/replace
@@ -743,7 +734,6 @@ POST /api/v1/settings/monitoring/operations/{id}/retry
 POST /api/v1/settings/monitoring/thanos/install
 POST /api/v1/settings/monitoring/thanos/preview
 POST /api/v1/settings/monitoring/thanos/replace
-POST /api/v1/settings/sso
 POST /api/v1/settings/tokens
 POST /api/v1/streams/tickets
 POST /api/v1/support-bundles
@@ -781,7 +771,6 @@ PUT /api/v1/admin/vault-connections/{id}
 PUT /api/v1/admin/webhooks/{id}
 PUT /api/v1/alerting/channels/{id}
 PUT /api/v1/alerting/rules/{id}
-PUT /api/v1/auth/dex/settings
 PUT /api/v1/auth/me/preferences
 PUT /api/v1/backups/schedules/{id}
 PUT /api/v1/backups/storage/{id}

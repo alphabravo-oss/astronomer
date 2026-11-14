@@ -152,7 +152,7 @@ func classifySystemWorkload(namespace, name string) (componentIdentity, bool) {
 		return componentIdentity{"delivery", "flux", "flux-distribution", "Flux controller installed and upgraded by Astronomer."}, true
 	case strings.Contains(value, "astronomer-agent"):
 		return componentIdentity{"agent", "astronomer", "helm", "Outbound Astronomer cluster agent."}, true
-	case namespace == "astronomer" && containsAny(value, "astronomer-server", "astronomer-frontend", "astronomer-worker", "astronomer-dex"):
+	case namespace == "astronomer" && containsAny(value, "astronomer-server", "astronomer-frontend", "astronomer-worker"):
 		return componentIdentity{"control-plane", "astronomer", "helm", "Astronomer management-plane component."}, true
 	case namespace == "astronomer" && containsAny(value, "valkey", "redis"):
 		return componentIdentity{"cache", "astronomer", "upstream-helm", "Valkey-compatible cache used by Astronomer."}, true
@@ -186,7 +186,17 @@ func deploymentComponent(item *appsv1.Deployment, identity componentIdentity) pr
 	if item.Spec.Replicas != nil {
 		desired = *item.Spec.Replicas
 	}
-	return workloadComponent(item.Namespace, "Deployment", item.Name, desired, item.Status.ReadyReplicas, item.Spec.Template.Spec.Containers, item.CreationTimestamp.Time, identity)
+	component := workloadComponent(item.Namespace, "Deployment", item.Name, desired, item.Status.ReadyReplicas, item.Spec.Template.Spec.Containers, item.CreationTimestamp.Time, identity)
+	if item.Namespace == DeliverySystemNamespace && item.Name == "source-controller" {
+		component.Health = "degraded"
+		if sourceControllerWarmStandbyReady(item) {
+			component.Health = "healthy"
+		} else if item.Status.AvailableReplicas < 1 || item.Status.ReadyReplicas < 1 {
+			component.Health = "unavailable"
+		}
+		component.Detail += " Only the elected source-controller serves artifacts; the second replica is a warm standby."
+	}
+	return component
 }
 
 func statefulSetComponent(item *appsv1.StatefulSet, identity componentIdentity) protocol.SystemComponent {

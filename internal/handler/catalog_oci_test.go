@@ -139,10 +139,5 @@ func TestFetchAndIngestOCIRepoNoCharts(t *testing.T) {
 	}
 }
 
-// TestFetchAndIngestOCIRepoLive is intentionally skipped — running it would
-// require network access to a real OCI registry, and the test environment
-// has no such guarantee. Restore by removing the Skip and pointing it at a
-// reachable registry to validate end-to-end ingest manually.
-func TestFetchAndIngestOCIRepoLive(t *testing.T) {
-	t.Skip("network-dependent; run manually against a reachable OCI registry")
-}
+// Real TLS registry and PostgreSQL ingestion coverage lives in
+// internal/catalog/oci_integration_test.go (the shared production implementation).

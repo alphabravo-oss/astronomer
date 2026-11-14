@@ -587,25 +587,6 @@
       }
     },
     {
-      "target": "$.components.schemas.DexOperation.properties.status.$ref",
-      "description": "Retain v1 Go SDK inline enum type identity.",
-      "remove": true
-    },
-    {
-      "target": "$.components.schemas.DexOperation.properties.status",
-      "description": "Generate the existing inline SDK type from canonical enum values.",
-      "update": {
-        "type": "string",
-        "enum": [
-          "pending",
-          "running",
-          "retrying",
-          "failed",
-          "succeeded"
-        ]
-      }
-    },
-    {
       "target": "$.components.schemas.ResourceOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true

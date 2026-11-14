@@ -46,8 +46,7 @@ func Evaluate(inventory protocol.DeliveryControllerInventory) Result {
 	if inventory.FluxVersion != fluxdistribution.Version() {
 		return Result{Status: UpgradeRequired, Code: "flux_version_unsupported"}
 	}
-	kube, err := semver.NewVersion(strings.TrimPrefix(inventory.KubernetesVersion, "v"))
-	if err != nil || kube.Major() != 1 || kube.Minor() < 33 || kube.Minor() > 35 {
+	if !SupportsKubernetes(inventory.KubernetesVersion) {
 		return Result{Status: Incompatible, Code: "kubernetes_version_unsupported"}
 	}
 	components, err := requiredComponentVersions()
@@ -104,4 +103,12 @@ func requiredComponentVersions() (map[string]string, error) {
 		result[name] = image.Version
 	}
 	return result, nil
+}
+
+// SupportsKubernetes applies the delivery release's supported stable minor range.
+// Kubernetes distribution build metadata (for example +k3s1) is permitted;
+// missing patch versions and prereleases are not qualified release versions.
+func SupportsKubernetes(raw string) bool {
+	kube, err := semver.StrictNewVersion(strings.TrimPrefix(raw, "v"))
+	return err == nil && kube.Major() == 1 && kube.Minor() >= 33 && kube.Minor() <= 35 && kube.Prerelease() == ""
 }

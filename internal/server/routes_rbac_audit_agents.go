@@ -73,7 +73,6 @@ func registerRBACAuditAgentRoutes(r chi.Router, deps RouterDependencies, rateLim
 	if deps.CoreAuth.Principals != nil {
 		r.Route("/rbac/principals", func(r chi.Router) {
 			r.With(rateLimit(appmiddleware.ClassSearch)).Get("/", deps.CoreAuth.Principals.Search)
-			r.With(rateLimit(appmiddleware.ClassSearch), writeRBAC).Post("/materialize/", deps.CoreAuth.Principals.Materialize)
 		})
 	}
 

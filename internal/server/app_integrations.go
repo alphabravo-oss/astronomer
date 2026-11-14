@@ -33,7 +33,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	rbacQuerier := c.rbacQuerier
 	authHandler := c.authHandler
 	totpHandler := c.totpHandler
-	ssoHandler := c.ssoHandler
 	resourceHandler := handler.NewResourceHandlerWithQueries(queries, requester)
 	resourceHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	resourceHandler.SetRunTx(sqlcMutationTxRunner[handler.ResourceSettingsMutationTx](database))
@@ -55,9 +54,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 		// hood on every SSO login + every admin re-sync; the same
 		// per-user cache invalidator handles both paths so the next
 		// authenticated request reflects the post-sync state.
-		if ssoHandler != nil {
-			ssoHandler.SetRBACCacheInvalidator(cache)
-		}
 	}
 	platformCharts, chartRepoErr := handler.NewPlatformChartRepoHandler()
 	if chartRepoErr != nil {

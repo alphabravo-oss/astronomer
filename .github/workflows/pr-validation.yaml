@@ -108,6 +108,10 @@ jobs:
       - run: make frontend-check
       - run: cd frontend && npm audit --audit-level=high
       - run: make frontend-build
+      - run: npm --prefix frontend run bundle:check
+      - run: npm --prefix frontend run test:editor-sanitizer
+      - run: cd frontend && npx playwright install chromium firefox webkit --with-deps
+      - run: npm --prefix frontend run test:browser-components -- editor.spec.ts --project=desktop --project=firefox-desktop --project=webkit-desktop
 
   helm:
     name: helm lint

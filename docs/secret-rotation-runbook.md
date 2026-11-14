@@ -14,7 +14,7 @@ below:
 
 | Secret                                | Encryption surface                       | Online rotation? | Forces re-pairing? |
 |---------------------------------------|------------------------------------------|------------------|--------------------|
-| `secrets.encryptionKey` (age keyring) | At-rest sealed columns (`sealedcols.Columns`: SSO, SMTP, delivery-source, registry, backup, cloud, webhook, SIEM, Vault credentials, Charlie local trust, Dex clients) | **yes**, with `astro admin rotate-keys` | no |
+| `secrets.encryptionKey` (age keyring) | At-rest sealed columns (`sealedcols.Columns`: SSO, SMTP, delivery-source, registry, backup, cloud, webhook, SIEM, Vault credentials, Charlie local trust) | **yes**, with `astro admin rotate-keys` | no |
 | `secrets.secretKey` (JWT HMAC)        | Every issued access + refresh JWT        | **yes**, two-key window for one refresh-token lifetime (7d) | no |
 | Durable agent tokens                  | Per-cluster adopted-agent identity       | **yes**, ACK-delivered rotation with grace | no |
 | Admin bootstrap password              | First-login admin account                | n/a — change via the normal password-change UI | n/a |
@@ -268,7 +268,7 @@ When you restore from the nightly dump per
 | `sso_configurations` (with `client_secret_encrypted` ciphertext) | `secrets.secretKey` — the JWT signing key |
 | `delivery_sources` (with write-only credential ciphertext) | `bootstrap.password` (irrelevant once an admin exists) |
 | `cluster_registration_tokens` | Agent-side Secret in each managed cluster (the agent reads the token from its own Secret, not from the dump) |
-| `dex_connectors` (with encrypted JSONB fields) | TLS certificate Secret (if `tls.source=secret`) — operator owns the cert lifecycle |
+| Optional Identity client Secret (operator-managed) | TLS certificate Secret (if `tls.source=secret`) — operator owns the cert lifecycle |
 
 **The two non-obvious gotchas** that the regular DR runbook glosses
 over:

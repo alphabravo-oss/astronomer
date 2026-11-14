@@ -76,7 +76,7 @@ func (c *defaultSSOBackchannelClient) PostEndSession(ctx context.Context, endpoi
 	_, _ = io.CopyN(io.Discard, resp.Body, 1<<20)
 
 	// Most IdPs return 200 or 204 on a successful end-session POST.
-	// Dex returns a 303 redirect when post_logout_redirect_uri is
+	// The legacy provider returns a 303 redirect when post_logout_redirect_uri is
 	// supplied (which we deliberately don't supply here — there's
 	// no browser to redirect). Treat 2xx and 303 as success; the
 	// rest is a soft failure that the caller surfaces as a metric.

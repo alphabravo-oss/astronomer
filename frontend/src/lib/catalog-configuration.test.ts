@@ -93,3 +93,34 @@ describe("version-bound configuration", () => {
     ).toEqual([]);
   });
 });
+
+it("keeps literal dotted/slashed property segments distinct through YAML edits", async () => {
+  const { changedValueSegments } = await import("./catalog-configuration");
+  const { getValueAtPath, setValueAtPath, dumpHelmValuesYAML } =
+    await import("./helm-values-schema");
+  const before = {
+    annotations: { "example.com/key": "old", example: { "com/key": "nested" } },
+    hosts: ["one"],
+    custom: { untouched: true },
+  };
+  const after = {
+    ...before,
+    annotations: { ...before.annotations, "example.com/key": "new" },
+    hosts: ["two"],
+  };
+  expect(changedValueSegments(before, after)).toEqual([
+    ["annotations", "example.com/key"],
+    ["hosts"],
+  ]);
+  const patch = changedValueSegments(before, after).reduce(
+    (result, path) => setValueAtPath(result, path, getValueAtPath(after, path)),
+    {},
+  );
+  expect(
+    parseHelmValuesYAML(dumpHelmValuesYAML(mergeCatalogValues(before, patch))),
+  ).toEqual(after);
+  expect(changedValuePaths(before, after)).toEqual([
+    'annotations["example.com/key"]',
+    "hosts",
+  ]);
+});

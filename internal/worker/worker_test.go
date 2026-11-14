@@ -521,8 +521,6 @@ func (workerLeaderElector) TryLeader(context.Context, string) (func(), bool, err
 }
 
 type workerRuntimeQueries struct{ tasks.RuntimeQuerier }
-type workerDexQueries struct{ tasks.DexOperationQuerier }
-type workerDexExecutor struct{ tasks.DexOperationExecutor }
 type workerSupportBundleQueries struct {
 	tasks.SupportBundleOperationQuerier
 }
@@ -532,10 +530,6 @@ type workerAuditExportQueries struct {
 	tasks.AuditExportOperationQuerier
 }
 type workerAuditExportGenerator struct{ tasks.AuditExportGenerator }
-
-func (workerDexQueries) RecoverDexOperationOutbox(context.Context, time.Time) (int64, error) {
-	return 0, nil
-}
 
 type workerManagementBackupExecutor struct{}
 
@@ -589,7 +583,7 @@ func testTunnelRuntime() TunnelRuntime {
 		Leader: workerLeaderElector{},
 	}, CRDOwnership: tasks.CRDOwnershipRuntime{Deps: tasks.CRDOwnershipDriftDeps{
 		Queries: &workerDispatchQueries{}, Dynamic: dynamicfake.NewSimpleDynamicClient(k8sruntime.NewScheme()),
-	}}, Dex: tasks.DexOperationRuntime{Queries: workerDexQueries{}, Executor: workerDexExecutor{}},
+	}},
 		SupportBundle: tasks.SupportBundleRuntime{Queries: workerSupportBundleQueries{}, Generator: workerSupportBundleGenerator{}},
 		AuditExport:   tasks.AuditExportRuntime{Queries: workerAuditExportQueries{}, Generator: workerAuditExportGenerator{}}}
 	if _, ok := runtime.Core.Deps.K8s.(tasks.K8sCapabilityChecker); !ok {
@@ -822,8 +816,6 @@ func TestNewTunnelWorkerBindsExplicitRuntimeHandlers(t *testing.T) {
 		tasks.ProjectReconcileType:                 false,
 		tasks.ProjectReconcileAllType:              false,
 		tasks.ClusterSnapshotPollType:              false,
-		tasks.DexOperationType:                     false,
-		tasks.DexOperationRecoveryType:             false,
 		tasks.ClusterSnapshotDispatchScheduledType: false,
 		tasks.ClusterSnapshotCleanupExpiredType:    false,
 		tasks.ClusterDecommissionType:              false,

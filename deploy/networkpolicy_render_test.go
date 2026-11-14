@@ -43,8 +43,6 @@ networkPolicy:
     - 10.40.0.0/16
   identityProviderEgressCIDRs:
     - 10.60.0.0/16
-dex:
-  enabled: true
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("write values override: %v", err)
@@ -65,8 +63,6 @@ dex:
 		"port: 5432",
 		"port: 6379",
 		"port: 6443",
-		"port: 389",
-		"port: 636",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rendered chart missing %q:\n%s", want, out)
@@ -75,7 +71,7 @@ dex:
 }
 
 func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
-	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
+	docs := parseRenderedDocs(t, helmTemplate(t))
 
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
 	selector := nestedMap(defaultDeny, "spec", "podSelector")
@@ -99,7 +95,6 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 		{name: "astronomer-frontend", component: "frontend"},
 		{name: "astronomer-server", component: "server"},
 		{name: "astronomer-worker", component: "worker"},
-		{name: "astronomer-dex", component: "dex"},
 		{name: "astronomer-postgres", component: "postgres"},
 		{name: "astronomer-redis", component: "redis"},
 	} {
@@ -196,7 +191,7 @@ func TestServerNetworkPolicyAllowsManagedPrometheusAPI(t *testing.T) {
 }
 
 func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
-	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
+	docs := parseRenderedDocs(t, helmTemplate(t))
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
 	selector := nestedMap(defaultDeny, "spec", "podSelector", "matchLabels")
 
@@ -207,7 +202,6 @@ func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 		{kind: "Deployment", name: "astronomer-server"},
 		{kind: "Deployment", name: "astronomer-worker"},
 		{kind: "Deployment", name: "astronomer-frontend"},
-		{kind: "Deployment", name: "astronomer-dex"},
 		{kind: "StatefulSet", name: "astronomer-postgres"},
 		{kind: "StatefulSet", name: "astronomer-redis"},
 		{kind: "Job", name: "astronomer-preflight"},
@@ -250,23 +244,11 @@ func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing
 	}{
 		{
 			name: "fresh",
-			sets: []string{"dex.enabled=true", "dex.migration.phase=fresh"},
-		},
-		{
-			name:          "prepare",
-			sets:          []string{"dex.enabled=true", "dex.migration.phase=prepare"},
-			requiredKinds: []string{"Job/astronomer-dex-legacy-prepare"},
-		},
-		{
-			name:          "cutover",
-			sets:          []string{"dex.enabled=true", "dex.migration.phase=cutover"},
-			requiredKinds: []string{"Job/astronomer-dex-legacy-cleanup"},
+			sets: nil,
 		},
 		{
 			name: "optional workloads",
 			sets: []string{
-				"dex.enabled=true",
-				"dex.migration.phase=fresh",
 				"managementBackup.s3.bucket=enterprise-backups",
 				"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
 				"managementBackup.encryption.sourceIdentity=test-installation",
@@ -382,221 +364,6 @@ func renderedWorkloadPodLabels(doc renderedDoc) (map[string]string, bool) {
 		return nestedStringMap(doc, "spec", "jobTemplate", "spec", "template", "metadata", "labels"), true
 	default:
 		return nil, false
-	}
-}
-
-func TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege(t *testing.T) {
-	const (
-		prepareName = "astronomer-dex-legacy-prepare"
-		cleanupName = "astronomer-dex-legacy-cleanup"
-	)
-
-	for _, tt := range []struct {
-		phase        string
-		presentName  string
-		absentName   string
-		component    string
-		policyWeight int
-		jobWeight    int
-		helmHook     string
-		helmDelete   string
-	}{
-		{phase: "fresh", absentName: prepareName + "," + cleanupName},
-		{
-			phase: "prepare", presentName: prepareName, absentName: cleanupName,
-			component: "dex-legacy-prepare", policyWeight: -10, jobWeight: -5,
-			helmHook: "pre-upgrade", helmDelete: "before-hook-creation",
-		},
-		{
-			phase: "cutover", presentName: cleanupName, absentName: prepareName,
-			component: "dex-legacy-cleanup", policyWeight: 5, jobWeight: 10,
-			helmHook: "post-upgrade", helmDelete: "before-hook-creation",
-		},
-	} {
-		t.Run(tt.phase, func(t *testing.T) {
-			docs := parseRenderedDocs(t, helmTemplate(t,
-				"dex.enabled=true",
-				"dex.migration.phase="+tt.phase,
-				"networkPolicy.externalEgressCIDRs[0]=10.10.0.0/16",
-				"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/16",
-			))
-
-			for _, absent := range strings.Split(tt.absentName, ",") {
-				if absent == "" {
-					continue
-				}
-				if renderedDocExists(docs, "Job", absent) || renderedDocExists(docs, "NetworkPolicy", absent) {
-					t.Errorf("%s rendered out-of-phase hook resources for %s", tt.phase, absent)
-				}
-			}
-			if tt.presentName == "" {
-				return
-			}
-
-			job := findRenderedDoc(t, docs, "Job", tt.presentName)
-			policy := findRenderedDoc(t, docs, "NetworkPolicy", tt.presentName)
-			jobLabels := nestedStringMap(job, "spec", "template", "metadata", "labels")
-			for key, want := range map[string]string{
-				"app.kubernetes.io/name":      "astronomer",
-				"app.kubernetes.io/instance":  "astronomer",
-				"app.kubernetes.io/part-of":   "astronomer",
-				"app.kubernetes.io/component": tt.component,
-			} {
-				if got := jobLabels[key]; got != want {
-					t.Errorf("%s pod label %s = %q, want %q", tt.presentName, key, got, want)
-				}
-			}
-			selector := nestedMap(policy, "spec", "podSelector", "matchLabels")
-			wantSelector := map[string]any{
-				"app.kubernetes.io/name":      "astronomer",
-				"app.kubernetes.io/instance":  "astronomer",
-				"app.kubernetes.io/component": tt.component,
-			}
-			if !reflect.DeepEqual(selector, wantSelector) {
-				t.Errorf("%s policy selector = %#v, want %#v", tt.presentName, selector, wantSelector)
-			}
-			if got, want := preflightEgressContracts(t, policy), []string{
-				"*:UDP/53,TCP/53",
-				"10.40.0.0/16:TCP/443,TCP/6443",
-				"10.10.0.0/16:TCP/443,TCP/6443",
-			}; !reflect.DeepEqual(got, want) {
-				t.Errorf("%s egress = %v, want exactly %v", tt.presentName, got, want)
-			}
-
-			policyAnnotations := nestedMap(policy, "metadata", "annotations")
-			jobAnnotations := nestedMap(job, "metadata", "annotations")
-			for key, want := range map[string]string{
-				"helm.sh/hook":               tt.helmHook,
-				"helm.sh/hook-delete-policy": tt.helmDelete,
-			} {
-				if got := stringValue(policyAnnotations[key]); got != want {
-					t.Errorf("%s policy annotation %s = %q, want %q", tt.presentName, key, got, want)
-				}
-			}
-			policyWeight, policyErr := strconv.Atoi(stringValue(policyAnnotations["helm.sh/hook-weight"]))
-			jobWeight, jobErr := strconv.Atoi(stringValue(jobAnnotations["helm.sh/hook-weight"]))
-			if policyErr != nil || jobErr != nil || policyWeight != tt.policyWeight || jobWeight != tt.jobWeight || policyWeight >= jobWeight {
-				t.Errorf("%s hook order policy=%d (%v), job=%d (%v), want %d before %d", tt.presentName, policyWeight, policyErr, jobWeight, jobErr, tt.policyWeight, tt.jobWeight)
-			}
-		})
-	}
-}
-
-func TestDexCleanupNonJobPrerequisitesOutliveTheJobStart(t *testing.T) {
-	const name = "astronomer-dex-legacy-cleanup"
-	docs := parseRenderedDocs(t, helmTemplate(t,
-		"dex.enabled=true",
-		"dex.migration.phase=cutover",
-	))
-
-	for _, kind := range []string{"ServiceAccount", "Role", "RoleBinding", "NetworkPolicy"} {
-		resource := findRenderedDoc(t, docs, kind, name)
-		annotations := nestedMap(resource, "metadata", "annotations")
-		for key, want := range map[string]string{
-			"helm.sh/hook":               "post-upgrade",
-			"helm.sh/hook-weight":        "5",
-			"helm.sh/hook-delete-policy": "before-hook-creation",
-		} {
-			if got := stringValue(annotations[key]); got != want {
-				t.Errorf("%s/%s annotation %s = %q, want %q", kind, name, key, got, want)
-			}
-		}
-		annotationsJSON := fmt.Sprint(annotations)
-		if strings.Contains(strings.ToLower(annotationsJSON), "hook-succeeded") || strings.Contains(annotationsJSON, "HookSucceeded") {
-			t.Errorf("%s/%s can be success-deleted before the cleanup Job starts: %#v", kind, name, annotations)
-		}
-	}
-
-	job := findRenderedDoc(t, docs, "Job", name)
-	jobAnnotations := nestedMap(job, "metadata", "annotations")
-	for key, want := range map[string]string{
-		"helm.sh/hook":               "post-upgrade",
-		"helm.sh/hook-weight":        "10",
-		"helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded",
-	} {
-		if got := stringValue(jobAnnotations[key]); got != want {
-			t.Errorf("Job/%s annotation %s = %q, want %q", name, key, got, want)
-		}
-	}
-}
-
-func TestDexMigrationHookPolicySurvivesDefaultDenyDisableTransition(t *testing.T) {
-	oldDocs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true", "dex.migration.phase=fresh"))
-	oldDefaultDeny := findRenderedDoc(t, oldDocs, "NetworkPolicy", "astronomer-default-deny")
-	oldSelector := nestedMap(oldDefaultDeny, "spec", "podSelector", "matchLabels")
-
-	for _, tt := range []struct {
-		name  string
-		phase string
-		sets  []string
-	}{
-		{name: "prepare disables default deny", phase: "prepare", sets: []string{"networkPolicy.defaultDeny=false"}},
-		{name: "prepare disables network policy", phase: "prepare", sets: []string{"networkPolicy.enabled=false"}},
-		{name: "cutover disables default deny", phase: "cutover", sets: []string{"networkPolicy.defaultDeny=false"}},
-		{name: "cutover disables network policy", phase: "cutover", sets: []string{"networkPolicy.enabled=false"}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			sets := append([]string{"dex.enabled=true", "dex.migration.phase=" + tt.phase}, tt.sets...)
-			docs := parseRenderedDocs(t, helmTemplate(t, sets...))
-			if renderedDocExists(docs, "NetworkPolicy", "astronomer-default-deny") {
-				t.Fatal("new release still rendered the release default-deny; transition scenario was not exercised")
-			}
-			name := "astronomer-dex-legacy-prepare"
-			if tt.phase == "cutover" {
-				name = "astronomer-dex-legacy-cleanup"
-			}
-			job := findRenderedDoc(t, docs, "Job", name)
-			jobLabels := nestedStringMap(job, "spec", "template", "metadata", "labels")
-			if !matchExactLabels(oldSelector, jobLabels) {
-				t.Fatalf("old release default-deny does not select transition Job labels %#v; scenario is invalid", jobLabels)
-			}
-			policy := findRenderedDoc(t, docs, "NetworkPolicy", name)
-			policySelector := nestedMap(policy, "spec", "podSelector", "matchLabels")
-			if !matchExactLabels(policySelector, jobLabels) {
-				t.Fatalf("transition policy selector %#v does not select Job labels %#v", policySelector, jobLabels)
-			}
-			if got, want := preflightEgressContracts(t, policy), []string{
-				"*:UDP/53,TCP/53",
-				"0.0.0.0/0:TCP/443,TCP/6443",
-			}; !reflect.DeepEqual(got, want) {
-				t.Fatalf("transition policy egress = %v, want %v", got, want)
-			}
-		})
-	}
-}
-
-func TestDexMigrationHookPolicyDoesNotInventAPIFallbackAndDeduplicatesCIDRs(t *testing.T) {
-	valuesPath := filepath.Join(t.TempDir(), "dex-hook-networkpolicy-values.yaml")
-	values := []byte(`
-networkPolicy:
-  externalEgressCIDRs: []
-  kubernetesAPIEgressCIDRs: []
-dex:
-  enabled: true
-  migration:
-    phase: prepare
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("write values override: %v", err)
-	}
-	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{valuesPath}))
-	policy := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-dex-legacy-prepare")
-	if got, want := preflightEgressContracts(t, policy), []string{"*:UDP/53,TCP/53"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Dex prepare policy invented API fallback: got %v, want %v", got, want)
-	}
-
-	docs = parseRenderedDocs(t, helmTemplate(t,
-		"dex.enabled=true",
-		"dex.migration.phase=cutover",
-		"networkPolicy.externalEgressCIDRs[0]=10.40.0.0/16",
-		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/16",
-	))
-	policy = findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-dex-legacy-cleanup")
-	if got, want := preflightEgressContracts(t, policy), []string{
-		"*:UDP/53,TCP/53",
-		"10.40.0.0/16:TCP/443,TCP/6443",
-	}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Dex cleanup policy CIDR union = %v, want de-duplicated %v", got, want)
 	}
 }
 

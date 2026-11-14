@@ -217,12 +217,7 @@ SELECT jsonb_build_object(
   'active_users', (SELECT count(*)::bigint FROM users WHERE is_active),
   'locked_users', (SELECT count(*)::bigint FROM users WHERE locked_until > now()),
   'users_requiring_password_change', (SELECT count(*)::bigint FROM users WHERE must_change_password),
-  'sso_providers', (SELECT count(*)::bigint FROM sso_configurations),
-  'enabled_sso_providers', (SELECT count(*)::bigint FROM sso_configurations WHERE is_enabled),
-  'dex_connectors', (SELECT count(*)::bigint FROM dex_connectors),
-  'enabled_dex_connectors', (SELECT count(*)::bigint FROM dex_connectors WHERE enabled),
-  'dex_runtime_configured', EXISTS(SELECT 1 FROM dex_settings),
-  'dex_runtime_generation_pending', COALESCE((SELECT runtime_generation > runtime_applied_generation FROM dex_settings LIMIT 1), false),
+  'shared_identity_bindings', (SELECT count(*)::bigint FROM shared_identity_bindings),
   'identity_group_mappings', (SELECT count(*)::bigint FROM identity_group_mappings),
   'cached_idp_group_memberships', (SELECT count(*)::bigint FROM user_idp_groups),
   'scim_tokens', (SELECT count(*)::bigint FROM scim_tokens),
@@ -470,7 +465,7 @@ SELECT jsonb_build_object(
 
 const platformInventoryQuery = `
 SELECT jsonb_build_object(
-  'identity', jsonb_build_object('users', (SELECT count(*)::bigint FROM users), 'sso_providers', (SELECT count(*)::bigint FROM sso_configurations), 'dex_connectors', (SELECT count(*)::bigint FROM dex_connectors), 'active_sso_sessions', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now()), 'totp_enrollments', (SELECT count(*)::bigint FROM user_totp_enrollments)),
+  'identity', jsonb_build_object('users', (SELECT count(*)::bigint FROM users), 'sso_providers', (SELECT count(*)::bigint FROM sso_configurations), 'shared_identity_bindings', (SELECT count(*)::bigint FROM shared_identity_bindings), 'active_sso_sessions', (SELECT count(*)::bigint FROM sso_sessions WHERE expires_at > now()), 'totp_enrollments', (SELECT count(*)::bigint FROM user_totp_enrollments)),
   'tenancy', jsonb_build_object('cluster_registrations', (SELECT count(*)::bigint FROM clusters), 'projects', (SELECT count(*)::bigint FROM projects), 'quota_plans', (SELECT count(*)::bigint FROM quota_plans)),
   'catalog', jsonb_build_object('repositories', (SELECT count(*)::bigint FROM helm_repositories), 'charts', (SELECT count(*)::bigint FROM helm_charts), 'chart_versions', (SELECT count(*)::bigint FROM helm_chart_versions), 'tools', (SELECT count(*)::bigint FROM cluster_tools)),
   'operations', jsonb_build_object('catalog', (SELECT count(*)::bigint FROM catalog_operations), 'tools', (SELECT count(*)::bigint FROM tool_operations), 'monitoring', (SELECT count(*)::bigint FROM monitoring_operations), 'logging', (SELECT count(*)::bigint FROM logging_operations), 'workloads', (SELECT count(*)::bigint FROM workload_operations)),

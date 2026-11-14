@@ -27,8 +27,6 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		"--set", "redis.bundled.enabled=false",
 		"--set", "redis.external.urlSecretRef.name=redis-credentials",
 		"--set", "redis.external.urlSecretRef.key=url",
-		"--set", "dex.enabled=true",
-		"--set", "dex.runtimeSecretName=dex-runtime",
 	}
 	command := exec.Command("helm", args...)
 	var stdout bytes.Buffer
@@ -43,7 +41,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		"core-credentials", "SIGNING_KEY", "AGE_KEYRING",
 		"bootstrap-credentials", "initial-password",
 		"database-credentials", "dsn",
-		"redis-credentials", "url", "dex-runtime",
+		"redis-credentials", "url",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("render missing %q", want)
@@ -58,35 +56,6 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		if strings.Contains(rendered, canary) {
 			t.Fatalf("reference-backed render leaked legacy inline canary %s", canary)
 		}
-	}
-}
-
-func TestDexLegacyInlineCredentialValuesAreRejected(t *testing.T) {
-	chart := filepath.Join(repoRoot(t), "deploy", "chart")
-	for _, legacy := range []string{
-		"dex.clientSecret=SYNTHETIC-DEX-HISTORY-CANARY",
-		"dex.clientSecretRef.name=legacy-dex-secret",
-		"dex.futurePassword=SYNTHETIC-DEX-HISTORY-CANARY",
-	} {
-		cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", legacy)
-		if err := cmd.Run(); err == nil {
-			t.Fatalf("legacy/unknown Dex credential value %q was accepted into Helm release values", strings.SplitN(legacy, "=", 2)[0])
-		}
-	}
-}
-
-func TestDexRuntimeSecretNameSchemaEnforcesDNS1123Subdomain(t *testing.T) {
-	chart := filepath.Join(repoRoot(t), "deploy", "chart")
-	for _, invalid := range []string{"UPPERCASE", "bad_name", "-leading", "trailing-", strings.Repeat("a", 64) + ".example"} {
-		cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+invalid)
-		if err := cmd.Run(); err == nil {
-			t.Fatalf("invalid runtime Secret name %q passed chart schema", invalid)
-		}
-	}
-	valid := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61)
-	cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+valid)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("valid 253-byte DNS subdomain rejected: %v\n%s", err, output)
 	}
 }
 
@@ -105,7 +74,6 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "secrets.encryptionKeyKey=AGE_KEYRING",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "bootstrap.email=admin@example.com",
-		"--set", "dex.runtimeSecretName=dex-runtime",
 		"--set", "networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"--set", "networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
 		"--set", "networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
@@ -125,7 +93,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 	for _, field := range []string{
 		"image.server.digest", "image.worker.digest", "image.agent.digest",
 		"utilities.busybox.digest", "postgres.image.digest", "preflight.image.digest", "frontend.image.digest",
-		"dex.image.digest", "managementBackup.image.digest", "managementRestoreDrill.image.digest",
+		"managementBackup.image.digest", "managementRestoreDrill.image.digest",
 		"managementRestoreDrill.sidecar.image.digest",
 	} {
 		args = append(args, "--set", field+"="+productionTestImageDigest)
@@ -144,7 +112,6 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"redis-credentials":     2,
 		"core-credentials":      3,
 		"bootstrap-credentials": 1,
-		"dex-runtime":           2,
 		"backup-credentials":    2,
 		"backup-wrap":           2,
 	} {

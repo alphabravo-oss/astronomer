@@ -53,7 +53,6 @@ func newProductionRouterHarness(t *testing.T) *productionRouterHarness {
 	cfg.CRDEnabled = true
 	cfg.NativeRBACEnabled = true
 	cfg.ManagementBackupEnabled = true
-	cfg.DexBundledEnabled = true
 	logger := zerolog.Nop()
 	ctx := context.Background()
 	c := &productionComposition{runtime: newRuntimeSupervisor(logger)}

@@ -56,3 +56,36 @@ func requestWithClusterID(rawURL string, clusterID uuid.UUID) *http.Request {
 	routeCtx.URLParams.Add("cluster_id", clusterID.String())
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
 }
+
+func TestExecRejectsNonAccessJWTBeforeUpgrade(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"refresh", auth.PurposeTOTPChallenge, auth.PurposeTOTPEnrollOnly} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			manager := auth.MustNewJWTManager("test-exec-boundary", 60)
+			userID := uuid.New()
+			var token string
+			var err error
+			if kind == "refresh" {
+				token, err = manager.GenerateRefreshToken(userID)
+			} else {
+				token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			consumer := &ExecConsumer{jwt: manager}
+			router := chi.NewRouter()
+			router.Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", consumer.HandleExec)
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/ws/exec/"+uuid.NewString()+"/default/pod/app/", nil)
+			request.Header.Set("Authorization", "Bearer "+token)
+			request.Header.Set("Connection", "Upgrade")
+			request.Header.Set("Upgrade", "websocket")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized || response.Header().Get("Upgrade") != "" {
+				t.Fatalf("status=%d upgrade=%q, want rejection before websocket upgrade", response.Code, response.Header().Get("Upgrade"))
+			}
+		})
+	}
+}

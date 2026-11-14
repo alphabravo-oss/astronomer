@@ -437,11 +437,6 @@
         {
           "goSDK": "inline",
           "property": "status",
-          "schema": "DexOperation"
-        },
-        {
-          "goSDK": "inline",
-          "property": "status",
           "schema": "ResourceOperation"
         },
         {

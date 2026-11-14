@@ -5,7 +5,6 @@ import {
   getSettingsSso,
   getSettingsTokens,
   getUsers as getUsersOperation,
-  postSettingsSso,
   postSettingsTokens,
   postUsers,
   postUsersByIdResetPassword,
@@ -41,19 +40,6 @@ export interface UpdateUserInput {
   displayName?: string;
   email?: string;
   enabled?: boolean;
-}
-
-export interface CreateSSOProviderInput {
-  type: "github" | "google" | "oidc";
-  name: string;
-  enabled: boolean;
-  config: {
-    clientId?: string;
-    clientSecret?: string;
-    metadataUrl?: string;
-    allowedOrganizations?: string;
-    autoCreateUsers?: boolean;
-  };
 }
 
 export interface CreateAPITokenInput {
@@ -246,30 +232,6 @@ export async function getSSOProviders(
     ? response
     : ((response as { data?: SSOProviderWire[] }).data ?? []);
   return rows.map(mapSSOProvider);
-}
-
-export async function createSSOProvider(
-  input: CreateSSOProviderInput,
-): Promise<SSOProvider> {
-  return mapSSOProvider(
-    requireData(
-      await postSettingsSso({
-        body: {
-          type: input.type,
-          name: input.name,
-          enabled: input.enabled,
-          config: {
-            client_id: input.config.clientId ?? "",
-            client_secret: input.config.clientSecret ?? "",
-            metadata_url: input.config.metadataUrl,
-            allowed_organizations: input.config.allowedOrganizations,
-            auto_create_users: input.config.autoCreateUsers,
-          },
-        },
-      }),
-      "createSSOProvider",
-    ),
-  );
 }
 
 export async function getAPITokens(signal?: AbortSignal): Promise<APIToken[]> {

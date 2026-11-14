@@ -48,17 +48,6 @@ func wireDashboardMutationFixture(h *DashboardHandler, q DashboardQuerier) *Dash
 	return h
 }
 
-type dexMutationFixture struct {
-	DexQuerier
-	forwardedAuditOutbox
-}
-
-func wireDexMutationFixture(h *DexHandler, q DexQuerier) *DexHandler {
-	tx := dexMutationFixture{DexQuerier: q, forwardedAuditOutbox: forwardedAuditOutbox{q}}
-	h.SetRunTx(func(_ context.Context, fn func(DexMutationTx) error) error { return fn(tx) })
-	return h
-}
-
 type gitOpsMutationFixture struct {
 	GitOpsQuerier
 	forwardedAuditOutbox

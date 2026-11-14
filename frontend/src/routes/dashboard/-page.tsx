@@ -97,7 +97,9 @@ export function DashboardPage() {
           <ActionButton
             intent="primary"
             icon={<Plus className="h-4 w-4" />}
-            onClick={() => void navigate({ to: "/dashboard/clusters/register" })}
+            onClick={() =>
+              void navigate({ to: "/dashboard/clusters/register" })
+            }
           >
             Register cluster
           </ActionButton>
@@ -111,7 +113,11 @@ export function DashboardPage() {
           tone={verdict.tone}
           sentence={verdict.sentence}
           numbers={[
-            { id: "clusters", label: "clusters", value: loading ? "—" : fleet.total },
+            {
+              id: "clusters",
+              label: "clusters",
+              value: loading ? "—" : fleet.total,
+            },
             {
               id: "disconnected",
               label: "disconnected",
@@ -253,7 +259,7 @@ export function DashboardPage() {
       </PageSection>
 
       <section className="space-y-3">
-        <WidgetGrid fetcher={renderGlobal} hideWhenEmpty />
+        <WidgetGrid scope={["global"]} fetcher={renderGlobal} hideWhenEmpty />
       </section>
       <ExtensionSlot
         point="dashboardWidget"
@@ -280,7 +286,8 @@ function fleetVerdict(
   if (total === 0)
     return {
       tone: "info",
-      sentence: "No clusters registered yet. Register one to start managing it.",
+      sentence:
+        "No clusters registered yet. Register one to start managing it.",
     };
   if (counts.disconnected > 0 || critical > 0)
     return {
@@ -312,18 +319,39 @@ const boardColumns: Array<{
   dot: string;
   status?: string;
 }> = [
-  { key: "healthy", label: "Healthy", dot: "bg-status-success", status: "active" },
-  { key: "attention", label: "Needs attention", dot: "bg-status-warning", status: "error" },
+  {
+    key: "healthy",
+    label: "Healthy",
+    dot: "bg-status-success",
+    status: "active",
+  },
+  {
+    key: "attention",
+    label: "Needs attention",
+    dot: "bg-status-warning",
+    status: "error",
+  },
   {
     key: "disconnected",
     label: "Disconnected",
     dot: "bg-status-error",
     status: "disconnected",
   },
-  { key: "registering", label: "Registering", dot: "bg-status-info", status: "pending" },
+  {
+    key: "registering",
+    label: "Registering",
+    dot: "bg-status-info",
+    status: "pending",
+  },
 ];
 
-function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
+function HealthBoard({
+  fleet,
+  loading,
+}: {
+  fleet: FleetModel;
+  loading: boolean;
+}) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {boardColumns.map((column) => {
@@ -336,7 +364,10 @@ function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }
           >
             <div className="flex items-center justify-between border-b border-border px-4 py-2">
               <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <span aria-hidden className={cn("h-2 w-2 rounded-full", column.dot)} />
+                <span
+                  aria-hidden
+                  className={cn("h-2 w-2 rounded-full", column.dot)}
+                />
                 {column.label}
               </span>
               <span
@@ -390,13 +421,26 @@ function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }
   );
 }
 
-function AgentsPanel({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
+function AgentsPanel({
+  fleet,
+  loading,
+}: {
+  fleet: FleetModel;
+  loading: boolean;
+}) {
   const versions = new Map<string, number>();
   for (const cluster of fleet.clusters) {
     if (!cluster.agentVersion) continue;
-    versions.set(cluster.agentVersion, (versions.get(cluster.agentVersion) ?? 0) + 1);
+    versions.set(
+      cluster.agentVersion,
+      (versions.get(cluster.agentVersion) ?? 0) + 1,
+    );
   }
-  const rows: Array<{ key: FleetHealth; label: string; tone: "success" | "warning" | "error" | "default" }> = [
+  const rows: Array<{
+    key: FleetHealth;
+    label: string;
+    tone: "success" | "warning" | "error" | "default";
+  }> = [
     { key: "healthy", label: "Connected", tone: "success" },
     { key: "attention", label: "Connected, degraded", tone: "warning" },
     { key: "disconnected", label: "Disconnected", tone: "error" },
@@ -432,10 +476,20 @@ function AgentsPanel({ fleet, loading }: { fleet: FleetModel; loading: boolean }
   );
 }
 
-function CapacityList({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
+function CapacityList({
+  fleet,
+  loading,
+}: {
+  fleet: FleetModel;
+  loading: boolean;
+}) {
   if (loading) {
     return (
-      <div role="status" aria-busy className="rounded-lg border border-border bg-card p-4">
+      <div
+        role="status"
+        aria-busy
+        className="rounded-lg border border-border bg-card p-4"
+      >
         <SkeletonText lines={4} />
       </div>
     );
@@ -471,7 +525,8 @@ function CapacityList({ fleet, loading }: { fleet: FleetModel; loading: boolean 
               {cluster.displayName || cluster.name}
             </RouterLink>
             <p className="text-meta text-muted-foreground">
-              {plural(cluster.nodeCount ?? 0, "node")} · {plural(cluster.podCount ?? 0, "pod")}
+              {plural(cluster.nodeCount ?? 0, "node")} ·{" "}
+              {plural(cluster.podCount ?? 0, "pod")}
             </p>
           </div>
           <CapacityBar label="CPU" value={cluster.cpuPercentage} />
@@ -490,13 +545,17 @@ function CapacityBar({
   value: number | null | undefined;
 }) {
   const pct =
-    value == null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value));
+    value == null || !Number.isFinite(value)
+      ? null
+      : Math.max(0, Math.min(100, value));
   return (
     <div className="min-w-0">
       <div className="flex items-center justify-between text-meta text-muted-foreground">
         <span>{label}</span>
         <span className="tabular-nums text-foreground">
-          {pct == null ? "—" : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`}
+          {pct == null
+            ? "—"
+            : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`}
         </span>
       </div>
       <div
@@ -609,7 +668,9 @@ function DeliveryStrip({
                     aria-hidden
                     className={cn(
                       "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-                      item.severity === "error" ? "bg-status-error" : "bg-status-warning",
+                      item.severity === "error"
+                        ? "bg-status-error"
+                        : "bg-status-warning",
                     )}
                   />
                   <span className="min-w-0">
@@ -662,12 +723,19 @@ function HealthRow({
       className="flex items-center justify-between px-3 py-2.5 transition-colors hover:bg-accent/40"
     >
       <span className="flex min-w-0 items-center gap-2">
-        <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
-        {icon ? <span className="shrink-0 text-muted-foreground">{icon}</span> : null}
+        <span
+          aria-hidden
+          className={cn("h-2 w-2 shrink-0 rounded-full", dot)}
+        />
+        {icon ? (
+          <span className="shrink-0 text-muted-foreground">{icon}</span>
+        ) : null}
         <span className="truncate text-sm text-foreground">{label}</span>
       </span>
       <span className="flex shrink-0 items-center gap-2">
-        {hint && <span className="text-meta text-muted-foreground">{hint}</span>}
+        {hint && (
+          <span className="text-meta text-muted-foreground">{hint}</span>
+        )}
         <span
           data-value=""
           className="text-sm font-medium tabular-nums text-foreground"

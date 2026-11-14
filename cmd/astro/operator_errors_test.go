@@ -33,7 +33,6 @@ func TestInvalidOperatorInputNeverReachesServer(t *testing.T) {
 		{[]string{"workloads", "get", "not-a-uuid", "Deployment", "payments", "api"}, "invalid"},
 		{[]string{"workloads", "scale", operatorTestID, "Deployment", "payments", "api"}, "--replicas is required"},
 		{[]string{"settings", "general", "set"}, "nothing to update"},
-		{[]string{"settings", "sso", "create", "company", "--type=invalid", "--client-id=id", "--client-secret=secret"}, "invalid --type"},
 		{[]string{"admin", "smtp", "update"}, "--data is required"},
 		{[]string{"admin", "smtp", "update", "--data=@/does-not-exist/astro.json"}, "no such file"},
 		{[]string{"admin", "vault", "get", "not-a-uuid"}, "invalid id"},

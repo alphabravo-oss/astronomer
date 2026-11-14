@@ -107,16 +107,11 @@ func TestReleaseDigestsRenderForCoreThirdPartyImages(t *testing.T) {
 		"redis.image.registry=mirror.example.test",
 		"redis.image.repository=valkey/valkey",
 		"redis.image.digest=" + digest,
-		"dex.enabled=true",
-		"dex.image.registry=mirror.example.test",
-		"dex.image.repository=dexidp/dex",
-		"dex.image.digest=" + digest,
 	}
 	docs := parseRenderedDocs(t, helmTemplate(t, sets...))
 	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-server", "initContainers", "wait-postgres", "mirror.example.test/library/busybox@"+digest)
 	assertRenderedContainerImage(t, docs, "StatefulSet", "astronomer-postgres", "containers", "postgres", "mirror.example.test/library/postgres@"+digest)
 	assertRenderedContainerImage(t, docs, "StatefulSet", "astronomer-redis", "containers", "redis", "mirror.example.test/valkey/valkey@"+digest)
-	assertRenderedContainerImage(t, docs, "Deployment", "astronomer-dex", "containers", "dex", "mirror.example.test/dexidp/dex@"+digest)
 }
 
 func assertRenderedContainerImage(t *testing.T, docs []renderedDoc, kind, workload, field, container, want string) {

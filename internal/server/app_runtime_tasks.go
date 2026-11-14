@@ -64,7 +64,6 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger z
 			ControlPlaneSnapshot: c.controlPlaneSnapshotRuntime, Deferred: routed.deferredRuntime,
 			KubectlSessionReap: c.kubectlSessionReapRuntime, SecurityIngest: c.securityIngestRuntime,
 			CRDOwnership:  crdOwnership,
-			Dex:           tasks.DexOperationRuntime{Queries: c.queries, Executor: c.dexHandler},
 			SupportBundle: tasks.SupportBundleRuntime{Queries: c.queries, Generator: routed.deps.AdminPlatform.SupportBundle},
 			AuditExport:   tasks.AuditExportRuntime{Queries: c.queries, Generator: routed.deps.AdminPlatform.Audit},
 		}

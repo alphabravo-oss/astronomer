@@ -14,7 +14,7 @@ import (
 )
 
 // dockerHubHosts are the spellings of Docker Hub. Short names such as
-// "busybox:1.36" or "dexidp/dex:v2" implicitly live there.
+// "busybox:1.36" or "example/service:v2" implicitly live there.
 var dockerHubHosts = map[string]bool{"docker.io": true, "index.docker.io": true, "registry-1.docker.io": true}
 
 // SplitHost separates a reference ("[oci://]host/path[:tag][@digest]") into

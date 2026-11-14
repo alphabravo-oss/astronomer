@@ -179,6 +179,15 @@ references. This restores the transport CA and offline publisher trust material
 alongside the database-held catalog state; no private catalog URL, proxy
 credential, or source credential is printed by the backup job.
 
+Use the `dr-crypto` extractor shipped with the backup producer or a newer
+compatible release. The bounded tar format preserves existing flat bundles and
+adds files one level below only `catalog-ca/` and `catalog-signature-trust/`.
+Older extractors reject these nested bundles. The extractor validates the whole
+archive before writing: at most 1,024 files, 1 MiB per file and 16 MiB total
+payload, with no links, traversal, duplicate paths or arbitrary directories.
+Extraction creates private directories (0700) and files (0600) and refuses an
+existing destination. Kubernetes Secret projection metadata is not archived.
+
 ---
 
 ## Preconditions
@@ -237,7 +246,8 @@ Before starting, confirm you have:
 ## Procedure
 
 The high-level shape is: freeze the writers, drop and recreate the database,
-restore the dump, thaw the writers, validate.
+restore the dump, validate schema/data/keys while writers remain stopped, then
+thaw the captured writer state and validate end-to-end.
 
 ### 1. Capture the current state
 
@@ -245,16 +255,28 @@ Even if the DB is corrupted, the rest of the chart's config is good — capture
 it so you can compare after the restore.
 
 ```bash
-helm -n astronomer get values astronomer > /tmp/astronomer-values-pre-restore.yaml
-kubectl -n astronomer get deploy,sts,svc,cronjob -o wide \
-  > /tmp/astronomer-resources-pre-restore.txt
+set -Eeuo pipefail
+umask 077
+restore_state=$(mktemp -d "$PWD/astronomer-restore.XXXXXX")
+helm -n astronomer get values astronomer > "$restore_state/values.yaml"
+kubectl config current-context > "$restore_state/context.txt"
+kubectl -n astronomer get deploy,hpa,cronjob -o json > "$restore_state/controllers.json"
+kubectl -n astronomer get deploy,sts,svc,cronjob -o wide > "$restore_state/resources.txt"
 ```
 
-Take a screenshot of `helm -n astronomer get values astronomer` so you have
-the production override values handy if the cluster goes fully sideways during
-the procedure.
+Values can contain credentials: keep this directory private and copy it only to
+approved protected recovery storage. Do not put values or key material in
+screenshots, shell history or public evidence. Record the intended kube context,
+namespace, database host/name and backup manifest identity before any mutation.
 
 ### 2. Stop the writers
+
+Capture each Deployment's original replica count and each CronJob's original
+suspend state from `controllers.json`. Pause any GitOps reconciler, HPA or other
+controller that can restore writer replicas, using its supported maintenance
+mechanism and retaining its previous configuration. Stop active backup Jobs and
+other database clients after identifying their owner. Verify no writer sessions
+remain; scaling Deployments alone does not establish this.
 
 Scale the server and worker to zero so nothing else writes during the restore.
 Leave the bundled Postgres (or your managed Postgres) running — you need it
@@ -265,7 +287,8 @@ kubectl -n astronomer scale deploy/astronomer-server --replicas=0
 kubectl -n astronomer scale deploy/astronomer-worker --replicas=0
 # If the frontend Deployment exists, scale it too (it polls /health endpoints
 # but no longer writes).
-kubectl -n astronomer scale deploy/astronomer-frontend --replicas=0 || true
+# Only if captured above; retain its original replica count.
+kubectl -n astronomer scale deploy/astronomer-frontend --replicas=0
 
 # Wait for pods to disappear.
 kubectl -n astronomer wait --for=delete pod \
@@ -293,15 +316,13 @@ kubectl -n astronomer exec -it sts/astronomer-postgres -- \
 
 #### External (managed) Postgres
 
-Start a temporary client Pod with `psql`:
-
-```bash
-kubectl -n astronomer run psql-restore --rm -it --restart=Never \
-  --image=postgres:17-alpine \
-  --env="PGURL=$(kubectl -n astronomer get secret <dsn-secret> \
-        -o jsonpath='{.data.<dsn-key>}' | base64 -d)" \
-  -- psql "$PGURL" -d postgres
-```
+Use a private, authenticated PostgreSQL client with a Secret-mounted libpq
+service/password file (`PGSERVICEFILE`/`PGPASSFILE`, mode 0600). In Kubernetes,
+mount an existing authorized Secret into an owned temporary client Pod; do not
+expand a DSN into `kubectl run --env`, command arguments or logs. Use a client
+version compatible with the dump and the target database. Select the maintenance
+`postgres` database for creation and the intended application database for
+restore. Keep the exact service name in the private recovery record.
 
 You should land at a `postgres=#` prompt.
 
@@ -314,6 +335,8 @@ You should land at a `postgres=#` prompt.
 In the psql session opened above:
 
 ```sql
+-- Compare these with the private recovery record before proceeding.
+SELECT current_database(), inet_server_addr(), inet_server_port(), current_user;
 -- Kick any remaining sessions off the target DB.
 SELECT pg_terminate_backend(pid)
 FROM pg_stat_activity
@@ -329,7 +352,8 @@ CREATE DATABASE astronomer OWNER astronomer;
 
 Run `pg_restore` against the empty database. We pass `--no-owner --no-acl`
 because the dump was produced with the same flags (it's environment-portable);
-the schema's roles are recreated by the new DB's owner.
+restored objects are owned by the restore role. Required roles and extensions
+must already be available; these flags do not recreate roles.
 
 #### Bundled Postgres
 
@@ -344,7 +368,7 @@ kubectl -n astronomer exec -it astronomer-postgres-0 -- \
     --username=astronomer \
     --dbname=astronomer \
     --no-owner --no-acl \
-    --jobs=4 \
+    --single-transaction --exit-on-error \
     --verbose \
     /tmp/astronomer.pgcustom
 ```
@@ -353,21 +377,18 @@ kubectl -n astronomer exec -it astronomer-postgres-0 -- \
 
 ```bash
 pg_restore \
-  --dbname "$PGURL" \
+  --dbname "service=astronomer-restore" \
   --no-owner --no-acl \
-  --jobs=4 \
+  --single-transaction --exit-on-error \
   --verbose \
   ./astronomer.pgcustom
 ```
 
-`--jobs=4` parallelises the data-load phase. Bump it up on a beefy DB; the
-schema phase always runs single-threaded.
-
-Expect `pg_restore` to emit a small number of "errors ignored" — these are
-typically `CREATE EXTENSION` no-ops or comments on system objects that the
-restoring role doesn't own. As long as the final summary line reports the
-expected object counts (the dump's TOC tells you what to expect), the restore
-is good.
+Both examples require exit status 0. `--single-transaction --exit-on-error`
+rolls back on the first SQL error; do not combine it with parallel jobs. Any
+restore error leaves writers stopped. Diagnose permissions, extensions or dump
+compatibility, recreate only the confirmed disposable/restore target, and rerun.
+Never accept an "errors ignored" summary as success.
 
 ### 6. Spot-check the data before bringing the app back
 
@@ -376,15 +397,19 @@ Still using the psql session (reconnect to the `astronomer` database):
 ```sql
 \c astronomer
 
--- Migration history matches what the chart's `migrate` Job expects.
-SELECT version, dirty FROM schema_migrations ORDER BY version DESC LIMIT 5;
+-- Compare with the backup manifest and the server's embedded Goose migrations.
+WITH latest AS (
+  SELECT DISTINCT ON (version_id) version_id, is_applied
+  FROM public.goose_db_version ORDER BY version_id, id DESC
+)
+SELECT COALESCE(MAX(version_id), 0) AS applied_version
+FROM latest WHERE is_applied;
 
 -- The big tables have rows.
-SELECT 'clusters' AS t, count(*) FROM clusters
-UNION ALL SELECT 'cluster_agents', count(*) FROM cluster_agents
-UNION ALL SELECT 'projects', count(*) FROM projects
-UNION ALL SELECT 'users', count(*) FROM users
-UNION ALL SELECT 'audit_log', count(*) FROM audit_log;
+SELECT 'clusters' AS t, count(*) FROM public.clusters
+UNION ALL SELECT 'projects', count(*) FROM public.projects
+UNION ALL SELECT 'users', count(*) FROM public.users
+UNION ALL SELECT 'audit_log', count(*) FROM public.audit_log;
 ```
 
 Audit log row counts should match (or be very close to) the last good count
@@ -392,25 +417,41 @@ you have from monitoring / your data warehouse. If `audit_log` is empty but
 `clusters` is populated, the dump is partial — pick an older one and restart
 from step 4.
 
-### 7. Bring the writers back up
+### 7. Bring the writers back up only after all gates pass
+
+Before any writer starts, require all of the following:
+
+- The encrypted dump and every required key/trust artifact decrypt, authenticate
+  and match the backup manifest. Missing keys are a failed restore gate.
+- `pg_restore` exited 0 and the Goose applied version equals the backup's
+  recorded version. Confirm the intended application binary's embedded migration
+  set is compatible. Do not start the server to discover a mismatch: it migrates
+  automatically at boot. Schema mismatch keeps writers stopped.
+- Expected tenant/project/cluster and audit data is present, and encrypted
+  application values can be read with the recovered keys using the supported
+  recovery tooling. Counts alone do not prove decryptability or completeness.
+
+Restore server/worker/frontend replica counts from the captured
+`controllers.json`, not production defaults. For each captured Deployment:
 
 ```bash
-kubectl -n astronomer scale deploy/astronomer-server --replicas=3
-kubectl -n astronomer scale deploy/astronomer-worker --replicas=3
-kubectl -n astronomer scale deploy/astronomer-frontend --replicas=3 || true
-
+jq -r '.items[] | select(.kind == "Deployment") |
+  select(.metadata.name == "astronomer-server" or
+         .metadata.name == "astronomer-worker" or
+         .metadata.name == "astronomer-frontend") |
+  [.metadata.name, (.spec.replicas | tostring)] | @tsv' \
+  "$restore_state/controllers.json" |
+while IFS="$(printf '\t')" read -r deployment replicas; do
+  kubectl -n astronomer scale "deployment/$deployment" --replicas="$replicas" || exit 1
+done
 kubectl -n astronomer rollout status deploy/astronomer-server --timeout=300s
 kubectl -n astronomer rollout status deploy/astronomer-worker --timeout=300s
 ```
 
-Replica counts above mirror `values-production.yaml`. For dev / k3d, use `1`.
-
-Re-enable the backup CronJob:
-
-```bash
-kubectl -n astronomer patch cronjob astronomer-management-backup \
-  -p '{"spec":{"suspend":false}}'
-```
+After validation, restore each CronJob's captured suspend state and the original
+HPA/GitOps configuration. A previously suspended CronJob stays suspended. On any
+failed gate, leave writers and backups stopped, retain private diagnostics and
+choose a known-good backup; never auto-resume from an exit trap.
 
 ### 8. Validate end-to-end
 
@@ -659,7 +700,7 @@ lockstep when the CNPG image moves to a new major.
 | Metric | Value |
 |--------|-------|
 | RPO    | up to 24h (gap to the last successful nightly dump). Take an ad-hoc dump before any risky change (`kubectl create job --from=cronjob/...`). |
-| RTO    | ~15 min for a single-region, single-DB restore once the operator is at the keyboard. Roughly linear in DB size: ~30 GB dumps restore in ~10 min on managed Postgres with `--jobs=4`. |
+| RTO    | ~15 min for a single-region, single-DB restore once the operator is at the keyboard. Roughly linear in DB size: ~30 GB dumps restore in ~10 min on managed Postgres with `--single-transaction --exit-on-error`. |
 | Data not covered | Redis (asynq queue state), in-flight Jobs at the moment of disaster, Prometheus metrics history (lives in your monitoring stack, not in Astronomer's DB). |
 | Cross-region failover | Out of scope. The bucket is single-region by default. For multi-region resilience, set `managementBackup.s3.region` to a region that replicates to another region via the cloud provider's bucket replication. |
 

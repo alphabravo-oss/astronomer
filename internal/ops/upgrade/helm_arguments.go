@@ -89,7 +89,7 @@ func (in HelmInputs) arguments() ([]string, error) {
 	setting("config.agentImageRepository", images["agent"])
 	setting("config.agentImageTag", in.Plan.Target)
 	setting("kubectlShell.image", images["shell"])
-	for _, role := range []string{"utilities.busybox", "postgres", "redis", "dex", "managementRestoreDrill.sidecar", "managementLogging"} {
+	for _, role := range []string{"utilities.busybox", "postgres", "redis", "managementRestoreDrill.sidecar", "managementLogging"} {
 		key := role + ".image.digest"
 		if role == "utilities.busybox" {
 			key = role + ".digest"

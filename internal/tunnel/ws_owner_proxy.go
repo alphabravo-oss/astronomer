@@ -27,6 +27,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // ForwardWSToOwnerPod reverse-proxies an HTTP-Upgrade WebSocket
@@ -98,6 +100,12 @@ func ForwardWSToOwnerPod(hub *Hub, log *slog.Logger, w http.ResponseWriter, r *h
 		Rewrite: func(req *httputil.ProxyRequest) {
 			req.SetURL(target)
 			req.SetXForwarded()
+			// TrustedRealIP can normalize RemoteAddr to a bare IP, which
+			// SetXForwarded cannot parse as host:port. Forward only that
+			// canonical client; the sibling still enforces its proxy trust.
+			if client := reqctx.ClientIP(req.In); client != nil {
+				req.Out.Header.Set("X-Forwarded-For", client.String())
+			}
 			req.Out.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
 			// Do not forward an externally supplied X-Forwarded-Host into the
 			// sibling's trusted internal request context.

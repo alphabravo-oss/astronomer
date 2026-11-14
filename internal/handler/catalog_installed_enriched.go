@@ -49,17 +49,17 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 	}
 	offset := queryOffset32(r)
 
-	rows, err := h.queries.ListInstalledChartsWithMetadataByCluster(r.Context(), sqlc.ListInstalledChartsWithMetadataByClusterParams{
-		ClusterID: clusterID,
-		Limit:     limit,
-		Offset:    offset,
+	rows, err := h.queries.ListProjectedClusterApps(r.Context(), sqlc.ListProjectedClusterAppsParams{
+		ClusterID:   clusterID,
+		QueryLimit:  limit,
+		QueryOffset: offset,
 	})
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cluster apps")
 		return
 	}
 
-	total, err := h.queries.CountInstalledChartsByCluster(r.Context(), clusterID)
+	total, err := h.queries.CountProjectedClusterApps(r.Context(), clusterID)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count cluster apps")
 		return
@@ -67,7 +67,14 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, enrichedInstalledRowJSON(row))
+		row.InstalledChart.Status = row.ProjectedStatus
+		out = append(out, enrichedInstalledRowJSON(sqlc.InstalledChartWithMetadata{
+			InstalledChart: row.InstalledChart, ChartVersion: row.ChartVersion,
+			ChartAppVersion: row.ChartAppVersion, ChartID: row.ChartID,
+			ChartName: row.ChartName, ChartDisplayName: row.ChartDisplayName,
+			ChartDescription: row.ChartDescription, ChartIconUrl: row.ChartIconUrl,
+			ChartCategory: row.ChartCategory, RepoName: row.RepoName, RepoType: row.RepoType,
+		}))
 	}
 
 	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))

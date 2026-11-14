@@ -1211,7 +1211,6 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerMonitoringRoutes(r, deps)
 	registerResourcesWorkloadsRoutes(r, deps)
 	registerSecurityRoutes(r, cfg, deps, rateLimit)
-	registerDexRoutes(r, deps)
 	registerCharlieRoutes(r, deps, rateLimit)
 }
 

@@ -104,10 +104,6 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, err.Error())
 		return
 	}
-	if tool.Slug == DexToolSlug {
-		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidRequest, "Dex is bundled with the Astronomer management chart; enable dex.enabled and use the Auth settings workflow")
-		return
-	}
 	clusterID, err := uuid.Parse(req.ClusterID)
 	if err != nil {
 		apiutil.WriteError(w, r, http.StatusBadRequest, apiutil.InvalidID, "Invalid cluster ID")

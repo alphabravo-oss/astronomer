@@ -1890,81 +1890,6 @@ type DeliveryTarget struct {
 	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 }
 
-type DexConnector struct {
-	ID                uuid.UUID       `json:"id"`
-	Name              string          `json:"name"`
-	Type              string          `json:"type"`
-	DisplayName       string          `json:"display_name"`
-	Config            json.RawMessage `json:"config"`
-	Enabled           bool            `json:"enabled"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	SecretsKeyID      string          `json:"secrets_key_id"`
-	SecretsAlgorithm  string          `json:"secrets_algorithm"`
-	SecretsCiphertext []byte          `json:"secrets_ciphertext"`
-	SecretsNonce      []byte          `json:"secrets_nonce"`
-}
-
-type DexOperation struct {
-	ID                uuid.UUID          `json:"id"`
-	Action            string             `json:"action"`
-	TargetID          uuid.UUID          `json:"target_id"`
-	RuntimeGeneration int64              `json:"runtime_generation"`
-	IdempotencyScope  string             `json:"idempotency_scope"`
-	IdempotencyKey    string             `json:"idempotency_key"`
-	RequestDigest     string             `json:"request_digest"`
-	Status            string             `json:"status"`
-	Phase             string             `json:"phase"`
-	AttemptCount      int32              `json:"attempt_count"`
-	LockedUntil       pgtype.Timestamptz `json:"locked_until"`
-	ErrorCode         string             `json:"error_code"`
-	CreatedBy         uuid.UUID          `json:"created_by"`
-	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         time.Time          `json:"updated_at"`
-	PayloadKeyID      string             `json:"payload_key_id"`
-	PayloadAlgorithm  string             `json:"payload_algorithm"`
-	PayloadCiphertext []byte             `json:"payload_ciphertext"`
-	PayloadNonce      []byte             `json:"payload_nonce"`
-}
-
-type DexSetting struct {
-	ID          uuid.UUID   `json:"id"`
-	IssuerUrl   string      `json:"issuer_url"`
-	ClusterID   pgtype.UUID `json:"cluster_id"`
-	Namespace   string      `json:"namespace"`
-	ReleaseName string      `json:"release_name"`
-	// Deprecated compatibility alias. Must never identify a ConfigMap containing Dex runtime configuration.
-	ConfigmapName string          `json:"configmap_name"`
-	Expiry        json.RawMessage `json:"expiry"`
-	Extra         json.RawMessage `json:"extra"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	// Stable retained Secret mounted read-only by Dex; owned by the Dex runtime reconciler.
-	RuntimeSecretName string `json:"runtime_secret_name"`
-	// Immutable Helm release identity for bundled Dex; empty for operator-managed Dex.
-	ChartReleaseName string `json:"chart_release_name"`
-	// Exact Kubernetes Deployment name reconciled by DexHandler.
-	DeploymentName string `json:"deployment_name"`
-	// Exact Kubernetes Service name used for the verified health proxy.
-	ServiceName string `json:"service_name"`
-	// Opaque monotonic generation for Dex runtime candidates; never content-derived.
-	RuntimeGeneration int64 `json:"runtime_generation"`
-	// Last generation conditionally verified in Secret, Deployment, and health checks.
-	RuntimeAppliedGeneration int64 `json:"runtime_applied_generation"`
-	// fresh/cutover require Secret-mounted rollout+health; prepare stops after verified Secret staging.
-	RuntimePhase string `json:"runtime_phase"`
-	// Last generation verified in the owned runtime Secret, before Deployment activation.
-	RuntimeStagedGeneration int64 `json:"runtime_staged_generation"`
-	// SSO enabled snapshot captured atomically with generation staging; restoration is generation-CAS guarded.
-	SagaPreviousSsoEnabled bool   `json:"saga_previous_sso_enabled"`
-	PublicClientsKeyID     string `json:"public_clients_key_id"`
-	PublicClientsAlgorithm string `json:"public_clients_algorithm"`
-	// age-sealed canonical JSON array of Dex static clients.
-	PublicClientsCiphertext []byte `json:"public_clients_ciphertext"`
-	PublicClientsNonce      []byte `json:"public_clients_nonce"`
-}
-
 type DurableJsonSchema struct {
 	TableSchema       string   `json:"table_schema"`
 	TableName         string   `json:"table_name"`
@@ -1994,19 +1919,6 @@ type EmailMessage struct {
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at"`
 	DedupeKey pgtype.Text        `json:"dedupe_key"`
-}
-
-type ExternalPrincipal struct {
-	ID          uuid.UUID          `json:"id"`
-	ConnectorID uuid.UUID          `json:"connector_id"`
-	Subject     string             `json:"subject"`
-	Email       string             `json:"email"`
-	Username    string             `json:"username"`
-	DisplayName string             `json:"display_name"`
-	UserID      uuid.UUID          `json:"user_id"`
-	LinkedAt    pgtype.Timestamptz `json:"linked_at"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at"`
 }
 
 type GitopsRegisteredCluster struct {
@@ -2149,6 +2061,28 @@ type IdentityGroupMapping struct {
 	ProjectID   pgtype.UUID `json:"project_id"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type IdentityProvisioningOperation struct {
+	ID                   uuid.UUID `json:"id"`
+	Issuer               string    `json:"issuer"`
+	ProjectID            uuid.UUID `json:"project_id"`
+	InstallationID       uuid.UUID `json:"installation_id"`
+	CredentialNamespace  string    `json:"credential_namespace"`
+	Generation           int64     `json:"generation"`
+	DesiredSpecDigest    string    `json:"desired_spec_digest"`
+	Operation            string    `json:"operation"`
+	State                string    `json:"state"`
+	Revision             int64     `json:"revision"`
+	ActorID              uuid.UUID `json:"actor_id"`
+	CorrelationID        uuid.UUID `json:"correlation_id"`
+	UpstreamOrgID        string    `json:"upstream_org_id"`
+	UpstreamProjectID    string    `json:"upstream_project_id"`
+	UpstreamAppID        string    `json:"upstream_app_id"`
+	UpstreamClientID     string    `json:"upstream_client_id"`
+	CredentialSecretName string    `json:"credential_secret_name"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 type ImageVulnerability struct {
@@ -2946,6 +2880,14 @@ type SecurityScanResult struct {
 	CancelRequestedAt  pgtype.Timestamptz `json:"cancel_requested_at"`
 }
 
+type SharedIdentityBinding struct {
+	Issuer    string    `json:"issuer"`
+	Subject   string    `json:"subject"`
+	UserID    uuid.UUID `json:"user_id"`
+	LinkedBy  uuid.UUID `json:"linked_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type SiemForwardQueue struct {
 	ID          int64           `json:"id"`
 	ForwarderID uuid.UUID       `json:"forwarder_id"`
@@ -3025,23 +2967,22 @@ type SmtpSetting struct {
 }
 
 type SsoConfiguration struct {
-	ID                     uuid.UUID          `json:"id"`
-	Provider               string             `json:"provider"`
-	IsEnabled              bool               `json:"is_enabled"`
-	DisplayName            string             `json:"display_name"`
-	Config                 json.RawMessage    `json:"config"`
-	ClientID               string             `json:"client_id"`
-	AllowedOrganizations   json.RawMessage    `json:"allowed_organizations"`
-	AllowedDomains         json.RawMessage    `json:"allowed_domains"`
-	AutoCreateUsers        bool               `json:"auto_create_users"`
-	DefaultGlobalRoleID    pgtype.UUID        `json:"default_global_role_id"`
-	CreatedAt              time.Time          `json:"created_at"`
-	UpdatedAt              time.Time          `json:"updated_at"`
-	MigratedToDexAt        pgtype.Timestamptz `json:"migrated_to_dex_at"`
-	ClientSecretKeyID      string             `json:"client_secret_key_id"`
-	ClientSecretAlgorithm  string             `json:"client_secret_algorithm"`
-	ClientSecretCiphertext []byte             `json:"client_secret_ciphertext"`
-	ClientSecretNonce      []byte             `json:"client_secret_nonce"`
+	ID                     uuid.UUID       `json:"id"`
+	Provider               string          `json:"provider"`
+	IsEnabled              bool            `json:"is_enabled"`
+	DisplayName            string          `json:"display_name"`
+	Config                 json.RawMessage `json:"config"`
+	ClientID               string          `json:"client_id"`
+	AllowedOrganizations   json.RawMessage `json:"allowed_organizations"`
+	AllowedDomains         json.RawMessage `json:"allowed_domains"`
+	AutoCreateUsers        bool            `json:"auto_create_users"`
+	DefaultGlobalRoleID    pgtype.UUID     `json:"default_global_role_id"`
+	CreatedAt              time.Time       `json:"created_at"`
+	UpdatedAt              time.Time       `json:"updated_at"`
+	ClientSecretKeyID      string          `json:"client_secret_key_id"`
+	ClientSecretAlgorithm  string          `json:"client_secret_algorithm"`
+	ClientSecretCiphertext []byte          `json:"client_secret_ciphertext"`
+	ClientSecretNonce      []byte          `json:"client_secret_nonce"`
 }
 
 type SsoSession struct {

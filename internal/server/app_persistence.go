@@ -84,11 +84,7 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	default:
 		encryptor = enc
 		logger.Info().Str("current_key_id", enc.CurrentKeyID()).Int("keys", enc.KeyCount()).Msg("encryption keyring loaded")
-		callbackBase := resolveCallbackBaseURL(ctx, cfg, queries)
-		ssoManager = auth.NewSSOManager(encryptor, jwtManager, callbackBase)
-		if loadErr := ssoManager.LoadFromDatabase(ctx, queries); loadErr != nil {
-			logger.Warn().Err(loadErr).Msg("failed to load sso providers")
-		}
+
 	}
 	if err := validateProductionSecurityConfig(cfg, encryptor); err != nil {
 		database.Close()
@@ -96,22 +92,6 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	}
 	reportInsecureDevKeys(cfg, logger)
 
-	// Migration 045 — Dex consolidation.
-	//
-	// When the chart deploys the in-cluster Dex (dex.enabled=true), the
-	// configmap template sets DEX_BUNDLED_ENABLED + DEX_BUNDLED_* describing
-	// the templated objects. The bootstrap below auto-wires the singleton
-	// dex_settings row so the operator's first connector + Apply works
-	// without a manual settings step. No-op when dex.enabled=false (legacy
-	// operator-managed Dex flow stays in effect).
-	if _, err := SeedBundledDexSettings(ctx, queries, logger, cfg); err != nil {
-		logger.Warn().Err(err).Msg("dex bootstrap: seed failed")
-	}
-	// Surface drift between legacy sso_configurations and the new
-	// dex_connectors path. Best-effort: log + continue on error.
-	if err := WarnIfLegacySSORowsActive(ctx, queries, logger); err != nil {
-		logger.Debug().Err(err).Msg("dex bootstrap: legacy SSO check failed")
-	}
 	c.database = database
 	c.queries = queries
 	c.jwtManager = jwtManager

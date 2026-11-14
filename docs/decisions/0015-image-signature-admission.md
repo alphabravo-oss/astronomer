@@ -8,6 +8,22 @@ tags: [security, supply-chain, deployment]
 
 # Image signature admission with per-vendor authorities
 
+## Current implementation correction — 2026-10-23
+
+The decision below records the October 20 intent and offline checks. The current
+[policy](../../deploy/policy-controller/cip-astronomer.yaml) uses `static: pass`
+for CNPG operator, CNPG PostgreSQL, Dex and Fluent Bit because the pinned verifier
+cannot verify their bundle signatures. Only first-party release images and the
+cert-manager key authority receive cryptographic admission checks. Four further
+upstream repository groups use the unsigned exception. Thus the original claim
+of five third-party repositories verified at admission was incorrect.
+
+[The current verification guide](../verify-images.md) lists exact globs, limits,
+owner and review/exit criteria. Prefix globs and chart digest pinning do not form
+an exact digest allowlist. Compatible-verifier or signed-mirror qualification
+with positive and negative admission tests remains open; do not replace pass
+authorities without that evidence.
+
 ## Context
 
 astronomer-dev runs Sigstore policy-controller with `no-match-policy: deny` in the `astronomer` namespace. The hand-made policies verified first-party images keylessly but passed every third-party image (`ghcr.io/cloudnative-pg/**`, Dex, Valkey, BusyBox, PostgreSQL, Fluent Bit, cert-manager) with `static: pass`, and the `no-match-policy` was a hand edit of a Helm-managed ConfigMap. The delivery verifier also needed a hand-made Secret holding the Sigstore trusted root.
@@ -30,7 +46,7 @@ Chosen option: per-vendor authorities. Checked with cosign 3.1.3 against the pin
 
 ### Positive Consequences
 
-- Five of the eight third-party repositories are now cryptographically verified at admission.
+- Intended benefit: verify signed vendors at admission. The current implementation falls short as documented in the dated correction above.
 - A render test fails when any image the chart can produce matches no policy.
 
 ### Negative Consequences

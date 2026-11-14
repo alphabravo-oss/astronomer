@@ -170,8 +170,6 @@ var taskDescriptors = []TaskDescriptor{
 	optionalDescriptor("feature.charlie", runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, TypeCharlieTriggerDispatch, rejectUnboundRuntimeTask, CapabilityProductBridge))),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, TypeClusterDecommission, rejectUnboundRuntimeTask, CapabilityTunnel)),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, TypeClusterDecommissionAll, rejectUnboundRuntimeTask, CapabilityTunnel)),
-	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.DexOperationType, rejectUnboundRuntimeTask, CapabilityTunnel, CapabilityEncryption)),
-	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.DexOperationRecoveryType, rejectUnboundRuntimeTask, CapabilityTunnel)),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.SupportBundleOperationType, rejectUnboundRuntimeTask, CapabilityTunnel)),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.SupportBundleRecoveryType, rejectUnboundRuntimeTask, CapabilityTunnel)),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.AuditExportOperationType, rejectUnboundRuntimeTask, CapabilityTunnel)),
@@ -195,7 +193,6 @@ func scheduled(owner TaskOwner, taskType, cron, description string) ScheduledTas
 }
 
 var scheduledTaskSpecs = []ScheduledTaskSpec{
-	scheduled(TaskOwnerTunnel, tasks.DexOperationRecoveryType, "@every 2m", "recover durable Dex operations after queue loss"),
 	scheduled(TaskOwnerTunnel, tasks.SupportBundleRecoveryType, "@every 2m", "recover durable support bundle operations after queue loss"),
 	scheduled(TaskOwnerTunnel, tasks.AuditExportRecoveryType, "@every 2m", "recover durable audit export operations after queue loss"),
 	scheduled(TaskOwnerWorker, TypeHealthCheck, "@every 60s", "cluster health check"),

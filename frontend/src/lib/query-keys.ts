@@ -13,6 +13,8 @@ import type { ResourceType } from "@/lib/api/resources";
 // arrays at call sites — add a factory entry instead (enforced by lint).
 
 export const queryKeys = {
+  dashboardWidgets: (scope: readonly string[]) =>
+    ["dashboard-widgets", ...scope] as const,
   networkPolicyTemplates: ["network-policy-templates"] as const,
   networkPolicyApplications: (clusterID: string) =>
     ["clusters", clusterID, "network-policy-applications"] as const,
@@ -298,6 +300,9 @@ export const queryKeys = {
   settings: {
     general: ["settings", "general"] as const,
     sso: ["settings", "sso"] as const,
+    identityBindingsAll: ["settings", "identity-bindings"] as const,
+    identityBindings: (offset: number) =>
+      ["settings", "identity-bindings", offset] as const,
     tokens: ["settings", "tokens"] as const,
     auditLogs: (params?: Record<string, unknown>) =>
       ["settings", "audit-logs", params] as const,

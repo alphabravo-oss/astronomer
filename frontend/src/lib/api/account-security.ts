@@ -262,7 +262,7 @@ export async function completePasswordReset(
 }
 
 // ============================================================
-// Logout (with optional Dex single-logout redirect)
+// Logout (with legacy optional provider logout redirect)
 // ============================================================
 
 export interface LogoutResult {

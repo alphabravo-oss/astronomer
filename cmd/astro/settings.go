@@ -354,18 +354,16 @@ func newSettingsTokensDeleteCmd() *cobra.Command {
 }
 
 // ---------------------------------------------------------------------------
-// settings sso list|create|delete
+// settings sso list
 // ---------------------------------------------------------------------------
 
 func newSettingsSsoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sso",
-		Short: "Manage SSO providers",
+		Short: "Inspect optional SSO configuration (configured through deployment settings)",
 	}
 	cmd.AddCommand(
 		newSettingsSsoListCmd(),
-		newSettingsSsoCreateCmd(),
-		newSettingsSsoDeleteCmd(),
 	)
 	return cmd
 }
@@ -390,123 +388,6 @@ func newSettingsSsoListCmd() *cobra.Command {
 			return renderSDK(cmd, *resp.JSON200)
 		},
 	}
-}
-
-func newSettingsSsoCreateCmd() *cobra.Command {
-	var (
-		providerType         string
-		clientID             string
-		clientSecret         string
-		metadataURL          string
-		allowedOrganizations string
-		autoCreateUsers      bool
-		enabled              bool
-	)
-	cmd := &cobra.Command{
-		Use:   "create <name>",
-		Short: "Create an SSO provider",
-		Long: `create posts to /api/v1/settings/sso. --type is required and must be one
-of github, google, or oidc. --client-id and --client-secret are required by
-the API. For oidc providers, pass --metadata-url.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := newAstroClient(cmd)
-			if err != nil {
-				return err
-			}
-
-			switch astroclient.PostSettingsSsoJSONBodyType(providerType) {
-			case astroclient.PostSettingsSsoJSONBodyTypeGithub,
-				astroclient.PostSettingsSsoJSONBodyTypeGoogle,
-				astroclient.PostSettingsSsoJSONBodyTypeOidc:
-				// ok
-			default:
-				return fmt.Errorf("invalid --type %q: want one of github, google, oidc", providerType)
-			}
-
-			var body astroclient.PostSettingsSsoJSONRequestBody
-			body.Name = args[0]
-			body.Type = astroclient.PostSettingsSsoJSONBodyType(providerType)
-			body.Config.ClientId = clientID
-			body.Config.ClientSecret = clientSecret
-			if cmd.Flags().Changed("metadata-url") {
-				v := metadataURL
-				body.Config.MetadataUrl = &v
-			}
-			if cmd.Flags().Changed("allowed-organizations") {
-				v := allowedOrganizations
-				body.Config.AllowedOrganizations = &v
-			}
-			if cmd.Flags().Changed("auto-create-users") {
-				v := autoCreateUsers
-				body.Config.AutoCreateUsers = &v
-			}
-			if cmd.Flags().Changed("enabled") {
-				v := enabled
-				body.Enabled = &v
-			}
-
-			resp, err := client.PostSettingsSsoWithResponse(cmd.Context(), body)
-			if err != nil {
-				return err
-			}
-			if resp.JSON201 == nil {
-				switch {
-				case resp.JSON400 != nil:
-					return settingsErr(resp.Status(), resp.JSON400)
-				case resp.JSON409 != nil:
-					return settingsErr(resp.Status(), resp.JSON409)
-				default:
-					return settingsErr(resp.Status(), nil)
-				}
-			}
-			return renderSDK(cmd, resp.JSON201.Data)
-		},
-	}
-	cmd.Flags().StringVar(&providerType, "type", "", "provider type: github|google|oidc (required)")
-	cmd.Flags().StringVar(&clientID, "client-id", "", "OAuth client id (required)")
-	cmd.Flags().StringVar(&clientSecret, "client-secret", "", "OAuth client secret (required)")
-	cmd.Flags().StringVar(&metadataURL, "metadata-url", "", "OIDC metadata URL (required for oidc)")
-	cmd.Flags().StringVar(&allowedOrganizations, "allowed-organizations", "", "comma-separated allowed organizations")
-	cmd.Flags().BoolVar(&autoCreateUsers, "auto-create-users", true, "auto-create users on first login")
-	cmd.Flags().BoolVar(&enabled, "enabled", true, "enable the provider")
-	_ = cmd.MarkFlagRequired("type")
-	_ = cmd.MarkFlagRequired("client-id")
-	_ = cmd.MarkFlagRequired("client-secret")
-	return cmd
-}
-
-func newSettingsSsoDeleteCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "delete <id>",
-		Aliases: []string{"rm"},
-		Short:   "Delete an SSO provider",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := newAstroClient(cmd)
-			if err != nil {
-				return err
-			}
-			id, err := uuid.Parse(args[0])
-			if err != nil {
-				return fmt.Errorf("invalid sso provider id %q: %w", args[0], err)
-			}
-			resp, err := client.DeleteSettingsSsoByIdWithResponse(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			// 204/200 with no JSON404 body means success.
-			if resp.JSON404 != nil {
-				return settingsErr(resp.Status(), resp.JSON404)
-			}
-			if sc := resp.StatusCode(); sc < 200 || sc >= 300 {
-				return settingsErr(resp.Status(), nil)
-			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Deleted SSO provider %s\n", id.String())
-			return err
-		},
-	}
-	return cmd
 }
 
 // ---------------------------------------------------------------------------

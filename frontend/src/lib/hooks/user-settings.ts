@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createAPIToken,
-  createSSOProvider,
   createUser,
   deleteAPIToken,
   deleteUser,
@@ -13,7 +12,6 @@ import {
   saveGeneralSettings,
   updateUser,
   type CreateAPITokenInput,
-  type CreateSSOProviderInput,
   type CreateUserInput,
   type GeneralSettings,
   type UpdateUserInput,
@@ -101,19 +99,6 @@ export function useSSOProviders() {
   return useQuery({
     queryKey: queryKeys.settings.sso,
     queryFn: ({ signal }) => getSSOProviders(signal),
-  });
-}
-
-export function useCreateSSOProvider() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateSSOProviderInput) => createSSOProvider(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.settings.sso });
-      toastSuccess("SSO provider created successfully");
-    },
-    onError: (error: Error) =>
-      toastApiError("Failed to create SSO provider", error),
   });
 }
 

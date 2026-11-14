@@ -1016,3 +1016,10 @@ func TestCreateProjectCatalog_RejectsTopLevelCredentials(t *testing.T) {
 		t.Fatalf("a catalog was created from a rejected request: %d rows", len(q.catalogs))
 	}
 }
+
+func (m *minimalCatalogQuerier) ListProjectedClusterApps(context.Context, sqlc.ListProjectedClusterAppsParams) ([]sqlc.ListProjectedClusterAppsRow, error) {
+	return nil, nil
+}
+func (m *minimalCatalogQuerier) CountProjectedClusterApps(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}

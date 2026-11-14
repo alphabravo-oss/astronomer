@@ -79,6 +79,34 @@ spec:
             - secretRef:
                 name: {{ include "astronomer.secretsSecretName" . }}
           env:
+
+            - name: IDENTITY_MODE
+              value: {{ .Values.identity.mode | quote }}
+            {{- if eq .Values.identity.mode "both" }}
+            - name: IDENTITY_ISSUER
+              value: {{ .Values.identity.issuer | quote }}
+            - name: IDENTITY_CLIENT_ID
+              value: {{ .Values.identity.clientID | quote }}
+            - name: IDENTITY_JWKS_URL
+              value: {{ .Values.identity.jwksURL | quote }}
+            - name: IDENTITY_AUTHORIZATION_URL
+              value: {{ .Values.identity.authorizationURL | quote }}
+            - name: IDENTITY_TOKEN_URL
+              value: {{ .Values.identity.tokenURL | quote }}
+            - name: IDENTITY_REDIRECT_URI
+              value: {{ .Values.identity.redirectURI | quote }}
+            - name: IDENTITY_ROLES_CLAIM
+              value: {{ .Values.identity.rolesClaim | quote }}
+            - name: IDENTITY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.identity.clientSecretRef.name | quote }}
+                  key: {{ .Values.identity.clientSecretRef.key | quote }}
+            {{- if .Values.identity.ca.existingSecret }}
+            - name: IDENTITY_CA_FILE
+              value: /etc/astronomer/identity-ca/ca.crt
+            {{- end }}
+            {{- end }}
             # Helm's traditional-repository resolver consults these process
             # variables directly instead of cli.EnvSettings. Keep every path
             # on the writable /tmp volume for the non-root, read-only runtime.
@@ -248,6 +276,11 @@ spec:
               value: /etc/ssl/certs:/astronomer/trust/extra
             {{- end }}
           volumeMounts:
+            {{- if and (eq .Values.identity.mode "both") .Values.identity.ca.existingSecret }}
+            - name: identity-ca
+              mountPath: /etc/astronomer/identity-ca
+              readOnly: true
+            {{- end }}
             {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
             - name: delivery-source-ca
               mountPath: /var/run/secrets/astronomer/delivery-source-ca
@@ -327,6 +360,14 @@ spec:
                   - -c
                   - "sleep {{ default 10 .Values.server.preStopSleepSeconds }}"
       volumes:
+        {{- if and (eq .Values.identity.mode "both") .Values.identity.ca.existingSecret }}
+        - name: identity-ca
+          secret:
+            secretName: {{ .Values.identity.ca.existingSecret | quote }}
+            items:
+              - key: {{ .Values.identity.ca.key | quote }}
+                path: ca.crt
+        {{- end }}
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi

@@ -101,7 +101,7 @@ func (p Plan) Validate() error {
 // by the byte-verified target chart. It does not infer a PostgreSQL/Valkey major
 // from current local defaults or replace historical target identities.
 func RuntimeBindings(manifest releasecontract.Manifest, chartSources map[string]string) (map[string]string, error) {
-	roles := []string{"utilities.busybox", "postgres", "redis", "dex", "managementRestoreDrill.sidecar", "managementLogging"}
+	roles := []string{"utilities.busybox", "postgres", "redis", "managementRestoreDrill.sidecar", "managementLogging"}
 	if len(chartSources) != len(roles) {
 		return nil, errors.New("exact target chart runtime role contract required")
 	}

@@ -11,13 +11,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/identity"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
 )
-
-type ssoWiringInvalidator struct{}
-
-func (ssoWiringInvalidator) Invalidate(string) {}
 
 func TestSSOCallbackProductionTransactionWiring(t *testing.T) {
 	var _ handler.SSOCallbackTx = (*sqlc.Queries)(nil)
@@ -40,30 +37,20 @@ func TestSSOCallbackStartupRequiresSecurityDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	jwt := auth.MustNewJWTManager("sso-wiring-test-secret", 60)
-	for _, missing := range []string{"transaction", "encryption", "cache", "jwt", "manager", ""} {
+	for _, missing := range []string{"transaction", "jwt", "manager", ""} {
 		t.Run(missing, func(t *testing.T) {
 			jwt.SetRevocationChecker(newSharedRevocations())
-			h := handler.NewSSOHandler(auth.NewSSOManager(enc, jwt, "/"), jwt, "/")
+			h := handler.NewSSOHandler(identity.New(config.IdentitySettings{Mode: "local"}, nil, nil), jwt, "/")
 			h.SetRunTx(func(context.Context, func(handler.SSOCallbackTx) error) error { return nil })
-			h.SetEncryptor(enc)
-			h.SetRBACCacheInvalidator(ssoWiringInvalidator{})
 			switch missing {
 			case "transaction":
 				h.SetRunTx(nil)
-			case "encryption":
-				h.SetEncryptor(nil)
-			case "cache":
-				h.SetRBACCacheInvalidator(nil)
 			case "jwt":
-				h = handler.NewSSOHandler(auth.NewSSOManager(enc, jwt, "/"), nil, "/")
+				h = handler.NewSSOHandler(identity.New(config.IdentitySettings{Mode: "local"}, nil, nil), nil, "/")
 				h.SetRunTx(func(context.Context, func(handler.SSOCallbackTx) error) error { return nil })
-				h.SetEncryptor(enc)
-				h.SetRBACCacheInvalidator(ssoWiringInvalidator{})
 			case "manager":
 				h = handler.NewSSOHandler(nil, jwt, "/")
 				h.SetRunTx(func(context.Context, func(handler.SSOCallbackTx) error) error { return nil })
-				h.SetEncryptor(enc)
-				h.SetRBACCacheInvalidator(ssoWiringInvalidator{})
 			}
 			queries := sqlc.New(nil)
 			deps := RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwt, AuthQueries: productionSecurityAuthQuerier{}, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{}, Encryptor: enc, SettingsCache: handler.NewSettingsCache(nil, time.Minute), Queries: queries, AuditWriter: queries, SSO: h}}

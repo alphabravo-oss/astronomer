@@ -28,7 +28,19 @@ that makes it safe. `make gosec` runs with G115 enabled.
 
 v2.1.0-rc.1 failed the Trivy gate on the upstream dl.k8s.io kubectl (built
 with go1.26.8). The shell image now compiles kubectl from k8s.io/kubectl
-(`tools/imagebins`, version pinned there) with the pinned Go 1.27.3 builder,
+(`tools/imagebins`, version pinned there) with the pinned Go 1.27.4 builder,
 so the scan needs no skip. `scripts/check-image-go.sh` (release workflow and
 `make docker-build`) fails any image that contains a Go binary built with a
 Go older than go.mod's `go` line.
+
+## Frontend dependency resolutions (2026-11-14)
+
+The lockfile resolves `follow-redirects` to 1.16.3, beyond the 1.16.2 fix for
+[GHSA-mrwp-f3q8-3g9p](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p).
+The current TypeScript ESLint parser still declares `minimatch` 10.x, so a
+parent-scoped override selects 11.0.1 for `@typescript-eslint/typescript-estree`
+to address [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+Other ESLint consumers keep their unaffected 3.x dependency. Remove this scoped
+override when the parser adopts a fixed version upstream, and rerun lint,
+type checking, tests and the dependency audit. These are dependency fixes, not
+advisory suppressions or accepted vulnerable versions.

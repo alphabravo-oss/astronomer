@@ -10,23 +10,27 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 )
 
 const (
 	maxKeyFileBytes          = 1 << 20
 	maxKeyBundleBytes        = 16 << 20
+	maxKeyBundleFiles        = 1024
 	legacyCBCKDFIterations   = 10_000
 	legacyCBCMaxPayloadBytes = maxKeyBundleBytes + 32
 )
 
 var (
-	secretKeyNamePattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9])?$`)
-	requiredKeys         = []string{"ASTRONOMER_ENCRYPTION_KEY", "SECRET_KEY"}
+	secretKeyNamePattern  = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9])?$`)
+	catalogKeyNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,253}$`)
+	requiredKeys          = []string{"ASTRONOMER_ENCRYPTION_KEY", "SECRET_KEY"}
 )
 
 func decodeNumbers(raw []byte, into any) error {
@@ -35,40 +39,79 @@ func decodeNumbers(raw []byte, into any) error {
 	return decoder.Decode(into)
 }
 
-// listKeyFiles validates source and returns its sorted key file names.
+func catalogTrustDirectory(name string) bool {
+	return name == "catalog-ca" || name == "catalog-signature-trust"
+}
+
+func validKeyMemberPath(name string) bool {
+	directory, file, nested := strings.Cut(name, "/")
+	if !nested {
+		return secretKeyNamePattern.MatchString(name)
+	}
+	return catalogTrustDirectory(directory) && catalogKeyNamePattern.MatchString(file) && file != "." && !strings.HasPrefix(file, "..")
+}
+
+// listKeyFiles allows flat keys and one level of catalog trust files only.
 func listKeyFiles(source string) ([]string, error) {
 	info, err := os.Lstat(source)
 	if err != nil || !info.IsDir() {
 		return nil, failf("key source must be a regular directory")
 	}
-	entries, err := os.ReadDir(source)
+	collector := keySourceCollector{source: source, directories: map[string]bool{}}
+	if err := filepath.WalkDir(source, collector.walk); err != nil {
+		return nil, err
+	}
+	for _, populated := range collector.directories {
+		if !populated {
+			return nil, failf("catalog trust directory is empty")
+		}
+	}
+	if err := requireKeys(func(name string) bool { return slices.Contains(collector.names, name) }); err != nil {
+		return nil, err
+	}
+	slices.Sort(collector.names)
+	return collector.names, nil
+}
+
+type keySourceCollector struct {
+	source      string
+	names       []string
+	directories map[string]bool
+	total       int64
+}
+
+func (c *keySourceCollector) walk(path string, entry fs.DirEntry, walkErr error) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if path == c.source {
+		return nil
+	}
+	name, err := filepath.Rel(c.source, path)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(entries) == 0 {
-		return nil, failf("key source directory is empty")
+	name = filepath.ToSlash(name)
+	if entry.IsDir() && catalogTrustDirectory(name) {
+		c.directories[name] = false
+		return nil
 	}
-	names := make([]string, 0, len(entries))
-	var total int64
-	for _, entry := range entries {
-		fileInfo, err := os.Lstat(filepath.Join(source, entry.Name()))
-		if err != nil || !fileInfo.Mode().IsRegular() || !secretKeyNamePattern.MatchString(entry.Name()) {
-			return nil, failf("key source may contain only top-level regular files")
-		}
-		if fileInfo.Size() <= 0 || fileInfo.Size() > maxKeyFileBytes {
-			return nil, failf("key file %s has an unsafe size", entry.Name())
-		}
-		total += fileInfo.Size()
-		names = append(names, entry.Name())
+	fileInfo, err := entry.Info()
+	if err != nil || !fileInfo.Mode().IsRegular() || !validKeyMemberPath(name) {
+		return failf("key source may contain only regular files at the top level or in supported catalog trust directories")
 	}
-	if total > maxKeyBundleBytes {
-		return nil, failf("key bundle exceeds the size limit")
+	if fileInfo.Size() <= 0 || fileInfo.Size() > maxKeyFileBytes {
+		return failf("key file %s has an unsafe size", name)
 	}
-	if err := requireKeys(func(name string) bool { return slices.Contains(names, name) }); err != nil {
-		return nil, err
+	c.total += fileInfo.Size()
+	c.names = append(c.names, name)
+	if c.total > maxKeyBundleBytes || len(c.names) > maxKeyBundleFiles {
+		return failf("key bundle exceeds the size or file count limit")
 	}
-	slices.Sort(names)
-	return names, nil
+	if directory, _, nested := strings.Cut(name, "/"); nested {
+		c.directories[directory] = true
+	}
+	return nil
 }
 
 func requireKeys(has func(string) bool) error {
@@ -80,21 +123,36 @@ func requireKeys(has func(string) bool) error {
 	return nil
 }
 
-// CreateKeyBundle writes a deterministic tar of the top-level regular files
+// CreateKeyBundle writes a deterministic tar of validated flat and catalog keys
 // in source (sorted, mode 0600, mtime 0, uid/gid 0).
 func CreateKeyBundle(source, output string) error {
 	names, err := listKeyFiles(source)
 	if err != nil {
 		return err
 	}
+	root, err := os.OpenRoot(source)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
 	return writeAtomically(output, func(out io.Writer) error {
 		archive := tar.NewWriter(out)
+		var total int
 		for _, name := range names {
-			content, err := os.ReadFile(filepath.Join(source, name)) // #nosec G304 -- validated top-level regular file
+			content, err := readKeySourceFile(root, name)
 			if err != nil {
 				return err
 			}
+			total += len(content)
+			if total > maxKeyBundleBytes {
+				return failf("key bundle exceeds the size limit")
+			}
 			header := &tar.Header{Typeflag: tar.TypeReg, Name: name, Size: int64(len(content)), Mode: 0o600, ModTime: time.Unix(0, 0), Format: tar.FormatUSTAR}
+			// Kubernetes permits 253-byte Secret keys; USTAR's basename field
+			// is only 100 bytes. Preserve the existing format whenever it fits.
+			if len(filepath.Base(name)) > 100 {
+				header.Format = tar.FormatPAX
+			}
 			if err := archive.WriteHeader(header); err != nil {
 				return err
 			}
@@ -106,6 +164,28 @@ func CreateKeyBundle(source, output string) error {
 	})
 }
 
+// Recheck size while reading, and contain file resolution within source even if
+// a staged file changes after directory validation.
+func readKeySourceFile(root *os.Root, name string) ([]byte, error) {
+	file, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, failf("key source member must be a regular file")
+	}
+	content, err := io.ReadAll(io.LimitReader(file, maxKeyFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) == 0 || len(content) > maxKeyFileBytes {
+		return nil, failf("key file has an unsafe size")
+	}
+	return content, nil
+}
+
 type keyMember struct {
 	name    string
 	content []byte
@@ -115,8 +195,11 @@ func readKeyMember(reader *tar.Reader, header *tar.Header, seen map[string]bool)
 	if header.Typeflag != tar.TypeReg || seen[header.Name] {
 		return keyMember{}, failf("key bundle contains a link, non-file, or duplicate member")
 	}
-	if filepath.Base(header.Name) != header.Name || !secretKeyNamePattern.MatchString(header.Name) {
+	if !validKeyMemberPath(header.Name) || seen[header.Name+"/"] {
 		return keyMember{}, failf("key bundle contains an unsafe member path")
+	}
+	if directory, _, nested := strings.Cut(header.Name, "/"); nested && seen[directory] {
+		return keyMember{}, failf("key bundle contains a file/directory path collision")
 	}
 	if header.Size <= 0 || header.Size > maxKeyFileBytes {
 		return keyMember{}, failf("key bundle member has an unsafe size")
@@ -151,10 +234,13 @@ func readKeyBundle(bundle string) ([]keyMember, error) {
 		if err != nil {
 			return nil, err
 		}
-		if total += header.Size; total > maxKeyBundleBytes {
-			return nil, failf("key bundle exceeds the size limit")
+		if total += header.Size; total > maxKeyBundleBytes || len(members) >= maxKeyBundleFiles {
+			return nil, failf("key bundle exceeds the size or file count limit")
 		}
 		seen[member.name] = true
+		if directory, _, nested := strings.Cut(member.name, "/"); nested {
+			seen[directory+"/"] = true
+		}
 		members = append(members, member)
 	}
 	return members, requireKeys(func(name string) bool { return seen[name] })
@@ -162,7 +248,12 @@ func readKeyBundle(bundle string) ([]keyMember, error) {
 
 func writeKeyFiles(directory string, members []keyMember) error {
 	for _, m := range members {
-		handle, err := os.OpenFile(filepath.Join(directory, m.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- validated single-segment name
+		if parent, _, nested := strings.Cut(m.name, "/"); nested {
+			if err := os.MkdirAll(filepath.Join(directory, parent), 0o700); err != nil {
+				return err
+			}
+		}
+		handle, err := os.OpenFile(filepath.Join(directory, m.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- validated bounded member path in private extraction directory
 		if err != nil {
 			return err
 		}
@@ -178,8 +269,8 @@ func writeKeyFiles(directory string, members []keyMember) error {
 }
 
 // ExtractKeyBundle validates the whole bundle before creating destination
-// (0700) with 0600 files; links, nested paths, duplicates and oversize
-// members are refused.
+// (0700) with 0600 files and optional 0700 catalog trust directories. Links,
+// arbitrary nesting, duplicates, path collisions and oversize members are refused.
 func ExtractKeyBundle(bundle, destination string) error {
 	if err := requireRegularFile(bundle, "key bundle"); err != nil {
 		return err

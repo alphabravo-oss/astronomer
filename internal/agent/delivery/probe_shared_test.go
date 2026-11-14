@@ -142,6 +142,8 @@ func TestSharedProbeWarmStandbyAndOldCurrentTimestamp(t *testing.T) {
 	sourceController := snapshot.Deployments[0]
 	replicas := int32(2)
 	sourceController.Spec.Replicas = &replicas
+	sourceController.Status.Replicas = replicas
+	sourceController.Status.UpdatedReplicas = replicas
 	sourceController.Status.Conditions = nil
 	inventory, _, err := probe.InspectObserved(context.Background())
 	if err != nil || !inventory.Ready {

@@ -351,8 +351,9 @@ func systemObjects(release protocol.DeliverySystemReleaseV2) []*unstructured.Uns
 	objects = append(objects, systemObject(kustomizationGVK, systemObjectName, labels, map[string]any{"spec": map[string]any{
 		"interval": release.Interval, "retryInterval": "1m", "timeout": release.Timeout, "path": "./", "prune": true, "wait": true,
 		"force": false, "suspend": release.Suspend, "serviceAccountName": systemApplierName,
-		"sourceRef": map[string]any{"apiVersion": "source.toolkit.fluxcd.io/v1", "kind": "OCIRepository", "name": systemObjectName},
-		"postBuild": map[string]any{"substitute": map[string]any{"ASTRONOMER_SYSTEM_GENERATION": fmt.Sprintf("%d", release.Generation)}},
+		"healthCheckExprs": systemDeploymentHealthChecks(),
+		"sourceRef":        map[string]any{"apiVersion": "source.toolkit.fluxcd.io/v1", "kind": "OCIRepository", "name": systemObjectName},
+		"postBuild":        map[string]any{"substitute": map[string]any{"ASTRONOMER_SYSTEM_GENERATION": fmt.Sprintf("%d", release.Generation)}},
 	}}))
 	return objects
 }

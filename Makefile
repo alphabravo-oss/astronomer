@@ -111,7 +111,7 @@ vet: ## go vet
 	go vet ./...
 
 fmt: ## Verify gofmt (does not modify files)
-	@out="$$(gofmt -l $$(git ls-files '*.go' | grep -v '^internal/db/sqlc/' | grep -v '\.gen\.go$$'))"; \
+	@out="$$(git ls-files --cached --others --exclude-standard '*.go' | grep -v '^internal/db/sqlc/' | grep -v '\.gen\.go$$' | while IFS= read -r file; do if [ -f "$$file" ]; then printf '%s\0' "$$file"; fi; done | xargs -0 -r gofmt -l)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed on:"; echo "$$out"; exit 1; fi
 
 frontend-check: ## Frontend type-check, lint, unit tests

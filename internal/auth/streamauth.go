@@ -44,7 +44,7 @@ func BearerFromHeader(headerVal string) string {
 //   - An API token (prefix `astro_`), looked up by sha256 hash in the
 //     api_tokens table. The query also enforces is_revoked=false at the SQL
 //     level. ExpiresAt is checked here. The owning user must be active.
-//   - A JWT, validated against the JWTManager's key set.
+//   - An access JWT, validated against the JWTManager's key set.
 //
 // On any failure (missing/expired/revoked/inactive-user/bad-signature) returns
 // (uuid.Nil, false) so callers can write a uniform 401. A missing JWT manager
@@ -85,6 +85,9 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
 		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
 			return uuid.Nil, false
 		}
+		if !APITokenIPAllowed(r, apiToken.AllowedCidrs) {
+			return uuid.Nil, false
+		}
 		dbUser, err := q.GetUserByID(r.Context(), apiToken.UserID)
 		if err != nil || !dbUser.IsActive {
 			return uuid.Nil, false
@@ -102,11 +105,11 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
 		return dbUser.ID, true
 	}
 
-	claims, err := j.ValidateToken(token)
+	claims, err := j.ValidateTokenContext(r.Context(), token)
 	if err != nil {
 		return uuid.Nil, false
 	}
-	if claims.UserID == uuid.Nil {
+	if claims.TokenType != AccessToken || claims.UserID == uuid.Nil {
 		return uuid.Nil, false
 	}
 	return claims.UserID, true

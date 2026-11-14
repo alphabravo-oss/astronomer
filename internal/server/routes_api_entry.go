@@ -99,11 +99,10 @@ func registerAPIIdentityEntryRoutes(r chi.Router, deps RouterDependencies) {
 			r.Get("/general/", deps.ClusterResources.Resources.GetGeneralSettings)
 			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).
 				Put("/general/", deps.ClusterResources.Resources.UpdateGeneralSettings)
-			r.Get("/sso/", deps.ClusterResources.Resources.ListSSOProviders)
-			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).
-				Post("/sso/", deps.ClusterResources.Resources.CreateSSOProvider)
-			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).
-				Delete("/sso/{id}/", deps.ClusterResources.Resources.DeleteSSOProvider)
+			r.Get("/sso/", deps.CoreAuth.SSO.ListProviders)
+			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).Get("/identity/bindings/", deps.CoreAuth.SSO.Bindings)
+			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).Post("/identity/bindings/", deps.CoreAuth.SSO.Bindings)
+			r.With(requireAuth(deps), requireScope(iauth.ScopeAdmin)).Delete("/identity/bindings/", deps.CoreAuth.SSO.Bindings)
 			// Preset catalog (GitHub / Google / Azure AD / GitLab /
 			// Okta). Public-readable so the login page can render
 			// branded buttons before the user is authenticated.

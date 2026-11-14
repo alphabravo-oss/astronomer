@@ -11,7 +11,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useDexConnectors } from "@/components/auth/hooks";
 import { RemoteRolePicker } from "@/components/rbac/remote-role-picker";
 import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
@@ -22,9 +21,6 @@ import type { GroupScope } from "@/lib/api/settings";
 function NewGroupMappingForm() {
   const navigate = useNavigate();
   const create = useCreateGroupMapping();
-  const { data: connectors } = useDexConnectors();
-
-  const [connector, setConnector] = useState("");
   const [groupName, setGroupName] = useState("");
   const [scope, setScope] = useState<GroupScope>("global");
   const [role, setRole] = useState("");
@@ -38,7 +34,6 @@ function NewGroupMappingForm() {
     }
     try {
       await create.mutateAsync({
-        ...(connector ? { connector_id: connector } : {}),
         group_name: groupName,
         scope,
         role_id: role,
@@ -54,27 +49,6 @@ function NewGroupMappingForm() {
   return (
     <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-4">
-        <div className="space-y-1.5">
-          <label
-            className="text-sm font-medium text-foreground"
-            htmlFor="gm-connector"
-          >
-            Connector
-          </label>
-          <Select
-            id="gm-connector"
-            value={connector}
-            onChange={(e) => setConnector(e.target.value)}
-          >
-            <option value="">Any connector</option>
-            {(connectors ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.displayName} ({c.type})
-              </option>
-            ))}
-          </Select>
-        </div>
-
         <div className="space-y-1.5">
           <label
             className="text-sm font-medium text-foreground"
@@ -184,9 +158,7 @@ function NewGroupMappingPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to group mappings
         </RouterLink>
-        <PageHeader
-          title="New group mapping"
-        />
+        <PageHeader title="New group mapping" />
         <NewGroupMappingForm />
       </PageShell>
     </SettingsAuthGate>

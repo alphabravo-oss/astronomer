@@ -13,6 +13,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/identity"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/logging"
 )
@@ -22,7 +23,6 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	queries := c.queries
 	jwtManager := c.jwtManager
 	encryptor := c.encryptor
-	ssoManager := c.ssoManager
 	bus := c.bus
 	hub := c.hub
 	requester := c.requester
@@ -101,32 +101,18 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	// consults.
 	jwtManager.SetRevocationChecker(handler.NewJWTRevocationChecker(queries))
 
-	var ssoHandler *handler.SSOHandler
-	if ssoManager != nil {
-		ssoHandler = handler.NewSSOHandler(ssoManager, jwtManager, "/")
-		ssoHandler.SetRunTx(sqlcMutationTxRunner[handler.SSOCallbackTx](database))
-		if encryptor != nil {
-			ssoHandler.SetEncryptor(encryptor)
-		}
+	settings, err := cfg.SharedIdentity()
+	if err != nil {
+		return err
 	}
-
-	// Phase B4 — Dex shim handler. Always wire it (even pre-encryption-key)
-	// so the connector wizard is browseable at /auth/dex/connector-types/;
-	// secret round-trips silently no-op when the encryptor is nil and the
-	// /apply endpoint short-circuits with a 503 when the K8s requester is
-	// unavailable.
-	dexHandler := handler.NewDexHandler(queries)
-	if cfg.DexBundledEnabled {
-		dexHandler.SetBundledRuntimeIdentity(handler.DexRuntimeIdentity{
-			Namespace: cfg.DexBundledNamespace, ChartReleaseName: cfg.DexBundledReleaseName,
-			DeploymentName: cfg.DexBundledDeploymentName, ServiceName: cfg.DexBundledServiceName,
-			RuntimeSecretName: cfg.DexBundledRuntimeSecretName, MigrationPhase: cfg.DexBundledMigrationPhase,
-		})
+	identityClient, err := cfg.IdentityHTTPClient()
+	if err != nil {
+		return err
 	}
-	dexHandler.SetRunTx(sqlcMutationTxRunner[handler.DexMutationTx](database))
-	dexHandler.SetEncryptor(encryptor)
-	dexHandler.SetK8sRequester(requester)
-	dexHandler.SetLogger(logging.Slog(logger))
+	sharedIdentity := identity.New(settings, queries, identityClient)
+	jwtManager.SetIdentityValidator(sharedIdentity.ValidateSession)
+	ssoHandler := handler.NewSSOHandler(sharedIdentity, jwtManager, "/")
+	ssoHandler.SetRunTx(sqlcMutationTxRunner[handler.SSOCallbackTx](database))
 
 	clusterHandler := handler.NewClusterHandler(queries)
 	clusterHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterMutationTx](database))
@@ -227,7 +213,6 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	c.authHandler = authHandler
 	c.totpHandler = totpHandler
 	c.ssoHandler = ssoHandler
-	c.dexHandler = dexHandler
 	c.clusterHandler = clusterHandler
 	c.clusterRegistrationHandler = clusterRegistrationHandler
 	c.localK8s = localK8s

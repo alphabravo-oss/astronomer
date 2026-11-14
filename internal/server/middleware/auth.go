@@ -5,9 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"net"
 	"net/http"
-	"net/netip"
 	"strings"
 	"time"
 
@@ -133,13 +131,10 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 					// (no restriction). Parse errors fail closed so a
 					// misconfigured token can't silently bypass the
 					// check.
-					if strings.TrimSpace(apiToken.AllowedCidrs) != "" {
-						nets, perr := auth.ParseAllowedCIDRs(apiToken.AllowedCidrs)
-						if perr != nil || !auth.IPAllowed(nets, netIP(reqctx.ClientIP(r))) {
-							auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
-							authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
-							return
-						}
+					if !auth.APITokenIPAllowed(r, apiToken.AllowedCidrs) {
+						auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
+						authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
+						return
 					}
 					clientIP := reqctx.ClientIP(r)
 					if jwtManager == nil || jwtManager.ClaimAPITokenActivity(tokenHash) {
@@ -174,11 +169,9 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 					authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
 					return
 				}
-				// Purpose-bound tokens (TOTP challenge etc.) are NEVER accepted
-				// as session credentials. They're valid for their dedicated
-				// endpoint only — POST /auth/totp/verify reads them via
-				// JWTManager.ValidateToken + Purpose check directly.
-				if claims.TokenType == auth.PurposeToken {
+				// Refresh and purpose-bound tokens are valid only at their
+				// dedicated endpoints, never as ordinary API credentials.
+				if claims.TokenType != auth.AccessToken {
 					authError(w, r, apiutil.AuthenticationRequired, "Token is not valid for this endpoint")
 					return
 				}
@@ -240,13 +233,6 @@ func requestUserFromSessionIdentity(identity auth.SessionIdentity, method string
 		MustChangePassword: identity.MustChangePassword, DateJoined: identity.DateJoined,
 		LastLogin: identity.LastLogin, HasLastLogin: identity.HasLastLogin, Resolved: true,
 	}
-}
-
-func netIP(address *netip.Addr) net.IP {
-	if address == nil {
-		return nil
-	}
-	return net.IP(address.AsSlice())
 }
 
 // RequireAuth is an alias for Auth that makes it explicit at the call site

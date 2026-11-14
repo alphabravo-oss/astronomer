@@ -85,7 +85,7 @@ export const SETTINGS_NAVIGATION: readonly SettingsNavigationGroup[] = [
         href: "/dashboard/settings/auth",
         title: "Authentication",
         description:
-          "Dex connectors, SSO providers, SCIM, and password policy.",
+          "Local login, optional single sign-on, SCIM, and password policy.",
         icon: ShieldAlert,
       },
       {

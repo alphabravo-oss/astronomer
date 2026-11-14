@@ -98,6 +98,40 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}
   schemas:
+    IdentityBindingRequest:
+      type: object
+      required:
+      - user_id
+      - subject
+      additionalProperties: false
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 255
+    IdentityBinding:
+      type: object
+      required:
+      - issuer
+      - subject
+      - user_id
+      properties:
+        issuer:
+          type: string
+        subject:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        linked_by:
+          type: string
+          format: uuid
     CatalogControllerOperationWindow:
       type: object
       description: |
@@ -7794,7 +7828,7 @@ components:
       type: object
       required: [kind, email, username, display_name]
       properties:
-        kind: {type: string, enum: [local, pending, external]}
+        kind: {type: string, enum: [local]}
         user_id: {type: string, format: uuid}
         principal_id: {type: string, format: uuid}
         connector_id: {type: string, format: uuid}
@@ -7823,24 +7857,6 @@ components:
         connectors:
           type: array
           items: {$ref: '#/components/schemas/PrincipalConnectorStatus'}
-    PrincipalMaterializeRequest:
-      type: object
-      additionalProperties: false
-      required: [connector_id, subject]
-      properties:
-        connector_id: {type: string, format: uuid}
-        subject: {type: string, minLength: 1, maxLength: 512}
-    PrincipalMaterialized:
-      type: object
-      required: [id, user_id, kind, connector_id, email, username, display_name]
-      properties:
-        id: {type: string, format: uuid}
-        user_id: {type: string, format: uuid}
-        kind: {type: string, enum: [pending]}
-        connector_id: {type: string, format: uuid}
-        email: {type: string, format: email}
-        username: {type: string}
-        display_name: {type: string}
     RBACRole:
       type: object
       additionalProperties: true
@@ -8392,274 +8408,6 @@ components:
             type: string
         allowed_cidrs:
           type: string
-    DexConnectorType:
-      type: object
-      additionalProperties: false
-      properties:
-        type:
-          type: string
-        display_hint:
-          type: string
-        required:
-          type: array
-          items:
-            type: string
-        optional:
-          type: array
-          items:
-            type: string
-        secret:
-          type: array
-          items:
-            type: string
-        nested:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            required: [parent, keys]
-            properties:
-              parent:
-                type: string
-              keys:
-                type: array
-                items:
-                  type: string
-      required: [type, display_hint, required, optional, secret, nested]
-    DexConnector:
-      type: object
-      additionalProperties: true
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        type:
-          type: string
-        display_name:
-          type: string
-        config:
-          type: object
-          additionalProperties: true
-        enabled:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required: [id, name, type, display_name, config, enabled, created_at, updated_at]
-    DexConnectorRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-        display_name:
-          type: string
-        config:
-          type: object
-          additionalProperties: true
-        enabled:
-          type: boolean
-    DexSettings:
-      type: object
-      additionalProperties: true
-      properties:
-        configured:
-          type: boolean
-        issuer_url:
-          type: string
-        namespace:
-          type: string
-        release_name:
-          type: string
-        chart_release_name:
-          type: string
-        deployment_name:
-          type: string
-        service_name:
-          type: string
-        runtime_secret_name:
-          type: string
-        public_clients:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              id:
-                type: string
-              name:
-                type: string
-              redirectURIs:
-                type: array
-                minItems: 1
-                items:
-                  type: string
-                  format: uri
-              secret:
-                type: string
-                description: Always redacted to an empty string on reads.
-              secret_configured:
-                type: boolean
-              public:
-                type: boolean
-              trustedPeers:
-                type: array
-                items:
-                  type: string
-        cluster_id:
-          type: string
-          format: uuid
-          nullable: true
-        updated_at:
-          type: string
-          format: date-time
-        expiry:
-          $ref: '#/components/schemas/DexExpiry'
-        extra:
-          $ref: '#/components/schemas/DexExtra'
-        runtime_generation: { type: integer, format: int64 }
-        runtime_phase: { type: string, enum: [fresh, prepare, cutover] }
-        runtime_staged_generation: { type: integer, format: int64 }
-        runtime_applied_generation: { type: integer, format: int64 }
-    DexSettingsRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - issuer_url
-      properties:
-        issuer_url:
-          type: string
-        namespace:
-          type: string
-        release_name:
-          type: string
-        chart_release_name:
-          type: string
-        deployment_name:
-          type: string
-        service_name:
-          type: string
-        runtime_secret_name:
-          type: string
-        public_clients:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            required: [id]
-            properties:
-              id: { type: string }
-              name: { type: string }
-              redirectURIs:
-                type: array
-                minItems: 1
-                items: { type: string, format: uri }
-              secret: { type: string, format: password, writeOnly: true }
-              secret_configured: { type: boolean, deprecated: true }
-              secretConfigured:
-                type: boolean
-                deprecated: true
-                x-go-name: SecretConfiguredLegacy
-              public: { type: boolean }
-              trustedPeers:
-                type: array
-                items: { type: string }
-        cluster_id:
-          type: string
-          format: uuid
-        expiry:
-          $ref: '#/components/schemas/DexExpiry'
-        extra:
-          $ref: '#/components/schemas/DexExtra'
-    DexExpiry:
-      type: object
-      additionalProperties: false
-      properties:
-        idTokens: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
-        signingKeys: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
-        refreshTokens:
-          type: object
-          additionalProperties: false
-          properties:
-            reuseInterval: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
-            validIfNotUsedFor: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
-            absoluteLifetime: { type: string, pattern: '^[0-9]+(ns|us|ms|s|m|h)$' }
-    DexExtra:
-      type: object
-      additionalProperties: false
-      properties:
-        logger:
-          type: object
-          additionalProperties: false
-          properties:
-            level: { type: string }
-            format: { type: string }
-        frontend:
-          type: object
-          additionalProperties: false
-          properties:
-            issuer: { type: string }
-            logoURL: { type: string, format: uri }
-            dir: { type: string }
-            theme: { type: string }
-        grpc:
-          type: object
-          additionalProperties: false
-          properties:
-            addr: { type: string }
-        telemetry:
-          type: object
-          additionalProperties: false
-          properties:
-            http: { type: string }
-    DexRegisterSSOResult:
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        provider:
-          type: string
-        client_id:
-          type: string
-        display_name:
-          type: string
-        issuer_url: { type: string, format: uri }
-        is_enabled: { type: boolean }
-        verified: { type: boolean }
-        staged: { type: boolean }
-        applied: { type: boolean }
-        runtime_state: { type: string, enum: [staged, applied] }
-        secret_resource_version: { type: string }
-        runtime_changed: { type: boolean }
-        runtime_generation: { type: integer, format: int64 }
-        created: { type: boolean }
-        updated: { type: boolean }
-    DexOperation:
-      type: object
-      additionalProperties: false
-      required: [operation_id, action, target_id, runtime_generation, status, phase, attempt_count, status_url, created_at, updated_at]
-      properties:
-        operation_id: { type: string, format: uuid }
-        action: { type: string, enum: [apply, register_sso] }
-        target_id: { type: string, format: uuid }
-        runtime_generation: { type: integer, format: int64, minimum: 0 }
-        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
-        phase: { type: string, enum: [queued, reconciling, finalizing, completed] }
-        attempt_count: { type: integer, minimum: 0 }
-        error_code: { type: string }
-        status_url: { type: string }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-        completed_at: { type: string, format: date-time }
     UsersSettingsUserListItem:
       type: object
       properties:
@@ -11873,6 +11621,85 @@ tags:
   - name: Delivery
     description: Flux-native targets, authoritative placement, rollouts, deployments, and compatibility
 paths:
+  /api/v1/settings/identity/bindings:
+    get:
+      operationId: getSettingsIdentityBindings
+      tags:
+      - Authentication
+      summary: Get explicit external identity bindings
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IdentityBinding'
+      parameters:
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+    post:
+      operationId: postSettingsIdentityBindings
+      tags:
+      - Authentication
+      summary: Post explicit external identity bindings
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ok:
+                        type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityBindingRequest'
+    delete:
+      operationId: deleteSettingsIdentityBindings
+      tags:
+      - Authentication
+      summary: Delete explicit external identity bindings
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ok:
+                        type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityBindingRequest'
   /api/v1/clusters/{id}/observability/grafana:
     delete:
       operationId: deleteClustersByIdObservabilityGrafana
@@ -32128,8 +31955,8 @@ paths:
     get:
       operationId: getRbacPrincipals
       tags: [rbac]
-      summary: Search local and discoverable external principals
-      description: Searches active local and pending identities plus enabled external connectors that expose a safe directory API. Connector capability and failures are returned explicitly. Requires both `rbac:read` and `users:read`.
+      summary: Search existing active local accounts
+      description: Searches existing active local accounts. External account materialization is not supported; optional SSO uses explicit issuer/subject bindings. Requires both `rbac:read` and `users:read`.
       x-astronomer-route-class: public-api
       x-astronomer-rbac: "rbac:read and users:read"
       x-astronomer-auth: "bearer-or-session"
@@ -32142,7 +31969,7 @@ paths:
           schema: {type: string, minLength: 3, maxLength: 128}
       responses:
         '200':
-          description: Principal results and per-connector discovery status.
+          description: Local account results; connectors is an empty compatibility field.
           content:
             application/json:
               schema:
@@ -32161,53 +31988,6 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
         '429':
           description: Search rate limit exceeded
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-  /api/v1/rbac/principals/materialize:
-    post:
-      operationId: postRbacPrincipalsMaterialize
-      tags: [rbac]
-      summary: Materialize a verified external principal
-      description: Re-resolves the immutable upstream subject, then atomically creates or reuses its local identity so a binding can be granted before first login. Requires `rbac:write`, `rbac:create`, and `users:create`.
-      x-astronomer-route-class: public-api
-      x-astronomer-rbac: "rbac:create and users:create"
-      x-astronomer-auth: "bearer-or-session"
-      security:
-        - bearerJWT: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/PrincipalMaterializeRequest'}
-      responses:
-        '201':
-          description: Verified principal materialized as a pending identity.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data: {$ref: '#/components/schemas/PrincipalMaterialized'}
-        '400':
-          description: Invalid request
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-        '401':
-          description: Authentication required
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-        '403':
-          description: Missing RBAC write/create or users create permission
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-        '404':
-          description: Connector not found or disabled
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-        '422':
-          description: Connector does not support safe principal discovery
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-        '429':
-          description: Search rate limit exceeded
-          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
-        '502':
-          description: Upstream principal verification failed
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
   /api/v1/rbac/my-roles:
     get:
@@ -33498,468 +33278,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/dex/connector-types/:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getAuthDexConnectorTypes
-      summary: List supported Dex connector types
-      description: |
-        Returns the connector-type registry (oidc, okta, microsoft, github,
-        gitlab, bitbucket, google, saml, ldap, oauth) with each type's required,
-        optional, secret, and nested field requirements for the UI wizard.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      responses:
-        '200':
-          description: Connector-type catalog.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/DexConnectorType'
-  /api/v1/auth/dex/connectors/:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getAuthDexConnectors
-      summary: List Dex connectors
-      description: Returns every persisted Dex connector. Secret config fields are redacted (blank with a `__<field>_set` marker).
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      responses:
-        '200':
-          description: List of connectors.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/DexConnector'
-        '500':
-          description: Listing failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "authenticated settings surface; explicit settings RBAC audit remains open"
-      x-astronomer-route-class: public-api
-      operationId: postAuthDexConnectors
-      summary: Create a Dex connector
-      description: Validates the config against the connector-type registry, encrypts secret fields, and persists the row.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DexConnectorRequest'
-      responses:
-        '201':
-          description: Connector created (secrets redacted in the response).
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexConnector'
-        '400':
-          description: Invalid body, missing name, unknown type, or failed field validation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '409':
-          description: A connector with that name already exists.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Encrypt, encode, or persist failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/dex/connectors/{id}/:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getAuthDexConnectorsById
-      summary: Get a Dex connector
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Connector (secrets redacted).
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexConnector'
-        '400':
-          description: Invalid connector ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '404':
-          description: Connector not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    patch:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "authenticated settings surface; explicit settings RBAC audit remains open"
-      x-astronomer-route-class: public-api
-      operationId: patchAuthDexConnectorsById
-      summary: Update a Dex connector
-      description: |
-        Partial update; omitted fields keep their current value. When `config`
-        is present it is treated as a full replacement, except secret fields
-        left empty are preserved from the existing row.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DexConnectorRequest'
-      responses:
-        '200':
-          description: Connector updated (secrets redacted).
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexConnector'
-        '400':
-          description: Invalid ID/body, unknown type, or field validation failure.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '404':
-          description: Connector not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Encrypt, encode, or update failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    delete:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "authenticated settings surface; explicit settings RBAC audit remains open"
-      x-astronomer-route-class: public-api
-      operationId: deleteAuthDexConnectorsById
-      summary: Delete a Dex connector
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Connector deleted.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        type: object
-                        properties:
-                          deleted:
-                            type: string
-                            format: uuid
-        '400':
-          description: Invalid connector ID.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '404':
-          description: Connector not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Delete failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/dex/settings/:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getAuthDexSettings
-      summary: Get Dex singleton settings
-      description: Returns the singleton Dex settings row. On a fresh install (no row), returns zero-value defaults with `configured:false`.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      responses:
-        '200':
-          description: Dex settings.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexSettings'
-    put:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "authenticated settings surface; explicit settings RBAC audit remains open"
-      x-astronomer-route-class: public-api
-      operationId: putAuthDexSettings
-      summary: Upsert Dex singleton settings
-      description: Upserts the Dex settings row. `issuer_url` is required. For bundled Dex, this endpoint binds only issuer and target cluster; namespace, chart release, Deployment, Service, and runtime Secret are immutable chart-derived identity. Operator-managed Dex may set the custom identity fields.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DexSettingsRequest'
-      responses:
-        '200':
-          description: Settings saved.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexSettings'
-        '400':
-          description: Invalid body, missing issuer_url, or invalid cluster_id.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Save failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/dex/apply/:
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "authenticated settings surface; explicit settings RBAC audit remains open"
-      x-astronomer-route-class: public-api
-      operationId: postAuthDexApply
-      summary: Queue a durable Dex runtime apply
-      description: |
-        Atomically records the requested generation, tunnel-worker task, and
-        mandatory audit intent. The worker owns all Kubernetes reconciliation.
-        Identical actor-bound key replays return the original operation.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      parameters:
-        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
-      responses:
-        '202':
-          description: Durable operation accepted; no Kubernetes call is made before this response.
-          headers:
-            Location: {description: Exact operation status resource, schema: {type: string}}
-            Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer, minimum: 1}}
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexOperation'
-        '400':
-          description: Settings not configured, missing issuer_url, or missing cluster_id.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Connector listing or config render failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Durable operation persistence or encryption unavailable.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/dex/register-as-sso/:
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "authenticated settings surface; explicit settings RBAC audit remains open"
-      x-astronomer-route-class: public-api
-      operationId: postAuthDexRegisterAsSso
-      summary: Queue durable Dex SSO registration
-      description: |
-        Atomically stages encrypted desired client settings, disables live SSO
-        for the new generation, and records the operation, worker task, and
-        mandatory audit intent. The worker verifies the runtime before enabling SSO.
-      tags:
-        - auth
-      security:
-        - bearerJWT: []
-      parameters:
-        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              properties:
-                client_id:
-                  type: string
-                  default: astronomer
-                client_secret:
-                  type: string
-                  format: password
-                  description: Plaintext; encrypted before storage.
-                display_name:
-                  type: string
-                  default: Sign in with Dex
-      responses:
-        '202':
-          description: Desired SSO state and its durable reconcile operation were committed atomically.
-          headers:
-            Location: {description: Exact operation status resource, schema: {type: string}}
-            Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer, minimum: 1}}
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexOperation'
-        '400':
-          description: Invalid body or Dex settings not configured.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Encrypt or save failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Durable operation persistence or encryption unavailable.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/dex/operations/{operation_id}/:
-    get:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "admin SSO update permission"
-      x-astronomer-route-class: public-api
-      operationId: getAuthDexOperation
-      summary: Get exact Dex operation status
-      tags: [auth]
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: operation_id
-          in: path
-          required: true
-          schema: {type: string, format: uuid}
-      responses:
-        '200':
-          description: Durable operation state.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/DexOperation'
-        '404':
-          description: Operation not found.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
   /api/v1/users:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -34679,13 +33997,13 @@ paths:
                           $ref: '#/components/schemas/UsersSettingsAuditLogEntry'
   /api/v1/settings/sso:
     get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
       x-astronomer-route-class: public-api
       operationId: getSettingsSso
       summary: List enabled SSO providers
       tags:
-        - users-settings
+      - users-settings
       description: Public-readable. Response is a bare JSON array (not enveloped).
       responses:
         '200':
@@ -34696,111 +34014,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/UsersSettingsSSOProvider'
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "API token admin scope plus sso:create"
-      x-astronomer-route-class: public-api
-      operationId: postSettingsSso
-      summary: Create an SSO provider
-      tags:
-        - users-settings
-      description: Requires the `admin` API-token scope plus sso:create RBAC.
-      security:
-        - bearerJWT: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - type
-                - name
-                - config
-              properties:
-                type:
-                  type: string
-                  enum:
-                    - github
-                    - google
-                    - oidc
-                name:
-                  type: string
-                enabled:
-                  type: boolean
-                  nullable: true
-                  description: Defaults to true.
-                config:
-                  type: object
-                  required:
-                    - client_id
-                    - client_secret
-                  properties:
-                    client_id:
-                      type: string
-                    client_secret:
-                      type: string
-                    metadata_url:
-                      type: string
-                      description: Required for oidc.
-                    allowed_organizations:
-                      type: string
-                      description: Comma-separated.
-                    auto_create_users:
-                      type: boolean
-                      nullable: true
-                      description: Defaults to true.
-      responses:
-        '201':
-          description: Created SSO provider.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/UsersSettingsSSOProvider'
-        '400':
-          description: Validation / unsupported provider type.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '409':
-          description: A provider with this key already exists.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/settings/sso/{id}:
-    delete:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "API token admin scope plus sso:delete"
-      x-astronomer-route-class: public-api
-      operationId: deleteSettingsSsoById
-      summary: Delete an SSO provider
-      tags:
-        - users-settings
-      description: Requires the `admin` API-token scope plus sso:delete RBAC.
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Provider deleted (no content).
-        '404':
-          description: SSO provider not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/settings/tokens:
     get:
       x-astronomer-auth: "bearer-or-session"

@@ -102,7 +102,6 @@ type productionComposition struct {
 	authHandler                          *handler.AuthHandler
 	totpHandler                          *handler.TOTPHandler
 	ssoHandler                           *handler.SSOHandler
-	dexHandler                           *handler.DexHandler
 	clusterHandler                       *handler.ClusterHandler
 	clusterRegistrationHandler           *handler.ClusterRegistrationHandler
 	localK8s                             kubernetes.Interface

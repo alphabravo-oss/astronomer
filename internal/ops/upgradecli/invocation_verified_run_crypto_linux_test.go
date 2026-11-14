@@ -29,7 +29,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
 )
 
-// Real offline signatures for all seven pinned image subjects and the target
+// Real offline signatures for all six pinned image subjects and the target
 // chart flow through PrepareInvocation and Invocation.Run. A joined synthetic
 // gh child accepts ONLY the exact historical attestation argv; this is not
 // GitHub attestation provenance. The synthetic kubectl fails at the first
@@ -47,8 +47,8 @@ func TestInvocationRunAuthenticatesEveryImageBeforeOwnedDatabaseBoundary(t *test
 		t.Fatal("complete cryptographic Verify was not acknowledged separately from failed Backup", err)
 	}
 	reads := imageReads()
-	if len(reads) != 7 {
-		t.Fatal("all seven image subjects were not verified", reads)
+	if len(reads) != 6 {
+		t.Fatal("all six image subjects were not verified", reads)
 	}
 	for role, count := range reads {
 		if count < 1 {
@@ -140,8 +140,8 @@ func invocationImageSignatureClient(t *testing.T, fixture *localChartCryptoFixtu
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Astronomer.Images) != 7 {
-		t.Fatal("exact candidate seven-image fixture required")
+	if len(manifest.Astronomer.Images) != 6 {
+		t.Fatal("exact candidate six-image fixture required")
 	}
 	bodies := map[string][]byte{}
 	signatureRoles := map[string]string{}

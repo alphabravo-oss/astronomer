@@ -27,9 +27,6 @@ plaintext or to the ciphertext.
 | `delivery_sources.ca_bundle_*` | Private CA bundle | Never exposed through read APIs or agent status. |
 | `delivery_sources.credential_*` | Delivery-source credential map | Write-only; `auth_mode='none'` requires it absent (CHECK). |
 | `delivery_system_releases.registry_credential_*` | System-release registry credential | Never exposed through release/status/audit APIs. |
-| `dex_connectors.secrets_*` | JSON object of the connector's secret fields (`clientSecret`, `bindPW`) | `config` holds only non-secret fields. |
-| `dex_operations.payload_*` | Durable Dex SSO-finalization input | Never returned or logged. |
-| `dex_settings.public_clients_*` | Canonical JSON array of Dex static clients (secrets included) | The only copy; the plaintext `public_clients` column was dropped. |
 | `gitops_registration_sources.auth_*` | Git credential (PAT / SSH key) | Write-only. |
 | `gitops_registration_sources.webhook_secret_*` | Per-source webhook HMAC secret | Write-only; never logged. |
 | `helm_repositories.auth_config_*` | Complete repository credential document | `auth_config` JSONB keeps only the non-secret projection (`internal/credential`). |
@@ -119,3 +116,5 @@ one character from a bounded SIEM/webhook glob pattern while
 `astronomer_event_glob_match` evaluates `*` and `?`. It never contains or
 persists authentication material.
 
+
+Migration 87 retires the broker columns described in historical migration notes above. Optional Identity client credentials use Kubernetes Secret references; issuer/subject bindings contain no provider credentials.

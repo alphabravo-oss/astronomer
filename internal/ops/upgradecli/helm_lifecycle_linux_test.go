@@ -43,7 +43,7 @@ func helmReleaseFixture(t *testing.T) *HelmRelease {
 	for _, row := range []struct{ name, repo string }{{"server", "astronomer-go-server"}, {"worker", "astronomer-go-worker"}, {"agent", "astronomer-go-agent"}, {"frontend", "astronomer-frontend"}, {"shell", "astronomer-shell"}, {"dr", "astronomer-dr"}} {
 		input.Manifest.Astronomer.Images = append(input.Manifest.Astronomer.Images, releasecontract.Artifact{Name: row.name, Kind: "container_image", Reference: "ghcr.io/alphabravo-oss/" + row.repo + "@sha256:" + strings.Repeat("a", 64)})
 	}
-	for _, role := range []string{"utilities.busybox", "postgres", "redis", "dex", "managementRestoreDrill.sidecar", "managementLogging"} {
+	for _, role := range []string{"utilities.busybox", "postgres", "redis", "managementRestoreDrill.sidecar", "managementLogging"} {
 		source := "fixture.invalid/" + strings.ToLower(strings.ReplaceAll(role, ".", "-")) + ":exact"
 		input.RuntimeSources[role] = source
 		input.Manifest.Astronomer.RuntimeImages = append(input.Manifest.Astronomer.RuntimeImages, releasecontract.RuntimeImage{SourceReference: source, Reference: strings.TrimSuffix(source, ":exact") + "@sha256:" + strings.Repeat("b", 64)})
@@ -253,7 +253,7 @@ func canonicalHelmManifestFixture(version string) (releasecontract.Manifest, map
 		manifest.Astronomer.Images = append(manifest.Astronomer.Images, artifact(row.name, "ghcr.io/alphabravo-oss/"+row.repo, "container_image"))
 	}
 	sources := map[string]string{}
-	for _, role := range []string{"utilities.busybox", "postgres", "redis", "dex", "managementRestoreDrill.sidecar", "managementLogging"} {
+	for _, role := range []string{"utilities.busybox", "postgres", "redis", "managementRestoreDrill.sidecar", "managementLogging"} {
 		repository := "fixture.invalid/" + strings.ToLower(strings.ReplaceAll(role, ".", "-"))
 		source := repository + ":exact"
 		sources[role] = source

@@ -153,15 +153,7 @@ spec:
         - protocol: TCP
           port: 26379
     {{- end }}
-    {{- if .Values.dex.enabled }}
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: 5556
-    {{- end }}
+
     {{- range $cidr := $externalCIDRs }}
     - to:
         - ipBlock:
@@ -177,6 +169,14 @@ spec:
           port: 6379
         - protocol: TCP
           port: 6443
+    {{- end }}
+    {{- range $cidr := $identityProviderEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
     {{- end }}
     {{- range $cidr := $externalHTTPSEgressCIDRs }}
     - to:
@@ -357,91 +357,7 @@ spec:
         - protocol: TCP
           port: 6443
     {{- end }}
-{{- if .Values.dex.enabled }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "astronomer.fullname" . }}-dex
-  labels:
-    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
-spec:
-  podSelector:
-    matchLabels:
-      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 6 }}
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    {{- if .Values.networkPolicy.allowPublicIngress }}
-    - ports:
-        - protocol: TCP
-          port: 5556
-    {{- end }}
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: 5556
-  egress:
-    - ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    {{- range $cidr := $externalCIDRs }}
-    - to:
-        - ipBlock:
-            cidr: {{ $cidr | quote }}
-      ports:
-        - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 389
-        - protocol: TCP
-          port: 636
-    {{- end }}
-    {{- range $cidr := $externalHTTPSEgressCIDRs }}
-    - to:
-        - ipBlock:
-            cidr: {{ $cidr | quote }}
-      ports:
-        - protocol: TCP
-          port: 80
-        - protocol: TCP
-          port: 443
-    {{- end }}
-    {{- range $cidr := $identityProviderEgressCIDRs }}
-    - to:
-        - ipBlock:
-            cidr: {{ $cidr | quote }}
-      ports:
-        - protocol: TCP
-          port: 389
-        - protocol: TCP
-          port: 636
-        - protocol: TCP
-          port: 443
-    {{- end }}
-    # Dex's Kubernetes storage backend reads/writes dex.coreos.com CRDs.
-    # Keep this explicit: broad connector egress is not portable for Service
-    # ClusterIP traffic because CNIs may enforce NetworkPolicy before or after
-    # kube-proxy DNAT.
-    {{- range $cidr := $kubernetesAPIEgressCIDRs }}
-    - to:
-        - ipBlock:
-            cidr: {{ $cidr | quote }}
-      ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 6443
-    {{- end }}
-{{- end }}
+
 {{- if ne (include "astronomer.postgresMode" .) "external" }}
 ---
 apiVersion: networking.k8s.io/v1

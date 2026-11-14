@@ -24,7 +24,7 @@ export function TopbarAccountMenu() {
   const { user, logout } = useAuthStore();
   const signOut = async () => {
     // POST /auth/logout first so the backend can revoke the session and (for
-    // SSO users) hand us a Dex end_session URL. Local state is cleared
+    // SSO users) hand us an external end_session URL. Local state is cleared
     // regardless.
     let redirectUrl: string | undefined;
     try {
@@ -64,7 +64,9 @@ export function TopbarAccountMenu() {
         </MenuLabel>
         <MenuSeparator />
         <MenuItem
-          onSelect={() => void navigate({ to: "/dashboard/account/preferences" })}
+          onSelect={() =>
+            void navigate({ to: "/dashboard/account/preferences" })
+          }
         >
           <SlidersHorizontal className="h-4 w-4" />
           Preferences

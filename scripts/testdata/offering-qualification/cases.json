@@ -1,0 +1,1335 @@
+{
+  "cases": [
+    {
+      "category": "app",
+      "id": "APP-01",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Constellation (constellation)"
+    },
+    {
+      "category": "app",
+      "id": "APP-02",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Kube State Metrics (kube-state-metrics)"
+    },
+    {
+      "category": "app",
+      "id": "APP-03",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Prometheus Node Exporter (prometheus-node-exporter)"
+    },
+    {
+      "category": "app",
+      "id": "APP-04",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Metrics Server (metrics-server)"
+    },
+    {
+      "category": "app",
+      "id": "APP-05",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Kube Prometheus Stack (kube-prometheus-stack)"
+    },
+    {
+      "category": "app",
+      "id": "APP-06",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Grafana (grafana)"
+    },
+    {
+      "category": "app",
+      "id": "APP-07",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Loki (loki)"
+    },
+    {
+      "category": "app",
+      "id": "APP-08",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Trivy Operator (trivy-operator)"
+    },
+    {
+      "category": "app",
+      "id": "APP-09",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "cert-manager (cert-manager)"
+    },
+    {
+      "category": "app",
+      "id": "APP-10",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Ingress NGINX (ingress-nginx)"
+    },
+    {
+      "category": "app",
+      "id": "APP-11",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "External Secrets Operator (external-secrets)"
+    },
+    {
+      "category": "app",
+      "id": "APP-12",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Kyverno (kyverno)"
+    },
+    {
+      "category": "app",
+      "id": "APP-13",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Longhorn (longhorn)"
+    },
+    {
+      "category": "app",
+      "id": "APP-14",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "OPA Gatekeeper (gatekeeper)"
+    },
+    {
+      "category": "app",
+      "id": "APP-15",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Fluent Bit (fluent-bit)"
+    },
+    {
+      "category": "app",
+      "id": "APP-16",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "ExternalDNS (external-dns)"
+    },
+    {
+      "category": "app",
+      "id": "APP-17",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Velero (velero)"
+    },
+    {
+      "category": "app",
+      "id": "APP-18",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "OpenTelemetry Collector (opentelemetry-collector)"
+    },
+    {
+      "category": "app",
+      "id": "APP-19",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "Grafana Tempo (tempo)"
+    },
+    {
+      "category": "app",
+      "id": "APP-20",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "KEDA (keda)"
+    },
+    {
+      "category": "app",
+      "id": "APP-21",
+      "required": true,
+      "section": "A. Curated application catalog \u2014 21 applications",
+      "title": "CloudNativePG (cloudnative-pg)"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-01",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "CIS Scanner (cis-operator)"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-02",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Dex (dex)"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-03",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Fluent Bit"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-04",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Trivy Operator"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-05",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "cert-manager"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-06",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Gatekeeper"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-07",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "kube-state-metrics"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-08",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Prometheus Node Exporter"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-09",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Ingress NGINX"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-10",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Longhorn"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-11",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "NeuVector"
+    },
+    {
+      "category": "tool",
+      "id": "TOOL-12",
+      "required": true,
+      "section": "B. Tools \u2014 12 separate entrypoint cases",
+      "title": "Istio"
+    },
+    {
+      "category": "base",
+      "id": "BASE-01",
+      "required": true,
+      "section": "C. Fresh adoption baseline \u2014 independent of catalog metadata",
+      "title": "on"
+    },
+    {
+      "category": "base",
+      "id": "BASE-02",
+      "required": true,
+      "section": "C. Fresh adoption baseline \u2014 independent of catalog metadata",
+      "title": "on"
+    },
+    {
+      "category": "base",
+      "id": "BASE-03",
+      "required": true,
+      "section": "C. Fresh adoption baseline \u2014 independent of catalog metadata",
+      "title": "off"
+    },
+    {
+      "category": "base",
+      "id": "BASE-04",
+      "required": true,
+      "section": "C. Fresh adoption baseline \u2014 independent of catalog metadata",
+      "title": "off"
+    },
+    {
+      "category": "base",
+      "id": "BASE-05",
+      "required": true,
+      "section": "C. Fresh adoption baseline \u2014 independent of catalog metadata",
+      "title": "resumed registration"
+    },
+    {
+      "category": "base",
+      "id": "BASE-06",
+      "required": true,
+      "section": "C. Fresh adoption baseline \u2014 independent of catalog metadata",
+      "title": "already adopted or read-only/namespace-only agent"
+    },
+    {
+      "category": "id",
+      "id": "ID-01",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex generic OIDC"
+    },
+    {
+      "category": "id",
+      "id": "ID-02",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex Okta"
+    },
+    {
+      "category": "id",
+      "id": "ID-03",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex Microsoft / Entra ID"
+    },
+    {
+      "category": "id",
+      "id": "ID-04",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex GitHub"
+    },
+    {
+      "category": "id",
+      "id": "ID-05",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex GitLab"
+    },
+    {
+      "category": "id",
+      "id": "ID-06",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex Bitbucket Cloud"
+    },
+    {
+      "category": "id",
+      "id": "ID-07",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex Google Workspace"
+    },
+    {
+      "category": "id",
+      "id": "ID-08",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex SAML"
+    },
+    {
+      "category": "id",
+      "id": "ID-09",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex LDAP / Active Directory"
+    },
+    {
+      "category": "id",
+      "id": "ID-10",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Dex generic OAuth"
+    },
+    {
+      "category": "id",
+      "id": "ID-11",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Direct GitHub SSO preset"
+    },
+    {
+      "category": "id",
+      "id": "ID-12",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Direct Google Workspace preset"
+    },
+    {
+      "category": "id",
+      "id": "ID-13",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Direct Entra ID (azure-ad) preset"
+    },
+    {
+      "category": "id",
+      "id": "ID-14",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Direct GitLab preset"
+    },
+    {
+      "category": "id",
+      "id": "ID-15",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Direct Okta preset"
+    },
+    {
+      "category": "id",
+      "id": "ID-16",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Direct generic OIDC"
+    },
+    {
+      "category": "id",
+      "id": "ID-17",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "SCIM discovery and Users"
+    },
+    {
+      "category": "id",
+      "id": "ID-18",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "SCIM Groups and group mappings"
+    },
+    {
+      "category": "id",
+      "id": "ID-19",
+      "required": true,
+      "section": "D. Identity \u2014 individual provider cases",
+      "title": "Local identity, MFA and API tokens"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-01",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Cluster monitoring stack"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-02",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Shared Thanos"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-03",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Shared Alertmanager"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-04",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Shared Grafana"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-05",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Shared Loki / hosted Loki"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-06",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Bring-your-own monitoring endpoints/backend configuration"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-07",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "Shared vs standalone member routing"
+    },
+    {
+      "category": "obs",
+      "id": "OBS-08",
+      "required": true,
+      "section": "E. Managed observability \u2014 five lifecycle families plus backend modes",
+      "title": "External dashboard links, query widgets and saved views"
+    },
+    {
+      "category": "log",
+      "id": "LOG-01",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Elasticsearch"
+    },
+    {
+      "category": "log",
+      "id": "LOG-02",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "OpenSearch"
+    },
+    {
+      "category": "log",
+      "id": "LOG-03",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Loki"
+    },
+    {
+      "category": "log",
+      "id": "LOG-04",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Splunk"
+    },
+    {
+      "category": "log",
+      "id": "LOG-05",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "CloudWatch"
+    },
+    {
+      "category": "log",
+      "id": "LOG-06",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Datadog"
+    },
+    {
+      "category": "log",
+      "id": "LOG-07",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "S3"
+    },
+    {
+      "category": "log",
+      "id": "LOG-08",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Syslog"
+    },
+    {
+      "category": "log",
+      "id": "LOG-09",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Pipeline filters and namespace selection"
+    },
+    {
+      "category": "log",
+      "id": "LOG-10",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Pipeline edit/reload/lifecycle"
+    },
+    {
+      "category": "log",
+      "id": "LOG-11",
+      "required": true,
+      "section": "F. Logging \u2014 eight destination cases plus pipeline/query behavior",
+      "title": "Native destination query/saved search"
+    },
+    {
+      "category": "send",
+      "id": "SEND-01",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Slack notification channel"
+    },
+    {
+      "category": "send",
+      "id": "SEND-02",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Email notification channel"
+    },
+    {
+      "category": "send",
+      "id": "SEND-03",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "PagerDuty channel"
+    },
+    {
+      "category": "send",
+      "id": "SEND-04",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Generic webhook notification channel"
+    },
+    {
+      "category": "send",
+      "id": "SEND-05",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Microsoft Teams channel"
+    },
+    {
+      "category": "send",
+      "id": "SEND-06",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "SMTP / transactional email"
+    },
+    {
+      "category": "send",
+      "id": "SEND-07",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Platform event webhooks"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-01",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Syslog UDP"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-02",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Syslog TCP"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-03",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Syslog TLS"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-04",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "Splunk HEC"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-05",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "NDJSON HTTPS"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-06",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "RFC5424 format"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-07",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "RFC3164 format"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-08",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "CEF format"
+    },
+    {
+      "category": "siem",
+      "id": "SIEM-09",
+      "required": true,
+      "section": "G. Alerts, email, outbound webhooks and SIEM",
+      "title": "NDJSON format and automatic format selection"
+    },
+    {
+      "category": "secret",
+      "id": "SECRET-01",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Vault token auth"
+    },
+    {
+      "category": "secret",
+      "id": "SECRET-02",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Vault AppRole auth"
+    },
+    {
+      "category": "secret",
+      "id": "SECRET-03",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Vault Kubernetes auth"
+    },
+    {
+      "category": "secret",
+      "id": "SECRET-04",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Vault KV v1"
+    },
+    {
+      "category": "secret",
+      "id": "SECRET-05",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Vault KV v2"
+    },
+    {
+      "category": "cloud",
+      "id": "CLOUD-01",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "AWS credentials"
+    },
+    {
+      "category": "cloud",
+      "id": "CLOUD-02",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "GCP credentials"
+    },
+    {
+      "category": "cloud",
+      "id": "CLOUD-03",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Azure credentials"
+    },
+    {
+      "category": "cloud",
+      "id": "CLOUD-04",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "DigitalOcean credentials"
+    },
+    {
+      "category": "cloud",
+      "id": "CLOUD-05",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Generic credentials"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-01",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Docker Registry v2-compatible registry configuration"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-02",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Helm HTTP(S) repositories"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-03",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "OCI sources/registries"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-04",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Git delivery sources"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-05",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Admin GitOps configuration sources"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-06",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Custom/application catalogs"
+    },
+    {
+      "category": "source",
+      "id": "SOURCE-07",
+      "required": true,
+      "section": "H. Secrets, credentials, registries and source integrations",
+      "title": "Disconnected mirrors/bundles"
+    },
+    {
+      "category": "dr",
+      "id": "DR-01",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Velero application installation"
+    },
+    {
+      "category": "dr",
+      "id": "DR-02",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Cluster snapshots and restore"
+    },
+    {
+      "category": "dr",
+      "id": "DR-03",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Cluster snapshot schedules"
+    },
+    {
+      "category": "dr",
+      "id": "DR-04",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "General Velero backup storage/schedules/restores"
+    },
+    {
+      "category": "dr",
+      "id": "DR-05",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "S3 / AWS backup storage"
+    },
+    {
+      "category": "dr",
+      "id": "DR-06",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "MinIO / compatible S3 backup storage"
+    },
+    {
+      "category": "dr",
+      "id": "DR-07",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "GCS backup storage"
+    },
+    {
+      "category": "dr",
+      "id": "DR-08",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Azure Blob backup storage"
+    },
+    {
+      "category": "dr",
+      "id": "DR-09",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "CSI volume snapshot mode"
+    },
+    {
+      "category": "dr",
+      "id": "DR-10",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Node-agent/filesystem volume backup mode"
+    },
+    {
+      "category": "dr",
+      "id": "DR-11",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Control-plane snapshot creation, inventory and restore guidance"
+    },
+    {
+      "category": "dr",
+      "id": "DR-12",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Management restore-drill reporting"
+    },
+    {
+      "category": "dr",
+      "id": "DR-13",
+      "required": true,
+      "section": "I. Backup and restore surfaces \u2014 distinct owners",
+      "title": "Management-plane backup lifecycle"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-01",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "PSA privileged, baseline, restricted"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-02",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Gatekeeper privileged-container policy"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-03",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Gatekeeper latest-image-tag policy"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-04",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Gatekeeper required-label policy"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-05",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Custom Gatekeeper templates/constraints"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-06",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Network-policy templates"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-07",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "API-server allowlist"
+    },
+    {
+      "category": "policy",
+      "id": "POLICY-08",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Compliance baselines/posture/export"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-01",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Generic Kubernetes CIS"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-02",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "RKE / RKE1 CIS"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-03",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "RKE2 CIS"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-04",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "K3s CIS"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-05",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "EKS CIS"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-06",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "AKS CIS"
+    },
+    {
+      "category": "cis",
+      "id": "CIS-07",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "GKE CIS"
+    },
+    {
+      "category": "mesh",
+      "id": "MESH-01",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Istio detection/posture/inventory"
+    },
+    {
+      "category": "mesh",
+      "id": "MESH-02",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Linkerd detection/posture"
+    },
+    {
+      "category": "mesh",
+      "id": "MESH-03",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Kuma detection"
+    },
+    {
+      "category": "mesh",
+      "id": "MESH-04",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Cilium detection"
+    },
+    {
+      "category": "mesh",
+      "id": "MESH-05",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Istio managed resource types"
+    },
+    {
+      "category": "sec",
+      "id": "SEC-01",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "Image Scans API / fleet vulnerabilities"
+    },
+    {
+      "category": "sec",
+      "id": "SEC-02",
+      "required": true,
+      "section": "J. Policy, security and service mesh",
+      "title": "API-server audit ingestion"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-01",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Sidebar extension mount"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-02",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Dashboard widget mount"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-03",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Cluster tab mount"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-04",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Settings page mount"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-05",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Declarative table"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-06",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Declarative chart"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-07",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Declarative stat"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-08",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Declarative form"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-09",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Signed bundle/iframe"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-10",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Astronomer API data proxy"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-11",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Kubernetes data proxy"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-12",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Prometheus data proxy"
+    },
+    {
+      "category": "ext",
+      "id": "EXT-13",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Extension lifecycle"
+    },
+    {
+      "category": "ai",
+      "id": "AI-01",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Charlie connection/onboarding/modes"
+    },
+    {
+      "category": "ai",
+      "id": "AI-02",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Charlie sessions/threads/context"
+    },
+    {
+      "category": "ai",
+      "id": "AI-03",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Charlie commands/capabilities/approvals"
+    },
+    {
+      "category": "ai",
+      "id": "AI-04",
+      "required": true,
+      "section": "K. UI extension platform and assisted operations",
+      "title": "Charlie triggers/findings/remediation"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-01",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Cluster adoption, agent connectivity/profiles and lifecycle"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-02",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Projects, namespaces, membership, RBAC and quotas"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-03",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Cluster templates and groups"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-04",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Delivery sources/bundles/versions/targets/rollouts"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-05",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Apps catalog discovery/repositories/installed releases"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-06",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Workloads, resources, CRDs and discovery"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-07",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Logs, events, exec/shell and kubeconfig"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-08",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Alert rules/events/silences/inhibition/anomaly views"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-09",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Audit, read-audit policies, retention and compliance export"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-10",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "General/platform settings, feature flags, branding/preferences"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-11",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "Dashboard widgets/templates and support bundles"
+    },
+    {
+      "category": "platform",
+      "id": "PLATFORM-12",
+      "required": true,
+      "section": "L. Cross-cutting offered workflows \u2014 coverage closure",
+      "title": "System inventory, compatibility and operation controllers"
+    }
+  ],
+  "runtime_registries": [
+    {
+      "expected_identities": [
+        "feature.alerting",
+        "feature.backups",
+        "feature.catalog",
+        "feature.charlie",
+        "feature.control_plane_snapshots",
+        "feature.delivery",
+        "feature.extensions",
+        "feature.hosted_loki",
+        "feature.monitoring",
+        "feature.projects",
+        "feature.security",
+        "feature.shared_grafana"
+      ],
+      "id": "feature-flags",
+      "items_path": "data",
+      "object_keys": true,
+      "path": "/api/v1/settings/features/"
+    },
+    {
+      "expected_identities": [
+        "constellation",
+        "kube-state-metrics",
+        "prometheus-node-exporter",
+        "metrics-server",
+        "kube-prometheus-stack",
+        "grafana",
+        "loki",
+        "trivy-operator",
+        "cert-manager",
+        "ingress-nginx",
+        "external-secrets",
+        "kyverno",
+        "longhorn",
+        "gatekeeper",
+        "fluent-bit",
+        "external-dns",
+        "velero",
+        "opentelemetry-collector",
+        "tempo",
+        "keda",
+        "cloudnative-pg"
+      ],
+      "id": "catalog-applications",
+      "identity_field": "slug",
+      "items_path": "data",
+      "path": "/api/v1/catalog/applications/"
+    },
+    {
+      "expected_identities": [
+        "cis-operator",
+        "dex",
+        "fluent-bit",
+        "trivy-operator",
+        "cert-manager",
+        "gatekeeper",
+        "kube-state-metrics",
+        "prometheus-node-exporter",
+        "ingress-nginx",
+        "longhorn",
+        "neuvector",
+        "istio"
+      ],
+      "id": "tools",
+      "identity_field": "slug",
+      "items_path": "data",
+      "path": "/api/v1/tools/?limit=100&offset=0"
+    },
+    {
+      "expected_identities": [
+        "bitbucket",
+        "github",
+        "gitlab",
+        "google",
+        "ldap",
+        "microsoft",
+        "oauth",
+        "oidc",
+        "okta",
+        "saml"
+      ],
+      "id": "dex-connector-types",
+      "identity_field": "type",
+      "items_path": "data",
+      "path": "/api/v1/auth/dex/connector-types/"
+    },
+    {
+      "expected_identities": [
+        "aws",
+        "azure",
+        "digitalocean",
+        "gcp",
+        "generic"
+      ],
+      "id": "cloud-credential-providers",
+      "identity_field": "name",
+      "items_path": "data.items",
+      "path": "/api/v1/cloud-credentials/providers"
+    },
+    {
+      "absent_when_feature_disabled": "feature.extensions",
+      "allow_additional": true,
+      "expected_identities": [],
+      "id": "extensions",
+      "identity_field": "name",
+      "items_path": "data.items",
+      "path": "/api/v1/extensions/"
+    }
+  ],
+  "schema_version": "astronomer-offering-cases-v1",
+  "source_document": "advisor-plans/028-offering-test-inventory.md"
+}

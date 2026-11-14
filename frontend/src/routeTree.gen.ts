@@ -124,10 +124,6 @@ import { Route as DashboardProjectsIdPolicyIndexRouteImport } from './routes/das
 import { Route as DashboardProjectsIdQuotaIndexRouteImport } from './routes/dashboard/projects/$id/quota/index'
 import { Route as DashboardSecurityScansScanIdIndexRouteImport } from './routes/dashboard/security/scans/$scanId/index'
 import { Route as DashboardSecurityScansNewIndexRouteImport } from './routes/dashboard/security/scans/new/index'
-import { Route as DashboardSettingsAuthInstallIndexRouteImport } from './routes/dashboard/settings/auth/install/index'
-import { Route as DashboardSettingsAuthRegisterSsoIndexRouteImport } from './routes/dashboard/settings/auth/register-sso/index'
-import { Route as DashboardSettingsAuthScimTokensIndexRouteImport } from './routes/dashboard/settings/auth/scim-tokens/index'
-import { Route as DashboardSettingsAuthSettingsIndexRouteImport } from './routes/dashboard/settings/auth/settings/index'
 import { Route as DashboardSettingsClusterGroupsNewIndexRouteImport } from './routes/dashboard/settings/cluster-groups/new/index'
 import { Route as DashboardSettingsComplianceBaselinesIndexRouteImport } from './routes/dashboard/settings/compliance/baselines/index'
 import { Route as DashboardSettingsGitopsIdIndexRouteImport } from './routes/dashboard/settings/gitops/$id/index'
@@ -154,9 +150,6 @@ import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './r
 import { Route as DashboardClustersIdToolsSlugConfigureRouteImport } from './routes/dashboard/clusters/$id/tools/$slug/configure'
 import { Route as DashboardLoggingPipelinesPipelineIdEditIndexRouteImport } from './routes/dashboard/logging/pipelines/$pipelineId/edit/index'
 import { Route as DashboardProjectsIdCloudCredentialsNewIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/new/index'
-import { Route as DashboardSettingsAuthConnectorsIdIndexRouteImport } from './routes/dashboard/settings/auth/connectors/$id/index'
-import { Route as DashboardSettingsAuthConnectorsNewIndexRouteImport } from './routes/dashboard/settings/auth/connectors/new/index'
-import { Route as DashboardSettingsAuthScimTokensNewIndexRouteImport } from './routes/dashboard/settings/auth/scim-tokens/new/index'
 import { Route as DashboardSettingsBackupDestinationsNewIndexRouteImport } from './routes/dashboard/settings/backup/destinations/new/index'
 import { Route as DashboardSettingsGeneralTokensNewIndexRouteImport } from './routes/dashboard/settings/general/tokens/new/index'
 import { Route as DashboardClustersIdDeliveryBundlesBundleIdIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/bundles/$bundleId/index'
@@ -833,30 +826,6 @@ const DashboardSecurityScansNewIndexRoute =
     path: '/security/scans/new/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
-const DashboardSettingsAuthInstallIndexRoute =
-  DashboardSettingsAuthInstallIndexRouteImport.update({
-    id: '/auth/install/',
-    path: '/auth/install/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsAuthRegisterSsoIndexRoute =
-  DashboardSettingsAuthRegisterSsoIndexRouteImport.update({
-    id: '/auth/register-sso/',
-    path: '/auth/register-sso/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsAuthScimTokensIndexRoute =
-  DashboardSettingsAuthScimTokensIndexRouteImport.update({
-    id: '/auth/scim-tokens/',
-    path: '/auth/scim-tokens/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsAuthSettingsIndexRoute =
-  DashboardSettingsAuthSettingsIndexRouteImport.update({
-    id: '/auth/settings/',
-    path: '/auth/settings/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
 const DashboardSettingsClusterGroupsNewIndexRoute =
   DashboardSettingsClusterGroupsNewIndexRouteImport.update({
     id: '/cluster-groups/new/',
@@ -1012,24 +981,6 @@ const DashboardProjectsIdCloudCredentialsNewIndexRoute =
     id: '/cloud-credentials/new/',
     path: '/cloud-credentials/new/',
     getParentRoute: () => DashboardProjectsIdRouteRoute,
-  } as any)
-const DashboardSettingsAuthConnectorsIdIndexRoute =
-  DashboardSettingsAuthConnectorsIdIndexRouteImport.update({
-    id: '/auth/connectors/$id/',
-    path: '/auth/connectors/$id/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsAuthConnectorsNewIndexRoute =
-  DashboardSettingsAuthConnectorsNewIndexRouteImport.update({
-    id: '/auth/connectors/new/',
-    path: '/auth/connectors/new/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsAuthScimTokensNewIndexRoute =
-  DashboardSettingsAuthScimTokensNewIndexRouteImport.update({
-    id: '/auth/scim-tokens/new/',
-    path: '/auth/scim-tokens/new/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
 const DashboardSettingsBackupDestinationsNewIndexRoute =
   DashboardSettingsBackupDestinationsNewIndexRouteImport.update({
@@ -1204,10 +1155,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/projects/$id/quota/': typeof DashboardProjectsIdQuotaIndexRoute
   '/dashboard/security/scans/$scanId/': typeof DashboardSecurityScansScanIdIndexRoute
   '/dashboard/security/scans/new/': typeof DashboardSecurityScansNewIndexRoute
-  '/dashboard/settings/auth/install/': typeof DashboardSettingsAuthInstallIndexRoute
-  '/dashboard/settings/auth/register-sso/': typeof DashboardSettingsAuthRegisterSsoIndexRoute
-  '/dashboard/settings/auth/scim-tokens/': typeof DashboardSettingsAuthScimTokensIndexRoute
-  '/dashboard/settings/auth/settings/': typeof DashboardSettingsAuthSettingsIndexRoute
   '/dashboard/settings/cluster-groups/new/': typeof DashboardSettingsClusterGroupsNewIndexRoute
   '/dashboard/settings/compliance/baselines/': typeof DashboardSettingsComplianceBaselinesIndexRoute
   '/dashboard/settings/gitops/$id/': typeof DashboardSettingsGitopsIdIndexRoute
@@ -1234,9 +1181,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/logging/pipelines/$pipelineId/edit/': typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
   '/dashboard/projects/$id/cloud-credentials/new/': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
-  '/dashboard/settings/auth/connectors/$id/': typeof DashboardSettingsAuthConnectorsIdIndexRoute
-  '/dashboard/settings/auth/connectors/new/': typeof DashboardSettingsAuthConnectorsNewIndexRoute
-  '/dashboard/settings/auth/scim-tokens/new/': typeof DashboardSettingsAuthScimTokensNewIndexRoute
   '/dashboard/settings/backup/destinations/new/': typeof DashboardSettingsBackupDestinationsNewIndexRoute
   '/dashboard/settings/general/tokens/new/': typeof DashboardSettingsGeneralTokensNewIndexRoute
   '/dashboard/clusters/$id/delivery/bundles/$bundleId/': typeof DashboardClustersIdDeliveryBundlesBundleIdIndexRoute
@@ -1357,10 +1301,6 @@ export interface FileRoutesByTo {
   '/dashboard/projects/$id/quota': typeof DashboardProjectsIdQuotaIndexRoute
   '/dashboard/security/scans/$scanId': typeof DashboardSecurityScansScanIdIndexRoute
   '/dashboard/security/scans/new': typeof DashboardSecurityScansNewIndexRoute
-  '/dashboard/settings/auth/install': typeof DashboardSettingsAuthInstallIndexRoute
-  '/dashboard/settings/auth/register-sso': typeof DashboardSettingsAuthRegisterSsoIndexRoute
-  '/dashboard/settings/auth/scim-tokens': typeof DashboardSettingsAuthScimTokensIndexRoute
-  '/dashboard/settings/auth/settings': typeof DashboardSettingsAuthSettingsIndexRoute
   '/dashboard/settings/cluster-groups/new': typeof DashboardSettingsClusterGroupsNewIndexRoute
   '/dashboard/settings/compliance/baselines': typeof DashboardSettingsComplianceBaselinesIndexRoute
   '/dashboard/settings/gitops/$id': typeof DashboardSettingsGitopsIdIndexRoute
@@ -1387,9 +1327,6 @@ export interface FileRoutesByTo {
   '/dashboard/clusters/$id/service-mesh/mtls': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/logging/pipelines/$pipelineId/edit': typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
   '/dashboard/projects/$id/cloud-credentials/new': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
-  '/dashboard/settings/auth/connectors/$id': typeof DashboardSettingsAuthConnectorsIdIndexRoute
-  '/dashboard/settings/auth/connectors/new': typeof DashboardSettingsAuthConnectorsNewIndexRoute
-  '/dashboard/settings/auth/scim-tokens/new': typeof DashboardSettingsAuthScimTokensNewIndexRoute
   '/dashboard/settings/backup/destinations/new': typeof DashboardSettingsBackupDestinationsNewIndexRoute
   '/dashboard/settings/general/tokens/new': typeof DashboardSettingsGeneralTokensNewIndexRoute
   '/dashboard/clusters/$id/delivery/bundles/$bundleId': typeof DashboardClustersIdDeliveryBundlesBundleIdIndexRoute
@@ -1517,10 +1454,6 @@ export interface FileRoutesById {
   '/dashboard/projects/$id/quota/': typeof DashboardProjectsIdQuotaIndexRoute
   '/dashboard/security/scans/$scanId/': typeof DashboardSecurityScansScanIdIndexRoute
   '/dashboard/security/scans/new/': typeof DashboardSecurityScansNewIndexRoute
-  '/dashboard/settings/auth/install/': typeof DashboardSettingsAuthInstallIndexRoute
-  '/dashboard/settings/auth/register-sso/': typeof DashboardSettingsAuthRegisterSsoIndexRoute
-  '/dashboard/settings/auth/scim-tokens/': typeof DashboardSettingsAuthScimTokensIndexRoute
-  '/dashboard/settings/auth/settings/': typeof DashboardSettingsAuthSettingsIndexRoute
   '/dashboard/settings/cluster-groups/new/': typeof DashboardSettingsClusterGroupsNewIndexRoute
   '/dashboard/settings/compliance/baselines/': typeof DashboardSettingsComplianceBaselinesIndexRoute
   '/dashboard/settings/gitops/$id/': typeof DashboardSettingsGitopsIdIndexRoute
@@ -1547,9 +1480,6 @@ export interface FileRoutesById {
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
   '/dashboard/logging/pipelines/$pipelineId/edit/': typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
   '/dashboard/projects/$id/cloud-credentials/new/': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
-  '/dashboard/settings/auth/connectors/$id/': typeof DashboardSettingsAuthConnectorsIdIndexRoute
-  '/dashboard/settings/auth/connectors/new/': typeof DashboardSettingsAuthConnectorsNewIndexRoute
-  '/dashboard/settings/auth/scim-tokens/new/': typeof DashboardSettingsAuthScimTokensNewIndexRoute
   '/dashboard/settings/backup/destinations/new/': typeof DashboardSettingsBackupDestinationsNewIndexRoute
   '/dashboard/settings/general/tokens/new/': typeof DashboardSettingsGeneralTokensNewIndexRoute
   '/dashboard/clusters/$id/delivery/bundles/$bundleId/': typeof DashboardClustersIdDeliveryBundlesBundleIdIndexRoute
@@ -1678,10 +1608,6 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/quota/'
     | '/dashboard/security/scans/$scanId/'
     | '/dashboard/security/scans/new/'
-    | '/dashboard/settings/auth/install/'
-    | '/dashboard/settings/auth/register-sso/'
-    | '/dashboard/settings/auth/scim-tokens/'
-    | '/dashboard/settings/auth/settings/'
     | '/dashboard/settings/cluster-groups/new/'
     | '/dashboard/settings/compliance/baselines/'
     | '/dashboard/settings/gitops/$id/'
@@ -1708,9 +1634,6 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/service-mesh/mtls/'
     | '/dashboard/logging/pipelines/$pipelineId/edit/'
     | '/dashboard/projects/$id/cloud-credentials/new/'
-    | '/dashboard/settings/auth/connectors/$id/'
-    | '/dashboard/settings/auth/connectors/new/'
-    | '/dashboard/settings/auth/scim-tokens/new/'
     | '/dashboard/settings/backup/destinations/new/'
     | '/dashboard/settings/general/tokens/new/'
     | '/dashboard/clusters/$id/delivery/bundles/$bundleId/'
@@ -1831,10 +1754,6 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/quota'
     | '/dashboard/security/scans/$scanId'
     | '/dashboard/security/scans/new'
-    | '/dashboard/settings/auth/install'
-    | '/dashboard/settings/auth/register-sso'
-    | '/dashboard/settings/auth/scim-tokens'
-    | '/dashboard/settings/auth/settings'
     | '/dashboard/settings/cluster-groups/new'
     | '/dashboard/settings/compliance/baselines'
     | '/dashboard/settings/gitops/$id'
@@ -1861,9 +1780,6 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/service-mesh/mtls'
     | '/dashboard/logging/pipelines/$pipelineId/edit'
     | '/dashboard/projects/$id/cloud-credentials/new'
-    | '/dashboard/settings/auth/connectors/$id'
-    | '/dashboard/settings/auth/connectors/new'
-    | '/dashboard/settings/auth/scim-tokens/new'
     | '/dashboard/settings/backup/destinations/new'
     | '/dashboard/settings/general/tokens/new'
     | '/dashboard/clusters/$id/delivery/bundles/$bundleId'
@@ -1990,10 +1906,6 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/quota/'
     | '/dashboard/security/scans/$scanId/'
     | '/dashboard/security/scans/new/'
-    | '/dashboard/settings/auth/install/'
-    | '/dashboard/settings/auth/register-sso/'
-    | '/dashboard/settings/auth/scim-tokens/'
-    | '/dashboard/settings/auth/settings/'
     | '/dashboard/settings/cluster-groups/new/'
     | '/dashboard/settings/compliance/baselines/'
     | '/dashboard/settings/gitops/$id/'
@@ -2020,9 +1932,6 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/service-mesh/mtls/'
     | '/dashboard/logging/pipelines/$pipelineId/edit/'
     | '/dashboard/projects/$id/cloud-credentials/new/'
-    | '/dashboard/settings/auth/connectors/$id/'
-    | '/dashboard/settings/auth/connectors/new/'
-    | '/dashboard/settings/auth/scim-tokens/new/'
     | '/dashboard/settings/backup/destinations/new/'
     | '/dashboard/settings/general/tokens/new/'
     | '/dashboard/clusters/$id/delivery/bundles/$bundleId/'
@@ -2850,34 +2759,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSecurityScansNewIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
-    '/dashboard/settings/auth/install/': {
-      id: '/dashboard/settings/auth/install/'
-      path: '/auth/install'
-      fullPath: '/dashboard/settings/auth/install/'
-      preLoaderRoute: typeof DashboardSettingsAuthInstallIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/auth/register-sso/': {
-      id: '/dashboard/settings/auth/register-sso/'
-      path: '/auth/register-sso'
-      fullPath: '/dashboard/settings/auth/register-sso/'
-      preLoaderRoute: typeof DashboardSettingsAuthRegisterSsoIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/auth/scim-tokens/': {
-      id: '/dashboard/settings/auth/scim-tokens/'
-      path: '/auth/scim-tokens'
-      fullPath: '/dashboard/settings/auth/scim-tokens/'
-      preLoaderRoute: typeof DashboardSettingsAuthScimTokensIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/auth/settings/': {
-      id: '/dashboard/settings/auth/settings/'
-      path: '/auth/settings'
-      fullPath: '/dashboard/settings/auth/settings/'
-      preLoaderRoute: typeof DashboardSettingsAuthSettingsIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
     '/dashboard/settings/cluster-groups/new/': {
       id: '/dashboard/settings/cluster-groups/new/'
       path: '/cluster-groups/new'
@@ -3060,27 +2941,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsIdCloudCredentialsNewIndexRouteImport
       parentRoute: typeof DashboardProjectsIdRouteRoute
     }
-    '/dashboard/settings/auth/connectors/$id/': {
-      id: '/dashboard/settings/auth/connectors/$id/'
-      path: '/auth/connectors/$id'
-      fullPath: '/dashboard/settings/auth/connectors/$id/'
-      preLoaderRoute: typeof DashboardSettingsAuthConnectorsIdIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/auth/connectors/new/': {
-      id: '/dashboard/settings/auth/connectors/new/'
-      path: '/auth/connectors/new'
-      fullPath: '/dashboard/settings/auth/connectors/new/'
-      preLoaderRoute: typeof DashboardSettingsAuthConnectorsNewIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/auth/scim-tokens/new/': {
-      id: '/dashboard/settings/auth/scim-tokens/new/'
-      path: '/auth/scim-tokens/new'
-      fullPath: '/dashboard/settings/auth/scim-tokens/new/'
-      preLoaderRoute: typeof DashboardSettingsAuthScimTokensNewIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
     '/dashboard/settings/backup/destinations/new/': {
       id: '/dashboard/settings/backup/destinations/new/'
       path: '/backup/destinations/new'
@@ -3216,10 +3076,6 @@ interface DashboardSettingsRouteRouteChildren {
   DashboardSettingsVaultIndexRoute: typeof DashboardSettingsVaultIndexRoute
   DashboardSettingsWebhooksIndexRoute: typeof DashboardSettingsWebhooksIndexRoute
   DashboardSettingsWidgetsIndexRoute: typeof DashboardSettingsWidgetsIndexRoute
-  DashboardSettingsAuthInstallIndexRoute: typeof DashboardSettingsAuthInstallIndexRoute
-  DashboardSettingsAuthRegisterSsoIndexRoute: typeof DashboardSettingsAuthRegisterSsoIndexRoute
-  DashboardSettingsAuthScimTokensIndexRoute: typeof DashboardSettingsAuthScimTokensIndexRoute
-  DashboardSettingsAuthSettingsIndexRoute: typeof DashboardSettingsAuthSettingsIndexRoute
   DashboardSettingsClusterGroupsNewIndexRoute: typeof DashboardSettingsClusterGroupsNewIndexRoute
   DashboardSettingsComplianceBaselinesIndexRoute: typeof DashboardSettingsComplianceBaselinesIndexRoute
   DashboardSettingsGitopsIdIndexRoute: typeof DashboardSettingsGitopsIdIndexRoute
@@ -3233,9 +3089,6 @@ interface DashboardSettingsRouteRouteChildren {
   DashboardSettingsTemplatesKeyIndexRoute: typeof DashboardSettingsTemplatesKeyIndexRoute
   DashboardSettingsWebhooksIdIndexRoute: typeof DashboardSettingsWebhooksIdIndexRoute
   DashboardSettingsWebhooksNewIndexRoute: typeof DashboardSettingsWebhooksNewIndexRoute
-  DashboardSettingsAuthConnectorsIdIndexRoute: typeof DashboardSettingsAuthConnectorsIdIndexRoute
-  DashboardSettingsAuthConnectorsNewIndexRoute: typeof DashboardSettingsAuthConnectorsNewIndexRoute
-  DashboardSettingsAuthScimTokensNewIndexRoute: typeof DashboardSettingsAuthScimTokensNewIndexRoute
   DashboardSettingsBackupDestinationsNewIndexRoute: typeof DashboardSettingsBackupDestinationsNewIndexRoute
   DashboardSettingsGeneralTokensNewIndexRoute: typeof DashboardSettingsGeneralTokensNewIndexRoute
 }
@@ -3271,14 +3124,6 @@ const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
     DashboardSettingsVaultIndexRoute: DashboardSettingsVaultIndexRoute,
     DashboardSettingsWebhooksIndexRoute: DashboardSettingsWebhooksIndexRoute,
     DashboardSettingsWidgetsIndexRoute: DashboardSettingsWidgetsIndexRoute,
-    DashboardSettingsAuthInstallIndexRoute:
-      DashboardSettingsAuthInstallIndexRoute,
-    DashboardSettingsAuthRegisterSsoIndexRoute:
-      DashboardSettingsAuthRegisterSsoIndexRoute,
-    DashboardSettingsAuthScimTokensIndexRoute:
-      DashboardSettingsAuthScimTokensIndexRoute,
-    DashboardSettingsAuthSettingsIndexRoute:
-      DashboardSettingsAuthSettingsIndexRoute,
     DashboardSettingsClusterGroupsNewIndexRoute:
       DashboardSettingsClusterGroupsNewIndexRoute,
     DashboardSettingsComplianceBaselinesIndexRoute:
@@ -3301,12 +3146,6 @@ const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
       DashboardSettingsWebhooksIdIndexRoute,
     DashboardSettingsWebhooksNewIndexRoute:
       DashboardSettingsWebhooksNewIndexRoute,
-    DashboardSettingsAuthConnectorsIdIndexRoute:
-      DashboardSettingsAuthConnectorsIdIndexRoute,
-    DashboardSettingsAuthConnectorsNewIndexRoute:
-      DashboardSettingsAuthConnectorsNewIndexRoute,
-    DashboardSettingsAuthScimTokensNewIndexRoute:
-      DashboardSettingsAuthScimTokensNewIndexRoute,
     DashboardSettingsBackupDestinationsNewIndexRoute:
       DashboardSettingsBackupDestinationsNewIndexRoute,
     DashboardSettingsGeneralTokensNewIndexRoute:
