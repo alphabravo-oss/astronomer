@@ -59,7 +59,7 @@ Every checkbox needs an exact source/artifact identity, check result and retaine
 evidence before closure. Where code already exists, verify and close the residual;
 do not rebuild it merely because an old document has unchecked boxes.
 
-### S0 — Consolidate and publish the current source (current request)
+### S0 — Consolidate and publish the current source (completed 2026-11-14)
 
 - [x] Inventory worktrees/remotes and privately snapshot the three dirty checkouts.
   All non-evidence changes in the older fixes checkout are present in the Identity
@@ -69,10 +69,15 @@ do not rebuild it merely because an old document has unchecked boxes.
 - [x] Validate the consolidated tree: Go lint/vet/format/build/race suite,
   real Identity/PostgreSQL/Redis tests, chart checks, frontend checks/build and
   applicable security/generated-contract checks. The [verification receipt](evidence/2026-11-14-consolidation/README.md) records 15,568 Go tests (7 explicit skips), 2,408 frontend tests, real integration results and limitations.
-- [ ] Commit implementation plus planning consolidation, fast-forward primary
+- [x] Commit implementation plus planning consolidation, fast-forward primary
   GitHub main without force, and verify the exact remote commit and contents.
-- [ ] Bring the primary local checkout onto published main while preserving old
+- [x] Bring the primary local checkout onto published main while preserving old
   branch/worktree snapshots. No live release is implied by this source operation.
+
+Publication verified: implementation `12fcad7f9d` and planning consolidation
+`e357405e70` are on primary GitHub main. The primary application and catalog
+checkouts are clean on their published main branches. See the [publication receipt](evidence/2026-11-14-consolidation/publication.json).
+The next implementation work is S1; S2–S7 remain open.
 
 ### S1 — Finish optional Identity and catalog provisioning (P0)
 

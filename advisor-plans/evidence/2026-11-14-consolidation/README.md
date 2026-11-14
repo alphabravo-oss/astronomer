@@ -56,7 +56,8 @@ Commands used Go 1.27.4 through `mise exec`, `GOFLAGS=-p=4` and the private
 root-filesystem temporary directory. The Go gate used the owned bridge fixture
 address through `ASTRONOMER_HELM_HTTP_PRIVATE_FIXTURE_IP`; no capacity guard was
 weakened. Source hashes were compared after the final checks. The full branch
-history is scanned again after committing and before pushing.
+history scan of the 2,306-commit publication candidate and the repeated compressed
+archive scan both pass; their final logs are retained alongside this receipt.
 
 Integration selections were `Identity|SharedIdentity|TestVersionsAreContiguous|TestUp`
 for Identity/config/handler/database/migrations; all provisioning tests with the

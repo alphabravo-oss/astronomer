@@ -1,5 +1,35 @@
 {
-  "status": "PENDING",
+  "status": "PUBLISHED",
+  "verified_at_utc": "2026-11-14T04:30:08.058715+00:00",
+  "remote": "https://github.com/alphabravo-oss/astronomer.git",
+  "target": "refs/heads/main",
   "implementation_commit": "12fcad7f9ddc3d3e10f24388d0bff72f4c268cf9",
-  "target": "origin/main"
+  "plan_consolidation_commit": "e357405e7083c664255f677e7d44230ec4af3dd2",
+  "verified_remote_main_at_source_publication": "e357405e7083c664255f677e7d44230ec4af3dd2",
+  "primary_checkout": {
+    "branch": "main",
+    "clean": true,
+    "matches_remote": true
+  },
+  "catalog": {
+    "branch": "main",
+    "commit": "856f3356e811f63dd3514cb3ac950cbe36189891",
+    "clean": true,
+    "already_published": true
+  },
+  "preservation": {
+    "private_snapshots": true,
+    "named_local_stashes": [
+      "preserved planning work before 2026-11-14 main consolidation",
+      "preserved duplicate runtime work after 2026-11-14 main consolidation"
+    ],
+    "old_ignored_artifacts_preserved": true
+  },
+  "secret_scans": {
+    "full_history_commits": 2306,
+    "full_history_findings": 0,
+    "compressed_archive_depth": 3,
+    "compressed_archive_findings": 0
+  },
+  "note": "This receipt records the verified source/plan publication. A subsequent documentation-only commit records closure; main may advance without changing the verified implementation."
 }
