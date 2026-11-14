@@ -1,0 +1,46 @@
+{
+  "source": "388ccad0a0c4b54edde37560f3a7da5f9ef07863",
+  "observed_at": "2026-10-10T01:30:46.631887+00:00",
+  "checks": [
+    {
+      "name": "actual-cosign-race",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "./internal/delivery/distribution",
+        "./deploy/bundles/cmd/distribution",
+        "-count=1",
+        "-timeout=5m"
+      ],
+      "exit_code": 0,
+      "log_sha256": "932da34cb4b43ead7b70c97601db8de8128424d2d21295fc9c74398d38fbd1a3",
+      "test_events": {
+        "pass": 187
+      },
+      "parent_pass_count": 50
+    },
+    {
+      "name": "vet",
+      "argv": [
+        "go",
+        "vet",
+        "./internal/delivery/distribution",
+        "./deploy/bundles/cmd/distribution"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_events": {},
+      "parent_pass_count": 0
+    }
+  ],
+  "source_dirty": "",
+  "toolchain": {
+    "go": "1.27.2",
+    "cosign": "3.1.3",
+    "cosign_sha256": "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71",
+    "GOMAXPROCS": "2",
+    "GOFLAGS": "-p=1"
+  }
+}

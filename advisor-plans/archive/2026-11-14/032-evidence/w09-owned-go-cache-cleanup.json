@@ -1,0 +1,1262 @@
+{
+  "time": "2026-10-09T21:50:13.801690+00:00",
+  "scope": "Exact regenerable Go cache entries containing completed task worktree source paths; active worktree entries and unrelated cache preserved",
+  "removed": [
+    {
+      "path": "/root/.cache/go-build/34/34922d2091f255abba59876bdb48a23fad7652ef8ee74bd7b8e1ec7f0de55ad6-d",
+      "bytes": 121385510,
+      "modified_at": "2026-10-09T20:57:42.769786+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f7/f7d4904d87a5583edbe359b76f71b814b07559871dfc0874a45f15b0986336f5-d",
+      "bytes": 6356616,
+      "modified_at": "2026-10-09T21:04:04.816270+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a1/a16573f7b89429d6fc6cce6cad25cda598a5827ba34c0e91482115122f22cfd5-d",
+      "bytes": 23937796,
+      "modified_at": "2026-10-09T20:41:34.818930+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a1/a1ff127c9b981d4842f3eae7f0008e1e683d7a754c39923878b9a5ba2ad08a87-d",
+      "bytes": 11698206,
+      "modified_at": "2026-10-09T21:31:19.999255+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a1/a1471c4aa7cde4ca3a22e13f7423872f71fae493ccc5c1b9dbb93253eb181a81-d",
+      "bytes": 38267622,
+      "modified_at": "2026-10-09T20:29:03.548835+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/19/19106067f4f36037580fa3300b268ae95a9f55b5e9eb9e901b33a6c9fed08dd3-d",
+      "bytes": 1118882,
+      "modified_at": "2026-10-09T20:56:52.689055+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/82/823526980433a7ec944f67ab30948f8122f136ad413d46db7a641a20849d7647-d",
+      "bytes": 120647628,
+      "modified_at": "2026-10-09T19:54:04.233622+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/eb/eb67f552d213534f2fbcab0c07aaee7b5e5074f98b78f7a5147250367b48f01b-d",
+      "bytes": 1118986,
+      "modified_at": "2026-10-09T21:09:17.062925+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/9a/9a992c072b39314b83a4813813ebf7252dba9cafc90a141edccda861569bb076-d",
+      "bytes": 1111344,
+      "modified_at": "2026-10-09T19:54:04.374748+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/50/50af3dfd93ab92f59aae0bba3d4a86359b020098b7530c8057c41cfae47ebb99-d",
+      "bytes": 120877060,
+      "modified_at": "2026-10-09T20:09:54.080561+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/83/8321d9c7db2774a27ce5b0bcf2a6cc4ef6c4a7259ad74df9a2f3cf04e1918727-d",
+      "bytes": 9947848,
+      "modified_at": "2026-10-09T19:48:09.250850+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/6d/6d25758b8efef412e916a007acd10f95a24ec3aeaf9d3dbe0464c697b13feeaf-d",
+      "bytes": 3655270,
+      "modified_at": "2026-10-09T20:57:23.805417+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/dc/dc12afabc36dee65eae75b105ba6e6e8dc9db7c8cacb594684f773d211d951b9-d",
+      "bytes": 1068862,
+      "modified_at": "2026-10-09T20:56:52.834915+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f6/f64aab0cb94fafc11b5c76c34656626737516c5450043e6235e070755851aa91-d",
+      "bytes": 1218174,
+      "modified_at": "2026-10-09T20:58:25.506524+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ee/ee3ce1b3cf1b5486f2423d80d1344b6d126ff9efceedde6050397e631d3bf1c4-d",
+      "bytes": 17586122,
+      "modified_at": "2026-10-09T20:52:00.847095+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f3/f3f46e5118d363310160de1fa1efba6ed585e450076b50bebf9c2301532d42f4-d",
+      "bytes": 1118986,
+      "modified_at": "2026-10-09T21:09:45.276829+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e3/e349f2e36c6de9645a1a9572f9666db9a23512896d51d214fa0f6b6209ed19f7-d",
+      "bytes": 9978258,
+      "modified_at": "2026-10-09T21:03:45.350841+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e3/e3c11088d09a86fc8002ac11663e3e2b36f5806f3d8d8a59a7d25a2301fdd6db-d",
+      "bytes": 38220900,
+      "modified_at": "2026-10-09T19:53:50.565851+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a2/a20353d42dc90a264a219817bf53cc860e6ce69f23229906cdea770d08a28f65-d",
+      "bytes": 9947976,
+      "modified_at": "2026-10-09T20:28:57.009539+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/54/54ca0b1e9aa00b33bbd578b3c39e3c909a81b16658b754b9346f61162ad7b321-d",
+      "bytes": 12144850,
+      "modified_at": "2026-10-09T20:41:34.077334+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ab/ab97b843dbf19f194941f607e02cabe4c2d16d10f2ee64494b248ead29523b86-d",
+      "bytes": 1111342,
+      "modified_at": "2026-10-09T19:50:52.476923+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c2/c25cc825a22ddf29abd135886d52c905cd1a7cd1e6c46f1799ab99e67ea02bd4-d",
+      "bytes": 1103466,
+      "modified_at": "2026-10-09T20:41:31.839560+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/04/04c31d27d674904efc3312a72472fb5fbacc07daa4d937528d4ae28ab3656387-d",
+      "bytes": 9991670,
+      "modified_at": "2026-10-09T20:57:10.718355+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/04/041aa81b3a527fa89b9f74a99c0faed59d47705e1c8391a648cd18b971334f6b-d",
+      "bytes": 1118272,
+      "modified_at": "2026-10-09T20:57:42.919218+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/5f/5f7d651b2aac35b2f3af817d1265a3ceab4baf6e7eb6a15a80350c3222780fb7-d",
+      "bytes": 23937800,
+      "modified_at": "2026-10-09T20:56:56.076538+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0a/0afc07042349c587822b4adf5613b757fa42a28b6166621d3c2ed5a462effcee-d",
+      "bytes": 1159262,
+      "modified_at": "2026-10-09T21:27:37.248756+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0a/0a73e74bf8d360e809639a933ab674e5f2fd0a8178f8d4f61c598579cf56ddee-d",
+      "bytes": 38222890,
+      "modified_at": "2026-10-09T19:52:06.443455+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/bc/bc1ae2724f43ad739ed0a1a80e509d4943ffcee844ee0e9d3ce2eb249d7c9c2d-d",
+      "bytes": 10061976,
+      "modified_at": "2026-10-09T20:12:39.969314+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/bc/bc261719cc6b302296e62fe618faacd940da334a2a2749ac766948996c7806aa-d",
+      "bytes": 10061988,
+      "modified_at": "2026-10-09T21:11:47.964438+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/bc/bc2a27ac42d664ca1e3b475cd77acd30ead526f62a36927161dd7e502df13e89-d",
+      "bytes": 38290036,
+      "modified_at": "2026-10-09T21:10:44.522269+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e2/e2b1f60439065a63133c9bfacda8e9c11eec3ad7e9e51b4e317a406b4c462dbb-d",
+      "bytes": 23937796,
+      "modified_at": "2026-10-09T20:31:54.566458+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/79/799d957deab78b22a460549bfdab75a4d5b4b6d77429e854b0065fc6fa2b362f-d",
+      "bytes": 12191264,
+      "modified_at": "2026-10-09T21:31:19.565991+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/79/792ff9da8d5f9bf992ef90bf58c92a820d9d841dc70046c45ed7fad1737383b0-d",
+      "bytes": 12191264,
+      "modified_at": "2026-10-09T21:10:40.955795+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/8a/8aa67a99ea25f7ffbc6713c971224dbb9f58b01f088fc7b82c4311bf51187bd9-d",
+      "bytes": 2618030,
+      "modified_at": "2026-10-09T19:48:05.112274+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c8/c81937672c685cf305f7dcc0305438216099578edbd757e3fbd5061cb2a7db8e-d",
+      "bytes": 120794458,
+      "modified_at": "2026-10-09T20:02:56.783861+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/00/00f80742eaea9662c84ab99b5d40a352483cc52fff71afbcb52bfe282abdfcde-d",
+      "bytes": 1099342,
+      "modified_at": "2026-10-09T20:41:36.286729+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ff/ffb12f2c4607c2277b9831c93cbfd8b1c3f5f9c1a0be4143a2a25344d0c9d2e5-d",
+      "bytes": 1097638,
+      "modified_at": "2026-10-09T21:27:18.234187+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ff/ff8965c1ac5f07b3f628c0534718e0039ff9165ca26741606f4691ac601dc34e-d",
+      "bytes": 1121784,
+      "modified_at": "2026-10-09T21:30:13.782605+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ff/ff1db4febd971d672d529dd8befe1ff7ac8e84661b7fbd13989f716a13d6267c-d",
+      "bytes": 1112998,
+      "modified_at": "2026-10-09T19:58:14.844306+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ff/ff7889908dd2194f9c19484ef5c44a707eae03d31c80a0167e31a8fd4f1baa9d-d",
+      "bytes": 12144720,
+      "modified_at": "2026-10-09T19:50:33.751950+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/3c/3cae8bf41e9f8895f1dc359809e35203c8717f0fdf53dbca44250fe118da6f1c-d",
+      "bytes": 3177180,
+      "modified_at": "2026-10-09T21:30:09.137619+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/41/415be581e3f4fc7cc6ffe36939a9b1804ab251227ed4fb21e603dfb35627d33f-d",
+      "bytes": 14069776,
+      "modified_at": "2026-10-09T20:13:34.815108+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ad/adc74157099f9111782c6e69c2e0bbd3185d9a90989d684d38a6b999f67b0850-d",
+      "bytes": 1117620,
+      "modified_at": "2026-10-09T20:16:00.980300+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ad/ad17831db7bf06e5d423b74d84dd5627f04ade7287b599e1fda86c5c1535f8ed-d",
+      "bytes": 120677296,
+      "modified_at": "2026-10-09T20:02:02.717338+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/32/32394c63e269334fd791253b84dbb5c37364f39d1fdef86093048348ebb21c3d-d",
+      "bytes": 2843724,
+      "modified_at": "2026-10-09T21:27:01.431190+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/32/32da8d26fb49c781cf476fe63ecc284580c9fd3a841bcd49f035d41c6fd4d04a-d",
+      "bytes": 120644598,
+      "modified_at": "2026-10-09T19:50:52.340194+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d6/d69de61e02ee70749c8e121ce7f4c3164af9ad64f4f4794305e22a52a704f801-d",
+      "bytes": 19114320,
+      "modified_at": "2026-10-09T20:57:13.034863+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d6/d628c4a1addf58e88c9d8d8ae6cf409de1303d6d266d9a57cb9bca225566bd94-d",
+      "bytes": 1117620,
+      "modified_at": "2026-10-09T20:12:58.702776+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/75/75dd28826747e95fb44721b51d4db3b46949cc1e5a2afaaa109e4dd80482c007-d",
+      "bytes": 68759586,
+      "modified_at": "2026-10-09T21:12:08.934580+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/58/58550e23a529c23832bd77f2f65fcc6c2d65a9ccd667d72e4e5b470c4ad5b1e7-d",
+      "bytes": 2626680,
+      "modified_at": "2026-10-09T21:29:47.590214+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e8/e8ecf8244e15f108b65165d1c69eda5e892f8ae25eb873aa90ed0c20c58a5b06-d",
+      "bytes": 120677410,
+      "modified_at": "2026-10-09T19:59:31.419851+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e8/e896b2ff80ef549df99ed987eaf602920a74de800343e4e68c35108fd044c1b3-d",
+      "bytes": 19118992,
+      "modified_at": "2026-10-09T21:09:26.697271+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/14/1400a3889a80cf48ef11f0fb0f0c3940564d375d27c4dfb27166b15275e8551c-d",
+      "bytes": 2843724,
+      "modified_at": "2026-10-09T20:57:25.072204+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/14/1453ce4e67362eb72823c0a9382262395e957e90d5fa9362f7e9a9723229c736-d",
+      "bytes": 1060044,
+      "modified_at": "2026-10-09T21:01:25.068428+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/14/149184914988962ecbe4ef1356b6a32e650e10b214b994a0a7ad7a7e2e4d13ed-d",
+      "bytes": 1165028,
+      "modified_at": "2026-10-09T21:14:07.907153+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e9/e91e54a776b2286a4120ec424595c5c1ddb964fbd493e16c194771743f4189d8-d",
+      "bytes": 1391768,
+      "modified_at": "2026-10-09T19:48:05.342156+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f4/f4dfc9bae5d365e648b615abfe07fbc782d5451ce59be2f91e7981efa7a8e706-d",
+      "bytes": 10061984,
+      "modified_at": "2026-10-09T20:41:38.042041+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f4/f42e4ab6df7ad6e66b3c8bc6c474bb5c24484dc03a3c730862b2ce4a40f23a90-d",
+      "bytes": 68833486,
+      "modified_at": "2026-10-09T21:31:25.646102+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f4/f49823908ef980241f7dc7d064b7e1759c01dc135316cadced1e3afb693ecf23-d",
+      "bytes": 1099206,
+      "modified_at": "2026-10-09T19:57:57.568389+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/db/dbc571b93f0ffe0f395439e67047d8cbc9ea966b9b247d57f01eed6aeac5302b-d",
+      "bytes": 7413922,
+      "modified_at": "2026-10-09T21:03:41.931783+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/db/db7a317e3e25b99726c3c6aafb5e13f8e725774c93221438e7ca04e6df9f2f60-d",
+      "bytes": 3200334,
+      "modified_at": "2026-10-09T21:03:48.702627+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/db/db127b94b39187bfa5fbb447f048067a3e7d19eeca1cdd8a1711add3641f4253-d",
+      "bytes": 1208488,
+      "modified_at": "2026-10-09T20:55:54.987653+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/01/0184462e88dc187eb4d3a2e7cd43884dc4810571ac72b1fd5b719d9a776900fa-d",
+      "bytes": 14101584,
+      "modified_at": "2026-10-09T20:41:37.778583+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/51/51a4054757b74014d53eb40ec4b4d8f6f7e2c07d48ba829114ce25f822b94cab-d",
+      "bytes": 10061962,
+      "modified_at": "2026-10-09T19:53:46.806306+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/03/03ce88de3fabfb7e2438f9628d0ec18b186dba4b0cfd1bdba3d8f871d41f3c0b-d",
+      "bytes": 19118990,
+      "modified_at": "2026-10-09T21:27:03.453481+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e0/e056c65f893b55dd2be365ecf4aef9799da02ba46e5bd639324cb05dca63f1f7-d",
+      "bytes": 2504466,
+      "modified_at": "2026-10-09T20:56:52.691495+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e0/e0b32d30d568f7d10dfeb70ae886e72870e515eb275dd67cf587788b4e0046bf-d",
+      "bytes": 9716552,
+      "modified_at": "2026-10-09T20:56:52.697443+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e0/e0b3917633cb776ad0b84e764355cb89b247c51147f1f7bdce0c6e10acbd089e-d",
+      "bytes": 66602286,
+      "modified_at": "2026-10-09T21:01:36.566350+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4e/4e912a610ed6edc0f366cec194518bc958525b65c9d7e2fdcad9bb788c2c8c38-d",
+      "bytes": 1213428,
+      "modified_at": "2026-10-09T21:31:18.532734+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b7/b7b0dfaa6a3e3a159a41972c2056ccf1e48841813cfbc2f760e912b1e3d68b68-d",
+      "bytes": 14076146,
+      "modified_at": "2026-10-09T21:01:25.442414+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4f/4f5f7bcf23b6a8a21126fe378d9460136f012f0146ef0f2e13d76afda915ba85-d",
+      "bytes": 1097638,
+      "modified_at": "2026-10-09T21:31:17.953225+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4f/4f120f038660e3274644282c55cc13eec1e94a98cca34252d98db54d6acf4ab9-d",
+      "bytes": 120672914,
+      "modified_at": "2026-10-09T19:56:18.356905+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/33/3386d0ba7e6542c8822e579ad39b2c93a0b16a8f6891969e57fdeff7c39cb594-d",
+      "bytes": 2618162,
+      "modified_at": "2026-10-09T20:57:10.445365+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f9/f912e0d8b61a75ec1657db39763b9d01cbc4c7cb8546a6c8e5a520b7a48487f9-d",
+      "bytes": 9947976,
+      "modified_at": "2026-10-09T21:26:58.871772+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d8/d8cc688a407c71ac5c74553b74f49d5c99994f3db34c76cfe51d0f7ecbd05295-d",
+      "bytes": 14069776,
+      "modified_at": "2026-10-09T19:59:13.147786+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d8/d857b4f560ccf785fd2edfc2721e08dde815a3c781f8b52768febdfdcc08a11b-d",
+      "bytes": 1101904,
+      "modified_at": "2026-10-09T20:28:04.937304+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d8/d8e9ba697e2ca3085d01d3645fe09eafdb966bf4f79d9dca68f2733d5727ff18-d",
+      "bytes": 1103470,
+      "modified_at": "2026-10-09T20:57:08.945557+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d8/d8ba445621e9ee4454a92411b83e36bbbb33f579ea8e73f697293a00b9058bd9-d",
+      "bytes": 1158650,
+      "modified_at": "2026-10-09T21:10:39.813488+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/9d/9d0627e4f7d4cb99f51fb2ff181d80c468a229a12d4733786374b3778c68ddf4-d",
+      "bytes": 2843720,
+      "modified_at": "2026-10-09T20:41:35.396190+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/25/251a3b4fbd25dcf79d383ab382492e7cc81de6a1f60bc7e419babfa9a6141285-d",
+      "bytes": 12144872,
+      "modified_at": "2026-10-09T21:29:52.033422+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/53/53d61ece205efcbaa7f88060c8e355fe5231d48cee9cb34290675b5b78dd2f43-d",
+      "bytes": 43369840,
+      "modified_at": "2026-10-09T21:01:37.504591+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/27/272e9f2b74af346df0093d5f9dcf46f20a62a28030646f76b920d2ab39d42b0f-d",
+      "bytes": 36989738,
+      "modified_at": "2026-10-09T19:48:14.794802+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/37/37c37835eb460e3bac7008fb2e4a713ec192f2a4162a6647a3c7030d66a8942c-d",
+      "bytes": 2407324,
+      "modified_at": "2026-10-09T21:18:06.149483+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/10/10bcbcdb17e269b40a3454b1eaa322cea6e5fb460abc540646b152100de87d35-d",
+      "bytes": 2402902,
+      "modified_at": "2026-10-09T20:23:18.887511+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a5/a576626ad0eb8d3ad2b807b5767ef2db7686db2142101f9e4f7b36e6af099e46-d",
+      "bytes": 14101600,
+      "modified_at": "2026-10-09T20:42:24.430195+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/31/31340c957d3ff784a2d3947211c8b8ee4030522f0254fb37386c6a8fa711378d-d",
+      "bytes": 2403034,
+      "modified_at": "2026-10-09T20:28:55.639476+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/63/636489f8e1eb9232939a6e17c0901536776351a7091753e49a92c89ffc1b89f8-d",
+      "bytes": 12144850,
+      "modified_at": "2026-10-09T21:27:00.151693+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/43/4377486ab8ddae12592dda0168040f9b510783fe14b70959377818f8a718a930-d",
+      "bytes": 38282106,
+      "modified_at": "2026-10-09T21:09:31.145925+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/43/43ab8e273942728bec7cd3b6e659387bf257d800462a85961222bea5b4333338-d",
+      "bytes": 120944874,
+      "modified_at": "2026-10-09T20:16:00.854881+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/85/85bed0e8d046452b58dce0ca95d79e94f35088708288e703d8e4d0d8fdb870b1-d",
+      "bytes": 2843586,
+      "modified_at": "2026-10-09T19:50:32.399498+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d7/d73f25159d868f4ebc023ffd55147102fae1d644dbb35dba74ea03982ed2a253-d",
+      "bytes": 1391898,
+      "modified_at": "2026-10-09T20:57:10.656674+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b2/b27382b909ed3cd7d134e4fd37c1ee40f9b2023b27eb80215c8ddbc4625edbd0-d",
+      "bytes": 1212454,
+      "modified_at": "2026-10-09T21:06:58.163024+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a6/a666f243faac6ec7342d9e4fc759f140e69561b9a5a378cb298475fba2a54e3d-d",
+      "bytes": 2407324,
+      "modified_at": "2026-10-09T21:28:44.168873+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/09/097ce9bf05676e6a94a2a0f08459421309a2f8d3dddbb1ccd10420415cb35a5d-d",
+      "bytes": 3776016,
+      "modified_at": "2026-10-09T21:10:40.168838+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/24/242f27dcc7f72d0ae3e085371ca9aa1547b9d5d60052948002305c63a5cab41e-d",
+      "bytes": 1103470,
+      "modified_at": "2026-10-09T21:26:57.909328+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/5e/5e53efa419f5cdb26cb9da5e59ca9722da348e99750f4eea1de8e6b59bbf1668-d",
+      "bytes": 121385468,
+      "modified_at": "2026-10-09T20:41:55.758329+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/5e/5eb69841c8e3fbdb5862d0d638783f08062b2fe6dc627cf5e2cce6eef0df6c07-d",
+      "bytes": 2401564,
+      "modified_at": "2026-10-09T19:48:06.078012+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a7/a7c92ff3a1273e5c4c59623ba46286c2f87fc0a9954fc4b0393779a8dce4eac4-d",
+      "bytes": 14101608,
+      "modified_at": "2026-10-09T21:27:20.020151+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/a7/a789214c0ad4b1ebbb390a3efa4486a5b083c7f2511b10d05b802deccaf10cb0-d",
+      "bytes": 1112986,
+      "modified_at": "2026-10-09T19:56:18.474423+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ba/ba57c69f17d9850c60b0c4cfd4c4c09aa6cdd857361e1f2c5831e22fbd79bcda-d",
+      "bytes": 38267062,
+      "modified_at": "2026-10-09T20:28:09.854484+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ba/bac4af70f8ae5d084a4644d785ba6231df7e382e9614d78e0b797bcdb1d0b14a-d",
+      "bytes": 23937822,
+      "modified_at": "2026-10-09T21:29:51.533553+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ba/bae30860de6e231f76906c0f56bf143331ae2c761689405253173ffede8055ea-d",
+      "bytes": 1103330,
+      "modified_at": "2026-10-09T19:50:31.588304+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/f0/f0e41e80507bdfe768297d848bbd30ee00dc3c73a7a09e35b1e0a2c5d9b2da50-d",
+      "bytes": 1118986,
+      "modified_at": "2026-10-09T21:12:17.303271+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/69/69f2a66c3e02ec5888db2d8df66d2e6e1b5baec4e056ba43a94073cdb7df1b04-d",
+      "bytes": 68762468,
+      "modified_at": "2026-10-09T21:10:49.172167+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/74/744b056a8e1d35f3a622b66b25ad5dcec460e2b44ef13fb1c26cf8ee6962a13a-d",
+      "bytes": 19114316,
+      "modified_at": "2026-10-09T20:41:37.245785+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/74/743f0f59159e467db24429ee20a7888958f7e06c076d31789d0a5e46ad17a0ef-d",
+      "bytes": 1114146,
+      "modified_at": "2026-10-09T20:09:54.210938+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/80/80e46289699c559314eadfbdc21b4baf8e60f8a42ddb786413a384c294682031-d",
+      "bytes": 9329670,
+      "modified_at": "2026-10-09T21:03:41.955648+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4c/4c5868745e26516dfe4522b6f9a70732c4d1c1d26be915e06436aee22d6c98ac-d",
+      "bytes": 19118990,
+      "modified_at": "2026-10-09T21:11:47.089603+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4c/4c1924b6f5605437db28532b9e33ddbaf4195a8f68df852c20293fc621e06492-d",
+      "bytes": 121408280,
+      "modified_at": "2026-10-09T21:09:16.937098+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4c/4c9ffd4ddb05547c949a9d1aeb33fd82ee75dfeb584f311fd88cac4da6a84734-d",
+      "bytes": 38255292,
+      "modified_at": "2026-10-09T20:22:39.509978+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/6a/6a74e22603346fe3f7774b0ebafbc1e87607365529955a843ad28d77677037bd-d",
+      "bytes": 120943882,
+      "modified_at": "2026-10-09T20:12:58.581240+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/6a/6a38d9dd2aa7c4e6913c0556eebf66fbe06d4b17ecf3a803021fbc4179f1af95-d",
+      "bytes": 19196002,
+      "modified_at": "2026-10-09T21:29:54.004019+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0e/0ece1c2b4ba54b1351cae37d5b88a63247308a675bfbdd0f08d37836072cbca0-d",
+      "bytes": 1114146,
+      "modified_at": "2026-10-09T20:02:56.939671+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/46/46cbf35c54503594284f61e1a8df984d89aa38bec50a517887da91383fe92e59-d",
+      "bytes": 1325146,
+      "modified_at": "2026-10-09T20:57:06.279783+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/bb/bbc866c88486a0f2ceb30a1448873942cb4a9491f80466f98c549b0d161b8f2c-d",
+      "bytes": 121385506,
+      "modified_at": "2026-10-09T20:42:40.338084+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/7c/7c814871c16b406d1f52ed87fecccf3fb9f03fab5ffda21e25405707818bc546-d",
+      "bytes": 1146848,
+      "modified_at": "2026-10-09T20:36:46.560685+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/5d/5d65c55024b478702aa91bf883854d2c4d806cacc0847961f1dd1762d5724dc0-d",
+      "bytes": 68759586,
+      "modified_at": "2026-10-09T21:27:27.862123+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ce/ce495e9f51d5e4ea6467287ff5d50a9852f369c7410cd2b5408bc79cd658fd3e-d",
+      "bytes": 23937800,
+      "modified_at": "2026-10-09T21:27:00.983096+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c9/c992363063c1e620442d5e1b75ab123326cd7589033e973342318087d0628da4-d",
+      "bytes": 38267630,
+      "modified_at": "2026-10-09T20:57:17.430818+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/45/4545ff902f633081b9f36999f770e847df75d093389765ca923443814f53e885-d",
+      "bytes": 68764484,
+      "modified_at": "2026-10-09T21:01:30.648032+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/45/45f2aa3e2d9a57b6bf13c9f275d4fb1e3757174cf9709aa3deea7f20774bb776-d",
+      "bytes": 18805564,
+      "modified_at": "2026-10-09T20:42:42.853887+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/3f/3f3343785b6c6649ce8ffe8520f3f9c223824f96c788de49d1be4c37d5e6e6ce-d",
+      "bytes": 121709996,
+      "modified_at": "2026-10-09T21:27:23.500455+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/3f/3fbbc3a48a0b7b79cd8a54572b9789ab66d5e2411d3e26bb23d93882212a993c-d",
+      "bytes": 120647632,
+      "modified_at": "2026-10-09T19:52:19.612388+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/78/78ec97fec808de525b58212053c3868a0af0cd290ab058dd9fbf5f151b2b3b47-d",
+      "bytes": 1212454,
+      "modified_at": "2026-10-09T21:30:10.325737+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/78/78b9213e7ef191f49c16a11b38302759c656411da252fa475533e67e4eae5417-d",
+      "bytes": 2407324,
+      "modified_at": "2026-10-09T20:52:42.794450+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/86/86d3b0bdfcdf2eb0f6c7b2fb322fc384069c45aba6413af9736660aa1b7df9f7-d",
+      "bytes": 3156400,
+      "modified_at": "2026-10-09T20:23:19.283069+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/86/86775d43c009b7d90f43bf652263b67cf8d3e921dc2906dec5a7b67b1a4b3b2e-d",
+      "bytes": 2407320,
+      "modified_at": "2026-10-09T20:39:14.070952+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/4b/4bed5f52c14f9a25fa1855904b96ea91a5bfdf0489be32c308f67d7bb072118c-d",
+      "bytes": 10142574,
+      "modified_at": "2026-10-09T21:29:49.733874+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ac/ac2c28ad7dd637b82973566cae63849c08b3617b085f96dff96f06b29ef842a5-d",
+      "bytes": 38267734,
+      "modified_at": "2026-10-09T20:28:30.286606+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/73/739dd7c69ac5efaacc00e0e18bed557baf8cd49942fef550ea6b279b3693e901-d",
+      "bytes": 11696002,
+      "modified_at": "2026-10-09T21:01:26.723817+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/1a/1ada4cd0b89dff4640ca21386dc9678ca1ed97449f7dce1a0d86933ab1aec1f1-d",
+      "bytes": 13290910,
+      "modified_at": "2026-10-09T21:04:04.761318+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0f/0f4484b1fa9b34c66a83b4f1695be87cdc79ae24d07f3fa4ed7f57dd35680e29-d",
+      "bytes": 5108696,
+      "modified_at": "2026-10-09T20:57:10.693497+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0f/0f38e49ede0448de8bc250dd4699ddc71f7b85a286f7b34aea161dfc2f74c58c-d",
+      "bytes": 38399034,
+      "modified_at": "2026-10-09T21:30:00.080725+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0f/0f0061c0cf3f2002a3b0bb1e6ee16323e87f043edba2e5d19985efd6e3ee549b-d",
+      "bytes": 2843748,
+      "modified_at": "2026-10-09T21:29:52.455199+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0f/0ff44a9277fdc0c25fd5d5a53baf71d9bf33f1366fbbf56465b773698c3db425-d",
+      "bytes": 12191264,
+      "modified_at": "2026-10-09T21:27:19.714159+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/90/90e5a0c337b1bdbb3b65dc08e213c8f56b147dd4901124fcec7891a0119c7619-d",
+      "bytes": 9906680,
+      "modified_at": "2026-10-09T20:56:52.644390+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e1/e169060a92b9da5bfaf8439c00f9313d93ab4c2a0636a2f59286c256e0451dec-d",
+      "bytes": 38277426,
+      "modified_at": "2026-10-09T21:09:03.444155+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/e1/e19c4f0846b6678f57a21196c338bcbf4d8329dd73b61756f54a7b00cd14858b-d",
+      "bytes": 1146316,
+      "modified_at": "2026-10-09T20:36:33.888806+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/55/55eefdaeb60399e6bc21ae1c888360e329fc012f3523000b446ccf52ca6964f6-d",
+      "bytes": 1112998,
+      "modified_at": "2026-10-09T20:02:02.843342+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/52/5271332be3621662105d15a57b2c665723b1c32a0ef09a427547df84625a7bef-d",
+      "bytes": 23937658,
+      "modified_at": "2026-10-09T19:48:10.031712+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ae/aefa85236e40cb115655263df34362b69ecd17b3be7673859589bdf09b44cebf-d",
+      "bytes": 121406264,
+      "modified_at": "2026-10-09T21:09:45.149016+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/ae/aec5a7f991196928f5cf77230a466d100d798e4470b4bf46c75f58e08abc1571-d",
+      "bytes": 38256268,
+      "modified_at": "2026-10-09T20:23:26.795463+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/be/bec6f282a0e2bd4990b44b71c8b6465ae48bcf3d9ba1431b4bbb8c6028cc353c-d",
+      "bytes": 10061988,
+      "modified_at": "2026-10-09T21:09:27.518054+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/96/96aba36d3d430841b807f76cc17b86dbf6188a2d0b0a7bcd762343a6c39b729c-d",
+      "bytes": 3177180,
+      "modified_at": "2026-10-09T20:57:07.801867+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/96/96e855541178594e30134a7490ef8b662c464462b56d9583fea98db53d112366-d",
+      "bytes": 9652146,
+      "modified_at": "2026-10-09T21:03:44.720301+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/96/961592b2101bff30fc77447bfb35ad8a9abdbd1511ced6052b2b9e444f1d27dd-d",
+      "bytes": 14101608,
+      "modified_at": "2026-10-09T21:06:50.218084+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c7/c7affd0b56351fcaf9ae22ef9573afd2c8ffe55518008e6d15b2ac39416459f8-d",
+      "bytes": 1118268,
+      "modified_at": "2026-10-09T20:41:55.889446+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/2b/2b5c1e9e130a627bf5e275f7722e6b4dabc41f566a98965de18c0968892f687d-d",
+      "bytes": 5836370,
+      "modified_at": "2026-10-09T21:01:19.916912+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/6b/6ba4e408295055ed9fe5f9ec23a8c0113dc9cdcbe02cf63c4e6e94dd582143af-d",
+      "bytes": 2402902,
+      "modified_at": "2026-10-09T20:28:24.847673+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/cd/cdf7ebaec6537109893cc39dbe246bfb4cb3484b2d167f084aa636a2f2cb0c77-d",
+      "bytes": 3187150,
+      "modified_at": "2026-10-09T21:15:46.929474+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/fd/fdb02167edfeed71868946e5f957cce095656b70ac11b452a03d329a32a377f7-d",
+      "bytes": 10061966,
+      "modified_at": "2026-10-09T19:50:35.126951+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/fd/fdb1d2106e02afca288ff3f5d801e871b15c5dda807ee0dce9262ab49e3fc8a0-d",
+      "bytes": 1208532,
+      "modified_at": "2026-10-09T20:52:01.079485+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/12/124fdb58378571b0b6cdeb840fcbb1579d860d8521cb6ba128baf5b9929c62bd-d",
+      "bytes": 1115902,
+      "modified_at": "2026-10-09T20:11:20.391435+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/fa/fa44743f337c01d0f8833d288111d66a77a0502478de3bf0ad04afe712ec4424-d",
+      "bytes": 1097638,
+      "modified_at": "2026-10-09T20:59:31.484029+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0b/0ba3d2ae9a54bf3d79e6803600914b9cc4e009281ea202485443adb1bdc50cd7-d",
+      "bytes": 38290034,
+      "modified_at": "2026-10-09T21:11:49.241793+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/2e/2eeb7c236b1ba9b73049324b5e78eca5739ad5036c10e374574afbeb2c0338a9-d",
+      "bytes": 10061976,
+      "modified_at": "2026-10-09T19:57:24.376724+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c1/c153e063ad041bd62020076012b53d730855369e22ed4f0d62fe609b36a92784-d",
+      "bytes": 1165232,
+      "modified_at": "2026-10-09T21:15:47.742494+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c1/c11c6dee2001fca41b7d11a7b9ed6f20477649b43f9596d5eb0d577e95e1777d-d",
+      "bytes": 23937658,
+      "modified_at": "2026-10-09T20:23:21.926730+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c6/c68b804d1356618d118881926da5998a87dd084cc29a098bd2d1c6e776997d42-d",
+      "bytes": 38267626,
+      "modified_at": "2026-10-09T20:31:59.032440+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/91/9182cf88f0e8465f93471fa0d948b4a4cf39876eab80b14f4e3c79c2b737a2d4-d",
+      "bytes": 10008160,
+      "modified_at": "2026-10-09T21:01:26.405805+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/6f/6f587f441c2ff0b163e312f830362d4803dbef68c9ef924e32a744548940b270-d",
+      "bytes": 19112782,
+      "modified_at": "2026-10-09T20:12:39.074734+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/20/201bd161e58ff8bb64d5df7753179101925dcade3c6e66b9c0fd2e0f31d8de41-d",
+      "bytes": 10061988,
+      "modified_at": "2026-10-09T20:57:24.670357+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/20/2088a270672140b4acb4dda69ef6068838725c48a63f3b2d4440b40596241808-d",
+      "bytes": 121403398,
+      "modified_at": "2026-10-09T21:12:17.163513+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/0c/0c6d919a479843addd18ceef4aec2991dc1ae68a9996f5885edf8d0248abdd07-d",
+      "bytes": 43413292,
+      "modified_at": "2026-10-09T21:31:32.371403+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/02/02edb8a6ee049e8ea4b565d3cfd75c8991fb5f5b3f52704e8201927cf429cb32-d",
+      "bytes": 2407320,
+      "modified_at": "2026-10-09T20:31:51.210196+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/02/028c33a900732a379ebd0adc612b3a4093b2aa27d6b5cf5722ca2148c0e56958-d",
+      "bytes": 1102058,
+      "modified_at": "2026-10-09T20:28:23.835175+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/1c/1c44e54b18b52c909d5d501a2848b757aadfc194ec61e790a0741256a2979899-d",
+      "bytes": 1158650,
+      "modified_at": "2026-10-09T21:12:18.467507+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b4/b41944f2c4af555a70a27fa607e9c82c9088df59cc044d8460ae8b1b7cd23c26-d",
+      "bytes": 10142552,
+      "modified_at": "2026-10-09T20:57:10.708312+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b4/b45f2577577c8ba30fef34a579c59587a29564c77056838d104c1e27079d314d-d",
+      "bytes": 10061988,
+      "modified_at": "2026-10-09T21:27:04.334303+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b4/b4b59751832cc2f9d17e31eee1fc164b8a2035a39e4d37e1d286961753175d5b-d",
+      "bytes": 4481866,
+      "modified_at": "2026-10-09T21:03:41.882686+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/40/403b520de66c71be1b4115d067700cf675cc4b36c3bf0c7a87a8ca934bc2fc8b-d",
+      "bytes": 9947848,
+      "modified_at": "2026-10-09T20:28:25.635063+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/05/05e2ebc0e9cb7873e4aa6bd08a6bfd91fa57d615c12bf792ed9a03e601fe5e42-d",
+      "bytes": 1119598,
+      "modified_at": "2026-10-09T21:27:23.659114+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/05/05174070d0828a069f24555c80b553474ca0c1fa3e5e0c2f986145762978d01e-d",
+      "bytes": 15431570,
+      "modified_at": "2026-10-09T21:01:28.814055+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/15/15f8a8747e73274655715defa0d11017a3105db96d2d4a5ec86076ec2eb31c05-d",
+      "bytes": 3155060,
+      "modified_at": "2026-10-09T20:22:56.438534+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/93/938a3cbeb4f1f37f1c4d61a2cbb3ca536909a8b0c38c0cffbca6808d548c76ea-d",
+      "bytes": 19112782,
+      "modified_at": "2026-10-09T19:59:13.946136+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/9c/9cbf8de6fc555e3ce60b4527145b9d0127bd0d91636a273ee8676578870bcf46-d",
+      "bytes": 1358438,
+      "modified_at": "2026-10-09T21:29:47.822954+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/9c/9cd15ccac8095ebe39b219f93c5c10d512f0c1a38c7f0423b2958f3bdfd922c5-d",
+      "bytes": 1104548,
+      "modified_at": "2026-10-09T20:28:54.670407+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/2f/2ffbdb7c32014f8407e020c8cfefb11d176cd5b8e854fe4d3ae3bc4a34cee29a-d",
+      "bytes": 1118268,
+      "modified_at": "2026-10-09T20:42:40.468249+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/7f/7fc031a356e19a9774eea8908d0c4130a5fabf22c0ae537335d28d20b1317838-d",
+      "bytes": 121848468,
+      "modified_at": "2026-10-09T21:30:13.652535+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/7f/7f35149a251836569a51bd29681023d7c2a178ccc3aa7e517111dc1b056f4227-d",
+      "bytes": 11623906,
+      "modified_at": "2026-10-09T21:29:48.290966+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b1/b1697bd88bd144412ba2b253198290313aff9a6c219e3ec294fbe6bd86ead085-d",
+      "bytes": 120907808,
+      "modified_at": "2026-10-09T20:11:20.250686+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/dd/dd54a3ad3d8ed4105975bd96326fda9cfc0390f652a853ad1bbe96638e9e96bb-d",
+      "bytes": 3160818,
+      "modified_at": "2026-10-09T20:31:52.261105+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/dd/dd6c34de7871e9cc4bff4ff1c9a9a65070c8db9421391781841f18f47ec4ccf2-d",
+      "bytes": 32373534,
+      "modified_at": "2026-10-09T20:57:00.588882+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d1/d17d7e72143c17652574db90ef4f675d4c9d493af0a8cfb4d3fd1dca7e530f00-d",
+      "bytes": 1265856,
+      "modified_at": "2026-10-09T20:59:03.744439+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d1/d10d20893858e683181f2f454d77e34557fb416cb4c17b6e887d67cba7d053d7-d",
+      "bytes": 10062282,
+      "modified_at": "2026-10-09T21:29:54.831928+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/d1/d1042ebbd5d452aa008625dbf3445f969f14d0b85d315e255a5b4f48bd11fe15-d",
+      "bytes": 1111346,
+      "modified_at": "2026-10-09T19:52:19.735831+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/99/993b8cee7b1eb7e9ac01dedb249b8a936baa2c25f48a56f34813fb50b606825f-d",
+      "bytes": 1114146,
+      "modified_at": "2026-10-09T20:03:14.832838+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/7e/7e32600edaf86ea9c00d6fff74d66ab92733a5997bda5823d759c0a24ee6c139-d",
+      "bytes": 11623884,
+      "modified_at": "2026-10-09T20:56:52.688002+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/87/877565f9994c44db20b3e8e46114c88d87b0ec2eee8c9afc8f8f469edaebf12d-d",
+      "bytes": 3177176,
+      "modified_at": "2026-10-09T20:34:28.037614+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/87/874367e6a8740e8206f4eed5e896315afb1e7d760d6e4ce386f07833cc346c46-d",
+      "bytes": 1212454,
+      "modified_at": "2026-10-09T20:58:49.934719+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/87/878cdb5163e1dacda46d2fb1c98be3b334982f849f7c845917ccb61ad89ddfe5-d",
+      "bytes": 1103470,
+      "modified_at": "2026-10-09T21:29:48.228832+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/87/87f075656e7cff5fe605d56f2c1f869269a5a49a3c9c158a0d171b682f5c35a8-d",
+      "bytes": 2078538,
+      "modified_at": "2026-10-09T21:03:50.661288+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/cf/cfe2d3064fee32361961e8d22dec364f1462e58edf0a90b43880be4aab8be206-d",
+      "bytes": 12191264,
+      "modified_at": "2026-10-09T21:01:25.100735+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/66/66e521a5d907b216dd492854e580435922f3e24885c309993bbd29aac8805bbb-d",
+      "bytes": 9948000,
+      "modified_at": "2026-10-09T21:29:50.589064+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/08/084748466ce68b3985c9d4d4c02d02dbcf4a59ac797422c64d7780836532e493-d",
+      "bytes": 1097638,
+      "modified_at": "2026-10-09T21:06:48.765197+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/11/1154bd80aa6850850c3497237e5ae8115e934bc008ae2f37d92ce4f22818d4d4-d",
+      "bytes": 1208500,
+      "modified_at": "2026-10-09T20:52:42.982201+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/84/84a172b404175b97476b9d4b5e6b1fa44251848a45923ebddbdee60049d15f7a-d",
+      "bytes": 19112768,
+      "modified_at": "2026-10-09T19:53:45.986193+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/2c/2c98dc04ff1867edc96822914325484d49eb5d511d745c6fa36f4c9939555429-d",
+      "bytes": 1261220,
+      "modified_at": "2026-10-09T20:57:09.161392+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/af/af1f56371383b0ae80ce58f500dac92704d2bd454915cba0d5c4fd80cddba8bc-d",
+      "bytes": 1265856,
+      "modified_at": "2026-10-09T21:30:11.441398+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/28/285e10267c041b90ee83ac5654de3b43456e325bab5f1b6e5e7ff7578a1d236c-d",
+      "bytes": 9947976,
+      "modified_at": "2026-10-09T20:41:32.794821+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/9f/9fd157fa9f39daa79277d93518228c169cba28dad1a2110e69b80b6fb64b194a-d",
+      "bytes": 1165072,
+      "modified_at": "2026-10-09T21:15:28.945304+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/9f/9f0c38c6256c27ce120781b3b2bffedf281293e857d244e7042601f19cba24a2-d",
+      "bytes": 70107450,
+      "modified_at": "2026-10-09T21:04:11.630121+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/b5/b56485cf4c7acbc4a812a839a46c68f09d5a706459be61314fb6515125d8dfc3-d",
+      "bytes": 1165232,
+      "modified_at": "2026-10-09T21:30:06.171129+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/c4/c412c0d43ff1255d4186e0376f550ed5a1b0af4c24825be27b7400de325fab3d-d",
+      "bytes": 120808964,
+      "modified_at": "2026-10-09T20:03:14.675726+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/da/da458786e36a806e24267d7a5b4e773cda7d8b1135d9cb15c523589ebaed17f5-d",
+      "bytes": 120677410,
+      "modified_at": "2026-10-09T19:58:14.729400+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/22/2296a82b0b8027265d34336ddfcd97d194a23464e453e4e56e1f3c40da04b414-d",
+      "bytes": 23937792,
+      "modified_at": "2026-10-09T20:28:58.962247+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/60/6070ecf10b247d9b7b9392665bff7456133edeafd224c213a2e5dcaef93f90d9-d",
+      "bytes": 19119362,
+      "modified_at": "2026-10-09T19:50:34.265186+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/60/60ed9994302de3ed44087289573db84e22b0f94d3dd3ed4341f66a8ec04b61f4-d",
+      "bytes": 19112782,
+      "modified_at": "2026-10-09T19:57:23.533180+00:00",
+      "source_worktree": "astronomer-032-w09"
+    },
+    {
+      "path": "/root/.cache/go-build/6c/6c758b91578b70e8445977c295c90a5710ce8bb3f54e0bdcc9feee3d0a8fbcaf-d",
+      "bytes": 1243586,
+      "modified_at": "2026-10-09T20:56:52.695480+00:00",
+      "source_worktree": "astronomer-032-w09"
+    }
+  ],
+  "bytes": 4855117370,
+  "original_receipt_sha256": "ddcbbb82c68f3a027e65e97aef22230416b2f56f60664cf9e7af5cc0b588686e"
+}

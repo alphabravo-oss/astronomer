@@ -1,0 +1,3 @@
+PASS live source-controller: Current
+PASS live helm-controller: Current
+PASS live kustomize-controller: Current

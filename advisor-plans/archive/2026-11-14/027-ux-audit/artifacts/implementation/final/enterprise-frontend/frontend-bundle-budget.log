@@ -1,0 +1,19 @@
+
+> astronomer-frontend@1.2.0 bundle:check
+> node --test scripts/check-bundle-budget.test.mjs && node scripts/check-bundle-budget.mjs
+
+✔ eager closure follows transitive static imports, deduplicates cycles/CSS, and excludes lazy features (2.593596ms)
+✔ a shared utility dragging a chart chunk into login is counted (0.263357ms)
+✔ missing roots and missing transitive imports fail closed (0.510431ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 81.632797
+bootstrap: 102 eager JS/CSS assets, 325255 gzip bytes (ceiling 418816)
+login: 117 eager JS/CSS assets, 353320 gzip bytes (ceiling 428032)
+app: 186 eager JS/CSS assets, 423195 gzip bytes (ceiling 489472)
+Frontend bundle budget passed for 462 chunks and 3 eager closures.

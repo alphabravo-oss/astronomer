@@ -1,0 +1,185 @@
+?   	github.com/alphabravocompany/astronomer-go/cmd/agent	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/cmd/astro	0.720s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/dexconfigcheck	0.016s
+?   	github.com/alphabravocompany/astronomer-go/cmd/dr-crypto	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/cmd/release-assets	0.084s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/server	0.105s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/worker	0.072s
+ok  	github.com/alphabravocompany/astronomer-go/deploy	(cached)
+ok  	github.com/alphabravocompany/astronomer-go/deploy/agent	0.928s
+ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles	0.024s
+?   	github.com/alphabravocompany/astronomer-go/deploy/dashboards	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/deploy/flux	0.006s
+?   	github.com/alphabravocompany/astronomer-go/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent	22.672s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent/delivery	9.929s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests	0.022s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent/observation	0.035s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agentcompat	0.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agentlifecycle	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/anomaly	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/api/apiutil	1.300s
+ok  	github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers	0.031s
+ok  	github.com/alphabravocompany/astronomer-go/internal/astrocli	0.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/astrocli/airgap	0.022s
+ok  	github.com/alphabravocompany/astronomer-go/internal/audit	1.230s
+ok  	github.com/alphabravocompany/astronomer-go/internal/auth	0.962s
+ok  	github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate	4.461s
+ok  	github.com/alphabravocompany/astronomer-go/internal/callerid	0.058s
+ok  	github.com/alphabravocompany/astronomer-go/internal/catalog	(cached)
+ok  	github.com/alphabravocompany/astronomer-go/internal/catalog/configuration	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie	4.904s
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie/contract	0.666s
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/schema	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/wire	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/cloudcreds	0.022s
+ok  	github.com/alphabravocompany/astronomer-go/internal/compliance	0.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/config	1.163s
+ok  	github.com/alphabravocompany/astronomer-go/internal/controlplane	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/credential	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/dashboards	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db	0.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/migrations	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/queries	0.006s
+?   	github.com/alphabravocompany/astronomer-go/internal/db/sealedcols	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	0.005s
+?   	github.com/alphabravocompany/astronomer-go/internal/deferredreplay	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/builtin	(cached)
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/compatibility	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/configuration	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/deployment	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/distribution	(cached)
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/metrics	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/model	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/placement	0.273s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/provider	0.201s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/resolver	1.394s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	7.370s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/state	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/status	0.017s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease	0.011s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	0.031s
+ok  	github.com/alphabravocompany/astronomer-go/internal/dexconfig	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/downstreamboundary	0.010s
+ok  	github.com/alphabravocompany/astronomer-go/internal/drcrypto	(cached)
+ok  	github.com/alphabravocompany/astronomer-go/internal/egress	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/email	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/envconfig	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/events	0.872s
+ok  	github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/gitops	0.016s
+ok  	github.com/alphabravocompany/astronomer-go/internal/grafanaproxy	0.049s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	20.024s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics	0.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/delivery	0.051s
+ok  	github.com/alphabravocompany/astronomer-go/internal/helmruntime	0.053s
+ok  	github.com/alphabravocompany/astronomer-go/internal/httpclient	1.101s
+ok  	github.com/alphabravocompany/astronomer-go/internal/httpserver	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/jsoncontract	0.232s
+ok  	github.com/alphabravocompany/astronomer-go/internal/kubectl	0.214s
+ok  	github.com/alphabravocompany/astronomer-go/internal/kubeutil	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/internal/lokiauth	0.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/maintenance	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/mesh	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/metrics	0.501s
+ok  	github.com/alphabravocompany/astronomer-go/internal/monitoring	0.026s
+ok  	github.com/alphabravocompany/astronomer-go/internal/netpol	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/notify	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/observability	0.966s
+ok  	github.com/alphabravocompany/astronomer-go/internal/operationstate	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/operator/lifecycle	0.105s
+ok  	github.com/alphabravocompany/astronomer-go/internal/operator/mirror	0.009s
+?   	github.com/alphabravocompany/astronomer-go/internal/operator/wire	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/ops/process	0.570s
+ok  	github.com/alphabravocompany/astronomer-go/internal/ops/upgrade	4.055s
+--- FAIL: TestOperatorChartRouteBindsAuthenticatedArchiveAndExactHelmVersion (0.02s)
+    chart_route_linux_test.go:37: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestOperatorChartRouteRejectsDifferentBytesExtraOutputsAndCanceledPublication (0.05s)
+    --- FAIL: TestOperatorChartRouteRejectsDifferentBytesExtraOutputsAndCanceledPublication/cancel (0.02s)
+        chart_route_linux_test.go:81: cancellation lost
+--- FAIL: TestCNPGOwnedRestoreUsesAuthenticatedSameMajorIndependentPodAndUIDCleanup (0.03s)
+    cloudnativepg_restore_linux_test.go:168: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID (0.46s)
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/volume (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/image (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/owner (0.04s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/token (0.04s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/mount (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/restart (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/group (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/seccomp (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/escalation (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/capabilities (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/rootfs (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/root (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/limit (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/uid (0.03s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod (0.06s)
+    --- FAIL: TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod/restore-failure (0.03s)
+        cloudnativepg_restore_linux_test.go:223: failed restore discarded ownership/recovery
+    --- FAIL: TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod/canceled-input (0.03s)
+        cloudnativepg_restore_linux_test.go:223: failed restore discarded ownership/recovery
+--- FAIL: TestExternalSanitizedReportNeverClaimsVerifiedDatabaseCopy (0.00s)
+    external_report_linux_test.go:27: artifact capture would exhaust maintained capacity reserve
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli	7.481s
+?   	github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli/toolchain	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/pagination	0.381s
+ok  	github.com/alphabravocompany/astronomer-go/internal/platformsettings	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/principal	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/projectquota	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/projects	0.049s
+ok  	github.com/alphabravocompany/astronomer-go/internal/quota	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/rbac	0.040s
+ok  	github.com/alphabravocompany/astronomer-go/internal/redaction	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/redisconn	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/registration	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/registry	0.004s
+?   	github.com/alphabravocompany/astronomer-go/internal/registry/startup	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/releasecontract	(cached)
+ok  	github.com/alphabravocompany/astronomer-go/internal/reqctx	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/scanner	0.016s
+ok  	github.com/alphabravocompany/astronomer-go/internal/scanner/databasejob	23.552s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	12.307s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.302s
+ok  	github.com/alphabravocompany/astronomer-go/internal/sessionpolicy	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/siem	0.082s
+ok  	github.com/alphabravocompany/astronomer-go/internal/strutil	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tableviews	0.006s
+?   	github.com/alphabravocompany/astronomer-go/internal/testdb	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/toolui	0.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel	0.924s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/userpreferences	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/vault	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/webhook	3.542s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker	0.137s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/leader	0.011s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	1.951s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/astroclient	0.028s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/crypto	0.012s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/logging	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/protocol	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/proxyhdr	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/safeconv	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/telemetry	0.305s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/version	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/scripts/loadtest	10.300s
+FAIL

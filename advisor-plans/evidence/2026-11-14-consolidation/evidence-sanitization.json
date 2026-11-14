@@ -1,0 +1,23 @@
+[
+  {
+    "path": "advisor-plans/evidence/2026-11-14-consolidation/authorization-integration.log",
+    "replaced_public_identifiers": 243,
+    "original_sha256": "4b1b35f23c56b766a0624f45a3a5b6f9f653cd6d6a130166fba94a46e891394c",
+    "publication_sha256": "becffd188d5c167ef787a0b41761d35c00b263d319fe4b6c197cf7ba321af1be",
+    "reason": "Public fixture/resource UUIDs misclassified as generic keys; original copies retained in private snapshots. No credential findings suppressed."
+  },
+  {
+    "path": "docs/assurance/catalog-configuration/2026-10-13/loki-lifecycle.json",
+    "replaced_public_identifiers": 8,
+    "original_sha256": "71e9b7536bdd5705e4043068e6c640f749bbdd2c4471af80077eae71eb7bc8fd",
+    "publication_sha256": "d0135d288849209cfcaae5f0ff3ec1b565391aabd2b1051eaca862b5cd7df3a7",
+    "reason": "Public fixture/resource UUIDs misclassified as generic keys; original copies retained in private snapshots. No credential findings suppressed."
+  },
+  {
+    "path": "docs/assurance/catalog-configuration/2026-10-13/longhorn-first-attempt-lifecycle.json",
+    "replaced_public_identifiers": 6,
+    "original_sha256": "dc9548130f8806c8f2b0e2b666eff86df4e4f115d5081d3880ac73a696c9949b",
+    "publication_sha256": "0aba0f62196f418582d9428130dbd0182de551a3024363be6549cc38a4d2cae8",
+    "reason": "Public fixture/resource UUIDs misclassified as generic keys; original copies retained in private snapshots. No credential findings suppressed."
+  }
+]

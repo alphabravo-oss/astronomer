@@ -1,0 +1,29 @@
+package main
+import (
+ "context"
+ "encoding/json"
+ "fmt"
+ "os"
+ "github.com/fluxcd/pkg/apis/kustomize"
+ fluxcel "github.com/fluxcd/pkg/runtime/cel"
+ "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+ "k8s.io/apimachinery/pkg/runtime/schema"
+)
+func main() {
+ data, err := os.ReadFile(os.Args[1]); if err != nil { panic(err) }
+ var input struct { Checks []kustomize.CustomHealthCheck `json:"checks"`; Fixtures []struct { Name string `json:"name"`; Object map[string]any `json:"object"`; Expected string `json:"expected"` } `json:"fixtures"` }
+ if err := json.Unmarshal(data, &input); err != nil { panic(err) }
+ factory, err := fluxcel.NewStatusReader(input.Checks); if err != nil { panic(err) }
+ if !factory(nil).Supports(schema.GroupKind{Group:"apps", Kind:"Deployment"}) { panic("custom reader does not support Deployments") }
+ evaluator, err := fluxcel.NewStatusEvaluator(&input.Checks[0].HealthCheckExpressions); if err != nil { panic(err) }
+ for _, fixture := range input.Fixtures {
+  // Kubernetes unstructured integers must be int64, not encoding/json float64.
+  encoded, _ := json.Marshal(fixture.Object)
+  var object unstructured.Unstructured
+  if err := object.UnmarshalJSON(encoded); err != nil { panic(err) }
+  result, err := evaluator.Evaluate(context.Background(), &object); if err != nil { panic(fmt.Sprintf("%s: %v", fixture.Name, err)) }
+  want := map[string]string{"current":"Current", "failed":"Failed", "inProgress":"InProgress"}[fixture.Expected]
+  if result.Status.String() != want { panic(fmt.Sprintf("%s: got %s, want %s", fixture.Name, result.Status, want)) }
+  fmt.Printf("PASS %s: %s\n", fixture.Name, result.Status)
+ }
+}

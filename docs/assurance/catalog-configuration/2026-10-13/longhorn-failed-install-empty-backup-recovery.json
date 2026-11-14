@@ -1,0 +1,29 @@
+{
+  "reason": "Initial baseline namespace blocked engine-image provisioning. Uninstall cannot run a missing engine binary to clean the unconfigured empty backup target. No volumes or backups exist.",
+  "object": {
+    "apiVersion": "longhorn.io/v1beta2",
+    "kind": "BackupTarget",
+    "metadata": {
+      "annotations": {
+        "longhorn.io/delete-backup-target-from-longhorn": ""
+      },
+      "creationTimestamp": "2026-10-13T00:38:10Z",
+      "deletionGracePeriodSeconds": 0,
+      "deletionTimestamp": "2026-10-13T00:42:49Z",
+      "finalizers": [
+        "longhorn.io"
+      ],
+      "generation": 2,
+      "name": "default",
+      "namespace": "longhorn-system",
+      "resourceVersion": "8198337",
+      "uid": "2863923d-44e6-48dc-b5ad-10ff7ed6a9e5"
+    },
+    "spec": {
+      "backupTargetURL": "",
+      "credentialSecret": "",
+      "pollInterval": "5m0s",
+      "syncRequestedAt": null
+    }
+  }
+}

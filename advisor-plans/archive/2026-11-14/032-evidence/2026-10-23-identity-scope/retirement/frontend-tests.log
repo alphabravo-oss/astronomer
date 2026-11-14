@@ -1,0 +1,19 @@
+
+> astronomer-frontend@2.1.1 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v5.0.5 /root/work/astronomer-identity/frontend
+
+Not implemented: Window's scrollTo() method
+Not implemented: Window's scrollTo() method
+
+ Test Files  346 passed (346)
+      Tests  2408 passed (2408)
+   Start at  23:22:04
+   Duration  360.54s (import 39%, environment 37%, tests 18%, setup 4%, transform 1%)
+
+Environment  jsdom was created 346 times · 246.88s total, 37% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

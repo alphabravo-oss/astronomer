@@ -1,0 +1,3 @@
+NAME                        VERSION        READY
+k3d-ui-demo-v211-agent-0    v1.35.7+k3s1   True
+k3d-ui-demo-v211-server-0   v1.35.7+k3s1   True

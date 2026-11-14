@@ -1,0 +1,63 @@
+
+Running 20 tests using 1 worker
+
+(node:1732131) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [live-auth-setup] › tests/e2e-live/live-auth.setup.ts:9:1 › bootstrap admin signs in and persists the real session (1.2s)
+(node:1732618) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: overview has no serious or critical violations (2.9s)
+  ✓   3 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: clusters has no serious or critical violations (2.5s)
+  ✓   4 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: register has no serious or critical violations (2.3s)
+  ✓   5 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: delivery has no serious or critical violations (2.6s)
+  ✓   6 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: alerting has no serious or critical violations (2.3s)
+  ✓   7 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: audit has no serious or critical violations (3.6s)
+  ✓   8 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: access-control has no serious or critical violations (3.0s)
+  ✓   9 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: agents has no serious or critical violations (2.4s)
+  ✓  10 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: settings-general has no serious or critical violations (2.5s)
+  ✓  11 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: settings-platform has no serious or critical violations (2.5s)
+  ✓  12 [live] › tests/e2e-live/charlie.live.spec.ts:6:1 › Charlie is a header icon + drawer, never a FAB (1.1s)
+  ✓  13 [live] › tests/e2e-live/clusters.live.spec.ts:4:1 › cluster list renders from the live API (723ms)
+  ✓  14 [live] › tests/e2e-live/dashboard.live.spec.ts:6:1 › overview counts agree with each other and with the clusters API (1.1s)
+  ✓  15 [live] › tests/e2e-live/dashboard.live.spec.ts:56:1 › settings is two layers deep and the hub redirects to General (950ms)
+  ✘  16 [live] › tests/e2e-live/metrics.live.spec.ts:5:1 › server exposes service_build_info on the metrics listener (23ms)
+(node:1736140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [live] › tests/e2e-live/palette.live.spec.ts:5:1 › command palette opens from the header, / and Ctrl+K and navigates (2.0s)
+  ✓  18 [live] › tests/e2e-live/settings.live.spec.ts:7:1 › settings page loads for the bootstrap admin (765ms)
+  ✓  19 [live] › tests/e2e-live/shell.live.spec.ts:14:1 › global rail → cluster panel → back through the breadcrumb (1.6s)
+  ✓  20 [live] › tests/e2e-live/shell.live.spec.ts:94:1 › footer carries one product line and no Charlie FAB covers content (858ms)
+
+
+  1) [live] › tests/e2e-live/metrics.live.spec.ts:5:1 › server exposes service_build_info on the metrics listener 
+
+    Error: apiRequestContext.get: connect ECONNREFUSED 127.0.0.1:9090
+    Call log:
+      - → GET http://127.0.0.1:9090/metrics
+        - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.4 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+
+
+       5 | test("server exposes service_build_info on the metrics listener", async ({ request }) => {
+       6 |   const metricsURL = process.env.PLAYWRIGHT_METRICS_URL ?? "http://127.0.0.1:9090/metrics";
+    >  7 |   const res = await request.get(metricsURL);
+         |                             ^
+       8 |   expect(res.status()).toBe(200);
+       9 |   const text = await res.text();
+      10 |   expect(text).toMatch(/^service_build_info\{.*version=.*\} 1$/m);
+        at /root/work/astronomer-fixes/frontend/tests/e2e-live/metrics.live.spec.ts:7:29
+
+    Error Context: ../../../../tmp/astronomer-review-20261023/live-results/metrics.live-server-expose-a9212-nfo-on-the-metrics-listener-live/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../tmp/astronomer-review-20261023/live-results/metrics.live-server-expose-a9212-nfo-on-the-metrics-listener-live/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../tmp/astronomer-review-20261023/live-results/metrics.live-server-expose-a9212-nfo-on-the-metrics-listener-live/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [live] › tests/e2e-live/metrics.live.spec.ts:5:1 › server exposes service_build_info on the metrics listener 
+  19 passed (39.1s)

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "rootIntegratedCommit": "fb442e99f41bbed1116aa8c6aed636d6ed49393f",
+  "sourceReviewed": [
+    "05335331",
+    "9ca94d04"
+  ],
+  "sourceCommit": "9ca94d04fd1ccfaaa17c161ede04f36c9a6483fa",
+  "sourceBindingsVerified": 21,
+  "executorGateLogHashesVerified": 5,
+  "independentReceipt": "root-cli-9ca94d04/receipt.json",
+  "review": "All constructor/client wiring/tests inspected. Only both independently approved literal HTTPS default-port GHCR/CDN origins grant the finite pair. Other callers retain the strict redirect default. Empty query spelling rejected. Immutable policy, credentials, bounded hops and shared strict JSON parser preserved. Root independent race: three parents, 15 cases, zero skips/failures; selected Node26 docs suite passes using exact-lock read-only cached packages.",
+  "scope": "Operator CLI and coupled package source acceptance only. Supplier whole bytes/hash/freshness, large-kit2, disconnected runtime and production OIDC remain unqualified."
+}

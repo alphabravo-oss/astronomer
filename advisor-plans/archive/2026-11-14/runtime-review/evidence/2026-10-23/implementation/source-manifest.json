@@ -1,0 +1,14 @@
+{
+  "base_commit": "e2223136030fa17541e6be082a511caf444b7067",
+  "branch": "fix/2.1-runtime-verification",
+  "deployed": false,
+  "files": {
+    "internal/auth/api_token_scopes.go": "66d03977c3e2b9153e08cbfdc4cf6c154799a48349664153e5410d8cb06fc317",
+    "internal/auth/streamauth.go": "4f5288e1c02bdca220215371a24d32528a21e1973cd893f26ad420a167d47961",
+    "internal/auth/streamauth_boundary_test.go": "4d2c12dd964bb730aa65cb8dd6b3c1ace033306f65702f1ec6f61139a20846e0",
+    "internal/server/middleware/auth.go": "e4c92836c1a3fc058152b725b4483441f85bc5429a49954c5815ba90a01cc692",
+    "internal/server/middleware/auth_boundary_test.go": "dae934b2b3725e73acc4c05706a76d2cc44ab47c26ab8a6e26b2856a2c1732b1",
+    "internal/tunnel/stream_auth_test.go": "a498b9a7f0e6bc3c8109020d20fc974948d14266bcb9aec79b8e8d5aac375b9e",
+    "internal/tunnel/ws_owner_proxy.go": "d0a1f310f7b376161e1cda21450a42fb2684e8efc752223b22323dde907c32ea"
+  }
+}

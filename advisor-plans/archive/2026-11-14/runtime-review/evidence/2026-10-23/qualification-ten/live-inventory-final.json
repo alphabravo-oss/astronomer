@@ -1,0 +1,1134 @@
+{
+  "schema_version": "astronomer-offering-qualification-v1",
+  "run_id": "inventory-1792743042364618373",
+  "generated_at": "2026-10-23T08:10:42.364620106Z",
+  "mode": "inventory",
+  "candidate": {
+    "commit": "e2223136030fa17541e6be082a511caf444b7067",
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "unstaged_diff_sha256": "9c4b9b23435cd6cc6aa11d1823d40512f1beda71ab89fbc696891cb034c1085b",
+    "untracked_sha256": "f063d3fc3ae05bd7dc13944859b71604784045ea9e4196c82dcb5d21b405b3d5",
+    "dirty": true
+  },
+  "target": {
+    "base_origin": "https://astronomer.dev.alphabravo.io",
+    "target_ids": {
+      "cluster_id": "10a06091-4d36-4e49-a9ff-78480522f9d0",
+      "project_id": "82590f54-1176-4793-8621-1317802cb31d"
+    }
+  },
+  "inventory": [
+    {
+      "id": "feature-flags",
+      "path": "/api/v1/settings/features/",
+      "pages": 1,
+      "http_statuses": [
+        200
+      ],
+      "observed_identities": [
+        "feature.alerting",
+        "feature.backups",
+        "feature.catalog",
+        "feature.charlie",
+        "feature.control_plane_snapshots",
+        "feature.delivery",
+        "feature.extensions",
+        "feature.hosted_loki",
+        "feature.monitoring",
+        "feature.projects",
+        "feature.security",
+        "feature.shared_grafana"
+      ],
+      "expected_identities": [
+        "feature.alerting",
+        "feature.backups",
+        "feature.catalog",
+        "feature.charlie",
+        "feature.control_plane_snapshots",
+        "feature.delivery",
+        "feature.extensions",
+        "feature.hosted_loki",
+        "feature.monitoring",
+        "feature.projects",
+        "feature.security",
+        "feature.shared_grafana"
+      ],
+      "missing_identities": [],
+      "additional_identities": [],
+      "observed_values": {
+        "feature.alerting": true,
+        "feature.backups": true,
+        "feature.catalog": true,
+        "feature.charlie": true,
+        "feature.control_plane_snapshots": false,
+        "feature.delivery": true,
+        "feature.extensions": false,
+        "feature.hosted_loki": false,
+        "feature.monitoring": true,
+        "feature.projects": true,
+        "feature.security": true,
+        "feature.shared_grafana": true
+      },
+      "status": "PASS",
+      "reason": "all pages matched the frozen manifest"
+    },
+    {
+      "id": "catalog-applications",
+      "path": "/api/v1/catalog/applications/",
+      "pages": 1,
+      "http_statuses": [
+        200
+      ],
+      "observed_identities": [
+        "cert-manager",
+        "cloudnative-pg",
+        "constellation",
+        "external-dns",
+        "external-secrets",
+        "fluent-bit",
+        "gatekeeper",
+        "grafana",
+        "ingress-nginx",
+        "keda",
+        "kube-prometheus-stack",
+        "kube-state-metrics",
+        "kyverno",
+        "loki",
+        "longhorn",
+        "metrics-server",
+        "opentelemetry-collector",
+        "prometheus-node-exporter",
+        "tempo",
+        "trivy-operator",
+        "velero"
+      ],
+      "expected_identities": [
+        "cert-manager",
+        "cloudnative-pg",
+        "constellation",
+        "external-dns",
+        "external-secrets",
+        "fluent-bit",
+        "gatekeeper",
+        "grafana",
+        "ingress-nginx",
+        "keda",
+        "kube-prometheus-stack",
+        "kube-state-metrics",
+        "kyverno",
+        "loki",
+        "longhorn",
+        "metrics-server",
+        "opentelemetry-collector",
+        "prometheus-node-exporter",
+        "tempo",
+        "trivy-operator",
+        "velero"
+      ],
+      "missing_identities": [],
+      "additional_identities": [],
+      "status": "PASS",
+      "reason": "all pages matched the frozen manifest"
+    },
+    {
+      "id": "tools",
+      "path": "/api/v1/tools/?limit=100\u0026offset=0",
+      "pages": 1,
+      "http_statuses": [
+        200
+      ],
+      "observed_identities": [
+        "cert-manager",
+        "cis-operator",
+        "dex",
+        "fluent-bit",
+        "gatekeeper",
+        "ingress-nginx",
+        "istio",
+        "kube-state-metrics",
+        "longhorn",
+        "neuvector",
+        "prometheus-node-exporter",
+        "trivy-operator"
+      ],
+      "expected_identities": [
+        "cert-manager",
+        "cis-operator",
+        "dex",
+        "fluent-bit",
+        "gatekeeper",
+        "ingress-nginx",
+        "istio",
+        "kube-state-metrics",
+        "longhorn",
+        "neuvector",
+        "prometheus-node-exporter",
+        "trivy-operator"
+      ],
+      "missing_identities": [],
+      "additional_identities": [],
+      "status": "PASS",
+      "reason": "all pages matched the frozen manifest"
+    },
+    {
+      "id": "dex-connector-types",
+      "path": "/api/v1/auth/dex/connector-types/",
+      "pages": 1,
+      "http_statuses": [
+        200
+      ],
+      "observed_identities": [
+        "bitbucket",
+        "github",
+        "gitlab",
+        "google",
+        "ldap",
+        "microsoft",
+        "oauth",
+        "oidc",
+        "okta",
+        "saml"
+      ],
+      "expected_identities": [
+        "bitbucket",
+        "github",
+        "gitlab",
+        "google",
+        "ldap",
+        "microsoft",
+        "oauth",
+        "oidc",
+        "okta",
+        "saml"
+      ],
+      "missing_identities": [],
+      "additional_identities": [],
+      "status": "PASS",
+      "reason": "all pages matched the frozen manifest"
+    },
+    {
+      "id": "cloud-credential-providers",
+      "path": "/api/v1/cloud-credentials/providers",
+      "pages": 1,
+      "http_statuses": [
+        200
+      ],
+      "observed_identities": [
+        "aws",
+        "azure",
+        "digitalocean",
+        "gcp",
+        "generic"
+      ],
+      "expected_identities": [
+        "aws",
+        "azure",
+        "digitalocean",
+        "gcp",
+        "generic"
+      ],
+      "missing_identities": [],
+      "additional_identities": [],
+      "status": "PASS",
+      "reason": "all pages matched the frozen manifest"
+    },
+    {
+      "id": "extensions",
+      "path": "/api/v1/extensions/",
+      "pages": 1,
+      "http_statuses": [
+        404
+      ],
+      "observed_identities": [],
+      "expected_identities": [],
+      "missing_identities": [],
+      "additional_identities": [],
+      "status": "PASS",
+      "reason": "route is unavailable because feature.extensions is explicitly disabled"
+    }
+  ],
+  "cases": [
+    {
+      "id": "APP-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-12",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-13",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-14",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-15",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-16",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-17",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-18",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-19",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-20",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "APP-21",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "TOOL-12",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "BASE-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "BASE-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "BASE-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "BASE-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "BASE-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "BASE-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-12",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-13",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-14",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-15",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-16",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-17",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-18",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "ID-19",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "OBS-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "LOG-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEND-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SIEM-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SECRET-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SECRET-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SECRET-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SECRET-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SECRET-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CLOUD-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CLOUD-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CLOUD-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CLOUD-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CLOUD-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SOURCE-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-12",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "DR-13",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "POLICY-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "CIS-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "MESH-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "MESH-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "MESH-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "MESH-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "MESH-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEC-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "SEC-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-12",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "EXT-13",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "AI-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "AI-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "AI-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "AI-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-01",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-02",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-03",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-04",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-05",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-06",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-07",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-08",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-09",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-10",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-11",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    },
+    {
+      "id": "PLATFORM-12",
+      "state": "NOT_RUN",
+      "reason": "inventory mode does not execute functional lifecycle cases"
+    }
+  ],
+  "summary": {
+    "total": 174,
+    "by_state": {
+      "NOT_RUN": 174
+    },
+    "inventory_pass": 6,
+    "inventory_fail": 0
+  },
+  "cleanup": {
+    "state": "NOT_APPLICABLE",
+    "reason": "inventory mode is GET-only"
+  }
+}

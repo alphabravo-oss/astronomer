@@ -1,0 +1,279 @@
+//go:build integration
+
+package tasks
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
+)
+
+func dexDurabilityFixture(t *testing.T) (*pgxpool.Pool, *sqlc.Queries, uuid.UUID) {
+	t.Helper()
+	pool := testdb.Pool(t)
+	id, actor := uuid.New(), uuid.New()
+	dexExec(t, pool, `INSERT INTO users(id,email,username) VALUES($1,$2,$2)`, actor, actor.String()+"@example.invalid")
+	dexExec(t, pool, `INSERT INTO dex_operations(id,action,target_id,idempotency_scope,idempotency_key,request_digest,created_by) VALUES($1,'apply',$2,'test',$3,$4,$5)`, id, uuid.New(), id.String(), strings.Repeat("a", 64), actor)
+	return pool, sqlc.New(pool), id
+}
+func dexExec(t *testing.T, pool *pgxpool.Pool, query string, args ...any) {
+	t.Helper()
+	if _, err := pool.Exec(t.Context(), query, args...); err != nil {
+		t.Fatal(err)
+	}
+}
+func dexClaim(t *testing.T, q *sqlc.Queries, id uuid.UUID) sqlc.DexOperation {
+	t.Helper()
+	row, err := q.ClaimDexOperation(t.Context(), sqlc.ClaimDexOperationParams{ID: id, LockedUntil: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return row
+}
+
+func TestDexDurableClaimExclusiveAndTakeover(t *testing.T) {
+	t.Parallel()
+	pool, q, id := dexDurabilityFixture(t)
+	var wg sync.WaitGroup
+	results := make(chan error, 16)
+	for range 16 {
+		wg.Go(func() {
+			_, err := q.ClaimDexOperation(t.Context(), sqlc.ClaimDexOperationParams{ID: id, LockedUntil: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}})
+			results <- err
+		})
+	}
+	wg.Wait()
+	close(results)
+	successes := 0
+	for err := range results {
+		if err == nil {
+			successes++
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatal(err)
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("claims=%d", successes)
+	}
+	dexExec(t, pool, `UPDATE dex_operations SET locked_until=now()-interval '1 second' WHERE id=$1`, id)
+	next := dexClaim(t, q, id)
+	if next.AttemptCount != 2 || next.Status != "running" {
+		t.Fatalf("takeover=%+v", next)
+	}
+}
+
+func TestDexDurableAttemptFencesEveryWrite(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"success", "retry", "failure", "phase"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			pool, q, id := dexDurabilityFixture(t)
+			old := dexClaim(t, q, id)
+			mutate := func(attempt int32) (int64, error) {
+				switch name {
+				case "success":
+					return q.MarkDexOperationSucceeded(t.Context(), sqlc.MarkDexOperationSucceededParams{ID: id, AttemptCount: attempt})
+				case "retry":
+					return q.MarkDexOperationRetrying(t.Context(), sqlc.MarkDexOperationRetryingParams{ID: id, AttemptCount: attempt, ErrorCode: "reconcile_retrying"})
+				case "failure":
+					return q.MarkDexOperationFailed(t.Context(), sqlc.MarkDexOperationFailedParams{ID: id, AttemptCount: attempt, ErrorCode: "reconcile_failed"})
+				default:
+					return q.SetDexOperationPhase(t.Context(), sqlc.SetDexOperationPhaseParams{ID: id, AttemptCount: attempt, Phase: "finalizing"})
+				}
+			}
+			dexExec(t, pool, `UPDATE dex_operations SET locked_until=now()-interval '1 second' WHERE id=$1`, id)
+			if n, err := mutate(old.AttemptCount); err != nil || n != 0 {
+				t.Fatalf("expired write=%d %v", n, err)
+			}
+			next := dexClaim(t, q, id)
+			if n, err := mutate(old.AttemptCount); err != nil || n != 0 {
+				t.Fatalf("superseded write=%d %v", n, err)
+			}
+			row, err := q.GetDexOperation(t.Context(), id)
+			if err != nil || row.Status != "running" || row.Phase != "reconciling" || row.ErrorCode != "" || row.CompletedAt.Valid {
+				t.Fatalf("stale write changed successor: %+v %v", row, err)
+			}
+			if n, err := mutate(next.AttemptCount); err != nil || n != 1 {
+				t.Fatalf("owner write=%d %v", n, err)
+			}
+		})
+	}
+}
+
+type dexExecutorFunc func(context.Context, sqlc.DexOperation) error
+
+func (f dexExecutorFunc) ExecuteDexOperation(ctx context.Context, row sqlc.DexOperation) error {
+	return f(ctx, row)
+}
+
+func TestDexDurableWorkerRejectsLostLease(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"success", "retry", "failure"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			pool, q, id := dexDurabilityFixture(t)
+			executor := dexExecutorFunc(func(_ context.Context, _ sqlc.DexOperation) error {
+				dexExec(t, pool, `UPDATE dex_operations SET locked_until=now()-interval '1 second' WHERE id=$1`, id)
+				dexClaim(t, q, id)
+				if name == "retry" {
+					return errors.New("private credential-shaped cause")
+				}
+				if name == "failure" {
+					return asynq.SkipRetry
+				}
+				return nil
+			})
+			runtime := DexOperationRuntime{Queries: q, Executor: executor}
+			err := runtime.Handle(t.Context(), asynq.NewTask(DexOperationType, []byte(`{"operation_id":"`+id.String()+`"}`)))
+			if err == nil || errors.Is(err, asynq.SkipRetry) || strings.Contains(err.Error(), "private") {
+				t.Fatalf("lost lease must retry safely: %v", err)
+			}
+			row, err := q.GetDexOperation(t.Context(), id)
+			if err != nil || row.Status != "running" || row.AttemptCount != 2 {
+				t.Fatalf("successor changed: %+v %v", row, err)
+			}
+		})
+	}
+}
+
+func TestDexDurableWorkerTerminalReplay(t *testing.T) {
+	t.Parallel()
+	for _, terminal := range []bool{false, true} {
+		name := "success"
+		if terminal {
+			name = "failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, q, id := dexDurabilityFixture(t)
+			calls := 0
+			runtime := DexOperationRuntime{Queries: q, Executor: dexExecutorFunc(func(context.Context, sqlc.DexOperation) error {
+				calls++
+				if terminal {
+					return asynq.SkipRetry
+				}
+				return nil
+			})}
+			task := asynq.NewTask(DexOperationType, []byte(`{"operation_id":"`+id.String()+`"}`))
+			err := runtime.Handle(t.Context(), task)
+			if terminal && !errors.Is(err, asynq.SkipRetry) || !terminal && err != nil {
+				t.Fatal(err)
+			}
+			before, err := q.GetDexOperation(t.Context(), id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := runtime.Handle(t.Context(), task); err != nil {
+				t.Fatal(err)
+			}
+			after, err := q.GetDexOperation(t.Context(), id)
+			want := "succeeded"
+			if terminal {
+				want = "failed"
+			}
+			if err != nil || calls != 1 || after.Status != want || after.AttemptCount != 1 || !after.CompletedAt.Valid || after.CompletedAt != before.CompletedAt {
+				t.Fatalf("replay changed terminal: calls=%d row=%+v err=%v", calls, after, err)
+			}
+		})
+	}
+}
+
+func TestDexDurableRecoverySelectionAndDeduplication(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, status         string
+		stale, expired, want bool
+	}{
+		{"stale_pending", "pending", true, false, true},
+		{"fresh_pending", "pending", false, false, false},
+		{"stale_retry", "retrying", true, false, true},
+		{"fresh_retry", "retrying", false, false, false},
+		{"expired_running", "running", false, true, true},
+		{"active_running", "running", true, false, false},
+		{"succeeded", "succeeded", true, true, false},
+		{"failed", "failed", true, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pool, q, id := dexDurabilityFixture(t)
+			if _, err := q.QueueDexOperation(t.Context(), sqlc.QueueDexOperationParams{ID: id, RuntimeGeneration: 1}); err != nil {
+				t.Fatal(err)
+			}
+			dexExec(t, pool, `UPDATE task_outbox SET status='delivered',delivered_at=now(),attempt_count=3,last_error='private prior cause' WHERE dedupe_key=$1`, "dex-operation:"+id.String())
+			updated := time.Now()
+			if tc.stale {
+				updated = updated.Add(-10 * time.Minute)
+			}
+			locked := time.Now().Add(time.Minute)
+			if tc.expired {
+				locked = time.Now().Add(-time.Minute)
+			}
+			dexExec(t, pool, `UPDATE dex_operations SET status=$2,updated_at=$3,locked_until=$4 WHERE id=$1`, id, tc.status, updated, locked)
+			count, err := q.RecoverDexOperationOutbox(t.Context(), time.Now().Add(-5*time.Minute))
+			want := int64(0)
+			if tc.want {
+				want = 1
+			}
+			if err != nil || count != want {
+				t.Fatalf("recovery=%d want=%d err=%v", count, want, err)
+			}
+			again, err := q.RecoverDexOperationOutbox(t.Context(), time.Now().Add(-5*time.Minute))
+			if err != nil || again != 0 {
+				t.Fatalf("duplicate recovery=%d %v", again, err)
+			}
+			var status, lastError string
+			var attempts int
+			var delivered pgtype.Timestamptz
+			err = pool.QueryRow(t.Context(), `SELECT status,attempt_count,last_error,delivered_at FROM task_outbox WHERE dedupe_key=$1`, "dex-operation:"+id.String()).Scan(&status, &attempts, &lastError, &delivered)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want && (status != "pending" || attempts != 0 || lastError != "" || delivered.Valid) {
+				t.Fatalf("outbox not reset: %s %d %s %v", status, attempts, lastError, delivered)
+			}
+			if !tc.want && status != "delivered" {
+				t.Fatalf("unexpected recovery: %s", status)
+			}
+		})
+	}
+}
+
+func TestDexDurableWorkerRetryConverges(t *testing.T) {
+	t.Parallel()
+	_, q, id := dexDurabilityFixture(t)
+	calls := 0
+	runtime := DexOperationRuntime{Queries: q, Executor: dexExecutorFunc(func(context.Context, sqlc.DexOperation) error {
+		calls++
+		if calls == 1 {
+			return errors.New("private cause")
+		}
+		return nil
+	})}
+	task := asynq.NewTask(DexOperationType, []byte(`{"operation_id":"`+id.String()+`"}`))
+	if err := runtime.Handle(t.Context(), task); err == nil || err.Error() != "Dex operation reconcile failed" {
+		t.Fatalf("retry error=%v", err)
+	}
+	row, err := q.GetDexOperation(t.Context(), id)
+	if err != nil || row.Status != "retrying" || row.ErrorCode != "reconcile_retrying" || row.LockedUntil.Valid || row.CompletedAt.Valid {
+		t.Fatalf("retry state=%+v %v", row, err)
+	}
+	if err := runtime.Handle(t.Context(), task); err != nil {
+		t.Fatal(err)
+	}
+	row, err = q.GetDexOperation(t.Context(), id)
+	if err != nil || row.Status != "succeeded" || row.AttemptCount != 2 || row.ErrorCode != "" || !row.CompletedAt.Valid {
+		t.Fatalf("convergence=%+v %v", row, err)
+	}
+}

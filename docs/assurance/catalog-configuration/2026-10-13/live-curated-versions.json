@@ -1,0 +1,222 @@
+[
+  {
+    "chart": "cert-manager",
+    "profiles": [
+      {
+        "version": "v1.21.1",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "cloudnative-pg",
+    "profiles": [
+      {
+        "version": "0.29.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "constellation",
+    "profiles": [
+      {
+        "version": "0.2.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "external-dns",
+    "profiles": [
+      {
+        "version": "1.21.1",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "external-secrets",
+    "profiles": [
+      {
+        "version": "2.9.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "fluent-bit",
+    "profiles": [
+      {
+        "version": "0.58.1",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "gatekeeper",
+    "profiles": [
+      {
+        "version": "3.23.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "gatekeeper",
+    "profiles": [
+      {
+        "version": "3.23.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "grafana",
+    "profiles": [
+      {
+        "version": "10.5.15",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "ingress-nginx",
+    "profiles": [
+      {
+        "version": "4.15.1",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "keda",
+    "profiles": [
+      {
+        "version": "2.20.2",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "kube-prometheus-stack",
+    "profiles": [
+      {
+        "version": "88.5.4",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "kube-state-metrics",
+    "profiles": [
+      {
+        "version": "8.4.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "kyverno",
+    "profiles": [
+      {
+        "version": "3.9.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "loki",
+    "profiles": [
+      {
+        "version": "7.3.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "longhorn",
+    "profiles": [
+      {
+        "version": "1.12.1",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "metrics-server",
+    "profiles": [
+      {
+        "version": "3.14.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "opentelemetry-collector",
+    "profiles": [
+      {
+        "version": "0.171.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "prometheus-node-exporter",
+    "profiles": [
+      {
+        "version": "4.56.1",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "tempo",
+    "profiles": [
+      {
+        "version": "1.24.4",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "trivy-operator",
+    "profiles": [
+      {
+        "version": "0.36.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  },
+  {
+    "chart": "velero",
+    "profiles": [
+      {
+        "version": "12.1.0",
+        "available": true,
+        "recommended": true
+      }
+    ]
+  }
+]

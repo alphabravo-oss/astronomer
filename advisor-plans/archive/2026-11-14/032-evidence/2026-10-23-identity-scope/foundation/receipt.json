@@ -1,0 +1,39 @@
+{
+  "base_commit": "040870752fc1635ecbb08d64f9e4b71538a061f4",
+  "branch": "feat/identity-zitadel",
+  "files": {
+    "go.mod": "6b480e33b521bc022d588c98882f827edc5e61ccf667662c0f3078e57ee117a1",
+    "go.sum": "ec0ca116283068caedbfe506b5c82fd6a0659bfd9fe24e9ed6b3d11d27f07e24",
+    "internal/config/config.go": "b251d48b5eb0bf726013f74a59b9b9dcaf222a5b236b50fe98572b7d9bf5268a",
+    "internal/config/optional_env.go": "c20296e4ed1e60516644c17222deb33e6edf6166783b0eeada4d086475f94e9d",
+    "internal/config/identity.go": "e42210497f40eb65a9dcabbbe4461df3bb5f7bb6ad9c23c1449d503a9a73407f",
+    "internal/config/identity_test.go": "0517c46094efa2265800c0696cb111645c154dd0a1f818941996f89908d1cc95",
+    "internal/identity/service.go": "1135c7f3175fb2a6828749d34c1571d96b93596f54489beea0d5dbfc3f3bb4df",
+    "internal/identity/service_integration_test.go": "42d66459f22a6d7f47cdc8d3a8aa17f19bee2783c4b7883db21f9d5ded0ee92d",
+    "internal/db/migrations/00086_shared_identity_bindings.sql": "de58ab4a563c2b57b35a514586b841236c8e3872c62bdc8cf8d964d369156951",
+    "internal/db/queries/shared_identity.sql": "2ec6d8a1224be11ea5147768a447a1174c88f25ef75a141ee0a9438824ea6e2a",
+    "internal/db/sqlc/shared_identity.sql.go": "56e657b19bc3ac86a95d17192c1366814891eb74eb0fcb00fcbe1f68bc3cdb71",
+    "internal/db/sqlc/models.go": "97445d8c51cb0550225b5e88e2a1f474872d35e5f6da383eeb116fc9fdb336b3",
+    "internal/db/sqlc/querier.go": "318cfff8bbbc86a4a55dc3f43b9cd5bf99d0f4f11bb02e118f825377e65acc61",
+    "deploy/chart/values.yaml": "c65c516001598d36698d19a85efec1de4bccf709a09e744a78195a6eadf41e22",
+    "deploy/chart/values.schema.json": "ff8d0c8fcfa4088b9977becb692bdb25387ecc70e2af2378ae3e77a41129ee69",
+    "deploy/chart/files/release-compatibility.json": "f844e92d1282fd427e6b942d269fd2a23b87d6b5d1e5f0eb3531965c0065b213",
+    "deploy/testdata/live-values-astronomer-dev.yaml": "1bfad1d90dee35f81a6aab0f13f6928022b34e920ea2d8c797ebbd9063506107"
+  },
+  "gates": {
+    "real_postgres_tls_jwks_race": "PASS",
+    "focused_lint": "PASS",
+    "security": "PASS",
+    "make_check": "PASS",
+    "go_mod_tidy_diff": "PASS"
+  },
+  "live_deployment_changed": false,
+  "server_routes_wired": false,
+  "unit_tests_reported": 15769,
+  "unit_tests_skipped": 15,
+  "logs": {
+    "check.log": "b3a05de06ef85116c35194264a3d99c730f90e389df0711efe9d3ff43c249194",
+    "integration.log": "012a1b0f48fe90718464198a33dfc6ff257a116be161c6d1eb02525507698961",
+    "security.log": "d0ac2455ec37f822dcabb762ae4e3f3b19df93a8c932118f9fb76c9d6a15c30d"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "source_commit": "d0114d252bd8b4ea929446db58385df666b90cf2",
+  "observed_at": "2026-10-09T20:58:21.819312+00:00",
+  "go": "1.27.2",
+  "postgres": "CNPG18.6 on owned K3s1.36.5; dedicated plan032_worker18",
+  "valkey_image": "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
+  "valkey_container": "astronomer-plan032-worker-valkey9-35b2f0d4b3",
+  "authenticated": true,
+  "appendonly": true,
+  "race": false,
+  "gates": [
+    {
+      "gate": "build",
+      "exit_code": 0,
+      "duration_seconds": 1.076947,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": {}
+    },
+    {
+      "gate": "migrate",
+      "exit_code": 0,
+      "duration_seconds": 1.538879,
+      "log_sha256": "2305ba39dd563cafd7f9266525919343ba2510f9160fc853075265514d82a4b4",
+      "tests": {}
+    },
+    {
+      "gate": "worker",
+      "exit_code": 0,
+      "duration_seconds": 137.132533,
+      "log_sha256": "b2bcb807f8130059ae3ee2857235f60435832e0c17c5d9b1bc4b5a512828cbdb",
+      "tests": {
+        "TestWorkerPostgresRedisIntegration": "pass"
+      }
+    }
+  ],
+  "release_qualified": false,
+  "limitations": [
+    "Existing worker test uses production business handlers and crash/replacement, but does not qualify a full deployed application or CNPG failover.",
+    "Latest source-harness adoption remains separate."
+  ],
+  "valkey_image_id": "sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
+  "container_loopback_port_binding": [
+    "127.0.0.1"
+  ],
+  "expected_parent_tests": 1,
+  "actual_parent_passes": 1,
+  "unexpected_skips": 0,
+  "first_party_worker_source_sha256": "d1e3bef67cfdd5e7b4642f27d74e7a760e1a4395eae742e2bd7a10bd27b7f24f",
+  "cases_in_parent": [
+    "Eight real queue/owner task families",
+    "Production business handlers against real PostgreSQL and cache",
+    "Actual worker process killed at committed checkpoint",
+    "Replacement production recoverer retries the original expired lease",
+    "Duplicate recovery delivery retains one external effect and audit linkage"
+  ],
+  "raw_logs_directory": "protected local cache: /root/.cache/astronomer-032/qualification/worker18-valkey9",
+  "valkey_cleanup": {
+    "at": "2026-10-09T20:58:44.905985+00:00",
+    "container_and_anonymous_volume_removed": true
+  }
+}

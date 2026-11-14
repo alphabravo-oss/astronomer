@@ -1,0 +1,6 @@
+{
+  "requests": [
+    "http://127.0.0.1:32127/api/v1/clusters/c-smoke-1/workloads/?limit=50&offset=0&kind=Deployment&sort=namespace_asc"
+  ],
+  "text": "Deployments\nCreate Deployment\nGroup namespaces (this page)\nColumns\n\t\nName\n\t\nNamespace\n\t\nReady\n\t\nStatus\n\t\nImage\n\t\nAge\n\t\n\n\n\nNo deployments found\n\nResources will appear here when they are available in this scope.\n\nShowing 0-0 of 51\n1\n2"
+}

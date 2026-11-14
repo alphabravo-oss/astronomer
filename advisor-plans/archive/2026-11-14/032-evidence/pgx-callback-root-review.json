@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W10",
+  "status": "SCOPED_REVIEW_ACCEPTED",
+  "packageStatus": "IN_PROGRESS",
+  "sourceCommit": "4799556282a8084bf6a29eab38c9033e2cc1880a",
+  "integratedThrough": "76f3983445f5706269dd67c6646f08bd744728e5",
+  "observedAt": "2026-10-09T23:44:47.538299+00:00",
+  "fullHelperSourceTestsDocsReviewed": true,
+  "executorSourceAndArtifactHashesVerified": 10,
+  "rootIndependentChecks": [
+    {
+      "command": "go test -race ./scripts/otel-pgx-qualification -count=1 -v",
+      "exitCode": 0,
+      "parents": 4,
+      "skips": 0
+    },
+    {
+      "command": "go build ./scripts/otel-pgx-qualification; rebuilt helper --database-ref protected dedicated reference --out exclusive sanitized receipt",
+      "exitCode": 0,
+      "actualServerVersionNum": 180006,
+      "actualCallbacks": {
+        "acquire": 7,
+        "batch": 1,
+        "batchQuery": 2,
+        "connect": 2,
+        "prepare": 1,
+        "query": 9
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "advisor-plans/032-evidence/root-w10-callbacks-4799/actual-callbacks.json",
+      "sha256": "5c35535e0b05bc987e21679b8c4f07999c78a241ac3b11b6645aa6ae248a8add",
+      "bytes": 554
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w10-callbacks-4799/2.log",
+      "sha256": "10b686987aca6072299009fd5cc0bf30b067a736212235d4a3a12bd327206350",
+      "bytes": 79
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w10-callbacks-4799/1.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w10-callbacks-4799/0.log",
+      "sha256": "9962b56aadf655d3a429c644b840151d902c258eacf40002efc697419fbc3318",
+      "bytes": 593
+    }
+  ],
+  "scope": "Dedicated owned callback table only. Actual database and major fence precede any writes. Real OTLP protobuf verifies linkage and redaction. No whole API/task/tunnel, collector deployment or overhead qualification."
+}

@@ -1,0 +1,6 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/identity	6.558s
+ok  	github.com/alphabravocompany/astronomer-go/internal/identity/provisioning	1.218s [no tests to run]
+ok  	github.com/alphabravocompany/astronomer-go/internal/config	1.143s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	7.960s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db	5.875s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/migrations	6.955s

@@ -1,0 +1,4 @@
+SQLC_VERSION=v1.31.1 ./scripts/check-sqlc-generated.sh
+sqlc-extensions: generated 28 isolated extensions
+sqlc-extensions: 28 isolated extensions are current
+sqlc generated output is current

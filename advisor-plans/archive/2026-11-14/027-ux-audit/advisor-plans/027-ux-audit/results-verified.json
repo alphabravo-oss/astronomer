@@ -1,0 +1,313 @@
+{
+  "config": {
+    "argv": [
+      "/usr/bin/node",
+      "/root/astronomer-all/astronomer/frontend/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "advisor-plans/027-ux-audit/playwright.config.mjs",
+      "--grep",
+      "reproduce"
+    ],
+    "configFile": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/playwright.config.mjs",
+    "rootDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-verified",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit",
+        "testIgnore": [],
+        "testMatch": [
+          "review.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "./advisor-plans/027-ux-audit/results-verified.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "review.spec.ts",
+      "file": "review.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "reproduce custom-resource back destination",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2839,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "CUSTOM_BACK /dashboard/clusters/c-smoke-1/certificates http://127.0.0.1:32127/dashboard/clusters/c-smoke-1/certificates\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T20:01:19.440Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-b9406ff6b83d747b39f6",
+          "file": "review.spec.ts",
+          "line": 77,
+          "column": 1
+        },
+        {
+          "title": "reproduce namespace disagreement on custom resources",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2800,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "CUSTOM_SCOPE_MISMATCH [\"http://127.0.0.1:32127/api/v1/clusters/c-smoke-1/k8s/apis/cert-manager.io/v1/certificates?limit=50\",\"http://127.0.0.1:32127/api/v1/clusters/c-smoke-1/k8s/apis/cert-manager.io/v1/certificates?limit=50\"]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T20:01:22.417Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-bc7c7a501cf5f0c7f210",
+          "file": "review.spec.ts",
+          "line": 95,
+          "column": 1
+        },
+        {
+          "title": "reproduce filtering after workload pagination",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3017,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "WORKLOAD_SCOPE_MISMATCH [\"http://127.0.0.1:32127/api/v1/clusters/c-smoke-1/workloads/?limit=50&offset=0&kind=Deployment&sort=namespace_asc\"]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T20:01:25.241Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-a31ca2e25342cb519c39",
+          "file": "review.spec.ts",
+          "line": 115,
+          "column": 1
+        },
+        {
+          "title": "reproduce shared stacks double-active navigation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2616,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "DOUBLE_ACTIVE [{\"text\":\"Astronomerby AlphaBravo\",\"href\":\"/dashboard\",\"class\":\"flex items-center gap-2.5 min-w-0 active\"},{\"text\":\"Overview\",\"href\":\"/dashboard\",\"class\":\"flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50 active\"},{\"text\":\"Metrics\",\"href\":\"/dashboard/monitoring\",\"class\":\"flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors bg-accent text-foreground font-medium active\"},{\"text\":\"Shared stacks\",\"href\":\"/dashboard/monitoring/stacks\",\"class\":\"flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors bg-accent text-foreground font-medium active\"}]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T20:01:28.273Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-bcd6deb07ac4b7796f7f",
+          "file": "review.spec.ts",
+          "line": 141,
+          "column": 1
+        },
+        {
+          "title": "reproduce forbidden Velero status as not installed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2571,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T20:01:30.904Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-386eeceaa75210e5dd50",
+          "file": "review.spec.ts",
+          "line": 153,
+          "column": 1
+        },
+        {
+          "title": "reproduce keyboard focus entering closed mobile sidebar",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2681,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "HIDDEN_SIDEBAR_FOCUS {\"label\":\"Astronomerby AlphaBravo\",\"inSidebar\":true,\"x\":-224,\"right\":-106.484375}\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T20:01:33.489Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-3a3a0026a506ed92bbed",
+          "file": "review.spec.ts",
+          "line": 166,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-24T20:01:18.449Z",
+    "duration": 17806.507,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

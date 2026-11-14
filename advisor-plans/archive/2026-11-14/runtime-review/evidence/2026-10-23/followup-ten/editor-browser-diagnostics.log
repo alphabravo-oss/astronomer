@@ -1,0 +1,69 @@
+[WebServer] (node:2305313) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2305346) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] [INEFFECTIVE_DYNAMIC_IMPORT] src/components/ui/monaco-editor.tsx is dynamically imported by src/components/ui/yaml-editor.tsx but also statically imported by tests/browser-components/editor.tsx, dynamic import will not move module into another chunk.
+[WebServer] 
+[WebServer] (node:2305481) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2305507) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:2305573) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (11.1s)
+
+
+  1) [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByLabel('Saved YAML')
+    Timeout: 10000ms
+    - Expected  - 1
+    + Received  + 2
+
+    - kind: ConfigMap
+    + kind: Pod
+    +
+
+    Call log:
+      - Expect "toHaveText" getByLabel('Saved YAML') with timeout 10000ms
+      - waiting for getByLabel('Saved YAML')
+        24 × locator resolved to <output aria-label="Saved YAML">kind: Pod↵</output>
+           - unexpected value "kind: Pod
+    "
+
+
+      19 |   await page.keyboard.press("ControlOrMeta+a");
+      20 |   await page.keyboard.type("kind: ConfigMap");
+    > 21 |   await page.getByRole("button", { name: "Save", exact: true }).click();
+         |                                               ^
+      22 |   await expect(page.getByLabel("Saved YAML")).toHaveText("kind: ConfigMap");
+      23 |   await expect(page.getByLabel("JSON diagnostics")).not.toHaveText("0");
+      24 |   expect(external).toEqual([]);
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:21:47
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 

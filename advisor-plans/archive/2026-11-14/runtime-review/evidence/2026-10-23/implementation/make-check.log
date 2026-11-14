@@ -1,0 +1,247 @@
+golangci-lint run ./...
+0 issues.
+go vet ./...
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T06:06:18Z" -o bin/server ./cmd/server
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T06:07:37Z" -o bin/worker ./cmd/worker
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T06:07:42Z" -o bin/agent ./cmd/agent
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T06:07:45Z" -o bin/astro ./cmd/astro
+go run gotest.tools/gotestsum@v1.13.0 --format pkgname --junitfile test-results/unit.xml -- -race -count=1 ./...
+∅  cmd/agent
+∅  cmd/dr-crypto
+✓  cmd/dexconfigcheck (1.022s)
+✓  cmd/release-assets (1.095s)
+✓  cmd/astro (1.802s)
+✓  cmd/server (1.196s)
+✓  cmd/worker (1.179s)
+∅  deploy/dashboards
+✓  deploy/bundles (1.048s)
+∅  frontend/node_modules/flatted/golang/pkg/flatted
+✓  deploy/flux (1.027s)
+✓  deploy/agent (4.955s)
+✓  internal/agent/kuberequests (1.07s)
+✓  internal/agent/observation (1.059s)
+✓  internal/agentcompat (1.029s)
+✓  internal/agentlifecycle (1.012s)
+✓  internal/anomaly (1.018s)
+✓  internal/api/apiutil (5.119s)
+✓  internal/apisvr/allowlist (1.016s)
+✓  internal/agent/delivery (14.657s)
+✓  internal/apisvr/allowlist/providers (1.056s)
+✓  internal/astrocli (1.031s)
+✓  internal/astrocli/airgap (1.08s)
+✓  internal/agent (21.804s)
+✓  internal/audit (5.875s)
+✓  internal/auth (6.278s)
+✓  internal/callerid (1.165s)
+✓  internal/catalog (1.123s)
+✓  internal/catalog/configuration (1.014s)
+✓  internal/cacheinvalidate (5.649s)
+✓  deploy (43.953s)
+∅  internal/charlie/contract/internal/schema
+∅  internal/charlie/contract/internal/wire
+✓  internal/cloudcreds (1.053s)
+✓  internal/charlie/contract (2.068s)
+✓  internal/compliance (1.038s)
+✓  internal/controlplane (1.012s)
+✓  internal/credential (1.031s)
+✓  internal/dashboards (1.026s)
+✓  internal/db (1.039s)
+✓  internal/db/migrations (1.016s)
+∅  internal/db/sealedcols
+✓  internal/db/queries (1.024s)
+∅  internal/deferredreplay
+✓  internal/db/sqlc (1.028s)
+✓  internal/delivery/asyncop (1.016s)
+✓  internal/delivery/builtin (1.218s)
+✓  internal/config (6.553s)
+✓  internal/delivery/catalogapp (1.04s)
+✓  internal/delivery/compatibility (1.022s)
+✓  internal/delivery/configuration (1.014s)
+✓  internal/delivery/deployment (1.026s)
+✓  internal/delivery/metrics (1.027s)
+✓  internal/delivery/model (1.027s)
+✓  internal/charlie (17.057s)
+✓  internal/delivery/placement (2.942s)
+✓  internal/delivery/provider (2.104s)
+✓  internal/delivery/state (1.02s)
+✓  internal/delivery/status (1.073s)
+✓  internal/delivery/systemrelease (1.022s)
+✓  internal/delivery/resolver (8.036s)
+✓  internal/delivery/systemrollout (1.035s)
+✓  internal/dexconfig (1.022s)
+✓  internal/downstreamboundary (1.029s)
+✓  internal/delivery/distribution (19.009s)
+✓  internal/egress (1.014s)
+✓  internal/email (1.02s)
+✓  internal/envconfig (1.018s)
+✓  internal/events (1.936s)
+✓  internal/gatekeeperpolicy (1.027s)
+✓  internal/gitops (1.032s)
+✓  internal/grafanaproxy (1.06s)
+✓  internal/drcrypto (22.719s)
+✓  internal/delivery/rollout (54.162s)
+✓  internal/handler/clustermetrics (1.063s)
+✓  internal/handler/delivery (1.227s)
+✓  internal/helmruntime (1.148s)
+✓  internal/httpserver (1.014s)
+✓  internal/httpclient (2.225s)
+✓  internal/kubectl (1.244s)
+✓  internal/jsoncontract (2.122s)
+✓  internal/kubeutil (1.05s)
+✓  internal/lokiauth (1.026s)
+✓  internal/maintenance (1.031s)
+✓  internal/mesh (1.02s)
+✓  internal/monitoring (1.097s)
+✓  internal/metrics (1.557s)
+✓  internal/netpol (1.014s)
+✓  internal/notify (1.016s)
+✓  internal/operationstate (1.012s)
+✓  internal/operator/mirror (1.032s)
+∅  internal/operator/wire
+✓  internal/operator/lifecycle (1.935s)
+✓  internal/ops/process (4.772s)
+✓  internal/ops/upgrade (5.237s)
+∅  internal/ops/upgradecli/toolchain
+✓  internal/pagination (3.349s)
+✓  internal/observability (11.957s)
+✓  internal/platformsettings (1.012s)
+✓  internal/principal (1.012s)
+✓  internal/projectquota (1.016s)
+✓  internal/projects (1.188s)
+✓  internal/quota (1.025s)
+✓  internal/rbac (1.319s)
+✓  internal/redaction (1.014s)
+✓  internal/redisconn (1.025s)
+✓  internal/registration (1.02s)
+∅  internal/registry/startup
+✓  internal/registry (1.027s)
+✓  internal/reqctx (1.016s)
+✓  internal/scanner (1.064s)
+✓  internal/ops/upgradecli (14.074s)
+✓  internal/server (14.818s)
+✓  internal/scanner/databasejob (25.365s)
+✓  internal/sessionpolicy (1.012s)
+✓  internal/server/middleware (1.709s)
+✓  internal/strutil (1.012s)
+✓  internal/siem (1.236s)
+∅  internal/testdb
+✓  internal/tableviews (1.012s)
+✓  internal/toolui (1.078s)
+✓  internal/tunnel/connectauth (1.025s)
+✓  internal/userpreferences (1.033s)
+✓  internal/tunnel (3.773s)
+✓  internal/vault (1.022s)
+✓  internal/webhook (4.655s)
+✓  internal/releasecontract (50.261s)
+✓  internal/worker (1.429s)
+✓  internal/worker/leader (1.018s)
+✓  internal/worker/tasks (5.109s)
+✓  pkg/logging (1.033s)
+✓  pkg/crypto (1.06s)
+✓  pkg/astroclient (1.068s)
+✓  pkg/protocol (1.037s)
+✓  pkg/proxyhdr (1.016s)
+✓  pkg/safeconv (1.024s)
+✓  pkg/version (1.02s)
+✓  pkg/telemetry (1.589s)
+✓  scripts/loadtest (31.521s)
+✓  internal/handler (3m30.167s)
+
+=== Skipped
+=== SKIP: deploy TestApplicationMetricsPromQL (0.28s)
+    application_metrics_promql_test.go:37: promtool unavailable; rendered fixtures validated, PromQL evaluation NOT RUN
+
+=== SKIP: deploy TestMonitoringK3sOverlayRendersWithKubePrometheusStack (0.00s)
+    monitoring_values_test.go:121: KPS_CHART not set; skipping upstream kube-prometheus-stack render
+
+=== SKIP: deploy TestDBPoolAlertPromQL (0.27s)
+    db_pool_alert_test.go:40: promtool unavailable; pool alert evaluation NOT RUN
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback (0.00s)
+    database_publication_artifact_test.go:127: COSIGN_BIN must select qualified actual signer
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey (0.00s)
+    database_publication_artifact_test.go:199: COSIGN_BIN must select qualified actual signer
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignDatabaseUpdateToCanonicalLoader (0.00s)
+    database_update_loader_test.go:248: COSIGN_BIN must select the qualified producer binary
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignProducerToVerifiedLoader (0.00s)
+    verified_registry_test.go:289: COSIGN_BIN must select the qualified producer binary
+
+=== SKIP: internal/handler TestFetchAndIngestOCIRepoLive (0.00s)
+    catalog_oci_test.go:147: network-dependent; run manually against a reachable OCI registry
+
+=== SKIP: internal/handler TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion (0.00s)
+    dex_config_test.go:741: synchronous apply contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestApply_FixedPointDoesNotMutateOrRollout (0.00s)
+    dex_config_test.go:853: synchronous apply contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestApply_503WhenNoK8sRequester (0.00s)
+    dex_config_test.go:1028: HTTP apply no longer depends on immediate tunnel availability
+
+=== SKIP: internal/handler TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO (0.00s)
+    dex_config_test.go:1184: synchronous apply contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSO_CreatesProviderRow (0.00s)
+    dex_config_test.go:1255: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSO_AtomicFailurePreservesCredentialPair (0.00s)
+    dex_config_test.go:1381: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges (0.00s)
+    dex_config_test.go:1415: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSOPlatformConfigFailurePreservesPair (0.00s)
+    dex_config_test.go:1769: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/helmruntime TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation (0.00s)
+    private_repository_test.go:41: owned private Helm repository address is not configured
+
+=== SKIP: internal/helmruntime TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate (0.00s)
+    proxy_identity_before_test.go:34: owned private Helm proxy address is not configured
+
+=== SKIP: internal/helmruntime TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity (0.00s)
+    proxy_operations_test.go:30: owned private Helm proxy address is not configured
+
+=== SKIP: internal/helmruntime TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins (0.00s)
+    proxy_operations_test.go:49: owned private Helm proxy address is not configured
+
+=== SKIP: internal/helmruntime TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined (0.00s)
+    proxy_operations_test.go:69: owned private Helm proxy address is not configured
+
+=== SKIP: internal/ops/upgradecli TestPrepareInvocationActualCryptoAndCanonicalProxyComposesOneCapturedDriver (0.00s)
+    invocation_crypto_linux_test.go:41: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestInvocationRunActualJoinedVerificationFailureRetainsCheckpointAndRecovery (0.00s)
+    invocation_run_crypto_linux_test.go:21: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestInvocationRunActualCancellationCannotLaunchOrReplayConcreteStages (0.00s)
+    invocation_run_crypto_linux_test.go:63: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestInvocationRunAuthenticatesEveryImageBeforeOwnedDatabaseBoundary (0.00s)
+    invocation_verified_run_crypto_linux_test.go:38: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestInvocationRunRejectsOneForeignImageSignerBeforeDatabaseCapture (0.00s)
+    invocation_verified_run_crypto_linux_test.go:81: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/default-preview (0.00s)
+    legacy_run_linux_test.go:36: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/yes-execute (0.00s)
+    legacy_run_linux_test.go:36: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/dry-overrides-yes (0.00s)
+    legacy_run_linux_test.go:36: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestConcreteReleaseDriverOrdersVerifiedBackupQuiescenceApplyAndObserve (0.00s)
+    release_driver_ordered_linux_test.go:328: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestConcreteReleaseDriverFailureAfterQuiescenceRestoresOnlyOriginalOwnedReplicas (0.00s)
+    release_driver_ordered_linux_test.go:351: owned private canonical-proxy fixture address is not configured
+
+=== SKIP: internal/ops/upgradecli TestInvocationActualVerifyFailureCannotInventPublicBackupReport (0.00s)
+    sanitized_report_linux_test.go:130: owned private canonical-proxy fixture address is not configured
+
+DONE 15638 tests, 32 skipped in 417.726s

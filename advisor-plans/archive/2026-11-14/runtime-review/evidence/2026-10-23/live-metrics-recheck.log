@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+(node:1741757) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [live] › tests/e2e-live/metrics.live.spec.ts:5:1 › server exposes service_build_info on the metrics listener (184ms)
+
+  1 passed (679ms)

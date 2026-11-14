@@ -1,0 +1,8 @@
+=== RUN   TestApplicationMetricsPromQL
+--- PASS: TestApplicationMetricsPromQL (0.48s)
+=== RUN   TestDBPoolAlertPromQL
+=== PAUSE TestDBPoolAlertPromQL
+=== CONT  TestDBPoolAlertPromQL
+--- PASS: TestDBPoolAlertPromQL (0.28s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/deploy	0.770s

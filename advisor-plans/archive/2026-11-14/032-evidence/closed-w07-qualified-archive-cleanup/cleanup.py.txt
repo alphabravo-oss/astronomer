@@ -1,0 +1,123 @@
+"""Reviewed-manifest cleanup proposal. Defaults to validation only; never glob-deletes."""
+import argparse,datetime,hashlib,json,mmap,os,re,signal,stat,subprocess,sys
+from pathlib import Path
+CACHE=Path('/root/.cache/go-build')
+CLOSED=['/root/astronomer-all/astronomer-032-w07/']
+PREFIX=re.compile(rb'/root/astronomer-all/astronomer(?:-[A-Za-z0-9_-]+)?/')
+def identity(s):
+ return dict(device=s.st_dev,inode=s.st_ino,sizeBytes=s.st_size,allocatedBytes=s.st_blocks*512,mode=stat.S_IMODE(s.st_mode),uid=s.st_uid,mtimeNS=s.st_mtime_ns,ctimeNS=s.st_ctime_ns,linkCount=s.st_nlink)
+def check_path(raw):
+ p=Path(raw)
+ if not p.is_absolute() or '..' in p.parts:raise ValueError('noncanonical cache path')
+ rel=p.relative_to(CACHE)
+ if len(rel.parts) != 2 or re.fullmatch(r'[0-9a-f]{2}',rel.parts[0]) is None or re.fullmatch(r'[0-9a-f]{64}-d',rel.parts[1]) is None:raise ValueError('not an exact cache object path')
+ if len(rel.parts)==3 and (rel.parts[2] in {'.','..'} or not rel.parts[2]):raise ValueError('unsafe nested cache basename')
+ for parent in list(p.parents):
+  if parent==CACHE.parent:break
+  if not stat.S_ISDIR(parent.lstat().st_mode):raise ValueError('non-directory/symlink cache parent')
+ return p
+
+def process_fence(records):
+ byinode={(r['device'],r['inode']):r['path'] for r in records}
+ for proc in Path('/proc').iterdir():
+  if not proc.name.isdigit() or int(proc.name)==os.getpid():continue
+  try:
+   try:cwd=os.readlink(proc/'cwd')
+   except FileNotFoundError:continue
+   if any(cwd==p.rstrip('/') or cwd.startswith(p) for p in CLOSED):raise ValueError('closed source directory has process consumer')
+   try:exe=os.readlink(proc/'exe')
+   except FileNotFoundError:exe=''
+   if Path(exe).name in {'go','compile','link','asm','cgo'}:raise ValueError('Go compiler/runtime command active')
+   # Do not retain argv: it can contain private values. Only path-equality inspection.
+   try:args=(proc/'cmdline').read_bytes().split(b'\0')
+   except FileNotFoundError:args=[]
+   if any(r['path'].encode() in args for r in records):raise ValueError('candidate executable path has active process argument')
+   for fd in (proc/'fd').iterdir():
+    try:s=fd.stat()
+    except FileNotFoundError:continue
+    if (s.st_dev,s.st_ino) in byinode:raise ValueError('candidate has open file descriptor')
+   for line in (proc/'maps').read_text().splitlines():
+    fields=line.split(None,5)
+    if len(fields)<5:continue
+    major,minor=[int(x,16) for x in fields[3].split(':')]
+    if (os.makedev(major,minor),int(fields[4])) in byinode:raise ValueError('candidate is process-mapped')
+  except (FileNotFoundError,ProcessLookupError):continue
+  except PermissionError:raise ValueError('process ownership inspection unavailable') from None
+
+def validate_record(r):
+ if r['type']!='ar':raise ValueError('W07 release permits ar only, never ELF')
+ p=check_path(r['path']);s=p.lstat()
+ if not stat.S_ISREG(s.st_mode) or s.st_uid!=os.getuid() or s.st_nlink!=1:raise ValueError('candidate is not exclusively owned regular cache file')
+ if identity(s)!={k:r[k] for k in identity(s)}:raise ValueError('candidate file identity changed')
+ fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+ try:
+  if identity(os.fstat(fd))!=identity(s):raise ValueError('opened candidate identity changed')
+  with mmap.mmap(fd,0,access=mmap.ACCESS_READ) as data:
+   if hashlib.sha256(data).hexdigest()!=r['sha256']:raise ValueError('candidate SHA changed')
+   if r['type']=='ar':
+    if not data[:8]==b'!<arch>\n' or b'go1.27.2' not in data[:4096]:raise ValueError('candidate Go ar type/compiler changed')
+   elif r['type']=='elf':
+    if data[:4]!=b'\x7fELF' or r['buildInfo']['goVersion']!='go1.27.2':raise ValueError('candidate ELF/compiler evidence invalid')
+    pos=r['buildInfo']['buildInfoOffset']
+    if data[pos:pos+14]!=b'\xff Go buildinf:' or not data[pos+15]&2:raise ValueError('candidate Go ELF build-info changed')
+   else:raise ValueError('unsupported candidate type')
+   observed=sorted(set(m.decode() for m in PREFIX.findall(data)))
+   owners=[p for p in CLOSED if data.find(p.encode())>=0]
+   if not owners or observed!=r['allObservedFirstPartyPrefixes'] or owners!=r['closedOwnerPrefixes'] or any(p not in CLOSED for p in observed):raise ValueError('candidate source provenance changed or active')
+  if identity(os.fstat(fd))!=identity(s) or identity(p.lstat())!=identity(s):raise ValueError('candidate changed during validation')
+ finally:os.close(fd)
+ return p
+
+def capacity():
+ script=Path('/root/astronomer-all/astronomer-032-w11/scripts/check-build-capacity.sh')
+ try:
+  raw=script.read_bytes();r=subprocess.run([str(script),'--json'],capture_output=True,text=True,timeout=10)
+  return {'scriptSHA256':hashlib.sha256(raw).hexdigest(),'exitCode':r.returncode,'json':json.loads(r.stdout)}
+ except BaseException as e:return {'captureFailureType':type(e).__name__}
+
+def interrupt(signum,frame):raise InterruptedError('cleanup outer interrupt')
+
+def main():
+ ap=argparse.ArgumentParser();ap.add_argument('--inventory',required=True);ap.add_argument('--expected-sha256',required=True);ap.add_argument('--receipt',required=True);ap.add_argument('--execute',action='store_true');a=ap.parse_args()
+ old_handlers={sig:signal.getsignal(sig) for sig in (signal.SIGTERM,signal.SIGINT)}
+ for sig in old_handlers:signal.signal(sig,interrupt)
+ result={'schemaVersion':1,'status':'VALIDATION_PENDING','executeRequested':a.execute,'startedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'cleanupScriptSHA256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'inventorySHA256':a.expected_sha256,'removed':[],'validatedCount':0,'limits':['Exact manifest only; all sources/evidence/original executable inputs/toolchains/modules/images/PVCs/frontend packages preserved.','Requires parent review/approval of exact manifest and implementation before --execute; validation is read-only.','Concurrent filesystem/process changes cannot be made atomic across the whole system; refuse active Go commands and repeat exact fences before each unlink.']};code=1
+ try:
+  result['capacityBefore']=capacity()
+  raw=Path(a.inventory).read_bytes()
+  if hashlib.sha256(raw).hexdigest()!=a.expected_sha256:raise ValueError('inventory SHA mismatch')
+  inv=json.loads(raw)
+  if inv['schemaVersion']!=1 or inv['status']!='READ_ONLY_CANDIDATES_NO_DELETION' or inv['explicitClosedSourcePrefixes']!=CLOSED or inv['cacheRoot']!=str(CACHE):raise ValueError('inventory scope/schema mismatch')
+  if any(inv[k] for k in ['openCandidateFDs','mappedCandidates','closedPrefixCWDProcesses','inspectionErrors']):raise ValueError('inventory records active/uninspectable consumers')
+  records=inv['candidates']
+  if sum(r['sizeBytes'] for r in records)>7*1024**3:raise ValueError('bounded W07 batch byte cap exceeded')
+  if not records or len({r['path'] for r in records})!=len(records) or len({(r['device'],r['inode']) for r in records})!=len(records):raise ValueError('empty or duplicate candidate identities')
+  process_fence(records)
+  for r in records:validate_record(r);result['validatedCount']+=1
+  process_fence(records)
+  if a.execute:
+   for r in records:
+    process_fence(records)
+    p=validate_record(r)
+    # Last no-follow path identity check, after SHA and ownership checks.
+    if identity(p.lstat())!={k:r[k] for k in identity(p.lstat())}:raise ValueError('candidate changed before unlink')
+    p.unlink();result['removed'].append(r)
+   result['status']='EXACT_CLOSED_CACHE_REMOVED'
+  else:result['status']='VALIDATED_READ_ONLY_NO_DELETION'
+  code=0
+ except BaseException as e:
+  result['status']='FAILED_PARTIAL_REMOVAL' if result['removed'] else 'FAILED_NO_DELETION'
+  result['failureType']=type(e).__name__
+  result['failure']=str(e) if isinstance(e,ValueError) else 'bounded cleanup operation failed; inspect protected execution transcript'
+ finally:
+  for sig in old_handlers:signal.signal(sig,signal.SIG_IGN)
+  result['capacityAfter']=capacity()
+  result['finishedAt']=datetime.datetime.now(datetime.timezone.utc).isoformat();result['removedLogicalBytes']=sum(r['sizeBytes'] for r in result['removed']);result['removedAllocatedBytes']=sum(r['allocatedBytes'] for r in result['removed'])
+  p=Path(a.receipt)
+  if not p.is_absolute() or not p.parent.is_dir() or p.parent.is_symlink() or stat.S_IMODE(p.parent.stat().st_mode)!=0o700:raise ValueError('receipt requires existing private0700 parent')
+  fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+  with os.fdopen(fd,'w') as f:json.dump(result,f,indent=2);f.write('\n')
+  print(json.dumps({'status':result['status'],'validatedCount':result['validatedCount'],'removedCount':len(result['removed']),'removedLogicalBytes':result['removedLogicalBytes'],'receiptPath':str(p),'receiptSHA256':hashlib.sha256(p.read_bytes()).hexdigest()}))
+ for sig,handler in old_handlers.items():signal.signal(sig,handler)
+ return code
+if __name__=='__main__':sys.exit(main())

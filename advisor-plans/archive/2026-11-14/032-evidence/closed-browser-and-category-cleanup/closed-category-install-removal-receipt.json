@@ -1,0 +1,22 @@
+{
+  "observed_at": "2026-10-10T00:55:18.230387+00:00",
+  "scope": "Parent-authorized exact closed category frontend/node_modules removal after all borrower overlays proved local; source, locks, qualification artifacts and W07 packages preserved.",
+  "removed_path": "/root/astronomer-all/astronomer-032-category-integration/frontend/node_modules",
+  "manifest_path": "/root/.cache/astronomer-032/qualification/w10/dependency-overlays/closed-category-install-manifest.json",
+  "manifest_sha256": "f415f0ae75a75ddde6eea2f492c1deb8b3928a0e4daac54ba7bb9c2034b34b32",
+  "records": 47826,
+  "regular_file_bytes": 462532925,
+  "filesystem_borrowers": [],
+  "process_borrowers": [],
+  "source_before": {
+    "commit": "8cc5c79c82bc8b2f54e92032418d93606e7e6ff1",
+    "status": "",
+    "lock_sha256": "26a16cecdcc7117ef56544fb307af3426f29f606fda97a890b3c45d0aa24ea73"
+  },
+  "source_after": {
+    "commit": "8cc5c79c82bc8b2f54e92032418d93606e7e6ff1",
+    "status": "",
+    "lock_sha256": "26a16cecdcc7117ef56544fb307af3426f29f606fda97a890b3c45d0aa24ea73"
+  },
+  "exact_path_absent": true
+}

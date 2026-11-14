@@ -1,0 +1,26 @@
+{
+  "http": 200,
+  "connection": {
+    "connected": true
+  },
+  "agent": {
+    "desired_replicas": 2,
+    "ready_replicas": 0
+  },
+  "mode": {
+    "requested": "disabled",
+    "authoritative": "disabled",
+    "emergency_disabled": true,
+    "auto_readiness": {
+      "ready": false
+    },
+    "workload_ceiling": "disabled",
+    "workload_ceiling_ready": false
+  },
+  "flagsStatus": 200,
+  "flags": {
+    "data": {
+      "feature.charlie": true
+    }
+  }
+}

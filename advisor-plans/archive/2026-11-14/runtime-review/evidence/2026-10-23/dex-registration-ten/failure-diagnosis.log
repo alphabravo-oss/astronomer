@@ -1,0 +1,54 @@
+--- FAIL: TestDatabaseUpgradePreflightIsReadOnlyAndBounded (0.22s)
+    chart_flux_delivery_test.go:228: database upgrade preflight missing "outside supported range 1-86"
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/deploy	43.296s
+--- FAIL: TestOperatorChartRouteBindsAuthenticatedArchiveAndExactHelmVersion (0.08s)
+    chart_route_linux_test.go:37: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestOperatorChartRouteRejectsDifferentBytesExtraOutputsAndCanceledPublication (0.26s)
+    --- FAIL: TestOperatorChartRouteRejectsDifferentBytesExtraOutputsAndCanceledPublication/cancel (0.08s)
+        chart_route_linux_test.go:81: cancellation lost
+--- FAIL: TestCNPGOwnedRestoreUsesAuthenticatedSameMajorIndependentPodAndUIDCleanup (0.18s)
+    cloudnativepg_restore_linux_test.go:168: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID (2.27s)
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/volume (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/image (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/owner (0.15s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/token (0.15s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/mount (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/restart (0.18s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/group (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/seccomp (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/escalation (0.17s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/capabilities (0.18s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/rootfs (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/root (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/limit (0.16s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+    --- FAIL: TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/uid (0.17s)
+        cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod (0.34s)
+    --- FAIL: TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod/restore-failure (0.17s)
+        cloudnativepg_restore_linux_test.go:223: failed restore discarded ownership/recovery
+    --- FAIL: TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod/canceled-input (0.18s)
+        cloudnativepg_restore_linux_test.go:223: failed restore discarded ownership/recovery
+--- FAIL: TestExternalSanitizedReportNeverClaimsVerifiedDatabaseCopy (0.00s)
+    external_report_linux_test.go:27: artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestConcreteReleaseDriverOrdersVerifiedBackupQuiescenceApplyAndObserve (1.66s)
+    release_driver_ordered_linux_test.go:334: concrete ordered stage failed backup artifact capture would exhaust maintained capacity reserve
+--- FAIL: TestConcreteReleaseDriverFailureAfterQuiescenceRestoresOnlyOriginalOwnedReplicas (1.71s)
+    release_driver_ordered_linux_test.go:356: backup artifact capture would exhaust maintained capacity reserve
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli	26.771s
+FAIL

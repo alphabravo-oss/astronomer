@@ -1,0 +1,372 @@
+
+> astronomer-frontend@2.1.1 test
+> vitest run
+
+
+ RUN  v5.0.5 /root/work/astronomer-fixes/frontend
+
+Not implemented: Window's scrollTo() method
+Not implemented: Window's scrollTo() method
+ ❯ src/routes/dashboard/settings/operations/operations-pagination.test.tsx (4 tests | 2 failed) 19758ms
+   × reaches row 101 through the actual generated transport and Dead-letter table 2554ms
+   × withholds cached rows and totals when a later outbox page loses permission 5777ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/routes/dashboard/settings/operations/operations-pagination.test.tsx > reaches row 101 through the actual generated transport and Dead-letter table
+TestingLibraryElementError: Unable to find an element with the text: archived-task-1. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<section[39m
+  [33mclass[39m=[32m"space-y-2"[39m
+[36m>[39m
+  [36m<div[39m
+    [33mclass[39m=[32m"flex items-center justify-between"[39m
+  [36m>[39m
+    [36m<h2[39m
+      [33mclass[39m=[32m"text-sm font-medium text-foreground"[39m
+    [36m>[39m
+      [0mDead-letter[0m
+      [36m<span[39m
+        [33mclass[39m=[32m"ml-2 text-xs text-muted-foreground font-mono"[39m
+      [36m>[39m
+        [0m— [0m
+        [0mdefault[0m
+      [36m</span>[39m
+    [36m</h2>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed shrink justify-start whitespace-normal font-normal inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent disabled:opacity-50"[39m
+      [33mdata-state[39m=[32m"closed"[39m
+      [33mtype[39m=[32m"button"[39m
+    [36m>[39m
+      [36m<svg[39m
+        [33maria-hidden[39m=[32m"true"[39m
+        [33mclass[39m=[32m"lucide lucide-refresh-cw h-3 w-3 animate-spin"[39m
+        [33mfill[39m=[32m"none"[39m
+        [33mheight[39m=[32m"24"[39m
+        [33mstroke[39m=[32m"currentColor"[39m
+        [33mstroke-linecap[39m=[32m"round"[39m
+        [33mstroke-linejoin[39m=[32m"round"[39m
+        [33mstroke-width[39m=[32m"2"[39m
+        [33mviewBox[39m=[32m"0 0 24 24"[39m
+        [33mwidth[39m=[32m"24"[39m
+        [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+      [36m>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"[39m
+        [36m/>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M21 3v5h-5"[39m
+        [36m/>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"[39m
+        [36m/>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M8 16H3v5"[39m
+        [36m/>[39m
+      [36m</svg>[39m
+      [0m [0m
+      [0mRefresh[0m
+    [36m</button>[39m
+  [36m</div>[39m
+  [36m<div[39m
+    [33mclass[39m=[32m"space-y-3"[39m
+  [36m>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-1 flex-wrap items-center gap-2"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex items-center gap-2 self-end sm:self-auto"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"relative"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33mclass[39m=[32m"inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-border text-muted-foreground hover:bg-accent hover:text-foreground"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-sliders-horizontal h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 5H3"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M12 19H3"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 3v4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M16 17v4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 12h-9"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 19h-5"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 5h-7"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M8 10v4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M8 12H3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0mColumns[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"rounded-lg border border-border overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-label[39m=[32m"Scrollable data table"[39m
+        [33mclass[39m=[32m"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring overflow-x-auto"[39m
+        [33mdata-table-region[39m=[32m""[39m
+        [33mrole[39m=[32m"region"[39m
+        [33mtabindex[39m=[32m"0"[39m
+      [36m>[39m
+        [36m<table[39m
+          [33mclass[39m=[32m"app-data-table w-full text-sm"[39m
+          [33mdata-layout[39m=[32m"scroll"[39m
+          [33mstyle[39m=[32m"min-width: 956px;"[39m
+        [36m>[39m
+          [36m<thead[39m
+            [33mclass[39m=[32m"border-b border-border"[39m
+          [36m>[39m
+            [36m<tr[39m
+              [33mclass[39m=[32m"transition-colors hover:bg-[var(--table-row-hover)] border-b border-border bg-muted/50"[39m
+            [36m>[39m
+              [36m<th[39m
+                [33mclass[39m=[32m"h-10 text-ellipsis whitespace-nowrap text-left text-meta px-3 py-2 min-w-0 overflow-hidden font-medium text-muted-foreground"[39m
+                [33mscope[39m=[32m"col"[39m
+                [33mstyle[39m=[32m"width: 160px; min-width: 130px; max-width: 480px;"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-1"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"whitespace-nowrap"[39m
+                  [36m>[39m
+                    [0mTask type[0m
+                  [36m</span>[39m
+                [36m</div>[39m
+              [36m</th>[39m
+              [36m<th[39m
+                [33mclass[39m=[32m"h-10 text-ellipsis whitespace-nowrap text-left text-meta px-3 py-2 min-w-0 overflow-hidden font-medium text-muted-foreground"[39m
+                [33mscope[39m=[32m"col"[39m
+                [33mstyle[39m=[32m"w...
+
+Ignored nodes: comments, script, style
+[36m<section[39m
+  [33mclass[39m=[32m"space-y-2"[39m
+[36m>[39m
+  [36m<div[39m
+    [33mclass[39m=[32m"flex items-center justify-between"[39m
+  [36m>[39m
+    [36m<h2[39m
+      [33mclass[39m=[32m"text-sm font-medium text-foreground"[39m
+    [36m>[39m
+      [0mDead-letter[0m
+      [36m<span[39m
+        [33mclass[39m=[32m"ml-2 text-xs text-muted-foreground font-mono"[39m
+      [36m>[39m
+        [0m— [0m
+        [0mdefault[0m
+      [36m</span>[39m
+    [36m</h2>[39m
+    [36m<button[39m
+      [33mclass[39m=[32m"transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed shrink justify-start whitespace-normal font-normal inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent disabled:opacity-50"[39m
+      [33mdata-state[39m=[32m"closed"[39m
+      [33mtype[39m=[32m"button"[39m
+    [36m>[39m
+      [36m<svg[39m
+        [33maria-hidden[39m=[32m"true"[39m
+        [33mclass[39m=[32m"lucide lucide-refresh-cw h-3 w-3 animate-spin"[39m
+        [33mfill[39m=[32m"none"[39m
+        [33mheight[39m=[32m"24"[39m
+        [33mstroke[39m=[32m"currentColor"[39m
+        [33mstroke-linecap[39m=[32m"round"[39m
+        [33mstroke-linejoin[39m=[32m"round"[39m
+        [33mstroke-width[39m=[32m"2"[39m
+        [33mviewBox[39m=[32m"0 0 24 24"[39m
+        [33mwidth[39m=[32m"24"[39m
+        [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+      [36m>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"[39m
+        [36m/>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M21 3v5h-5"[39m
+        [36m/>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"[39m
+        [36m/>[39m
+        [36m<path[39m
+          [33md[39m=[32m"M8 16H3v5"[39m
+        [36m/>[39m
+      [36m</svg>[39m
+      [0m [0m
+      [0mRefresh[0m
+    [36m</button>[39m
+  [36m</div>[39m
+  [36m<div[39m
+    [33mclass[39m=[32m"space-y-3"[39m
+  [36m>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex flex-1 flex-wrap items-center gap-2"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"flex items-center gap-2 self-end sm:self-auto"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"relative"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33maria-expanded[39m=[32m"false"[39m
+            [33mclass[39m=[32m"inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-border text-muted-foreground hover:bg-accent hover:text-foreground"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"lucide lucide-sliders-horizontal h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 5H3"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M12 19H3"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 3v4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M16 17v4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 12h-9"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 19h-5"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M21 5h-7"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M8 10v4"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M8 12H3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0mColumns[0m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"rounded-lg border border-border overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33maria-label[39m=[32m"Scrollable data table"[39m
+        [33mclass[39m=[32m"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring overflow-x-auto"[39m
+        [33mdata-table-region[39m=[32m""[39m
+        [33mrole[39m=[32m"region"[39m
+        [33mtabindex[39m=[32m"0"[39m
+      [36m>[39m
+        [36m<table[39m
+          [33mclass[39m=[32m"app-data-table w-full text-sm"[39m
+          [33mdata-layout[39m=[32m"scroll"[39m
+          [33mstyle[39m=[32m"min-width: 956px;"[39m
+        [36m>[39m
+          [36m<thead[39m
+            [33mclass[39m=[32m"border-b border-border"[39m
+          [36m>[39m
+            [36m<tr[39m
+              [33mclass[39m=[32m"transition-colors hover:bg-[var(--table-row-hover)] border-b border-border bg-muted/50"[39m
+            [36m>[39m
+              [36m<th[39m
+                [33mclass[39m=[32m"h-10 text-ellipsis whitespace-nowrap text-left text-meta px-3 py-2 min-w-0 overflow-hidden font-medium text-muted-foreground"[39m
+                [33mscope[39m=[32m"col"[39m
+                [33mstyle[39m=[32m"width: 160px; min-width: 130px; max-width: 480px;"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-center gap-1"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"whitespace-nowrap"[39m
+                  [36m>[39m
+                    [0mTask type[0m
+                  [36m</span>[39m
+                [36m</div>[39m
+              [36m</th>[39m
+              [36m<th[39m
+                [33mclass[39m=[32m"h-10 text-ellipsis whitespace-nowrap text-left text-meta px-3 py-2 min-w-0 overflow-hidden font-medium text-muted-foreground"[39m
+                [33mscope[39m=[32m"col"[39m
+                [33mstyle[39m=[32m"w...
+ ❯ waitForWrapper node_modules/@testing-library/dom/dist/wait-for.js:163:27
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:86:33
+ ❯ src/routes/dashboard/settings/operations/operations-pagination.test.tsx:183:17
+    181|     mount();
+    182|     const table = panel(title);
+    183|     await table.findByText(
+       |                 ^
+    184|       title === "Task outbox" ? "durable-task-1" : "archived-task-1",
+    185|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/routes/dashboard/settings/operations/operations-pagination.test.tsx > withholds cached rows and totals when a later outbox page loses permission
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/routes/dashboard/settings/operations/operations-pagination.test.tsx:215:1
+    213| });
+    214|
+    215| it("withholds cached rows and totals when a later outbox page loses pe…
+       | ^
+    216|   mount();
+    217|   const table = panel("Task outbox");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 350 passed (351)
+      Tests  2 failed | 2430 passed (2432)
+   Start at  05:35:40
+   Duration  243.91s (import 39%, environment 34%, tests 19%, setup 4%, transform 3%, worker 1%)
+
+Environment  jsdom was created 351 times · 312.52s total, 34% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

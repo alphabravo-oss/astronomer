@@ -1,0 +1,194 @@
+golangci-lint run ./...
+0 issues.
+go vet ./...
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T16:24:22Z" -o bin/server ./cmd/server
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T16:25:34Z" -o bin/worker ./cmd/worker
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T16:25:39Z" -o bin/agent ./cmd/agent
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.0-1-ge222313603-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=e222313603 -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T16:25:42Z" -o bin/astro ./cmd/astro
+go run gotest.tools/gotestsum@v1.13.0 --format pkgname --junitfile test-results/unit.xml -- -race -count=1 ./...
+∅  cmd/agent
+∅  cmd/dr-crypto
+✓  cmd/dexconfigcheck (1.03s)
+✓  cmd/release-assets (1.497s)
+✓  cmd/astro (2.135s)
+∅  deploy/dashboards
+∅  frontend/node_modules/flatted/golang/pkg/flatted
+✓  internal/anomaly (1.018s)
+✓  internal/agentlifecycle (1.02s)
+✓  deploy/flux (1.028s)
+✓  internal/agentcompat (1.045s)
+✓  deploy/bundles (1.061s)
+✓  internal/agent/observation (1.068s)
+✓  internal/agent/kuberequests (1.082s)
+✓  cmd/worker (1.227s)
+✓  cmd/server (1.26s)
+✓  internal/apisvr/allowlist (1.018s)
+✓  internal/astrocli (1.042s)
+✓  internal/apisvr/allowlist/providers (1.086s)
+✓  internal/astrocli/airgap (1.071s)
+✓  internal/callerid (1.511s)
+∅  internal/charlie/contract/internal/schema
+∅  internal/charlie/contract/internal/wire
+✓  internal/catalog/configuration (1.043s)
+✓  internal/catalog (1.492s)
+✓  internal/cloudcreds (1.07s)
+✓  internal/compliance (1.043s)
+✓  internal/charlie/contract (2.193s)
+✓  internal/controlplane (1.014s)
+✓  internal/credential (1.031s)
+✓  internal/dashboards (1.027s)
+∅  internal/db/sealedcols
+✓  deploy/agent (5.257s)
+∅  internal/deferredreplay (2ms)
+✓  internal/db (1.04s)
+✓  internal/db/migrations (1.016s)
+✓  internal/db/queries (1.024s)
+✓  internal/db/sqlc (1.033s)
+✓  internal/delivery/asyncop (1.022s)
+✓  internal/delivery/catalogapp (1.035s)
+✓  internal/api/apiutil (5.44s)
+✓  internal/delivery/compatibility (1.018s)
+✓  internal/cacheinvalidate (5.532s)
+✓  internal/audit (5.771s)
+✓  internal/delivery/builtin (1.48s)
+✓  internal/delivery/configuration (1.012s)
+✓  internal/delivery/deployment (1.022s)
+✓  internal/delivery/metrics (1.024s)
+✓  internal/auth (6.412s)
+✓  internal/delivery/model (1.04s)
+✓  internal/delivery/state (1.018s)
+✓  internal/delivery/status (1.076s)
+✓  internal/delivery/systemrelease (1.032s)
+✓  internal/delivery/systemrollout (1.038s)
+✓  internal/dexconfig (1.03s)
+✓  internal/downstreamboundary (1.031s)
+✓  internal/delivery/provider (2.271s)
+✓  internal/egress (1.016s)
+✓  internal/email (1.029s)
+✓  internal/envconfig (1.03s)
+✓  internal/delivery/placement (3.192s)
+✓  internal/config (6.806s)
+✓  internal/gatekeeperpolicy (1.039s)
+✓  internal/gitops (1.033s)
+✓  internal/grafanaproxy (1.08s)
+✓  internal/events (1.915s)
+✓  internal/agent/delivery (15.212s)
+✓  internal/delivery/resolver (9.411s)
+✓  internal/charlie (17.698s)
+✓  internal/agent (23.13s)
+✓  internal/delivery/distribution (19.739s)
+✓  internal/drcrypto (24.649s)
+✓  internal/httpserver (1.016s)
+✓  internal/mesh (1.022s)
+✓  internal/maintenance (1.033s)
+✓  internal/lokiauth (1.034s)
+✓  internal/handler/clustermetrics (1.059s)
+✓  internal/kubeutil (1.064s)
+✓  internal/handler/delivery (1.244s)
+∅  internal/operator/wire
+✓  internal/kubectl (1.247s)
+✓  internal/metrics (1.569s)
+✓  internal/jsoncontract (1.861s)
+∅  internal/ops/upgradecli/toolchain
+✓  internal/netpol (1.012s)
+✓  internal/notify (1.02s)
+✓  internal/operationstate (1.014s)
+✓  internal/monitoring (1.097s)
+✓  internal/operator/mirror (1.032s)
+✓  internal/httpclient (2.217s)
+✓  internal/helmruntime (2.59s)
+✓  internal/operator/lifecycle (1.972s)
+✓  internal/platformsettings (1.016s)
+✓  internal/principal (1.012s)
+✓  internal/projectquota (1.018s)
+∅  internal/registry/startup
+✓  internal/quota (1.028s)
+✓  internal/projects (1.191s)
+✓  internal/rbac (1.303s)
+✓  internal/redaction (1.014s)
+✓  internal/redisconn (1.014s)
+✓  internal/registration (1.02s)
+✓  internal/registry (1.022s)
+✓  internal/reqctx (1.012s)
+✓  internal/scanner (1.062s)
+✓  internal/sessionpolicy (1.012s)
+∅  internal/testdb
+✓  internal/strutil (1.012s)
+✓  internal/siem (1.214s)
+✓  internal/pagination (3.448s)
+✓  internal/tableviews (1.014s)
+✓  internal/server/middleware (1.69s)
+✓  internal/toolui (1.077s)
+✓  internal/tunnel/connectauth (1.025s)
+✓  internal/userpreferences (1.033s)
+✓  internal/vault (1.025s)
+✓  internal/ops/upgrade (5.237s)
+✓  internal/ops/process (5.749s)
+✓  internal/worker/leader (1.02s)
+✓  pkg/astroclient (1.071s)
+✓  pkg/crypto (1.071s)
+✓  internal/worker (1.437s)
+✓  pkg/logging (1.039s)
+✓  pkg/protocol (1.062s)
+✓  pkg/proxyhdr (1.014s)
+✓  pkg/safeconv (1.016s)
+✓  pkg/version (1.018s)
+✓  internal/tunnel (3.94s)
+✓  pkg/telemetry (1.659s)
+✓  scripts/qualify-offerings (1.26s)
+✓  internal/webhook (4.63s)
+✓  internal/worker/tasks (5.103s)
+✓  internal/observability (11.996s)
+✓  deploy (45.913s)
+✓  internal/server (14.81s)
+✓  internal/scanner/databasejob (25.39s)
+✓  internal/delivery/rollout (55.932s)
+✓  internal/ops/upgradecli (32.421s)
+✓  scripts/loadtest (30.235s)
+✓  internal/releasecontract (49.518s)
+✓  internal/handler (3m30.871s)
+
+=== Skipped
+=== SKIP: deploy TestApplicationMetricsPromQL (0.32s)
+    application_metrics_promql_test.go:37: promtool unavailable; rendered fixtures validated, PromQL evaluation NOT RUN
+
+=== SKIP: deploy TestMonitoringK3sOverlayRendersWithKubePrometheusStack (0.00s)
+    monitoring_values_test.go:121: KPS_CHART not set; skipping upstream kube-prometheus-stack render
+
+=== SKIP: deploy TestDBPoolAlertPromQL (0.26s)
+    db_pool_alert_test.go:40: promtool unavailable; pool alert evaluation NOT RUN
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback (0.00s)
+    database_publication_artifact_test.go:127: COSIGN_BIN must select qualified actual signer
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey (0.00s)
+    database_publication_artifact_test.go:199: COSIGN_BIN must select qualified actual signer
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignDatabaseUpdateToCanonicalLoader (0.00s)
+    database_update_loader_test.go:248: COSIGN_BIN must select the qualified producer binary
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignProducerToVerifiedLoader (0.00s)
+    verified_registry_test.go:289: COSIGN_BIN must select the qualified producer binary
+
+=== SKIP: internal/handler TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion (0.00s)
+    dex_config_test.go:741: synchronous apply contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestApply_FixedPointDoesNotMutateOrRollout (0.00s)
+    dex_config_test.go:853: synchronous apply contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO (0.00s)
+    dex_config_test.go:1165: synchronous apply contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSO_CreatesProviderRow (0.00s)
+    dex_config_test.go:1236: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSO_AtomicFailurePreservesCredentialPair (0.00s)
+    dex_config_test.go:1362: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges (0.00s)
+    dex_config_test.go:1396: synchronous registration contract replaced by durable Dex operation worker
+
+=== SKIP: internal/handler TestRegisterAsSSOPlatformConfigFailurePreservesPair (0.00s)
+    dex_config_test.go:1750: synchronous registration contract replaced by durable Dex operation worker
+
+DONE 15769 tests, 14 skipped in 281.222s

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source_commit": "d4274b07edf5623c15546591751d641322116dac",
+  "outcome": "FAIL",
+  "stage": "migration database connect",
+  "test_run": false,
+  "reason": "Immediate connect after private NodePort creation was refused; no migrations or tests ran.",
+  "log_digest": "sha256:6bccb2c566b146f6eba083c9083962833a45cb467cbcd0f27d602d3f3fd2db80",
+  "qualification": "latest_major_fixture_endpoint_prerequisite_attempt"
+}

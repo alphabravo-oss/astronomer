@@ -1,0 +1,60 @@
+=== RUN   TestJournalGenerationBounds
+=== PAUSE TestJournalGenerationBounds
+=== RUN   TestJournalConcurrentClaimsAndCrashRecovery
+=== PAUSE TestJournalConcurrentClaimsAndCrashRecovery
+=== RUN   TestJournalScopeAndAuditFailureAreClosed
+=== PAUSE TestJournalScopeAndAuditFailureAreClosed
+=== RUN   TestJournalCompletionRequiresDurableCredentialAndCurrentRevision
+=== PAUSE TestJournalCompletionRequiresDurableCredentialAndCurrentRevision
+=== RUN   TestRegistrationLockSerializesGenerationsAndReleasesOnFailure
+=== PAUSE TestRegistrationLockSerializesGenerationsAndReleasesOnFailure
+=== RUN   TestCredentialSecretDurabilityAndIsolation
+=== PAUSE TestCredentialSecretDurabilityAndIsolation
+=== CONT  TestRegistrationLockSerializesGenerationsAndReleasesOnFailure
+=== CONT  TestJournalScopeAndAuditFailureAreClosed
+=== CONT  TestJournalConcurrentClaimsAndCrashRecovery
+=== CONT  TestJournalCompletionRequiresDurableCredentialAndCurrentRevision
+=== CONT  TestCredentialSecretDurabilityAndIsolation
+=== CONT  TestJournalGenerationBounds
+2026/11/14 04:13:00 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.1.3
+  API Version: 1.52
+  Operating System: Ubuntu 26.04 LTS
+  Total Memory: 31331 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: c225941b0c4efde09b37f0b60ad327a1ea9c5703e8d7b19d63b7788c3376126f
+  Test ProcessID: c3790c13-73fb-443d-bc6a-24106fab13ca
+2026/11/14 04:13:00 🐳 Creating container for image postgres:17.11-alpine
+2026/11/14 04:13:01 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/11/14 04:13:01 ✅ Container created: 15725537d614
+2026/11/14 04:13:01 🐳 Starting container: 15725537d614
+2026/11/14 04:13:01 ✅ Container started: 15725537d614
+2026/11/14 04:13:01 ⏳ Waiting for container id 15725537d614 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/11/14 04:13:01 Shell not found in container
+2026/11/14 04:13:01 🔔 Container is ready: 15725537d614
+2026/11/14 04:13:01 ✅ Container created: 764e55ac9953
+2026/11/14 04:13:01 🐳 Starting container: 764e55ac9953
+I1114 04:13:01.662420 1085146 request.go:754] "Waited before sending request" delay="1.148279191s" reason="client-side throttling, not priority and fairness" verb="GET" URL="https://127.0.0.1:6554/api/v1/namespaces/identity-credential-test-jcjkh/secrets/identity-client-b4ccc8756f3ba430a40b1150eb4e8753dabcf2ff?timeout=15s"
+2026/11/14 04:13:01 ✅ Container started: 764e55ac9953
+2026/11/14 04:13:01 ⏳ Waiting for container id 764e55ac9953 image: postgres:17.11-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/11/14 04:13:03 🔔 Container is ready: 764e55ac9953
+=== NAME  TestRegistrationLockSerializesGenerationsAndReleasesOnFailure
+    lock_integration_test.go:19: testdbconf: [DISPOSABLE_POSTGRES_DSN_REDACTED]
+=== NAME  TestJournalGenerationBounds
+    journal_integration_test.go:22: testdbconf: [DISPOSABLE_POSTGRES_DSN_REDACTED]
+=== NAME  TestJournalCompletionRequiresDurableCredentialAndCurrentRevision
+    journal_integration_test.go:155: testdbconf: [DISPOSABLE_POSTGRES_DSN_REDACTED]
+=== NAME  TestJournalScopeAndAuditFailureAreClosed
+    journal_integration_test.go:107: testdbconf: [DISPOSABLE_POSTGRES_DSN_REDACTED]
+=== NAME  TestJournalConcurrentClaimsAndCrashRecovery
+    journal_integration_test.go:70: testdbconf: [DISPOSABLE_POSTGRES_DSN_REDACTED]
+--- PASS: TestJournalGenerationBounds (5.89s)
+--- PASS: TestJournalConcurrentClaimsAndCrashRecovery (5.90s)
+--- PASS: TestJournalScopeAndAuditFailureAreClosed (5.90s)
+--- PASS: TestRegistrationLockSerializesGenerationsAndReleasesOnFailure (5.93s)
+--- PASS: TestJournalCompletionRequiresDurableCredentialAndCurrentRevision (5.95s)
+--- PASS: TestCredentialSecretDurabilityAndIsolation (6.01s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/identity/provisioning	7.297s

@@ -1,0 +1,16 @@
+OpenAPI request-schema field contract
+=====================================
+request shapes (named and inline)        : 160
+  bound to a Go struct                   : 160
+  unbound, on the debt list              : 0
+  unbound, NOT on the debt list          : 0
+  explicitly provisional                 : 0
+  bound but property-less (placeholder)  : 0
+bindings (marker occurrences)            : 160
+  field-comparable                       : 160
+per-field waivers                        : 9
+schemas with field drift                 : 0
+drifting fields                          : 0
+inline request bodies (field-verifiable) : 36
+proxy passthrough request bodies         : 44
+polymorphic Kubernetes request bodies    : 2

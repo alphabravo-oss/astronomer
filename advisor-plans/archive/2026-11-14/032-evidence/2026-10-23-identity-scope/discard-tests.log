@@ -1,0 +1,3 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	0.089s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	0.061s
+ok  	github.com/alphabravocompany/astronomer-go/deploy	3.179s

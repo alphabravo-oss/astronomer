@@ -1,0 +1,38 @@
+{
+  "source_commit": "7b14d41b4cdcdddd82a4152825daccff1c6b6940",
+  "started_at": "2026-10-09T22:34:47.333841+00:00",
+  "completed_at": "2026-10-09T22:34:59.878936+00:00",
+  "postgres_major": 18,
+  "cluster": "plan032-postgres18",
+  "database": "plan032_w09_review18",
+  "schema": "72|f",
+  "race": true,
+  "expected": 15,
+  "terminal": {
+    "TestServiceRejectsMissingAuditBeforeOpeningDatabase": "pass",
+    "TestPostgresSystemRolloutStartIdempotencyAndEligibility": "pass",
+    "TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction": "pass",
+    "TestPostgresSystemRolloutConcurrentFenceHasOneWinner": "pass",
+    "TestPostgresSystemRolloutCohortPromotionAndRollback": "pass",
+    "TestPostgresSystemRolloutPromotionConflictRollsBackRetirement": "pass",
+    "TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData": "pass",
+    "TestScanViewRetainsValidAdditiveV1Strategy": "pass",
+    "TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing": "pass",
+    "TestFailureThresholdUsesCountOrInclusivePercentage": "pass",
+    "TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable": "pass",
+    "TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets": "pass",
+    "TestCanonicalStrategyIsStableForExplicitCanaryOrder": "pass",
+    "TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets": "pass",
+    "TestActionTransitionIsClosedAndRequiresPreviousRelease": "pass"
+  },
+  "missing": [],
+  "failed": [],
+  "all_structured_skips": [],
+  "test_exit_code": 0,
+  "sha256": {
+    "/root/.cache/astronomer-032/qualification/cnpg36/w08-systemrollout-root/pg18-integration.jsonl": "6de1256baf352e2933ae1e54cfa886ebae4acdd8a1caab948e38f5fe28bad21b"
+  },
+  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; System rollout characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim",
+  "retained_source_log": "advisor-plans/032-evidence/cnpg18-systemrollout-sqlc-integration.jsonl",
+  "retained_source_log_sha256": "6de1256baf352e2933ae1e54cfa886ebae4acdd8a1caab948e38f5fe28bad21b"
+}

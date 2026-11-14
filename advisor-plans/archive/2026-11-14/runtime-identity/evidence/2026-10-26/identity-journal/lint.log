@@ -1,0 +1,5 @@
+internal/identity/provisioning/journal_integration_test.go:50:1: cognitive complexity 21 of func `TestJournalConcurrentClaimsAndCrashRecovery` is high (> 20) (gocognit)
+func TestJournalConcurrentClaimsAndCrashRecovery(t *testing.T) {
+^
+1 issues:
+* gocognit: 1

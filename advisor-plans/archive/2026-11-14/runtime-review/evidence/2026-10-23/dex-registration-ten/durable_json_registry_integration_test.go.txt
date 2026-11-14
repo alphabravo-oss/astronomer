@@ -1,0 +1,40 @@
+//go:build integration
+
+package migrations_test
+
+import (
+	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
+)
+
+func TestDurableJSONRegistryReferencesExistingColumns(t *testing.T) {
+	t.Parallel()
+	pool := testdb.Pool(t)
+	rows, err := pool.Query(t.Context(), `SELECT contract.table_schema,contract.table_name,contract.column_name
+ FROM durable_json_schemas contract
+ LEFT JOIN information_schema.columns actual
+ ON actual.table_schema=contract.table_schema AND actual.table_name=contract.table_name AND actual.column_name=contract.column_name
+ WHERE actual.column_name IS NULL ORDER BY 1,2,3`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var schema, table, column string
+		if err := rows.Scan(&schema, &table, &column); err != nil {
+			t.Fatal(err)
+		}
+		t.Errorf("orphan JSON contract: %s.%s.%s", schema, table, column)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM durable_json_schemas WHERE table_schema='public' AND table_name='dex_settings' AND column_name IN ('expiry','extra')`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("remaining Dex JSON contracts=%d, want 2", count)
+	}
+}

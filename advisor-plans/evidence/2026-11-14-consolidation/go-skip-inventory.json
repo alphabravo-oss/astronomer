@@ -1,0 +1,37 @@
+[
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/deploy",
+    "test": "TestApplicationMetricsPromQL",
+    "reason": "=== RUN   TestApplicationMetricsPromQL\n    application_metrics_promql_test.go:37: promtool unavailable; rendered fixtures validated, PromQL evaluation NOT RUN\n--- SKIP: TestApplicationMetricsPromQL (0.24s)\n"
+  },
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/deploy",
+    "test": "TestMonitoringK3sOverlayRendersWithKubePrometheusStack",
+    "reason": "=== RUN   TestMonitoringK3sOverlayRendersWithKubePrometheusStack\n    monitoring_values_test.go:121: KPS_CHART not set; skipping upstream kube-prometheus-stack render\n--- SKIP: TestMonitoringK3sOverlayRendersWithKubePrometheusStack (0.00s)\n"
+  },
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/deploy",
+    "test": "TestDBPoolAlertPromQL",
+    "reason": "=== RUN   TestDBPoolAlertPromQL\n=== PAUSE TestDBPoolAlertPromQL\n=== CONT  TestDBPoolAlertPromQL\n    db_pool_alert_test.go:40: promtool unavailable; pool alert evaluation NOT RUN\n--- SKIP: TestDBPoolAlertPromQL (0.25s)\n"
+  },
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+    "test": "TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback",
+    "reason": "=== RUN   TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback\n    database_publication_artifact_test.go:127: COSIGN_BIN must select qualified actual signer\n--- SKIP: TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback (0.00s)\n"
+  },
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+    "test": "TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey",
+    "reason": "=== RUN   TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey\n    database_publication_artifact_test.go:199: COSIGN_BIN must select qualified actual signer\n--- SKIP: TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey (0.00s)\n"
+  },
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+    "test": "TestSelectedCosignDatabaseUpdateToCanonicalLoader",
+    "reason": "=== RUN   TestSelectedCosignDatabaseUpdateToCanonicalLoader\n    database_update_loader_test.go:248: COSIGN_BIN must select the qualified producer binary\n--- SKIP: TestSelectedCosignDatabaseUpdateToCanonicalLoader (0.00s)\n"
+  },
+  {
+    "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+    "test": "TestSelectedCosignProducerToVerifiedLoader",
+    "reason": "=== RUN   TestSelectedCosignProducerToVerifiedLoader\n    verified_registry_test.go:289: COSIGN_BIN must select the qualified producer binary\n--- SKIP: TestSelectedCosignProducerToVerifiedLoader (0.00s)\n"
+  }
+]

@@ -1,0 +1,63 @@
+{
+  "source": "0b185c9ff6827e9c6af766138e8c47d909afb025",
+  "observed_at": "2026-10-10T01:29:24.832791+00:00",
+  "checks": [
+    {
+      "name": "sdk-race",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "./pkg/astroclient",
+        "-run",
+        "^TestPaginationCursor",
+        "-count=1",
+        "-timeout=3m"
+      ],
+      "exit_code": 0,
+      "log_sha256": "4d6846cfdfd8ce684b798792a63b2d6edf48f89b857de3850ebf689734d99d95",
+      "test_events": {
+        "pass": 12
+      },
+      "parent_pass_count": 3
+    },
+    {
+      "name": "pagination-race",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "./internal/pagination",
+        "-count=1",
+        "-timeout=3m"
+      ],
+      "exit_code": 0,
+      "log_sha256": "8405415e03e46222eedfb034aad6099cab1c543aa4717f4f01d67a00500cf841",
+      "test_events": {
+        "pass": 18
+      },
+      "parent_pass_count": 12
+    },
+    {
+      "name": "vet",
+      "argv": [
+        "go",
+        "vet",
+        "./pkg/astroclient",
+        "./internal/pagination"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_events": {},
+      "parent_pass_count": 0
+    }
+  ],
+  "source_dirty": "",
+  "toolchain": {
+    "go": "1.27.2",
+    "GOMAXPROCS": "2",
+    "GOFLAGS": "-p=1"
+  }
+}

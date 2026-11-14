@@ -1,0 +1,41 @@
+v2.45.1: Pulling from dexidp/dex
+15357f9784c6: Pulling fs layer
+bb78ce3fa942: Pulling fs layer
+2148fcf46d47: Pulling fs layer
+589002ba0eae: Pulling fs layer
+6985f83ebfbc: Pulling fs layer
+4e16bc4ee860: Pulling fs layer
+17ccd6a7fbb0: Pulling fs layer
+680f1119fdbc: Pulling fs layer
+d245ab785273: Pulling fs layer
+08f59f12d978: Pulling fs layer
+9c7808dab1b2: Pulling fs layer
+c4116159fc35: Pulling fs layer
+f5b069c938ad: Download complete
+2148fcf46d47: Download complete
+589002ba0eae: Download complete
+6985f83ebfbc: Download complete
+bb78ce3fa942: Download complete
+15357f9784c6: Download complete
+589002ba0eae: Pull complete
+9c7808dab1b2: Download complete
+17ccd6a7fbb0: Download complete
+08f59f12d978: Download complete
+c4116159fc35: Download complete
+d245ab785273: Download complete
+bb78ce3fa942: Pull complete
+15357f9784c6: Pull complete
+9c7808dab1b2: Pull complete
+17ccd6a7fbb0: Pull complete
+08f59f12d978: Pull complete
+d245ab785273: Pull complete
+6985f83ebfbc: Pull complete
+680f1119fdbc: Download complete
+4e16bc4ee860: Download complete
+2148fcf46d47: Pull complete
+680f1119fdbc: Pull complete
+c4116159fc35: Pull complete
+4e16bc4ee860: Pull complete
+Digest: sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462
+Status: Downloaded newer image for ghcr.io/dexidp/dex:v2.45.1
+ghcr.io/dexidp/dex:v2.45.1

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scope": "Original focused SDK compilation failure and narrow source correction",
+  "source": "c7fc72834a79c03bdf114818f716f97b3fa42d09",
+  "immutableOriginalDirectory": "/root/.cache/astronomer-032/qualification/w11-focused-c7fc7283",
+  "receiptSHA256": "ff543e1c9e16762db81fb8c1d8e98298ff1631505fcd29de101d318406e97763",
+  "rootVerification": {
+    "all21OriginalArtifactSHA256Verified": true,
+    "all7245FrozenGitBlobBindingsAndCanonicalFingerprintVerified": true,
+    "all16ActualNumeric20GiB20PercentGuardsPass": true,
+    "twoHeldGroupsDrained": true,
+    "sourceAndSelectedGoIdentityStable": true,
+    "httpclientParentsPass": 31,
+    "configurationParentsPass": 3,
+    "helmRuntimeParentsExecuted": 0,
+    "skips": 0
+  },
+  "compileDefects": [
+    "requestLoader embedded ClientConfig conflicts with owned method",
+    "Helm4 chart file type is common.File"
+  ],
+  "sourceFix": "32a3864bdc2719a849d213337adf42a0f98977fe",
+  "fullSourceFixReviewed": true,
+  "sourceFixScope": "Two source paths; private interface alias preserves promoted loader methods; test uses actual upstream common.File",
+  "successorDriverSHA256": "38889361abb4c79f452bcf9edf21f4f5a95775029376b7e78a5d752a7eebfab3",
+  "successorOnlyChanges": [
+    "frozen commit",
+    "new exclusive output"
+  ],
+  "wholeCandidateQualified": false
+}

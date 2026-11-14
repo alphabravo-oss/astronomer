@@ -1,0 +1,4 @@
+statefulset.apps/charlie-agent
+service/charlie-agent-bridge
+service/charlie-agent-headless
+networkpolicy.networking.k8s.io/charlie-agent

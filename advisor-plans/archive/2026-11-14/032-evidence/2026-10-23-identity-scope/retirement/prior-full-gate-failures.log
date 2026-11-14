@@ -1,0 +1,276 @@
+golangci-lint run ./...
+0 issues.
+go vet ./...
+lstat cmd/dexconfigcheck/main.go: no such file or directory
+lstat cmd/dexconfigcheck/main_test.go: no such file or directory
+lstat deploy/dex_runtime_secret_render_test.go: no such file or directory
+lstat internal/dexconfig/validate.go: no such file or directory
+lstat internal/dexconfig/validate_test.go: no such file or directory
+lstat internal/handler/dex_config.go: no such file or directory
+lstat internal/handler/dex_config_test.go: no such file or directory
+lstat internal/handler/dex_connectors.go: no such file or directory
+lstat internal/handler/dex_operations.go: no such file or directory
+lstat internal/handler/dex_operations_test.go: no such file or directory
+lstat internal/handler/dex_reconcile.go: no such file or directory
+lstat internal/handler/dex_runtime.go: no such file or directory
+lstat internal/handler/dex_settings.go: no such file or directory
+lstat internal/handler/dex_transactional_audit_test.go: no such file or directory
+lstat internal/handler/principals_test.go: no such file or directory
+lstat internal/handler/sso_ha_slo_test.go: no such file or directory
+lstat internal/handler/sso_test.go: no such file or directory
+lstat internal/handler/sso_tx.go: no such file or directory
+lstat internal/handler/sso_tx_test.go: no such file or directory
+lstat internal/server/dex_bootstrap.go: no such file or directory
+lstat internal/server/dex_bootstrap_test.go: no such file or directory
+lstat internal/server/routes_dex.go: no such file or directory
+lstat internal/worker/tasks/dex_operation.go: no such file or directory
+lstat internal/worker/tasks/dex_operation_test.go: no such file or directory
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.1-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=040870752f -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T23:24:30Z" -o bin/server ./cmd/server
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.1-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=040870752f -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T23:25:02Z" -o bin/worker ./cmd/worker
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.1-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=040870752f -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T23:25:07Z" -o bin/agent ./cmd/agent
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=v2.1.1-dirty -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=040870752f -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=2026-10-23T23:25:10Z" -o bin/astro ./cmd/astro
+go run gotest.tools/gotestsum@v1.13.0 --format pkgname --junitfile test-results/unit.xml -- -race -count=1 ./...
+∅  cmd/agent
+∅  cmd/dr-crypto
+✓  cmd/release-assets (1.179s)
+✓  cmd/astro (2.51s)
+∅  deploy/dashboards
+∅  frontend/node_modules/flatted/golang/pkg/flatted
+✓  internal/agentlifecycle (1.078s)
+✓  internal/anomaly (1.081s)
+✓  deploy/flux (1.093s)
+✓  deploy/bundles (1.132s)
+✓  internal/agentcompat (1.148s)
+✓  internal/agent/observation (1.207s)
+✓  cmd/worker (1.217s)
+✓  cmd/server (1.221s)
+✓  internal/agent/kuberequests (1.334s)
+✓  internal/apisvr/allowlist (1.052s)
+✓  internal/astrocli (1.112s)
+✓  internal/apisvr/allowlist/providers (1.128s)
+✓  internal/astrocli/airgap (1.123s)
+∅  internal/charlie/contract/internal/schema
+∅  internal/charlie/contract/internal/wire
+✓  internal/callerid (1.488s)
+✓  internal/catalog (1.495s)
+✓  internal/catalog/configuration (1.05s)
+✓  internal/cloudcreds (1.123s)
+✓  internal/compliance (1.096s)
+✓  internal/controlplane (1.042s)
+✓  internal/credential (1.088s)
+✓  internal/charlie/contract (2.344s)
+✓  internal/dashboards (1.097s)
+∅  internal/db/sealedcols
+✓  internal/db (1.121s)
+∅  internal/deferredreplay
+✓  internal/db/migrations (1.064s)
+✓  internal/db/queries (1.054s)
+✓  deploy/agent (5.667s)
+✓  internal/api/apiutil (5.84s)
+✓  internal/db/sqlc (1.074s)
+✓  internal/delivery/asyncop (1.066s)
+✓  internal/delivery/catalogapp (1.089s)
+✓  internal/delivery/compatibility (1.066s)
+✓  internal/cacheinvalidate (5.489s)
+✓  internal/delivery/configuration (1.058s)
+✓  internal/delivery/builtin (1.565s)
+✓  internal/delivery/deployment (1.112s)
+✓  internal/audit (6.131s)
+✓  internal/auth (6.198s)
+✓  internal/delivery/metrics (1.08s)
+✓  internal/delivery/model (1.084s)
+✓  internal/delivery/state (1.075s)
+✓  internal/delivery/status (1.175s)
+✓  internal/delivery/systemrelease (1.123s)
+✓  internal/delivery/systemrollout (1.115s)
+✓  internal/downstreamboundary (1.11s)
+✓  internal/delivery/provider (2.436s)
+✓  internal/egress (1.056s)
+✓  internal/email (1.129s)
+✓  internal/envconfig (1.109s)
+✓  internal/gatekeeperpolicy (1.1s)
+✓  internal/config (7.568s)
+✓  internal/delivery/placement (3.851s)
+✓  internal/gitops (1.096s)
+✓  internal/grafanaproxy (1.158s)
+✓  internal/events (2.142s)
+✓  internal/agent/delivery (14.919s)
+✓  internal/delivery/resolver (10.161s)
+✓  internal/charlie (19.471s)
+✓  internal/agent (22.579s)
+✓  internal/delivery/distribution (21.035s)
+∅  internal/identity
+✓  internal/maintenance (1.095s)
+✓  internal/mesh (1.098s)
+✓  internal/httpserver (1.107s)
+✓  internal/lokiauth (1.141s)
+✓  internal/kubeutil (1.242s)
+✓  internal/handler/clustermetrics (1.269s)
+✓  internal/handler/delivery (1.275s)
+✓  internal/kubectl (1.359s)
+∅  internal/operator/wire
+✓  internal/metrics (1.581s)
+✓  internal/jsoncontract (1.936s)
+✓  internal/netpol (1.056s)
+∅  internal/ops/upgradecli/toolchain
+✓  internal/notify (1.075s)
+✓  internal/operationstate (1.047s)
+✓  internal/httpclient (2.337s)
+✓  internal/monitoring (1.242s)
+✓  internal/operator/mirror (1.128s)
+✓  internal/helmruntime (2.811s)
+✓  internal/drcrypto (25.658s)
+✓  internal/platformsettings (1.042s)
+✓  internal/principal (1.016s)
+✓  internal/projectquota (1.047s)
+✓  internal/operator/lifecycle (2.112s)
+∅  internal/registry/startup
+✓  internal/quota (1.032s)
+✓  internal/projects (1.184s)
+✓  internal/redaction (1.014s)
+✓  internal/rbac (1.343s)
+✓  internal/redisconn (1.02s)
+✓  internal/registration (1.02s)
+✓  internal/registry (1.02s)
+✓  internal/reqctx (1.026s)
+✓  internal/scanner (1.088s)
+✓  internal/sessionpolicy (1.014s)
+∅  internal/testdb
+✓  internal/strutil (1.018s)
+✓  internal/tableviews (1.031s)
+✓  internal/siem (1.297s)
+✓  internal/pagination (3.774s)
+✓  internal/server/middleware (1.839s)
+✓  internal/ops/process (4.821s)
+✓  internal/toolui (1.069s)
+✓  internal/tunnel/connectauth (1.029s)
+✓  internal/userpreferences (1.037s)
+✓  internal/ops/upgrade (5.293s)
+✓  internal/vault (1.022s)
+✓  internal/worker/leader (1.027s)
+✓  internal/worker (1.414s)
+✓  pkg/astroclient (1.078s)
+✓  pkg/crypto (1.066s)
+✓  pkg/logging (1.039s)
+✓  pkg/protocol (1.047s)
+✓  pkg/proxyhdr (1.014s)
+✓  pkg/safeconv (1.028s)
+✓  pkg/version (1.025s)
+✓  internal/tunnel (3.882s)
+✓  pkg/telemetry (1.689s)
+✓  scripts/qualify-offerings (1.363s)
+✓  internal/webhook (4.637s)
+✓  internal/worker/tasks (5.689s)
+✓  deploy (44.391s)
+✓  internal/observability (12.751s)
+✓  internal/server (15.03s)
+✓  internal/scanner/databasejob (25.513s)
+✖  internal/ops/upgradecli (28.106s)
+✓  internal/delivery/rollout (59.099s)
+✓  scripts/loadtest (31.464s)
+✓  internal/releasecontract (50.418s)
+✖  internal/handler (2m58.728s)
+
+=== Skipped
+=== SKIP: deploy TestApplicationMetricsPromQL (0.31s)
+    application_metrics_promql_test.go:37: promtool unavailable; rendered fixtures validated, PromQL evaluation NOT RUN
+
+=== SKIP: deploy TestMonitoringK3sOverlayRendersWithKubePrometheusStack (0.00s)
+    monitoring_values_test.go:121: KPS_CHART not set; skipping upstream kube-prometheus-stack render
+
+=== SKIP: deploy TestDBPoolAlertPromQL (0.37s)
+    db_pool_alert_test.go:40: promtool unavailable; pool alert evaluation NOT RUN
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback (0.00s)
+    database_publication_artifact_test.go:127: COSIGN_BIN must select qualified actual signer
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey (0.00s)
+    database_publication_artifact_test.go:199: COSIGN_BIN must select qualified actual signer
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignDatabaseUpdateToCanonicalLoader (0.00s)
+    database_update_loader_test.go:248: COSIGN_BIN must select the qualified producer binary
+
+=== SKIP: internal/delivery/distribution TestSelectedCosignProducerToVerifiedLoader (0.00s)
+    verified_registry_test.go:289: COSIGN_BIN must select the qualified producer binary
+
+=== Failed
+=== FAIL: internal/handler TestInteractiveSessionMintPathsUseContextProvider/SSOHandler.commitSSOCallback (0.00s)
+    session_timeout_mint_contract_test.go:72: parse sso_tx.go: open sso_tx.go: no such file or directory
+
+=== FAIL: internal/handler TestInteractiveSessionMintPathsUseContextProvider (0.03s)
+
+=== FAIL: internal/ops/upgradecli TestOperatorChartRouteBindsAuthenticatedArchiveAndExactHelmVersion (0.08s)
+    chart_route_linux_test.go:37: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestOperatorChartRouteRejectsDifferentBytesExtraOutputsAndCanceledPublication/cancel (0.09s)
+    chart_route_linux_test.go:81: cancellation lost
+
+=== FAIL: internal/ops/upgradecli TestOperatorChartRouteRejectsDifferentBytesExtraOutputsAndCanceledPublication (0.25s)
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreUsesAuthenticatedSameMajorIndependentPodAndUIDCleanup (0.15s)
+    cloudnativepg_restore_linux_test.go:168: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/volume (0.17s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/image (0.16s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/owner (0.19s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/token (0.21s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/mount (0.18s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/restart (0.16s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/group (0.16s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/seccomp (0.18s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/escalation (0.20s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/capabilities (0.20s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/rootfs (0.21s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/root (0.19s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/limit (0.19s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID/uid (0.16s)
+    cloudnativepg_restore_linux_test.go:192: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreRejectsForeignPodSpecAndRecreatedUID (2.56s)
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod/restore-failure (0.16s)
+    cloudnativepg_restore_linux_test.go:223: failed restore discarded ownership/recovery
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod/canceled-input (0.15s)
+    cloudnativepg_restore_linux_test.go:223: failed restore discarded ownership/recovery
+
+=== FAIL: internal/ops/upgradecli TestCNPGOwnedRestoreFailureAndCancellationRetainDumpAndAttemptedPod (0.31s)
+
+=== FAIL: internal/ops/upgradecli TestExternalSanitizedReportNeverClaimsVerifiedDatabaseCopy (0.01s)
+    external_report_linux_test.go:27: artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestConcreteReleaseDriverOrdersVerifiedBackupQuiescenceApplyAndObserve (1.58s)
+    release_driver_ordered_linux_test.go:334: concrete ordered stage failed backup artifact capture would exhaust maintained capacity reserve
+
+=== FAIL: internal/ops/upgradecli TestConcreteReleaseDriverFailureAfterQuiescenceRestoresOnlyOriginalOwnedReplicas (1.70s)
+    release_driver_ordered_linux_test.go:356: backup artifact capture would exhaust maintained capacity reserve
+
+DONE 15567 tests, 7 skipped, 27 failures in 248.921s
+exit status 1
+make: *** [Makefile:91: test] Error 1

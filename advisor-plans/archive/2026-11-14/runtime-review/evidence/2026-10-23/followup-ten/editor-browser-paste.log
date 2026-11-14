@@ -1,0 +1,154 @@
+[WebServer] (node:2328133) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2328164) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] [INEFFECTIVE_DYNAMIC_IMPORT] src/components/ui/monaco-editor.tsx is dynamically imported by src/components/ui/yaml-editor.tsx but also statically imported by tests/browser-components/editor.tsx, dynamic import will not move module into another chunk.
+[WebServer] 
+[WebServer] (node:2328269) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2328282) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:2328364) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (11.2s)
+(node:2329105) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [firefox-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (12.2s)
+(node:2330129) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (12.5s)
+
+
+  1) [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByLabel('Saved YAML')
+    Expected: "kind: ConfigMap"
+    Received: "kd:figMap"
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toHaveText" getByLabel('Saved YAML') with timeout 10000ms
+      - waiting for getByLabel('Saved YAML')
+        24 × locator resolved to <output aria-label="Saved YAML">kd:figMap</output>
+           - unexpected value "kd:figMap"
+
+
+      26 |   await page.keyboard.type("kind: ConfigMap");
+      27 |   await page.getByRole("button", { name: "Save", exact: true }).click();
+    > 28 |   await expect(page.getByLabel("Saved YAML")).toHaveText("kind: ConfigMap");
+         |                                               ^
+      29 |   await expect(page.getByLabel("JSON diagnostics")).not.toHaveText("0");
+      30 |   expect(external).toEqual([]);
+      31 |   expect(failures).toEqual([]);
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:28:47
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [firefox-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  getByRole('region', { name: 'YAML editor' }).locator('textarea')
+    Expected: visible
+    Received: hidden
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: 'YAML editor' }).locator('textarea') with timeout 10000ms
+      - waiting for getByRole('region', { name: 'YAML editor' }).locator('textarea')
+        23 × locator resolved to <textarea wrap="on" tabindex="0" data-mprt="7" role="textbox" autocorrect="off" autocomplete="off" spellcheck="false" autocapitalize="off" aria-required="false" aria-multiline="true" aria-autocomplete="both" aria-label="Editor content" aria-roledescription="editor" class="inputarea monaco-mouse-cursor-text"></textarea>
+           - unexpected value "hidden"
+
+
+      17 |     .getByRole("region", { name: "YAML editor" })
+      18 |     .locator("textarea");
+    > 19 |   await expect(input).toBeVisible();
+         |                       ^
+      20 |   await expect(page.getByLabel("JSON diagnostics")).not.toHaveText("0");
+      21 |   await page
+      22 |     .getByRole("region", { name: "YAML editor" })
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:19:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByLabel('Saved YAML')
+    Timeout: 10000ms
+    - Expected  - 0
+    + Received  + 1
+
+    + kind: Pod
+      kind: ConfigMap
+
+    Call log:
+      - Expect "toHaveText" getByLabel('Saved YAML') with timeout 10000ms
+      - waiting for getByLabel('Saved YAML')
+        24 × locator resolved to <output aria-label="Saved YAML">kind: Pod↵kind: ConfigMap</output>
+           - unexpected value "kind: Pod
+    kind: ConfigMap"
+
+
+      26 |   await page.keyboard.type("kind: ConfigMap");
+      27 |   await page.getByRole("button", { name: "Save", exact: true }).click();
+    > 28 |   await expect(page.getByLabel("Saved YAML")).toHaveText("kind: ConfigMap");
+         |                                               ^
+      29 |   await expect(page.getByLabel("JSON diagnostics")).not.toHaveText("0");
+      30 |   expect(external).toEqual([]);
+      31 |   expect(failures).toEqual([]);
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:28:47
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+    [firefox-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+    [webkit-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 

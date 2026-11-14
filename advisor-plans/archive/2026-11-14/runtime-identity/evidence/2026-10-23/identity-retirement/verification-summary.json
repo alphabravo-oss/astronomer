@@ -1,0 +1,25 @@
+{
+  "branch": "feat/identity-zitadel",
+  "base": "040870752fc1635ecbb08d64f9e4b71538a061f4",
+  "source_files": 5125,
+  "source_unchanged_during_final_gate": true,
+  "go_check": {
+    "exit_code": 0,
+    "reported_tests": 15568,
+    "skipped": 7
+  },
+  "frontend": {
+    "test_files": 346,
+    "tests_passed": 2408,
+    "skipped": 0,
+    "typecheck": "pass",
+    "lint": "pass",
+    "format": "pass",
+    "production_build": "pass"
+  },
+  "real_postgres_tls_identity_tests": "pass",
+  "private_ca_and_session_contract": "pass",
+  "security": "pass; no called vulnerabilities; one uncalled required-module advisory",
+  "working_source_scan": "17 pre-existing findings on source lines identical to HEAD; no newly introduced finding",
+  "deployed": false
+}

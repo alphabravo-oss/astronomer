@@ -1,0 +1,144 @@
+[WebServer] (node:2291256) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2291269) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] [INEFFECTIVE_DYNAMIC_IMPORT] src/components/ui/monaco-editor.tsx is dynamically imported by src/components/ui/yaml-editor.tsx but also statically imported by tests/browser-components/editor.tsx, dynamic import will not move module into another chunk.
+[WebServer] 
+[WebServer] (node:2291367) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2291403) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:2291488) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (10.4s)
+(node:2291961) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [firefox-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (12.2s)
+(node:2292840) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (11.1s)
+
+
+  1) [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.monaco-editor textarea').first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.monaco-editor textarea').first() with timeout 10000ms
+      - waiting for locator('.monaco-editor textarea').first()
+
+
+      12 |   await page.goto("/?editor");
+      13 |   const input = page.locator(".monaco-editor textarea").first();
+    > 14 |   await expect(input).toBeVisible();
+         |                       ^
+      15 |   await input.focus();
+      16 |   await page.keyboard.press("ControlOrMeta+a");
+      17 |   await page.keyboard.type("kind: ConfigMap");
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:14:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [firefox-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.monaco-editor textarea').first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.monaco-editor textarea').first() with timeout 10000ms
+      - waiting for locator('.monaco-editor textarea').first()
+
+
+      12 |   await page.goto("/?editor");
+      13 |   const input = page.locator(".monaco-editor textarea").first();
+    > 14 |   await expect(input).toBeVisible();
+         |                       ^
+      15 |   await input.focus();
+      16 |   await page.keyboard.press("ControlOrMeta+a");
+      17 |   await page.keyboard.type("kind: ConfigMap");
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:14:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-firefox-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.monaco-editor textarea').first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.monaco-editor textarea').first() with timeout 10000ms
+      - waiting for locator('.monaco-editor textarea').first()
+
+
+      12 |   await page.goto("/?editor");
+      13 |   const input = page.locator(".monaco-editor textarea").first();
+    > 14 |   await expect(input).toBeVisible();
+         |                       ^
+      15 |   await input.focus();
+      16 |   await page.keyboard.press("ControlOrMeta+a");
+      17 |   await page.keyboard.type("kind: ConfigMap");
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/editor.spec.ts:14:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-webkit-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+    [firefox-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+    [webkit-desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 

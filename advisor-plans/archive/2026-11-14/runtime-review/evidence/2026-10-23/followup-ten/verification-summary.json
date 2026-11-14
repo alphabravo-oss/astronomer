@@ -1,0 +1,38 @@
+{
+  "tests": 15692,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 31,
+  "passed": 15661,
+  "source_files": 74,
+  "source_hashes_match": true,
+  "frontend_unit": {
+    "files": 351,
+    "passed": 2435,
+    "note": "before YAML callback change; final YAML behavior covered by browser test"
+  },
+  "editor_browsers": {
+    "passed": 3,
+    "engines": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ]
+  },
+  "desktop_components": {
+    "passed": 12
+  },
+  "sanitizer_and_provenance": {
+    "passed": 3
+  },
+  "npm_vulnerabilities": 0,
+  "oci_registry_postgres": "passed",
+  "private_helm_proxy": "passed with owned private interface and workspace TMPDIR",
+  "open": [
+    "pagination causal diagnosis",
+    "Dex queued rollout/provider replacement scenarios",
+    "live Charlie suspension",
+    "qualification runner source port and independent estate",
+    "immutable candidate release/deployment and 174 lifecycle cases"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "source": "2ec0a00485faee453eae8c22a9e6f3e5154c96c2",
+  "observedAt": "2026-10-10T01:50:33.946899+00:00",
+  "sourceIdentityIndependentlyReproduced": {
+    "schema_version": 2,
+    "source_file_count": 6175,
+    "source_tree_sha256": "0c09b6b8e39ee6dd823354c428eff649e1d06f94c5977fee33e359e622a92995"
+  },
+  "artifactHashesVerified": 42,
+  "packetAndReferenceHashesVerified": 4,
+  "actualFrameworkResult": {
+    "total": 18,
+    "passed": 16,
+    "failed": 2,
+    "skipped": 0,
+    "flaky": 0,
+    "retries": 0
+  },
+  "durationSeconds": 397.832825,
+  "qualification": "FAIL two actual Firefox journeys; no full/browser/current-candidate pass",
+  "failureDescriptions": [
+    {
+      "journey": "YAML",
+      "result": "Explicit YAML selector reaches Monaco; actual editor contains duplicate comment/JSON manifests; no dry-run POST recorded; Dry run passed assertion fails",
+      "scope": "Input/model characterization pending; no backend dry-run acceptance or save/readback claim"
+    },
+    {
+      "journey": "refresh",
+      "result": "All refresh rotation/replay/family-revocation HTTP assertions pass; existing page refresh401 precedes dashboard navigation abort and login200",
+      "scope": "Commit-ready page.goto reports NS_BINDING_ABORTED; final login controls not observed by this failed journey"
+    }
+  ],
+  "capacityFailureRetained": "0e988159e1eac45b6fca6f52b7e04d0218ef7e345c341157d3c8da75071d5437",
+  "scope": "Original immutable application5d, corrected fixture2ec; framework pass/fail not native human observation"
+}

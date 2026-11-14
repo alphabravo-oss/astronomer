@@ -1,0 +1,57 @@
+{
+  "source_commit": "75ed2ad576d8969d33ae12830a48fe87709670f6",
+  "binary_sha256": "d389e1b16d591c8999bb918df54480ae8b0ff2925c4be0e7d942d2680039b99e",
+  "driver_receipt_sha256": "dd024f1b7fdb400a6855c953f7ff734154ad5289a8c19e65348076709f82ae10",
+  "clusterUID": "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e",
+  "pod_before": "plan032-postgres18-1",
+  "pod_after": "plan032-postgres18-2",
+  "ready_instances_after": 3,
+  "cluster_and_pvc_identities_preserved": true,
+  "fault": {
+    "clusterUID": "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e",
+    "podUID": "bd199967-5dbc-4713-ac84-cfd84a800db3",
+    "fault": "owned-primary-pod-deletion",
+    "at": "2026-10-09T21:52:20.503819+00:00"
+  },
+  "driver": {
+    "schemaVersion": 1,
+    "status": "pass",
+    "sourceCommit": "75ed2ad576d8969d33ae12830a48fe87709670f6",
+    "clusterUID": "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e",
+    "database": "plan032_w12_failover18_20261009",
+    "schema": "qualification_w12_2223a902",
+    "startedAt": "2026-10-09T21:52:18.182825315Z",
+    "completedAt": "2026-10-09T21:52:46.017210015Z",
+    "fault": {
+      "clusterUID": "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e",
+      "podUID": "bd199967-5dbc-4713-ac84-cfd84a800db3",
+      "fault": "owned-primary-pod-deletion",
+      "at": "2026-10-09T21:52:20.503819Z"
+    },
+    "beforePrimary": "10.42.3.16/32:2026-10-09 20:35:47.611437+00",
+    "afterPrimary": "10.42.0.16/32:2026-10-09 20:36:15.803838+00",
+    "acknowledgedWrites": 62,
+    "transientWriteFailures": 22,
+    "maximumSuccessfulWriteGapNanoseconds": 21524143974,
+    "faultToNewPrimaryCommitNanoseconds": 23519872839,
+    "acknowledgedRowsLost": 0,
+    "checks": {
+      "acknowledged-rows-preserved": true,
+      "exact-audit-count": true,
+      "exact-ledger-count": true,
+      "fault-observed": true,
+      "post-fault-commits": true,
+      "primary-changed": true,
+      "tenant-idempotency-payload-audit-integrity": true
+    },
+    "limits": [
+      "One synthetic workload and one separately recorded operator fault; not a whole-application RTO or SLA certification.",
+      "Production internal/db pool is kept open throughout. Synthetic ledger/audit tables do not prove every production business handler.",
+      "No Kubernetes mutation, cleanup, backup, PITR or encryption-key restoration is performed by this driver.",
+      "Committed fixture schema is retained for a separately owned physical restore comparison."
+    ]
+  },
+  "driver_exit_code": 0,
+  "scope": "One synthetic application-pool write workload, owned three-instance CNPG18 on K3s1.36.5, same stable read/write service and same process/pool through UID-bound primary pod deletion; not full-application, node loss, PITR, historical key recovery or SLA certification",
+  "receipt_source_sha256": "8d58823aec96973975ec65423046e47ef974d071bf3bca249646ddba526853ef"
+}

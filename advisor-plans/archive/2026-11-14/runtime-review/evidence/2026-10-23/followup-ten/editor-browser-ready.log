@@ -1,0 +1,43 @@
+[WebServer] (node:2308375) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2308417) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] [INEFFECTIVE_DYNAMIC_IMPORT] src/components/ui/monaco-editor.tsx is dynamically imported by src/components/ui/yaml-editor.tsx but also statically imported by tests/browser-components/editor.tsx, dynamic import will not move module into another chunk.
+[WebServer] 
+[WebServer] (node:2308511) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2308554) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:2308609) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers (30.2s)
+
+
+  1) [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 
+
+    Test timeout of 30000ms exceeded.
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/editor-shipped-ESM-editor--9fd9a-cs-with-same-origin-workers-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [desktop] › tests/browser-components/editor.spec.ts:2:1 › shipped ESM editor saves YAML and runs JSON diagnostics with same-origin workers 

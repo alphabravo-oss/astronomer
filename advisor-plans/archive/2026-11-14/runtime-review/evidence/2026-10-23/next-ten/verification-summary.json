@@ -1,0 +1,86 @@
+{
+  "source_manifest": "source-manifest.json",
+  "source_files": 57,
+  "source_hashes_match_after_checks": true,
+  "source_drift": [],
+  "make_check": {
+    "exit_code": 0,
+    "tests": 15692,
+    "passed": 15660,
+    "skipped": 32,
+    "failed": 0,
+    "errors": 0,
+    "seconds": 344.957597,
+    "go_flags": "-p=4",
+    "temp_filesystem": "private directory on root filesystem; capacity guard retained"
+  },
+  "security": {
+    "exit_code": 0,
+    "reachable_vulnerabilities": 0,
+    "module_only_advisories": 1,
+    "gitleaks_commits": 2304,
+    "gitleaks_findings": 0
+  },
+  "frontend": {
+    "files": 351,
+    "tests": 2435,
+    "passed": 2435,
+    "failed": 0,
+    "lint_exit": 0,
+    "type_build_csp_exit": 0,
+    "bundle_exit": 0,
+    "bootstrap_gzip_bytes": 321623,
+    "login_gzip_bytes": 350044,
+    "app_gzip_bytes": 453766,
+    "browser_component_passes": 4,
+    "sanitizer_negative_and_positive_tests": 2,
+    "npm_audit_vulnerabilities": 0,
+    "vendored_monaco_sanitizer_remediation": "OPEN"
+  },
+  "catalog": {
+    "python": "3.15.0",
+    "uv": "0.13.0",
+    "verified_locked_distributions": 62,
+    "tests_passed": 49,
+    "generated_files_checked": 35,
+    "lockfile_changed": false
+  },
+  "helm_lint": {
+    "exit_code": 0
+  },
+  "deploy_tests": {
+    "exit_code": 0
+  },
+  "changed_real_postgres_integration": {
+    "exit_code": 0
+  },
+  "prior_skips_qualified_separately": 7,
+  "other_skip_dispositions_open": 25,
+  "live_browser_baseline": {
+    "deployed_version": "v2.1.1",
+    "passed": 20,
+    "failed": 0,
+    "metrics_forward_closed": true
+  },
+  "offerings": {
+    "live_registry_passes": 6,
+    "lifecycle_not_run": 174,
+    "estate_preflight": "BLOCKED",
+    "historical_runner_tests_exit": 0,
+    "runner_ported": false
+  },
+  "charlie": {
+    "mode": "disabled",
+    "emergency_disabled": true,
+    "feature_enabled": true,
+    "agent_ready": 0,
+    "agent_desired": 2,
+    "disable_http_status": 409,
+    "full_suspension": "BLOCKED: agent ceiling confirmation pending"
+  },
+  "deployment": {
+    "candidate_published": false,
+    "candidate_deployed": false,
+    "old_ui_demo_preserved": true
+  }
+}

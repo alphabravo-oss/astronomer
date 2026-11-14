@@ -1,0 +1,7 @@
+--- FAIL: TestAuditStreamRejectsMFAChallenge (0.00s)
+    stream_audit_test.go:12: pre-MFA challenge was accepted by exec stream authentication
+--- FAIL: TestAuditStreamEnforcesAPITokenCIDR (0.00s)
+    stream_audit_test.go:19: API token outside allowed CIDR was accepted by exec stream authentication
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/auth	0.013s
+FAIL

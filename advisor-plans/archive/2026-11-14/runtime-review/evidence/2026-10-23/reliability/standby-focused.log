@@ -1,0 +1,11 @@
+E1023 06:33:49.623595 2008650 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: gitrepositories.source.toolkit.fluxcd.io \"\" not found" logger="UnhandledError" reflector="pkg/mod/k8s.io/client-go@v0.37.1/tools/cache/reflector.go:343" type="*unstructured.Unstructured"
+E1023 06:33:50.831441 2008650 reflector.go:227] "Failed to watch" err="failed to list *unstructured.Unstructured: gitrepositories.source.toolkit.fluxcd.io is forbidden: <nil>" logger="UnhandledError" reflector="pkg/mod/k8s.io/client-go@v0.37.1/tools/cache/reflector.go:343" type="*unstructured.Unstructured"
+I1023 06:33:52.291126 2008650 reflector.go:664] "Warning: watch ended with error" reflector="pkg/mod/k8s.io/client-go@v0.37.1/tools/cache/reflector.go:343" type="*unstructured.Unstructured" err=""
+I1023 06:33:54.539669 2008650 reflector.go:664] "Warning: watch ended with error" reflector="pkg/mod/k8s.io/client-go@v0.37.1/tools/cache/reflector.go:343" type="*unstructured.Unstructured" err="very short watch: pkg/mod/k8s.io/client-go@v0.37.1/tools/cache/reflector.go:343: Unexpected watch close - watch lasted less than a second and no items received"
+E1023 06:33:55.931563 2008650 reflector.go:227] "Failed to watch" err="watch unavailable" logger="UnhandledError" reflector="pkg/mod/k8s.io/client-go@v0.37.1/tools/cache/reflector.go:343" type="*unstructured.Unstructured"
+--- FAIL: TestSharedProbeWarmStandbyAndOldCurrentTimestamp (0.00s)
+    probe_shared_test.go:148: warm standby regression <nil>
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/agent/delivery	10.613s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/distribution	8.753s
+FAIL

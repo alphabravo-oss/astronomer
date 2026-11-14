@@ -1,0 +1,14 @@
+
+> astronomer-frontend@2.1.1 test:editor-sanitizer
+> node --test scripts/check-editor-sanitizer.test.mjs
+
+✔ Monaco removes executable tags, handlers and dangerous link protocols (40.050833ms)
+✔ Monaco preserves permitted markup and HTTPS links (5.986748ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1021.914484

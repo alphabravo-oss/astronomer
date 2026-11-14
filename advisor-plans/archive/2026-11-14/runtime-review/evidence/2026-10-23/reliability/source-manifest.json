@@ -1,0 +1,30 @@
+{
+  "base": "e2223136030fa17541e6be082a511caf444b7067",
+  "files": {
+    "deploy/chart/templates/management-plane-backup-cronjob.yaml": "d7b7b370c82ae66165eed9de36036705c227f9e75bd52eed5e8f26eab30dc43d",
+    "deploy/management_backup_catalog_roundtrip_test.go": "41a5ea91391eb6ae14903162831358094af0662b1a593246f710986a68ed5146",
+    "docs/management-plane-dr-runbook.md": "a9605f477a8df13bb9e7862247c65a16960b4958a5012c9bbb4c096faee1e77a",
+    "go.mod": "7f8e259164ef5b58bd4d5aced7c456dd13bdb242c88ae34007f2d3a95775fda1",
+    "go.sum": "5578428228b24a29b478474cca7eceda9462fbb92356ab615e33985b87b0b463",
+    "internal/agent/delivery/probe.go": "e659b175871d58f62e55031a110153eb38dfe3d7abf3b60b04217e79ea4cd6be",
+    "internal/agent/delivery/probe_shared_test.go": "2b71a182bb34b6c4b5290e3bc402c6498f42f77fb6f577e26d53fc595017cf4f",
+    "internal/agent/delivery/probe_test.go": "3d152285af412166de2356d5dc05ee1956554247fc7bf4d66d5d026b412dae8e",
+    "internal/agent/delivery/system.go": "499fefb6cd3b46109832ad1eab16fc877d164c73414be5cdebe55ddf37a097ac",
+    "internal/agent/delivery/system_health.go": "80501558e8a3f3c02b0f264dc216967583c26a531a52acc7ce3904b492b63e6d",
+    "internal/agent/delivery/system_health_test.go": "4f4dc240886dab715ab16aeb7ee431dfddd6de066e156305e04d4c31358f5eda",
+    "internal/agent/delivery/system_inventory.go": "7ed976f6ece80ab36f31e93b7a9edcb6ad0977b6d1ea2952787e242631c092bd",
+    "internal/agent/observation_delivery_integration_test.go": "fd272f13831089fa27adb5b0ea5213941741110cca201769013f06f0c9918eae",
+    "internal/auth/api_token_scopes.go": "66d03977c3e2b9153e08cbfdc4cf6c154799a48349664153e5410d8cb06fc317",
+    "internal/auth/streamauth.go": "4f5288e1c02bdca220215371a24d32528a21e1973cd893f26ad420a167d47961",
+    "internal/auth/streamauth_boundary_test.go": "4d2c12dd964bb730aa65cb8dd6b3c1ace033306f65702f1ec6f61139a20846e0",
+    "internal/drcrypto/keybundle.go": "5f91dc8f2b70ef522dafe4f9fdf7eac9de9ea6bc58f85b0e238e0a2397963d89",
+    "internal/drcrypto/keybundle_catalog_test.go": "db1b0b8604c68a0ffbdd2c064983e07659bfee977c8246192c62788dd583fb25",
+    "internal/server/delivery_idempotency_scope_test.go": "6434602953125bacea0a9d8b0eddebfd4ee17aea5fbcf61d1736a6ad734e2637",
+    "internal/server/middleware/auth.go": "e4c92836c1a3fc058152b725b4483441f85bc5429a49954c5815ba90a01cc692",
+    "internal/server/middleware/auth_boundary_test.go": "dae934b2b3725e73acc4c05706a76d2cc44ab47c26ab8a6e26b2856a2c1732b1",
+    "internal/server/middleware/idempotency.go": "65d0f8f5a9db3594ab0e8ed1a070ba6e4b8bc80082a7693763cfa9095a401098",
+    "internal/server/middleware/idempotency_test.go": "0cebb640ff737ce4d68b95750371953b44386455872e6d3dca55ec9df4f39789",
+    "internal/tunnel/stream_auth_test.go": "a498b9a7f0e6bc3c8109020d20fc974948d14266bcb9aec79b8e8d5aac375b9e",
+    "internal/tunnel/ws_owner_proxy.go": "d0a1f310f7b376161e1cda21450a42fb2684e8efc752223b22323dde907c32ea"
+  }
+}

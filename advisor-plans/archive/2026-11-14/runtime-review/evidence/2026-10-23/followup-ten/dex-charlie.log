@@ -1,0 +1,68 @@
+=== RUN   TestPreparePhaseCrashRetryStagesSecretWithoutDeploymentCutover
+--- PASS: TestPreparePhaseCrashRetryStagesSecretWithoutDeploymentCutover (0.00s)
+=== RUN   TestApplyRuntimeSecret_FailsClosedWhenChartIdentityMissing
+--- PASS: TestApplyRuntimeSecret_FailsClosedWhenChartIdentityMissing (0.00s)
+=== RUN   TestApplyRuntimeSecret_RefusesUnownedNameCollision
+--- PASS: TestApplyRuntimeSecret_RefusesUnownedNameCollision (0.00s)
+=== RUN   TestApplyRuntimeSecret_ReconcilesOwnedMetadataAndPreservesForeignFields
+--- PASS: TestApplyRuntimeSecret_ReconcilesOwnedMetadataAndPreservesForeignFields (0.00s)
+=== RUN   TestDexConnectorUpdateAndDeleteAreAudited
+--- PASS: TestDexConnectorUpdateAndDeleteAreAudited (0.00s)
+=== RUN   TestConnectorMutationFailureAndManualDisableRemainFailClosed
+--- PASS: TestConnectorMutationFailureAndManualDisableRemainFailClosed (0.00s)
+=== RUN   TestStaleGenerationCannotEnableDexSSOOrOverwriteNewerSecret
+--- PASS: TestStaleGenerationCannotEnableDexSSOOrOverwriteNewerSecret (0.00s)
+=== RUN   TestDexSagaAtomicFailureAndABRestorationTimeline
+=== RUN   TestDexSagaAtomicFailureAndABRestorationTimeline/statement_failure_leaves_generation_and_SSO_unchanged
+=== RUN   TestDexSagaAtomicFailureAndABRestorationTimeline/stale_A_cannot_re-enable_after_B_supersedes_it
+--- PASS: TestDexSagaAtomicFailureAndABRestorationTimeline (0.00s)
+    --- PASS: TestDexSagaAtomicFailureAndABRestorationTimeline/statement_failure_leaves_generation_and_SSO_unchanged (0.00s)
+    --- PASS: TestDexSagaAtomicFailureAndABRestorationTimeline/stale_A_cannot_re-enable_after_B_supersedes_it (0.00s)
+=== RUN   TestDexGenerationCASStopsAfterInterleavedExternalReads
+=== RUN   TestDexGenerationCASStopsAfterInterleavedExternalReads/Secret_GET_superseded_before_PATCH
+=== RUN   TestDexGenerationCASStopsAfterInterleavedExternalReads/Deployment_GET_superseded_before_resourceVersion_PATCH
+--- PASS: TestDexGenerationCASStopsAfterInterleavedExternalReads (0.00s)
+    --- PASS: TestDexGenerationCASStopsAfterInterleavedExternalReads/Secret_GET_superseded_before_PATCH (0.00s)
+    --- PASS: TestDexGenerationCASStopsAfterInterleavedExternalReads/Deployment_GET_superseded_before_resourceVersion_PATCH (0.00s)
+=== RUN   TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition
+--- PASS: TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition (0.00s)
+=== RUN   TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure
+=== RUN   TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure/empty-url
+=== RUN   TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure/malformed-envelope
+=== RUN   TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure/bad-server-ciphertext
+--- PASS: TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure (0.00s)
+    --- PASS: TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure/empty-url (0.00s)
+    --- PASS: TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure/malformed-envelope (0.00s)
+    --- PASS: TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure/bad-server-ciphertext (0.00s)
+=== RUN   TestDexApplyQueuesDurablyWithoutKubernetesAndReplaysExactlyOnce
+--- PASS: TestDexApplyQueuesDurablyWithoutKubernetesAndReplaysExactlyOnce (0.00s)
+=== RUN   TestDexConnectorStageAndAuditCommitTogether
+=== RUN   TestDexConnectorStageAndAuditCommitTogether/commit
+=== RUN   TestDexConnectorStageAndAuditCommitTogether/audit_failure_restores_connector_and_SSO_generation
+--- PASS: TestDexConnectorStageAndAuditCommitTogether (0.00s)
+    --- PASS: TestDexConnectorStageAndAuditCommitTogether/commit (0.00s)
+    --- PASS: TestDexConnectorStageAndAuditCommitTogether/audit_failure_restores_connector_and_SSO_generation (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	0.065s
+=== RUN   TestDexOperationRuntimeSuccessIsTerminalAndDuplicateSafe
+--- PASS: TestDexOperationRuntimeSuccessIsTerminalAndDuplicateSafe (0.00s)
+=== RUN   TestDexOperationRuntimePersistsRetryWithoutLeakingCause
+--- PASS: TestDexOperationRuntimePersistsRetryWithoutLeakingCause (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	0.051s
+=== RUN   TestFeatureDisableQuiescesBeforeRuntimeShutdown
+--- PASS: TestFeatureDisableQuiescesBeforeRuntimeShutdown (0.00s)
+=== RUN   TestFeatureDisableStopsRuntimeForInactiveConnection
+--- PASS: TestFeatureDisableStopsRuntimeForInactiveConnection (0.00s)
+=== RUN   TestEmergencyDisableCommitsLocallyBeforeRemoteAndStaysClosedOnOutage
+--- PASS: TestEmergencyDisableCommitsLocallyBeforeRemoteAndStaysClosedOnOutage (0.00s)
+=== RUN   TestEmergencyDisableRemainsAvailableWhenAuditStorageFails
+--- PASS: TestEmergencyDisableRemainsAvailableWhenAuditStorageFails (0.00s)
+=== RUN   TestEmergencyDisableCancelsAndDrainsRegisteredWrite
+--- PASS: TestEmergencyDisableCancelsAndDrainsRegisteredWrite (0.00s)
+=== RUN   TestEmergencyDisableReturnsPendingStateUntilNonCancellableWriteDrains
+--- PASS: TestEmergencyDisableReturnsPendingStateUntilNonCancellableWriteDrains (0.01s)
+=== RUN   TestEmergencyDisableIsIdempotentAfterFeatureSuspension
+--- PASS: TestEmergencyDisableIsIdempotentAfterFeatureSuspension (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie	0.057s

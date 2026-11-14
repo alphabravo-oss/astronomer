@@ -1,0 +1,210 @@
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes
+=== RUN   TestReadOnlyTransportRedirectsAndCLI
+=== PAUSE TestReadOnlyTransportRedirectsAndCLI
+=== RUN   TestTokenAndReportFilesFailClosed
+=== PAUSE TestTokenAndReportFilesFailClosed
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses
+=== RUN   TestEstateListsRequireCompletePagination
+=== PAUSE TestEstateListsRequireCompletePagination
+=== RUN   TestPreflightSchemaRejectsLifecycleAndUnboundPass
+=== PAUSE TestPreflightSchemaRejectsLifecycleAndUnboundPass
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/valid
+=== CONT  TestPreflightSchemaRejectsLifecycleAndUnboundPass
+=== CONT  TestTokenAndReportFilesFailClosed
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/valid
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/valid
+=== CONT  TestReadOnlyTransportRedirectsAndCLI
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts
+--- PASS: TestTokenAndReportFilesFailClosed (0.00s)
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-member
+=== CONT  TestEstateListsRequireCompletePagination
+=== RUN   TestEstateListsRequireCompletePagination/valid
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/valid
+=== PAUSE TestEstateListsRequireCompletePagination/valid
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-member
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/old-kubernetes
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/default
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/unknown-offering
+=== RUN   TestEstateListsRequireCompletePagination/missing-pagination
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-node
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/old-kubernetes
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/unknown-offering
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-kubernetes
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/cross-origin
+=== PAUSE TestEstateListsRequireCompletePagination/missing-pagination
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-kubernetes
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/default
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/cross-origin
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-node
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/stale-heartbeat
+=== RUN   TestEstateListsRequireCompletePagination/repeat
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/same-origin-other-route
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/stale-heartbeat
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/kube-system
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/management
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-project
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/kube-system
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-project
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-commit
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-commit
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/management
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer-delivery-system
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/same-origin-other-route
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer-delivery-system
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/repeat
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/flux-system
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/repeat
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/flux-system
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/bad-pagination
+=== PAUSE TestEstateListsRequireCompletePagination/repeat
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/bad-pagination
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-project
+=== RUN   TestEstateListsRequireCompletePagination/null-data
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-project
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-owner
+=== PAUSE TestEstateListsRequireCompletePagination/null-data
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-origin
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-owner
+=== CONT  TestEstateListsRequireCompletePagination/valid
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-node
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/false-ok
+=== RUN   TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/bad/name
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/false-ok
+=== PAUSE TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/bad/name
+=== CONT  TestEstateListsRequireCompletePagination/repeat
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/trailing
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/trailing
+=== CONT  TestEstateListsRequireCompletePagination/missing-pagination
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/duplicate
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/bad/name
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/duplicate
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer-delivery-system
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/default
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/kube-system
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-origin
+=== CONT  TestEstateListsRequireCompletePagination/null-data
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-task
+=== CONT  TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/flux-system
+=== RUN   TestInventoryTraversesPagesAndRejectsFalseGreenResponses/oversized
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-node
+--- PASS: TestReadOnlyTransportRedirectsAndCLI (0.01s)
+=== PAUSE TestInventoryTraversesPagesAndRejectsFalseGreenResponses/oversized
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/valid
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/same-origin-other-route
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/false-ok
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/cross-origin
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/repeat
+--- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes (0.00s)
+    --- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/bad/name (0.00s)
+    --- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer (0.00s)
+    --- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/default (0.00s)
+    --- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/astronomer-delivery-system (0.00s)
+    --- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/kube-system (0.00s)
+    --- PASS: TestMemberTargetsUseClusterScopedNamespacesAndRejectProtectedScopes/flux-system (0.00s)
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-task
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/extra-node
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/no-attestor
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/oversized
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/duplicate
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/bad-pagination
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/trailing
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/no-attestor
+=== CONT  TestInventoryTraversesPagesAndRejectsFalseGreenResponses/unknown-offering
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/extra-node
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/shared-host
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/changed-system
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/changed-system
+--- PASS: TestEstateListsRequireCompletePagination (0.00s)
+    --- PASS: TestEstateListsRequireCompletePagination/missing-pagination (0.01s)
+    --- PASS: TestEstateListsRequireCompletePagination/valid (0.01s)
+    --- PASS: TestEstateListsRequireCompletePagination/repeat (0.01s)
+    --- PASS: TestEstateListsRequireCompletePagination/null-data (0.01s)
+=== RUN   TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/not-ready
+=== PAUSE TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/not-ready
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/valid
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/not-ready
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/changed-system
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-node
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-project
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/shared-host
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/valid
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/extra-node
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/valid
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/stale
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/stale
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/future
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/future
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/management
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/untrusted-source
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-owner
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/old-kubernetes
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-kubernetes
+=== CONT  TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/stale-heartbeat
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/untrusted-source
+=== RUN   TestEstateEvidenceBindingFreshnessAndIndependentHosts/repeated-system
+=== PAUSE TestEstateEvidenceBindingFreshnessAndIndependentHosts/repeated-system
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-node
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/stale
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/repeated-system
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/no-attestor
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-project
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/shared-host
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-origin
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/untrusted-source
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-commit
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/future
+--- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes (0.02s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/changed-system (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/valid (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/old-kubernetes (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-owner (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/wrong-project (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-node (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/not-ready (0.02s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/extra-node (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/missing-kubernetes (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/stale-heartbeat (0.01s)
+    --- PASS: TestCurrentEstateCorroboratesTaskOwnershipAndAllNodes/management (0.01s)
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/valid
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-member
+=== CONT  TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-task
+--- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts (0.03s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/stale (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-node (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-project (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/untrusted-source (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/shared-host (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-origin (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/no-attestor (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/repeated-system (0.01s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-commit (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/missing-member (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/future (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/wrong-task (0.00s)
+    --- PASS: TestEstateEvidenceBindingFreshnessAndIndependentHosts/valid (0.00s)
+--- PASS: TestPreflightSchemaRejectsLifecycleAndUnboundPass (0.06s)
+--- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/false-ok (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/repeat (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/same-origin-other-route (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/cross-origin (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/trailing (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/duplicate (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/valid (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/bad-pagination (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/unknown-offering (0.01s)
+    --- PASS: TestInventoryTraversesPagesAndRejectsFalseGreenResponses/oversized (0.20s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/scripts/qualify-offerings	1.273s

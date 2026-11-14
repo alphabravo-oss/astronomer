@@ -1,0 +1,1226 @@
+[
+  {
+    "slug": "cert-manager",
+    "version": "v1.21.1",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "cert-manager",
+      "artifact_digest": "c27101f3f3e2349fb4a9e704316105bf7b52ad73b8c8257d3498ef7f2f6a4adc",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "cloudnative-pg",
+    "version": "0.29.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "cloudnative-pg",
+      "artifact_digest": "668e065ff53508d58238788fd35b355a925060843629a951df0e6a9362e6d32f",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "constellation",
+    "version": "0.2.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "constellation",
+      "artifact_digest": "ea0d90ca7a7f7bb6d2ffaa466f925b96d2cae5b3d95728603d17ece12d72ee46",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.27.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 20Gi database plus 8Gi scanner cache); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:645389d51c7308f21cbe871cd77fe413895fb4a9c22cd25b8e1691d1b2f696b5"
+    }
+  },
+  {
+    "slug": "external-dns",
+    "version": "1.21.1",
+    "preset": "upstream",
+    "preview": {
+      "allowed": false,
+      "application": "external-dns",
+      "artifact_digest": "5dd033a4b872bf641860695705ee460031d0bc695f114bf8926fee6736814e19",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        },
+        {
+          "code": "functional_configuration",
+          "status": "blocking",
+          "title": "DNS ownership",
+          "description": "Set a unique txtOwnerId so this release cannot ambiguously claim records owned by another ExternalDNS deployment."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "external-secrets",
+    "version": "2.9.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "external-secrets",
+      "artifact_digest": "da2d5c126a103b4c1b16a9dc1c168c4332a3687144e88ac070e594f81a0b6578",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "fluent-bit",
+    "version": "0.58.1",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "fluent-bit",
+      "artifact_digest": "fc2235278cdb4e76befb8520464a66ff459c6d7711bbbc8755dedcc32799877b",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:5c165894f069355e2556a6cf2048a106e2f54b3b8756e780188a25e1ec95a928"
+    }
+  },
+  {
+    "slug": "gatekeeper",
+    "version": "3.23.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "gatekeeper",
+      "artifact_digest": "33f018bca8b875a9e01f447efef09414609d0d38185101207a4a6d655fe3d2a0",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "grafana",
+    "version": "10.5.15",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "grafana",
+      "artifact_digest": "c08c87969270402e7d5227edb8385af67cc32ee34817bff89773ad02303b5d79",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 10Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "ingress-nginx",
+    "version": "4.15.1",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "ingress-nginx",
+      "artifact_digest": "3eff0bd18151d6e6b1c441463410571443dda1ac78292cb189346628de784f0c",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "keda",
+    "version": "2.20.2",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "keda",
+      "artifact_digest": "db60b1fa60f0565fefa4ce2f87e855b6a8854363ee82962fbe28a12a70d64c4c",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "kube-prometheus-stack",
+    "version": "88.5.4",
+    "preset": "standard",
+    "preview": {
+      "allowed": true,
+      "application": "kube-prometheus-stack",
+      "artifact_digest": "c17a08afbbaa8577b5bdc990511b3cf1a3a37ae76ce5817e7478300f9933749b",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 100Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:83952fe3b4f694df9276286de1a15438295fbadc4b61e4e77cc086a1cf110e17"
+    }
+  },
+  {
+    "slug": "kube-prometheus-stack",
+    "version": "88.5.4",
+    "preset": "persistent",
+    "preview": {
+      "allowed": true,
+      "application": "kube-prometheus-stack",
+      "artifact_digest": "c17a08afbbaa8577b5bdc990511b3cf1a3a37ae76ce5817e7478300f9933749b",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 100Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:7cc7ead0482c736b77d5d833990368831031cc7211589e7e4fa52d24803f1490"
+    }
+  },
+  {
+    "slug": "kube-state-metrics",
+    "version": "8.4.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "kube-state-metrics",
+      "artifact_digest": "74cc198067993744791e92ee280d8f255a0bbd43c86d765814402c455d478680",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "kyverno",
+    "version": "3.9.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "kyverno",
+      "artifact_digest": "9663e8d3d15b070e5925b4f26b3f9a8824872a42ac7bf27ca105c897cb5aba51",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "loki",
+    "version": "7.3.0",
+    "preset": "evaluation",
+    "preview": {
+      "allowed": true,
+      "application": "loki",
+      "artifact_digest": "04a339f712d770a1f599f05fc0a5a3cde18e43914e49ae6a49f7171be86bcc09",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 100Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:1bba401644110ec5b9f6999a6281c18522b1d69bfcd8cd453412093ec75666bd"
+    }
+  },
+  {
+    "slug": "loki",
+    "version": "7.3.0",
+    "preset": "persistent",
+    "preview": {
+      "allowed": true,
+      "application": "loki",
+      "artifact_digest": "04a339f712d770a1f599f05fc0a5a3cde18e43914e49ae6a49f7171be86bcc09",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 100Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:d6811bd75c9b8d0a6fd977eee14a9ad4a28640a2696dcb23257eb41d0770051d"
+    }
+  },
+  {
+    "slug": "longhorn",
+    "version": "1.12.1",
+    "preset": "replicated",
+    "preview": {
+      "allowed": true,
+      "application": "longhorn",
+      "artifact_digest": "c8cf4b35a9d872cd5f7e44fd26d8e6ac7c2abaee42f4e2f2a0b0ebbc6e3a6116",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required; Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:85d5d5d7c15da8c9036cd165ac4e03a23f06dcdf434c1909c7483172b5ea53ac"
+    }
+  },
+  {
+    "slug": "longhorn",
+    "version": "1.12.1",
+    "preset": "evaluation",
+    "preview": {
+      "allowed": true,
+      "application": "longhorn",
+      "artifact_digest": "c8cf4b35a9d872cd5f7e44fd26d8e6ac7c2abaee42f4e2f2a0b0ebbc6e3a6116",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required; Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:661a6b9b8a03b64657aabbd9e623cef9843de765b87465151def1d4bb8c7a8f4"
+    }
+  },
+  {
+    "slug": "metrics-server",
+    "version": "3.14.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "metrics-server",
+      "artifact_digest": "c2ca1185c01e6e7f53dd1b7d131f0c9b3fa50e003ed068b784563a1b5a3422a1",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "opentelemetry-collector",
+    "version": "0.171.0",
+    "preset": "deployment",
+    "preview": {
+      "allowed": true,
+      "application": "opentelemetry-collector",
+      "artifact_digest": "5526010c00b6319ced10dd9e711149b10d5539dfa1e23ee22546648f7f702352",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:f75ee7a5a2871cb3bbdcf05afc9f2692e749668ee8aecbd9a4d106247810fa78"
+    }
+  },
+  {
+    "slug": "prometheus-node-exporter",
+    "version": "4.56.1",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "prometheus-node-exporter",
+      "artifact_digest": "70fab291e00a34c58fd943bb075fecc2e2e73fa95db1bcbbe7cdfe008795354a",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "tempo",
+    "version": "1.24.4",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "tempo",
+      "artifact_digest": "f1f6e318d5bca3b5097cb676077796cdf8135beb2c1f71c4d14614ccf9b0081b",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 50Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "trivy-operator",
+    "version": "0.36.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "trivy-operator",
+      "artifact_digest": "bb0c44bc70e3158cc63ea49d7458ede6db5b6c932f6585a2d787eb9712fd4288",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  },
+  {
+    "slug": "velero",
+    "version": "12.1.0",
+    "preset": "upstream",
+    "preview": {
+      "allowed": true,
+      "application": "velero",
+      "artifact_digest": "cd23589ad1b2d25cdd3220f6866b3f6f4c5683c4c09494e76a14700b33f81f83",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    }
+  }
+]

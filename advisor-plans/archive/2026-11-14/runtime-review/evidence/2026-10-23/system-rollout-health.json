@@ -1,0 +1,243 @@
+{
+    "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+    "kind": "Kustomization",
+    "metadata": {
+        "creationTimestamp": "2026-10-23T05:42:23Z",
+        "finalizers": [
+            "finalizers.fluxcd.io"
+        ],
+        "generation": 1,
+        "labels": {
+            "app.kubernetes.io/managed-by": "astronomer-agent",
+            "app.kubernetes.io/part-of": "astronomer-delivery",
+            "delivery.astronomer.io/system": "true"
+        },
+        "name": "astronomer-system-release",
+        "namespace": "astronomer-delivery-system",
+        "resourceVersion": "1890",
+        "uid": "475dfc18-3ef9-4b3e-b7fc-518142dc4fdc"
+    },
+    "spec": {
+        "force": false,
+        "interval": "5m",
+        "patches": [
+            {
+                "patch": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: source-controller\nspec:\n  template:\n    metadata:\n      annotations:\n        astronomer.io/trust-bundle-sha256: \"e9c7b63ee2623386e9b0a3ee32f499d01a8ea23dc83b8383ddff9f8e749543b7\"\n    spec:\n      containers:\n        - name: manager\n          volumeMounts:\n            - name: astronomer-trust-bundle\n              mountPath: /etc/ssl/certs\n              readOnly: true\n      volumes:\n        - name: astronomer-trust-bundle\n          configMap:\n            name: astronomer-trust-bundle\n",
+                "target": {
+                    "group": "apps",
+                    "kind": "Deployment",
+                    "name": "source-controller",
+                    "version": "v1"
+                }
+            }
+        ],
+        "path": "./",
+        "postBuild": {
+            "substitute": {
+                "ASTRONOMER_SYSTEM_GENERATION": "127"
+            }
+        },
+        "prune": true,
+        "retryInterval": "1m",
+        "serviceAccountName": "astronomer-delivery-system-applier",
+        "sourceRef": {
+            "apiVersion": "source.toolkit.fluxcd.io/v1",
+            "kind": "OCIRepository",
+            "name": "astronomer-system-release"
+        },
+        "suspend": false,
+        "timeout": "15m",
+        "wait": true
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastTransitionTime": "2026-10-23T05:53:37Z",
+                "message": "Running health checks for revision sha256:6bdbd0a080bc667e58bf23a7b13f12f2fc07d551b3abd7be07ae74025b50ea41 with a timeout of 15m0s",
+                "observedGeneration": 1,
+                "reason": "ProgressingWithRetry",
+                "status": "True",
+                "type": "Reconciling"
+            },
+            {
+                "lastTransitionTime": "2026-10-23T05:53:37Z",
+                "message": "health check failed after 1.095600043s: failed early due to stalled resources: [Deployment/astronomer-delivery-system/source-controller status: 'Failed']",
+                "observedGeneration": 1,
+                "reason": "HealthCheckFailed",
+                "status": "False",
+                "type": "Ready"
+            },
+            {
+                "lastTransitionTime": "2026-10-23T05:53:37Z",
+                "message": "failed early due to stalled resources: [Deployment/astronomer-delivery-system/source-controller status: 'Failed']",
+                "observedGeneration": 1,
+                "reason": "HealthCheckFailed",
+                "status": "False",
+                "type": "Healthy"
+            }
+        ],
+        "history": [
+            {
+                "digest": "sha256:7d0b00dc7b5b505094a2eecad944056e8926f8c630a3dbeef50d271e03edd14b",
+                "firstReconciled": "2026-10-23T05:52:36Z",
+                "lastReconciled": "2026-10-23T05:53:37Z",
+                "lastReconciledDuration": "1.645765917s",
+                "lastReconciledStatus": "HealthCheckFailed",
+                "metadata": {
+                    "revision": "sha256:6bdbd0a080bc667e58bf23a7b13f12f2fc07d551b3abd7be07ae74025b50ea41"
+                },
+                "totalReconciliations": 2
+            }
+        ],
+        "inventory": {
+            "entries": [
+                {
+                    "id": "_buckets.source.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_externalartifacts.source.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_gitrepositories.source.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_helmcharts.source.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_helmreleases.helm.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_helmrepositories.source.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_kustomizations.kustomize.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_ocirepositories.source.toolkit.fluxcd.io_apiextensions.k8s.io_CustomResourceDefinition",
+                    "v": "v1"
+                },
+                {
+                    "id": "_astronomer-delivery-system__Namespace",
+                    "v": "v1"
+                },
+                {
+                    "id": "_astronomer-delivery-platform-applier_rbac.authorization.k8s.io_ClusterRole",
+                    "v": "v1"
+                },
+                {
+                    "id": "_astronomer-delivery-system-applier_rbac.authorization.k8s.io_ClusterRole",
+                    "v": "v1"
+                },
+                {
+                    "id": "_crd-controller-astronomer-delivery-system_rbac.authorization.k8s.io_ClusterRole",
+                    "v": "v1"
+                },
+                {
+                    "id": "_astronomer-delivery-critical_scheduling.k8s.io_PriorityClass",
+                    "v": "v1"
+                },
+                {
+                    "id": "_astronomer-delivery-system-applier_rbac.authorization.k8s.io_ClusterRoleBinding",
+                    "v": "v1"
+                },
+                {
+                    "id": "_cluster-reconciler-astronomer-delivery-system_rbac.authorization.k8s.io_ClusterRoleBinding",
+                    "v": "v1"
+                },
+                {
+                    "id": "_crd-controller-astronomer-delivery-system_rbac.authorization.k8s.io_ClusterRoleBinding",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_astronomer-delivery-system-applier__ServiceAccount",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_astronomer-noop__ServiceAccount",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_helm-controller__ServiceAccount",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_kustomize-controller__ServiceAccount",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_source-controller__ServiceAccount",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_controller-metrics__Service",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_source-controller__Service",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_helm-controller_apps_Deployment",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_kustomize-controller_apps_Deployment",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_source-controller_apps_Deployment",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_helm-controller_policy_PodDisruptionBudget",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_kustomize-controller_policy_PodDisruptionBudget",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_source-controller_policy_PodDisruptionBudget",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_allow-dns_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_allow-kubernetes-api_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_allow-metrics_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_allow-source-artifact-client_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_allow-source-artifacts_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_allow-source-egress_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                },
+                {
+                    "id": "astronomer-delivery-system_default-deny_networking.k8s.io_NetworkPolicy",
+                    "v": "v1"
+                }
+            ]
+        },
+        "lastAttemptedRevision": "sha256:6bdbd0a080bc667e58bf23a7b13f12f2fc07d551b3abd7be07ae74025b50ea41",
+        "observedGeneration": -1
+    }
+}

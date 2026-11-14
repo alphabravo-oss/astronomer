@@ -1,0 +1,4 @@
+
+> astronomer-frontend@2.1.1 type-check
+> tsc --noEmit
+

@@ -1,0 +1,151 @@
+[
+  {
+    "path": "/api/v1/admin/charlie/status/",
+    "status": 200,
+    "body": {
+      "data": {
+        "connection": {},
+        "agent": {
+          "standby_replicas": [],
+          "replicas": [
+            {
+              "state": "unknown"
+            },
+            {
+              "state": "unknown"
+            }
+          ]
+        },
+        "mode": {
+          "emergency_disabled": false,
+          "effects": [
+            null,
+            null
+          ],
+          "auto_readiness": {
+            "blockers": [
+              {
+                "code": "allowlist_unreviewed",
+                "message": "Automation readiness could not be verified."
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "path": "/api/v1/catalog/operations/9a830945-3bff-4e26-b10d-d49f39e54b51/",
+    "status": 200,
+    "body": {
+      "data": {
+        "events": [
+          {
+            "detail": {},
+            "message": "operation execution started",
+            "stage": "queue"
+          },
+          {
+            "detail": {},
+            "message": "requesting fenced Flux application deletion",
+            "stage": "delivery"
+          },
+          {
+            "detail": {},
+            "message": "Flux target deletion requested",
+            "stage": "deletion"
+          },
+          {
+            "detail": {},
+            "message": "operation completed",
+            "stage": "complete"
+          },
+          {
+            "detail": {
+              "message": "",
+              "phase": "removed"
+            },
+            "message": "Flux reports the application removed",
+            "stage": "workloads"
+          }
+        ],
+        "status": "completed"
+      }
+    }
+  }
+]
+Skip to main content
+Astronomer
+by AlphaBravo
+Overview
+Clusters
+Delivery
+Observability
+Security
+Access
+Settings
+Documentation
+
+Astronomer v2.1.1 · AlphaBravo
+
+Settings
+Charlie
+Search pages, clusters and resources
+/
+⌘K
+
+Experience
+
+General
+Platform
+Dashboard widgets
+Charlie
+
+Identity & access
+
+Authentication
+Group mappings
+
+Governance
+
+Quota plans
+Cluster groups
+Network policy templates
+Read-audit policies
+Compliance exports
+
+Reliability
+
+Operations
+Astronomer backup
+
+Integrations
+
+GitOps sources
+Email & SMTP
+Webhooks
+Notification templates
+SIEM forwarders
+Vault connections
+Charlie
+
+Connect and govern the external Charlie service and its Astronomer product agent.
+
+Connection
+Agent
+Mode
+Kubernetes
+Alerts
+Automation
+Access
+Diagnostics
+Charlie is connected
+
+This installation has one Charlie connection. Disconnect it before connecting to the same or another Charlie.
+
+Charlie endpoint
+https://charlie.dev.alphabravo.io
+
+Charlie chat, findings, and the product agent stay available until you disconnect. Connecting a different Charlie is a new one-time token after disconnect.
+
+Disconnect

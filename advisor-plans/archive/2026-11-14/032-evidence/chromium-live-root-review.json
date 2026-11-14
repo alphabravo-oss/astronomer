@@ -1,0 +1,42 @@
+{
+  "observedAt": "2026-10-10T00:12:43.623194+00:00",
+  "sourceCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+  "integratedCommits": [
+    "188f55aa",
+    "0e24d1ca",
+    "5b356902"
+  ],
+  "review": "Entire two source/test corrections and sanitized evidence reviewed. Root verifies eight private e141 failure artifacts, eight private 949 failure artifacts, four private Chromium PASS artifacts, and reproduces frozen 6,170-file SHA c71bbc91ae93735e2270059d23de47374d759a819717e5d4b1427e15b5a601f5. Raw private artifacts stay restricted.",
+  "rootStaticCommands": [
+    {
+      "command": "python3 scripts/tests/live_browser_preflight_test.py",
+      "result": "PASS3cases"
+    },
+    {
+      "command": "python3 scripts/tests/runtime_qualification_matrix_test.py",
+      "result": "PASS14cases"
+    },
+    {
+      "command": "bash scripts/tests/live-browser-runner-test.sh",
+      "result": "PASS"
+    }
+  ],
+  "actualExecutorBrowser": {
+    "engine": "chromium",
+    "expectedCases": 18,
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "retries": 0,
+    "workers": 1,
+    "durationSeconds": 421.710603,
+    "trivyEnabled": true,
+    "terminal": "Real HTTP 201 session, WebSocket, remote stdin/stdout marker, Disconnect HTTP 200, persisted closed status, and scoped pod HTTP 404."
+  },
+  "limitations": [
+    "Root reviewed exact artifacts/static runner gates; it has not repeated the full 18 live journeys on the integrated candidate.",
+    "Firefox/WebKit fresh stack execution remains pending.",
+    "Native T3 was available/attached, but environment-port/direct-host navigation returned ERR_CONNECTION_REFUSED; no application observation or manual certification.",
+    "Tracing disabled on frozen 5d8f; no collector/whole-trace claim. Whole W12 stays IN_PROGRESS."
+  ]
+}

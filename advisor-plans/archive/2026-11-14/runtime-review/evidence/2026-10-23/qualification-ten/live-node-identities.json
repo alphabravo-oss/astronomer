@@ -1,0 +1,33 @@
+{
+  "observed_at": "2026-10-23T08:13:00.354033+00:00",
+  "clusters": [
+    {
+      "cluster_id": "10a06091-4d36-4e49-a9ff-78480522f9d0",
+      "nodes": [
+        {
+          "name": "k3d-ui-demo-v211-agent-0",
+          "status": "Ready",
+          "system_uuid": "263c3b45-9849-48df-a062-cc25475d2584",
+          "kubelet_version": "v1.35.7+k3s1"
+        },
+        {
+          "name": "k3d-ui-demo-v211-server-0",
+          "status": "Ready",
+          "system_uuid": "263c3b45-9849-48df-a062-cc25475d2584",
+          "kubelet_version": "v1.35.7+k3s1"
+        }
+      ]
+    },
+    {
+      "cluster_id": "b9e30a53-0817-40ae-a840-14dddb8d36f0",
+      "nodes": [
+        {
+          "name": "k3d-site-demo-server-0",
+          "status": "Ready",
+          "system_uuid": "263c3b45-9849-48df-a062-cc25475d2584",
+          "kubelet_version": "v1.35.7+k3s1"
+        }
+      ]
+    }
+  ]
+}

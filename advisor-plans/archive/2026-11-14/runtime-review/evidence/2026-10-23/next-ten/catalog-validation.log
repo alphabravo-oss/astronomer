@@ -1,0 +1,9 @@
+catalog and revocation policy conform to their v1 schemas
+artifact lock covers every catalog application
+generated catalog output is current (35 files)
+catalog.json is structurally valid
+.................................................
+----------------------------------------------------------------------
+Ran 49 tests in 7.650s
+
+OK

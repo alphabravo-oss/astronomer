@@ -1,0 +1,9 @@
+helm lint deploy/chart -f deploy/chart/values-dev.yaml --kube-version 1.35.0 --set-string secrets.secretKey=[PUBLIC_HELM_TEST_SIGNING_KEY_REDACTED] --set-string secrets.encryptionKey=[PUBLIC_HELM_TEST_KEY_REDACTED]
+level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-identity/deploy/chart/dashboards resolved=/root/work/astronomer-identity/deploy/dashboards
+level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-identity/deploy/chart/dashboards resolved=/root/work/astronomer-identity/deploy/dashboards
+==> Linting deploy/chart
+[INFO] Chart.yaml: icon is recommended
+
+1 chart(s) linted, 0 chart(s) failed
+helm template astronomer deploy/chart -f deploy/chart/values-dev.yaml --kube-version 1.35.0 --set-string secrets.secretKey=[PUBLIC_HELM_TEST_SIGNING_KEY_REDACTED] --set-string secrets.encryptionKey=[PUBLIC_HELM_TEST_KEY_REDACTED] > /dev/null
+level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-identity/deploy/chart/dashboards resolved=/root/work/astronomer-identity/deploy/dashboards

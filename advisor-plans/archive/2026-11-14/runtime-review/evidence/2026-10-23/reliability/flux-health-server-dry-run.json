@@ -1,0 +1,37 @@
+{
+  "observed_at": "2026-10-23T06:47:10.924436+00:00",
+  "command": "kubectl patch kustomization astronomer-system-release --type=merge --patch-file <generated-policy> --dry-run=server",
+  "exit_code": 0,
+  "api_version": "kustomize.toolkit.fluxcd.io/v1",
+  "kind": "Kustomization",
+  "namespace": "astronomer-delivery-system",
+  "name": "astronomer-system-release",
+  "server_accepted_policy": true,
+  "policy_persisted": false,
+  "live_ready_conditions": [
+    {
+      "lastTransitionTime": "2026-10-23T06:46:31Z",
+      "message": "Running health checks for revision sha256:6bdbd0a080bc667e58bf23a7b13f12f2fc07d551b3abd7be07ae74025b50ea41 with a timeout of 15m0s",
+      "observedGeneration": 1,
+      "reason": "ProgressingWithRetry",
+      "status": "True",
+      "type": "Reconciling"
+    },
+    {
+      "lastTransitionTime": "2026-10-23T06:46:31Z",
+      "message": "health check failed after 356.146663ms: failed early due to stalled resources: [Deployment/astronomer-delivery-system/source-controller status: 'Failed']",
+      "observedGeneration": 1,
+      "reason": "HealthCheckFailed",
+      "status": "False",
+      "type": "Ready"
+    },
+    {
+      "lastTransitionTime": "2026-10-23T06:46:31Z",
+      "message": "failed early due to stalled resources: [Deployment/astronomer-delivery-system/source-controller status: 'Failed']",
+      "observedGeneration": 1,
+      "reason": "HealthCheckFailed",
+      "status": "False",
+      "type": "Healthy"
+    }
+  ]
+}

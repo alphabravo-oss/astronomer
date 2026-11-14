@@ -1,0 +1,244 @@
+[
+  {
+    "route": "/dashboard",
+    "headings": [
+      "Platform Overview",
+      "Clusters",
+      "Recent Activity",
+      "Platform Health"
+    ],
+    "alerts": [],
+    "text": "Platform Overview\n\nReal-time status of your Kubernetes infrastructure\n\nWelcome to Astronomer\n\nManage every Kubernetes cluster, workload, and policy from one console. Read the docs\n\nClusters\n\n1\n\n1 active\n\nWarnings\n\n0\n\nneeds attention\n\nDisconnected\n\n0\n\nagent offline\n\nOpen Alerts\n\n0\n\nall clear\n\nPods\n\n42\n\nacross 3 nodes\n\nRegister cluster\n\nGenerate an install command for a new cluster\n\nBrowse catalog\n\nInstall Helm charts across managed clusters\n\nReview alerts\n\nAcknowledge firing alerts and manage routing\n\nManage projects\n\nQuotas, members, and project-scoped resources\n\nClusters\nView all\nStatus\nColumns\nName\n\t\nStatus\n\t\nProvider\n\t\nVersion\n\t\nNodes\n\t\nPods\n\t\nCPU\n\t\nMemory\n\nSmoke East\t\nActive\t\nAWS\nAmazon EKS\n\t1.31\t3\t42\t25%\t33%\nRecent Activity\n\nNo recent activity\n\nPlatform Health\nFiring alerts\nAll clear\n0\nAgent offline\nall reachable\n0\nTools installed\nacross all clusters\n0\nAstronomer backup\ndrill never run\n—\nOpen kubectl shell on any cluster",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters",
+    "headings": [
+      "Clusters"
+    ],
+    "alerts": [],
+    "text": "Clusters\n\nMonitor and manage the existing Kubernetes clusters you've registered with Astronomer\n\nRegister Cluster\nAll Statuses\nActive\nWarning\nError\nDisconnected\nConnecting\nAll Providers\nAWS\nGCP\nAzure\nOn-Premise\nDigitalOcean\nAll Environments\nProduction\nStaging\nDevelopment\nTesting\nColumns\nName\n\t\nStatus\n\t\nProvider\n\t\nDistribution\n\t\nK8s Version\n\t\nNodes\n\t\nPods\n\t\nCPU%\n\t\nMem%\n\t\nLast Heartbeat\n\t\n\n\n\nSmoke East\n\nsmoke-east\n\n\t\nActive\tAWS\tAmazon EKS\t1.31\t3\t42\t\n25%\n\t\n33%\n\t9 months ago\t",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/projects",
+    "headings": [
+      "Projects"
+    ],
+    "alerts": [],
+    "text": "Projects\n\nOrganize clusters and namespaces into logical projects\n\nCreate Project\n\nNo projects created\n\nCreate a project to group namespaces, members, policy, and quota across adopted clusters.\n\nCreate project",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/rbac",
+    "headings": [
+      "RBAC"
+    ],
+    "alerts": [],
+    "text": "RBAC\n\nUsers, roles, and bindings. Cluster and project roles can also carry CRD grants for a single Custom Resource. Effective shows what a user can actually do.\n\nCreate Role\nGlobal Roles\nCluster Roles\nProject Roles\nUsers\nBindings\nNative grants\nEffective\nColumns\nRole\n\t\nDescription\n\t\nType\n\t\nRules\n\t\nCRD grants\n\t\nCreated\n\t\n\n\n\nNo global roles defined\n\nCreate the first item to configure this feature.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/security",
+    "headings": [
+      "Security"
+    ],
+    "alerts": [],
+    "text": "Security\n\nCIS benchmarks, Pod Security Admission policies, and compliance.\n\nCreate Template\nCIS Scans\nPSA Templates\nSecurity Policies\n\nWhat is Pod Security Admission (PSA)?\n\nPSA is the built-in Kubernetes admission controller (the successor to PodSecurityPolicy) that enforces the three Pod Security Standards on a per-namespace basis. A template defines which standard applies in each of three modes; it only takes effect once you assign and apply it to a cluster from the Security Policies tab.\n\nSTANDARDS (LEVELS)\n\nPrivileged\nUnrestricted — no policy applied. For trusted/system namespaces or to opt out of PSA.\nBaseline\nMinimally restrictive — blocks known privilege escalations while staying broadly compatible.\nRestricted\nHeavily restricted — follows current pod-hardening best practices. Recommended for production.\n\nMODES\n\nEnforce\nRejects pods that violate the standard at admission time.\nAudit\nAllows the pod but records a violation in the audit log.\nWarn\nAllows the pod but returns a user-facing warning to the client.\nColumns\nName\n\t\nEnforce\n\t\nAudit\n\t\nWarn\n\t\nDescription\n\t\n\n\n\nNo PSA templates defined\n\nCreate the first item to configure this feature.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/agents",
+    "headings": [
+      "Cluster Agents"
+    ],
+    "alerts": [],
+    "text": "Cluster Agents\n\nConnected, degraded, and disconnected Astronomer agents across adopted clusters.\n\nServer - · Supported agent - · Compatible - · Generated Never\n\nNo cluster agents connected\n\nRegister an existing Kubernetes cluster to install its agent and begin reporting health.\n\nRegister cluster",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/alerting",
+    "headings": [
+      "Alerting"
+    ],
+    "alerts": [],
+    "text": "Alerting\n\nFleet inbox and routing. Alert rules are defined on each cluster.\n\nAnomaly Baselines\nActive Alerts\nNotification Channels\nSilences\nInhibitions\nFiring\n0\nAcknowledged\n0\nResolved\n0\nSilenced\n0\nAll statuses\nFiring\nAcknowledged\nResolved\nSilenced\nAll severities\nCritical\nWarning\nInfo\nColumns\nSeverity\n\t\nRule\n\t\nMessage\n\t\nCluster\n\t\nFired\n\t\nStatus\n\t\n\n\n\nNo alert events\n\nThere are no events matching the selected scope and filters.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/logging",
+    "headings": [
+      "Logging"
+    ],
+    "alerts": [],
+    "text": "Logging\n\nShared log destinations. Pipelines are configured on each cluster.\n\nCreate Destination\nDestinations\nOperations\nColumns\nOutput\n\t\nType\n\t\nCluster\n\t\nConnection\n\t\nEnabled\n\t\nCreated\n\t\n\n\n\nNo logging outputs configured\n\nCreate the first item to configure this feature.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/catalog",
+    "headings": [
+      "Catalog"
+    ],
+    "alerts": [],
+    "text": "Catalog\n\nShared Helm repositories. Browse and install charts from a cluster's Apps page.\n\nProject visibility\nSelect a project…\nBrowse Charts\nInstalled\n0\nRepositories\n0\nAll\nMonitoring\nLogging\nSecurity\nDatabase\nNetworking\nStorage\nMessaging\nCI/CD\nOther\n\nSelect a project\n\nChart visibility and install authorization are isolated by project.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/settings",
+    "headings": [
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations",
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations",
+      "Settings",
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations"
+    ],
+    "alerts": [],
+    "text": "EXPERIENCE\nGeneral\nPlatform\nDashboard widgets\nCharlie\nIDENTITY & ACCESS\nAuthentication\nGroup mappings\nGOVERNANCE\nQuota plans\nCluster groups\nNetwork policy templates\nRead-audit policies\nCompliance exports\nRELIABILITY\nOperations\nAstronomer backup\nINTEGRATIONS\nGitOps sources\nEmail & SMTP\nWebhooks\nNotification templates\nSIEM forwarders\nVault connections\nSettings\n\nPlatform configuration and administration. All surfaces below are admin-only.\n\nExperience\n\nShape the console, assistance, and operator defaults.\n\nGeneral\n\nPlatform identity, audit defaults, API tokens, and support.\n\nPlatform\n\nBranding, banners, feature flags, sessions, and telemetry.\n\nDashboard widgets\n\nPrometheus, Grafana, and URL widgets for operator dashboards.\n\nCharlie\n\nAI access, automation policy, diagnostics, and product-agent controls.\n\nIdentity & access\n\nControl sign-in, groups, and administrative authority.\n\nAuthentication\n\nDex connectors, SSO providers, SCIM, and password policy.\n\nGroup mappings\n\nMap identity-provider groups to scoped RBAC roles.\n\nGovernance\n\nDefine tenancy, policy, evidence, and organizational boundaries.\n\nQuota plans\n\nSet per-tenant limits for projects, clusters, storage, and tokens.\n\nCluster groups\n\nOrganize clusters by environment, region, or business unit.\n\nNetwork policy templates\n\nCurate reusable isolation policies for adopted clusters.\n\nRead-audit policies\n\nChoose which sensitive reads produce evidence records.\n\nCompliance exports\n\nCreate signed audit, RBAC, and configuration evidence bundles.\n\nReliability\n\nOperate the management plane and its shared services.\n\nOperations\n\nInspect worker queues, retry failed work, and manage the DLQ.\n\nAstronomer backup\n\nConfigure management-plane backups, encryption, and restore drills.\n\nIntegrations\n\nConnect delivery, notifications, secrets, and external systems.\n\nGitOps sources\n\nRegister and secure Flux-native repository sources.\n\nEmail & SMTP\n\nConfigure outbound mail, test delivery, and inspect sent mail.\n\nWebhooks\n\nDeliver platform events to incident and automation systems.\n\nNotification templates\n\nCustomize transactional email and webhook messages.\n\nSIEM forwarders\n\nStream audit and platform events to security tooling.\n\nVault connections\n\nResolve encrypted Vault references during installations.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/settings/backup",
+    "headings": [
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations",
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations",
+      "Astronomer backup",
+      "S3 destinations",
+      "Restore drill history"
+    ],
+    "alerts": [],
+    "text": "EXPERIENCE\nGeneral\nPlatform\nDashboard widgets\nCharlie\nIDENTITY & ACCESS\nAuthentication\nGroup mappings\nGOVERNANCE\nQuota plans\nCluster groups\nNetwork policy templates\nRead-audit policies\nCompliance exports\nRELIABILITY\nOperations\nAstronomer backup\nINTEGRATIONS\nGitOps sources\nEmail & SMTP\nWebhooks\nNotification templates\nSIEM forwarders\nVault connections\nBack to Settings\nSETTINGS · BACKUP\nAstronomer backup\n\nNightly dump of Astronomer's own database to one or more S3 buckets. Workload snapshots live on each cluster after Velero is installed there.\n\nS3 destinations\n\nEach destination gets its own nightly dump CronJob. Add a second bucket for DR or a different schedule.\n\nAdd destination\n\nNo backup destinations\n\nAdd an S3 bucket to start nightly dumps of Astronomer’s database.\n\nAdd destination\n\nNo restore drill has run\n\nThe weekly drill restores the latest dump into a scratch Postgres and records the result here.\n\nRestore drill history\n\nNo restore drill history\n\nCompleted restore drills will appear here after the scheduled validation runs.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/settings/operations",
+    "headings": [
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations",
+      "Experience",
+      "Identity & access",
+      "Governance",
+      "Reliability",
+      "Integrations",
+      " Operations",
+      "Queues",
+      "Dead-letter",
+      "Task outbox"
+    ],
+    "alerts": [],
+    "text": "EXPERIENCE\nGeneral\nPlatform\nDashboard widgets\nCharlie\nIDENTITY & ACCESS\nAuthentication\nGroup mappings\nGOVERNANCE\nQuota plans\nCluster groups\nNetwork policy templates\nRead-audit policies\nCompliance exports\nRELIABILITY\nOperations\nAstronomer backup\nINTEGRATIONS\nGitOps sources\nEmail & SMTP\nWebhooks\nNotification templates\nSIEM forwarders\nVault connections\n\nOperations\n\nLive view of the asynq worker queues + DLQ. Audited; superuser-only.\n\nQueues\nRefresh\nState\nColumns\nName\n\t\nPending\n\t\nActive\n\t\nScheduled\n\t\nRetry\n\t\nDLQ\n\t\nCompleted\n\t\nState\n\n\n\nNo queues registered\n\nThe worker may not be running.\n\nDead-letter\nRefresh\nSelect a queue above to inspect its dead-letter contents.\nTask outbox\n\nDurable DB task intents waiting for Redis delivery or operator retry.\n\nDead\nFailed\nPending\nDelivering\nDelivered\nAll\nRefresh\nStatus\nColumns\nTask type\n\t\nStatus\n\t\nQueue\n\t\nAttempts\n\t\nNext attempt\n\t\nLast error\n\t\nActions\n\n\n\nNo matching task outbox rows\n\nNo dead task outbox rows.",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/cluster-templates",
+    "headings": [
+      "Onboarding Bundles"
+    ],
+    "alerts": [],
+    "text": "Onboarding Bundles\n\nReusable bundles of tools, policy, and project defaults applied to a cluster after you register it — they shape an adopted cluster, they don't create one.\n\nNew bundle\n\nNo onboarding bundles yet\n\nCreate a reusable bundle of tools, policy, and project defaults for adopted clusters.\n\nCreate bundle",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/apps",
+    "headings": [
+      " Apps"
+    ],
+    "alerts": [],
+    "text": "Apps\n\nBrowse, install, and manage helm-packaged applications on Smoke East. Releases managed by the Tools tab appear here too with a \"Managed by Tools\" pivot.\n\nProject visibility\nSelect a project…\nInstalled\n0\nBrowse\nRecommended\nRepositories\n0\n\nNo apps installed yet\n\nBrowse the catalog and install your first chart. Quick Start deploys metrics exporters and, unless opted out, Trivy image scanning through Flux. Inspect those baseline deployments in Delivery. Full monitoring and logging are separate add-ons.\n\nBrowse catalog\nOpen Tools\nPrevious\nPage 1\nNext",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/tools",
+    "headings": [
+      "Tools"
+    ],
+    "alerts": [],
+    "text": "Tools\n\nManage operational tools for Smoke East\n\nNo tools available",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/workloads",
+    "headings": [
+      "Workloads"
+    ],
+    "alerts": [],
+    "text": "Workloads\n\nAll Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in this cluster.\n\nNo workloads in this cluster\n\nInstall a chart from the catalog or use the kubectl shell to apply a manifest.\n\nBrowse catalog",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/custom-resources",
+    "headings": [
+      "Custom Resources"
+    ],
+    "alerts": [],
+    "text": "Custom Resources\nScope\nColumns\nKind\n\t\nGroup\n\t\nPlural\n\t\nVersions\n\t\nScope\n\t\nAge\n\nCertificate\tcert-manager.io\tcertificates\tv1\tNamespaced\t-",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/metrics",
+    "headings": [
+      "Metrics"
+    ],
+    "alerts": [],
+    "text": "Metrics\n\nExplore this cluster’s metrics, logs, and dashboards in Grafana.\n\nCluster Grafana is not installed\n\nEnable Grafana in this cluster’s monitoring stack to add its private dashboard here.\n\nOpen monitoring stack",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/logging",
+    "headings": [
+      "Logs"
+    ],
+    "alerts": [],
+    "text": "Logs\n\nExplore this cluster’s metrics, logs, and dashboards in Grafana.\n\nConfigure log collection\n\nCluster Grafana is not installed\n\nEnable Grafana in this cluster’s monitoring stack to add its private dashboard here.\n\nOpen monitoring stack",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/image-scans",
+    "headings": [
+      " Image Scans"
+    ],
+    "alerts": [],
+    "text": "Image Scans\n\nAggregated CVE counts from the in-cluster Trivy operator. Astronomer ingests VulnerabilityReport CRDs continuously.\n\nExport CSV\nTrigger rescan\nImage scanning isn't enabled on this cluster\nAstronomer's built-in scanning uses the Trivy operator, which isn't installed here — so there are no vulnerability reports. If you already use a different scanner (e.g. NeuVector), you can ignore this. To turn on Astronomer scanning, install Trivy from the Tools tab; reports appear within the first scan window (~5–15 min).\nEnable Trivy from Tools\nCRITICAL\n0\nHIGH\n0\nMEDIUM\n0\nLOW\n0\nLast scan: 1/1/1970, 12:00:00 AM · reports: 0 · snapshots stored: 0\nWhat changed in the last 24h\n\nNot enough scan history yet — we'll surface a diff once a second snapshot lands (typically within an hour of trivy-operator's schedule).\n\nScan history (30 days)\n0 scans\n\nNo history yet — once trivy-operator publishes a second VulnerabilityReport this chart will show the trend.\n\nNamespace\nAll namespaces\nImage\tNamespace\tWorkload\tCritical\tHigh\tTotal\tScanned\n\nNo vulnerability reports yet\n\nInstall trivy-operator on this cluster and reports will populate within the first scan window (typically 5–15 min). Already installed? Use the rescan button above.\n\nInstall via Tools\nView adoption status",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/snapshots",
+    "headings": [
+      "Snapshots"
+    ],
+    "alerts": [],
+    "text": "Snapshots\n\nVelero-backed workload snapshots for Smoke East.\n\nVelero is not installed\n\nWorkload snapshots show up here after Velero is installed on this cluster. Install it from Cluster Tools, then return to take and schedule snapshots.\n\nInstall Velero",
+    "errors": []
+  },
+  {
+    "route": "/dashboard/clusters/c-smoke-1/template",
+    "headings": [
+      "Template",
+      ""
+    ],
+    "alerts": [],
+    "text": "Template\n\nCluster template applied to Smoke East.\n\nUnknown\nTemplate:\nApplied at:\n1/1/1970, 12:00:00 AM\nReapply\nDetach\nApplied spec\n(read-only snapshot)\n(no spec recorded)",
+    "errors": []
+  }
+]

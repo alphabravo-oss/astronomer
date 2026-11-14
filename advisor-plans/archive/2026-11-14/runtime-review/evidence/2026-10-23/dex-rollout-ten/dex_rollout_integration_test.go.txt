@@ -1,0 +1,328 @@
+//go:build integration
+
+package handler
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+)
+
+type realDexRequester struct {
+	client                   *http.Client
+	host, cluster, namespace string
+	mu                       sync.Mutex
+	writes                   int
+}
+
+func (r *realDexRequester) Do(ctx context.Context, cluster, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	if cluster != r.cluster || (!strings.HasPrefix(path, "/api/v1/namespaces/"+r.namespace+"/") && !strings.HasPrefix(path, "/apis/apps/v1/namespaces/"+r.namespace+"/")) {
+		return nil, errors.New("request outside owned Dex fixture")
+	}
+	req, err := http.NewRequestWithContext(ctx, method, r.host+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	if method != http.MethodGet {
+		r.mu.Lock()
+		r.writes++
+		r.mu.Unlock()
+	}
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	return &protocol.K8sResponsePayload{StatusCode: resp.StatusCode, Body: base64.StdEncoding.EncodeToString(data)}, nil
+}
+func (r *realDexRequester) writeCount() int { r.mu.Lock(); defer r.mu.Unlock(); return r.writes }
+
+type realDexFixture struct {
+	*dexRegistrationFixture
+	kubeconfig, namespace, name string
+	requester                   *realDexRequester
+}
+
+func (f *realDexFixture) kubectl(t *testing.T, args ...string) []byte {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "kubectl", append([]string{"--kubeconfig", f.kubeconfig, "-n", f.namespace}, args...)...).Output()
+	if err != nil {
+		t.Fatalf("owned Kubernetes operation %s failed: %v", args[0], err)
+	}
+	return out
+}
+func (f *realDexFixture) deployment(t *testing.T) dexDeployment {
+	t.Helper()
+	var d dexDeployment
+	if err := json.Unmarshal(f.kubectl(t, "get", "deployment", f.name, "-o", "json"), &d); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+func (f *realDexFixture) secret(t *testing.T) dexRuntimeSecret {
+	t.Helper()
+	var s dexRuntimeSecret
+	if err := json.Unmarshal(f.kubectl(t, "get", "secret", f.name+"-runtime", "-o", "json"), &s); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+func (f *realDexFixture) apply(t *testing.T) uuid.UUID {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil)
+	r.Header.Set("Idempotency-Key", uuid.NewString())
+	r = r.WithContext(reqctx.WithUser(t.Context(), &reqctx.User{ID: f.actor.String(), AuthMethod: "jwt"}))
+	w := httptest.NewRecorder()
+	f.h.Apply(w, r)
+	return acceptedDexID(t, w)
+}
+func acceptedDexID(t *testing.T, w *httptest.ResponseRecorder) uuid.UUID {
+	t.Helper()
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("admission status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Data dexOperationResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Data.OperationID == uuid.Nil {
+		t.Fatal("missing admitted operation id")
+	}
+	return response.Data.OperationID
+}
+func (f *realDexFixture) dispatch(t *testing.T, id uuid.UUID) error {
+	t.Helper()
+	runtime := tasks.DexOperationRuntime{Queries: f.q, Executor: f.h}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	return runtime.Handle(ctx, asynq.NewTask(tasks.DexOperationType, []byte(`{"operation_id":"`+id.String()+`"}`)))
+}
+func (f *realDexFixture) mustDispatch(t *testing.T, id uuid.UUID) {
+	t.Helper()
+	if err := f.dispatch(t, id); err != nil {
+		t.Fatal(err)
+	}
+	row, err := f.q.GetDexOperation(t.Context(), id)
+	if err != nil || row.Status != "succeeded" {
+		t.Fatalf("operation not succeeded: %v %s", err, row.Status)
+	}
+}
+func (f *realDexFixture) stageConnector(t *testing.T, label string) {
+	t.Helper()
+	c, err := f.q.GetDexConnectorByName(t.Context(), "saml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.q.StageUpdateDexConnector(t.Context(), sqlc.StageUpdateDexConnectorParams{ConnectorID: c.ID, Type: c.Type, DisplayName: label, Config: c.Config, SecretsKeyID: c.SecretsKeyID, SecretsAlgorithm: c.SecretsAlgorithm, SecretsCiphertext: c.SecretsCiphertext, SecretsNonce: c.SecretsNonce, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Opt-in: use only a dedicated disposable k3d-dex-contract-* cluster. The
+// harness applies the actual chart Dex resources and talks to the real API;
+// no Deployment status, Secret response or health response is simulated.
+//
+//nolint:tparallel // scenarios form one ordered rollout lifecycle against a shared real cluster and database
+func TestDexWorkerRealChartRollout(t *testing.T) {
+	t.Parallel()
+	kubeconfig := os.Getenv("DEX_ROLLOUT_TEST_KUBECONFIG")
+	if kubeconfig == "" {
+		t.Skip("requires owned disposable Dex Kubernetes cluster")
+	}
+	raw, err := clientcmd.LoadFromFile(kubeconfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(raw.CurrentContext, "k3d-dex-contract-") {
+		t.Fatal("refusing non-disposable Kubernetes context")
+	}
+	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := newDexRegistrationFixture(t)
+	namespace := "dex-contract-" + uuid.NewString()[:8]
+	f := &realDexFixture{dexRegistrationFixture: base, kubeconfig: kubeconfig, namespace: namespace, name: namespace + "-dex"}
+	f.kubectl(t, "create", "namespace", namespace)
+	// Namespace cleanup is bounded and scoped to the exact UID created here.
+	var ns struct {
+		Metadata struct {
+			UID string `json:"uid"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(f.kubectl(t, "get", "namespace", namespace, "-o", "json"), &ns); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		body, _ := json.Marshal(map[string]any{"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": map[string]string{"uid": ns.Metadata.UID}})
+		req, e := http.NewRequestWithContext(ctx, http.MethodDelete, cfg.Host+"/api/v1/namespaces/"+namespace, bytes.NewReader(body))
+		if e != nil {
+			t.Error(e)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, e := client.Do(req)
+		if e != nil {
+			t.Error(e)
+			return
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode >= 300 && resp.StatusCode != 404 {
+			t.Errorf("namespace cleanup status=%d", resp.StatusCode)
+		}
+	})
+	chart := filepath.Join("..", "..", "deploy", "chart")
+	args := []string{"template", namespace, chart, "--namespace", namespace, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", "fullnameOverride=" + namespace, "--set", "dex.enabled=true", "--set", "dex.issuerURL=https://dex.example.com/dex", "--set", "secrets.secretKey=helm-lint-only-jwt-signing-key-0000", "--set", "secrets.encryptionKey=AGE-SECRET-KEY-1YXRFCUA5M305R99XC5G7YRD9UFTGUE3PLFAC2Z2U8GSVLPZ9LQCQFHSDY9"}
+	for _, file := range []string{"dex-rbac.yaml", "dex-runtime-secret.yaml", "dex-deployment.yaml", "dex-service.yaml"} {
+		args = append(args, "--show-only", "templates/"+file)
+	}
+	rendered, err := exec.CommandContext(t.Context(), "helm", args...).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(t.TempDir(), "dex.yaml")
+	if err := os.WriteFile(manifest, rendered, 0600); err != nil {
+		t.Fatal(err)
+	}
+	f.kubectl(t, "apply", "-f", manifest)
+	f.kubectl(t, "rollout", "status", "deployment/"+f.name, "--timeout=150s")
+	t.Logf("owned namespace=%s real chart bootstrap ready", namespace)
+	// GitHub's connector initializes locally without contacting a third-party IdP.
+	sealed := f.seal(t, []byte(`{"clientSecret":"owned-test-upstream-secret"}`))
+	f.exec(t, `UPDATE dex_connectors SET type='github',config='{"clientID":"owned-test-client"}',secrets_key_id=$1,secrets_algorithm=$2,secrets_ciphertext=$3,secrets_nonce=$4`, sealed.KeyID, sealed.Algorithm, sealed.Ciphertext, sealed.Nonce)
+	f.exec(t, `UPDATE dex_settings SET namespace=$1,release_name=$2,deployment_name=$2,service_name=$2,runtime_secret_name=$3,chart_release_name=$1,issuer_url='https://dex.example.com/dex' WHERE id=$4`, namespace, f.name, f.name+"-runtime", dexSettingsSingletonID)
+	settings, _ := f.state(t)
+	f.requester = &realDexRequester{client: client, host: cfg.Host, cluster: uuid.UUID(settings.ClusterID.Bytes).String(), namespace: namespace}
+	f.h.SetK8sRequester(f.requester)
+	f.h.rolloutTimeout = 45 * time.Second
+	f.h.SetBundledRuntimeIdentity(DexRuntimeIdentity{Namespace: namespace, ChartReleaseName: namespace, DeploymentName: f.name, ServiceName: f.name, RuntimeSecretName: f.name + "-runtime", MigrationPhase: "fresh"})
+	t.Run("registration_rolls_and_enables_matching_provider", func(t *testing.T) {
+		id := acceptedDexID(t, f.register(t, "live-registration", "live-paired-secret"))
+		f.mustDispatch(t, id)
+		settings, provider := f.state(t)
+		if !provider.IsEnabled || settings.RuntimeAppliedGeneration != settings.RuntimeGeneration {
+			t.Fatal("runtime/provider not activated")
+		}
+		plain, e := f.enc.DecryptString(crypto.FromParts(provider.ClientSecretKeyID, provider.ClientSecretAlgorithm, provider.ClientSecretCiphertext, provider.ClientSecretNonce))
+		if e != nil || plain != "live-paired-secret" {
+			t.Fatal("provider credential mismatch")
+		}
+	})
+	if t.Failed() {
+		return
+	}
+	t.Run("fresh_apply_fixed_point", func(t *testing.T) {
+		beforeSecret, beforeDeployment, writes := f.secret(t), f.deployment(t), f.requester.writeCount()
+		f.mustDispatch(t, f.apply(t))
+		afterSecret, afterDeployment := f.secret(t), f.deployment(t)
+		if beforeSecret.Metadata.ResourceVersion != afterSecret.Metadata.ResourceVersion || beforeDeployment.Metadata.Generation != afterDeployment.Metadata.Generation || writes != f.requester.writeCount() {
+			t.Fatal("fixed point mutated Secret or Deployment")
+		}
+	})
+	t.Run("foreign_secret_fields_survive_metadata_repair", func(t *testing.T) {
+		f.kubectl(t, "patch", "secret", f.name+"-runtime", "--type=merge", "-p", `{"metadata":{"labels":{"foreign.example/owner":"keep","astronomer.io/backup-reconstruction":null}},"data":{"foreign-key":"a2VlcA=="}}`)
+		f.mustDispatch(t, f.apply(t))
+		secret := f.secret(t)
+		if secret.Metadata.Labels["foreign.example/owner"] != "keep" || secret.Data["foreign-key"] != "a2VlcA==" {
+			t.Fatal("foreign Secret fields lost")
+		}
+	})
+	t.Run("connector_mutation_restores_enabled_provider", func(t *testing.T) {
+		f.stageConnector(t, "Updated provider")
+		_, provider := f.state(t)
+		if provider.IsEnabled {
+			t.Fatal("mutation did not disable provider")
+		}
+		f.mustDispatch(t, f.apply(t))
+		_, provider = f.state(t)
+		if !provider.IsEnabled {
+			t.Fatal("successful rollout did not restore provider")
+		}
+	})
+	t.Run("failed_rollout_stays_disabled_then_retry_converges", func(t *testing.T) {
+		f.stageConnector(t, "Rollout failure")
+		id := f.apply(t)
+		f.kubectl(t, "patch", "deployment", f.name, "--type=strategic", "-p", `{"spec":{"template":{"spec":{"containers":[{"name":"dex","command":["/usr/local/bin/dex","invalid-test-command"]}]}}}}`)
+		f.h.rolloutTimeout = 3 * time.Second
+		err := f.dispatch(t, id)
+		f.h.rolloutTimeout = 45 * time.Second
+		_, provider := f.state(t)
+		if err == nil || provider.IsEnabled {
+			t.Fatal("failed rollout activated provider")
+		}
+		f.kubectl(t, "patch", "deployment", f.name, "--type=strategic", "-p", `{"spec":{"template":{"spec":{"containers":[{"name":"dex","command":["/usr/local/bin/dex","serve","/etc/dex/config.yaml"]}]}}}}`)
+		f.mustDispatch(t, id)
+		_, provider = f.state(t)
+		if !provider.IsEnabled {
+			t.Fatal("retry did not restore provider")
+		}
+	})
+	if t.Failed() {
+		return
+	}
+	t.Run("manual_disable_survives_apply", func(t *testing.T) {
+		f.exec(t, `UPDATE sso_configurations SET is_enabled=false WHERE provider='dex'`)
+		f.stageConnector(t, "Manual disable")
+		f.mustDispatch(t, f.apply(t))
+		_, provider := f.state(t)
+		if provider.IsEnabled {
+			t.Fatal("manual disable was undone")
+		}
+	})
+	t.Run("stale_operation_never_writes_kubernetes", func(t *testing.T) {
+		id := f.apply(t)
+		f.stageConnector(t, "Newer generation")
+		writes := f.requester.writeCount()
+		if err := f.dispatch(t, id); err == nil {
+			t.Fatal("stale operation succeeded")
+		}
+		if writes != f.requester.writeCount() {
+			t.Fatal("stale operation mutated Kubernetes")
+		}
+		row, err := f.q.GetDexOperation(t.Context(), id)
+		if err != nil || row.Status != "retrying" {
+			t.Fatalf("stale outcome=%s %v", row.Status, err)
+		}
+	})
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "10a06091-4d36-4e49-a9ff-78480522f9d0",
+    "name": "ui-demo-v211",
+    "status": "active",
+    "kubernetes_version": "v1.35.7+k3s1",
+    "registration_phase": "ready",
+    "agent_privilege_profile": "admin"
+  },
+  {
+    "id": "60d2f356-c8c3-484b-b045-cbf68dd2e808",
+    "name": "ui-demo",
+    "status": "active",
+    "kubernetes_version": "v1.30.4+k3s1",
+    "registration_phase": "ready",
+    "agent_privilege_profile": "admin"
+  },
+  {
+    "id": "b9e30a53-0817-40ae-a840-14dddb8d36f0",
+    "name": "site-demo",
+    "status": "active",
+    "kubernetes_version": "v1.35.7+k3s1",
+    "registration_phase": "ready",
+    "agent_privilege_profile": "admin"
+  },
+  {
+    "id": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+    "name": "local",
+    "status": "active",
+    "kubernetes_version": "v1.35.7+k3s1",
+    "registration_phase": "ready",
+    "agent_privilege_profile": "viewer"
+  }
+]

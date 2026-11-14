@@ -1,0 +1,121 @@
+[
+  {
+    "rule": "generic-api-key",
+    "file": "deploy/chart/values-k3d.yaml",
+    "line": 13,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "9b075feedc36c164736edf6c594015a73bdb9f07b12dbfc990b0a027ab1cefd0"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "cmd/astro/client_auth_test.go",
+    "line": 118,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "09542d0a52afa46f0d65cf2cb9186e6162710b55955b64185508812e039b657a"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "deploy/secret_material_render_test.go",
+    "line": 52,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "0dbd5e97d263621cd5f0ee2a555a275bc85886dce6349cf55fd0268b6beafe10"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "deploy/secret_material_render_test.go",
+    "line": 113,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "dcd6999e983a052de9523a27a7d206769bb31fbd46550b7a571b1fd0433315e5"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "deploy/secret_material_render_test.go",
+    "line": 116,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "defe0ff6020b3dc5e33e70c577e522027ba4d87050ebb4c0c5d420bec6b9df61"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/config/production.go",
+    "line": 43,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "a5090449a14392a9a7bfb7b172649e1dbc9b9acbc0fc4facb3ce8202ba320155"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/alerting_redaction_test.go",
+    "line": 19,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "1707a1ee0fa23453cb0c37126f022427cbe4c36c294bd573ef4f9bd84bbc2b0b"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/delivery/source_transactional_audit_test.go",
+    "line": 62,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "d8608de1579b4dce414484234b378c42d8f92bca9d4b4540f4ff4ecbbc18e738"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/supportbundle_operations_test.go",
+    "line": 77,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "31cfa01bc99340977398c77eb907f6da70379a79b66b16d7be5d0dd4cb31f6d6"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/password_reset_test.go",
+    "line": 302,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "b53a8e94a9d5af06360ebc2354aa4642b516b00b9fef6df19d217ab9e301b757"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/password_reset_test.go",
+    "line": 340,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "38140c76487e2ee5449768e0869effdb1fd4fd0e69f0bd6f8172933099f84c4a"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/password_reset_test.go",
+    "line": 375,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "38140c76487e2ee5449768e0869effdb1fd4fd0e69f0bd6f8172933099f84c4a"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/password_reset_test.go",
+    "line": 403,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "38140c76487e2ee5449768e0869effdb1fd4fd0e69f0bd6f8172933099f84c4a"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/handler/users.go",
+    "line": 85,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "1b3394cd5e7271904292ef1ea1e8173819813c639edfbf728e22b42d47b07b1c"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/server/privilege_groups_test.go",
+    "line": 14,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "0ed4ebe6135746fbc631976839a4a9f478f1a0eb42a40c53e09fede4dc93bbbc"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/tunnel/internal_auth_test.go",
+    "line": 13,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "6aa9acc029511d6e6f0c6816de71229031b676d6b14b64ed5e0fdf9b70fd7a32"
+  },
+  {
+    "rule": "generic-api-key",
+    "file": "internal/tunnel/internal_auth_test.go",
+    "line": 43,
+    "source_lines_already_present_at_HEAD": true,
+    "source_lines_sha256": "667049ecf0192896df450a0195d9b1317118d26b04a841bb89f19eeea57b26b3"
+  }
+]

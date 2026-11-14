@@ -1,0 +1,11 @@
+{
+  "sourceCommit": "927151bebf20c6a8f63fe76ff804b45e86044ded",
+  "priorTriageSHA256": "e0d4fba820892e8ea3bfbfa8d951013968a58c4c4bbc0c8a6827e649863dda0d",
+  "constantByteSHAAndLineChecks": 62,
+  "priorExactControlSHAchecks": 62,
+  "currentFindingAndSourceSHAchecks": 62,
+  "result": "EXACT CURRENT CONTROL BINDINGS VERIFIED",
+  "policyAction": "NONE; no exceptions modified",
+  "verifierCorrection": "Initial optional SQL-prefix assertions incorrectly assumed every owned SQL constant used sqlc --name header; removed that assumption, retained exact prior control/raw-byte/finding/line/source hashes",
+  "scope": "Prior static query/column-list-not-credential decisions remain same bytes; no other G101 exemption"
+}

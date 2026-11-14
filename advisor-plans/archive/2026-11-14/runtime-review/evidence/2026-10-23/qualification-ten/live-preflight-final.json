@@ -1,0 +1,19 @@
+{
+  "lifecycle_qualified": false,
+  "schema_version": "astronomer-offering-estate-preflight-v2",
+  "run_id": "preflight-1792743042438068769",
+  "generated_at": "2026-10-23T08:10:42.43806974Z",
+  "candidate": {
+    "commit": "e2223136030fa17541e6be082a511caf444b7067",
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "unstaged_diff_sha256": "9c4b9b23435cd6cc6aa11d1823d40512f1beda71ab89fbc696891cb034c1085b",
+    "untracked_sha256": "20e156fa026820109d7b406b68fe95674b2734602cf89ac0b4372450ac067b22",
+    "dirty": true
+  },
+  "base_origin": "https://astronomer.dev.alphabravo.io",
+  "status": "BLOCKED",
+  "reason": "member_targets requires at least 2 explicit entries; member_targets[0].namespace is protected; qualification_id must be a task-specific DNS label; repository candidate is dirty",
+  "required_member_clusters": 2,
+  "configured_member_targets": 1,
+  "members": []
+}

@@ -1,0 +1,10 @@
+2026/10/23 05:40:35 INFO audit event recorded event=audit_recorded correlation_id=req-1 source=http action=request.post resource_type=cluster resource_id=660e8400-e29b-41d4-a716-446655440000
+2026/10/23 05:40:35 ERROR request failed request_id=e5420195-ebc9-4b32-851f-9dd44d0bc62b status=503 code=audit_unavailable internal_detail="Mandatory audit storage is unavailable"
+2026/10/23 05:40:35 INFO audit event recorded event=audit_recorded correlation_id=req-v1 source=http action=request.delete resource_type=cluster resource_id=660e8400-e29b-41d4-a716-446655440000
+--- FAIL: TestAuditRefreshIsNotAccessCredential (0.00s)
+    backend_audit_test.go:17: refresh JWT reached protected handler: status=204, want=401
+--- FAIL: TestAuditIdempotencyIsolatesConcreteResourceIDs (0.00s)
+    backend_audit_test.go:28: different resource IDs executed 1 mutations, want=2
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.042s
+FAIL

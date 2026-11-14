@@ -1,0 +1,18 @@
+{
+  "schema_version": "astronomer-offering-estate-preflight-v1",
+  "run_id": "preflight-1792740021695246990",
+  "generated_at": "2026-10-23T07:20:21.695248152Z",
+  "candidate": {
+    "commit": "e2223136030fa17541e6be082a511caf444b7067",
+    "staged_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "unstaged_diff_sha256": "8a54d0a2c8064f2d6a02c6240996f0c5470bf633e81db86492e99dc1781bd814",
+    "untracked_sha256": "4b2e1081511a051f2fb7110a5ce0829f34edd99e25b7946db4808d1755fc4f07",
+    "dirty": true
+  },
+  "base_origin": "https://astronomer.dev.alphabravo.io",
+  "status": "BLOCKED",
+  "reason": "member_targets requires at least 2 explicit entries; repository candidate is dirty",
+  "required_member_clusters": 2,
+  "configured_member_targets": 1,
+  "members": []
+}

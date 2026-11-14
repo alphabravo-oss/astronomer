@@ -1,0 +1,11 @@
+golangci-lint run ./...
+internal/handler/dex_rollout_integration_test.go:61:23: Error return value of `resp.Body.Close` is not checked (errcheck)
+	defer resp.Body.Close()
+	                     ^
+internal/handler/dex_rollout_integration_test.go:159:6: TestDexWorkerRealChartRollout's subtests should call t.Parallel (tparallel)
+func TestDexWorkerRealChartRollout(t *testing.T) {
+     ^
+2 issues:
+* errcheck: 1
+* tparallel: 1
+make: *** [Makefile:108: lint] Error 1

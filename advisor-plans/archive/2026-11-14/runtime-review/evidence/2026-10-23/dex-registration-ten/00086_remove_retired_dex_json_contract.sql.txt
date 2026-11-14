@@ -1,0 +1,10 @@
+-- +goose Up
+-- +goose StatementBegin
+-- Migration 82 removed this plaintext column in favor of the sealed client
+-- family. The registry-driven trigger otherwise treats the absent field as SQL
+-- NULL and rejects every Dex settings INSERT/UPDATE. Keep the contracts for
+-- the remaining JSON columns and the sealed-family shape constraint intact.
+DELETE FROM public.durable_json_schemas
+WHERE table_schema = 'public' AND table_name = 'dex_settings'
+  AND column_name = 'public_clients';
+-- +goose StatementEnd

@@ -1,0 +1,347 @@
+{
+  "config": {
+    "argv": [
+      "/usr/bin/node",
+      "/root/astronomer-all/astronomer/frontend/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "advisor-plans/027-ux-audit/playwright.config.mjs",
+      "--grep",
+      "reproduce"
+    ],
+    "configFile": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/playwright.config.mjs",
+    "rootDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit",
+        "testIgnore": [],
+        "testMatch": [
+          "review.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "./advisor-plans/027-ux-audit/results-reproductions.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "review.spec.ts",
+      "file": "review.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "reproduce custom-resource back destination",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2898,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "CUSTOM_BACK /dashboard/clusters/c-smoke-1/certificates http://127.0.0.1:32127/dashboard/clusters/c-smoke-1/certificates\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:56:21.231Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-b9406ff6b83d747b39f6",
+          "file": "review.spec.ts",
+          "line": 77,
+          "column": 1
+        },
+        {
+          "title": "reproduce namespace disagreement on custom resources",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 32429,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Namespace scope: team-a', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('button', { name: 'Namespace scope: team-a', exact: true }) with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Namespace scope: team-a', exact: true })\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Namespace scope: team-a', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('button', { name: 'Namespace scope: team-a', exact: true }) with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Namespace scope: team-a', exact: true })\u001b[22m\n\n    at /root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts:108:92",
+                    "location": {
+                      "file": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts",
+                      "column": 92,
+                      "line": 108
+                    },
+                    "snippet": "  106 |   });\n  107 |   await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}/custom-resources/cert-manager.io/v1/certificates?namespaces=team-a`);\n> 108 |   await expect(page.getByRole('button', { name: 'Namespace scope: team-a', exact: true })).toBeVisible();\n      |                                                                                            ^\n  109 |   await expect(page.getByRole('link', { name: 'cert-team-b', exact: true })).toBeVisible();\n  110 |   fs.writeFileSync(info.outputPath('custom-scope.json'), JSON.stringify({ requests, url: page.url() }, null, 2));\n  111 |   await page.screenshot({ path: info.outputPath('custom-scope.png') });"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts",
+                        "column": 92,
+                        "line": 108
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Namespace scope: team-a', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('button', { name: 'Namespace scope: team-a', exact: true }) with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Namespace scope: team-a', exact: true })\u001b[22m\n\n\n  106 |   });\n  107 |   await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}/custom-resources/cert-manager.io/v1/certificates?namespaces=team-a`);\n> 108 |   await expect(page.getByRole('button', { name: 'Namespace scope: team-a', exact: true })).toBeVisible();\n      |                                                                                            ^\n  109 |   await expect(page.getByRole('link', { name: 'cert-team-b', exact: true })).toBeVisible();\n  110 |   fs.writeFileSync(info.outputPath('custom-scope.json'), JSON.stringify({ requests, url: page.url() }, null, 2));\n  111 |   await page.screenshot({ path: info.outputPath('custom-scope.png') });\n    at /root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts:108:92"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:56:24.266Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions/review-reproduce-namespace-disagreement-on-custom-resources/test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions/review-reproduce-namespace-disagreement-on-custom-resources/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions/review-reproduce-namespace-disagreement-on-custom-resources/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts",
+                    "column": 92,
+                    "line": 108
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-bc7c7a501cf5f0c7f210",
+          "file": "review.spec.ts",
+          "line": 95,
+          "column": 1
+        },
+        {
+          "title": "reproduce filtering after workload pagination",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 32707,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Namespace scope: team-b', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('button', { name: 'Namespace scope: team-b', exact: true }) with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Namespace scope: team-b', exact: true })\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Namespace scope: team-b', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('button', { name: 'Namespace scope: team-b', exact: true }) with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Namespace scope: team-b', exact: true })\u001b[22m\n\n    at /root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts:132:92",
+                    "location": {
+                      "file": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts",
+                      "column": 92,
+                      "line": 132
+                    },
+                    "snippet": "  130 |   });\n  131 |   await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}/deployments?namespaces=team-b`);\n> 132 |   await expect(page.getByRole('button', { name: 'Namespace scope: team-b', exact: true })).toBeVisible();\n      |                                                                                            ^\n  133 |   await expect(page.getByText('No deployments found', { exact: true })).toBeVisible();\n  134 |   expect(requests.length).toBeGreaterThan(0);\n  135 |   expect(requests.every(url => !new URL(url).searchParams.has('namespace'))).toBeTruthy();"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts",
+                        "column": 92,
+                        "line": 132
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: getByRole('button', { name: 'Namespace scope: team-b', exact: true })\nExpected: visible\nTimeout: 30000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" getByRole('button', { name: 'Namespace scope: team-b', exact: true }) with timeout 30000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('button', { name: 'Namespace scope: team-b', exact: true })\u001b[22m\n\n\n  130 |   });\n  131 |   await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}/deployments?namespaces=team-b`);\n> 132 |   await expect(page.getByRole('button', { name: 'Namespace scope: team-b', exact: true })).toBeVisible();\n      |                                                                                            ^\n  133 |   await expect(page.getByText('No deployments found', { exact: true })).toBeVisible();\n  134 |   expect(requests.length).toBeGreaterThan(0);\n  135 |   expect(requests.every(url => !new URL(url).searchParams.has('namespace'))).toBeTruthy();\n    at /root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts:132:92"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:56:57.574Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions/review-reproduce-filtering-after-workload-pagination/test-failed-1.png"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions/review-reproduce-filtering-after-workload-pagination/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts-reproductions/review-reproduce-filtering-after-workload-pagination/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/review.spec.ts",
+                    "column": 92,
+                    "line": 132
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-a31ca2e25342cb519c39",
+          "file": "review.spec.ts",
+          "line": 115,
+          "column": 1
+        },
+        {
+          "title": "reproduce shared stacks double-active navigation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2717,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "DOUBLE_ACTIVE [{\"text\":\"Astronomerby AlphaBravo\",\"href\":\"/dashboard\",\"class\":\"flex items-center gap-2.5 min-w-0 active\"},{\"text\":\"Overview\",\"href\":\"/dashboard\",\"class\":\"flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50 active\"},{\"text\":\"Metrics\",\"href\":\"/dashboard/monitoring\",\"class\":\"flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors bg-accent text-foreground font-medium active\"},{\"text\":\"Shared stacks\",\"href\":\"/dashboard/monitoring/stacks\",\"class\":\"flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors bg-accent text-foreground font-medium active\"}]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:57:31.260Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-bcd6deb07ac4b7796f7f",
+          "file": "review.spec.ts",
+          "line": 141,
+          "column": 1
+        },
+        {
+          "title": "reproduce forbidden Velero status as not installed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2732,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:57:34.101Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-386eeceaa75210e5dd50",
+          "file": "review.spec.ts",
+          "line": 153,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-24T19:56:20.299Z",
+    "duration": 76624.635,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}

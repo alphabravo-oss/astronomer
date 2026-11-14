@@ -1,0 +1,18 @@
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-dex-contract-20261023'  
+[36mINFO[0m[0000] Created image volume k3d-dex-contract-20261023-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-dex-contract-20261023-tools' 
+[36mINFO[0m[0001] Creating node 'k3d-dex-contract-20261023-server-0' 
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.22.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'dex-contract-20261023'     
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-dex-contract-20261023-server-0' 
+[36mINFO[0m[0007] All agents already running.                  
+[36mINFO[0m[0007] All helpers already running.                 
+[36mINFO[0m[0007] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0009] Cluster 'dex-contract-20261023' created successfully! 
+[36mINFO[0m[0009] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write dex-contract-20261023)
+kubectl cluster-info

@@ -1,0 +1,5 @@
+internal/drcrypto/restore_integration_test.go:26:1: cognitive complexity 22 of func `TestDisposableDatabaseRestoreAndRequiredKeyGates` is high (> 20) (gocognit)
+func TestDisposableDatabaseRestoreAndRequiredKeyGates(t *testing.T) {
+^
+1 issues:
+* gocognit: 1

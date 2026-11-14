@@ -1,0 +1,578 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e
+> node scripts/generate-e2e-stubs.mjs
+
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e
+> playwright test --project=chromium --project=mobile-chromium operator- --workers=1
+
+
+Running 74 tests using 1 worker
+(node:3151830) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3151953) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+············F(node:3153302) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3153649) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3154026) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3154718) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··F(node:3155332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3155822) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+········(node:3157024) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+············F(node:3158429) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3158817) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3159219) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3159833) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··F(node:3160510) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·T(node:3161628) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+···········
+
+  1) [chromium] › tests/e2e/operator-failure-recovery.spec.ts:95:1 › SMTP tests only saved configuration after an edited draft is saved 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 5
+    + Received  + 1
+
+    - Array [
+    -   Object {
+    -     "recipient": "ops@example.test",
+    -   },
+    - ]
+    + Array []
+
+    Call Log:
+    - Timeout 10000ms exceeded while waiting on the predicate
+
+      141 |   await dialog.getByPlaceholder("ops@example.com").fill("ops@example.test");
+      142 |   await testButton.click();
+    > 143 |   await expect.poll(() => tests).toEqual([{ recipient: "ops@example.test" }]);
+          |                                  ^
+      144 | });
+      145 |
+      146 | for (const status of [403, 404]) {
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:143:34
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 403 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/denied|permission/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/denied|permission/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/denied|permission/i).first()
+
+
+      182 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      183 |         .first(),
+    > 184 |     ).toBeVisible();
+          |       ^
+      185 |     await expect(
+      186 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      187 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:184:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 404 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/not found/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/not found/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/not found/i).first()
+
+
+      182 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      183 |         .first(),
+    > 184 |     ).toBeVisible();
+          |       ^
+      185 |     await expect(
+      186 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      187 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:184:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests/e2e/operator-pipeline-editing.spec.ts:68:1 › pipeline edits keep its ID, opaque filters and labels through PUT 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /\/logging\/pipelines\/pipeline-workflow-1$/
+    Received string:  "http://127.0.0.1:32128/dashboard/logging/pipelines/pipeline-workflow-1?pipelinePage=1"
+    Timeout: 10000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 10000ms
+        24 × locator resolved to <html lang="en">…</html>
+           - unexpected value "http://127.0.0.1:32128/dashboard/logging/pipelines/pipeline-workflow-1?pipelinePage=1"
+
+
+      144 |     { method: "PUT", path: `/api/v1/logging/pipelines/${id}` },
+      145 |   ]);
+    > 146 |   await expect(page).toHaveURL(new RegExp(`/logging/pipelines/${id}$`));
+          |                      ^
+      147 |   await page.reload();
+      148 |   await expect(
+      149 |     page.getByRole("heading", { name: "Checkout logs revised", exact: true }),
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-pipeline-editing.spec.ts:146:22
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests/e2e/operator-resource-history.spec.ts:5:1 › workload to pod retains failing status, URL logs state, and browser Back context 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('CrashLoopBackOff', { exact: true })
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('CrashLoopBackOff', { exact: true }) with timeout 10000ms
+      - waiting for getByText('CrashLoopBackOff', { exact: true })
+
+
+      102 |   await expect(
+      103 |     page.getByText("CrashLoopBackOff", { exact: true }),
+    > 104 |   ).toBeVisible();
+          |     ^
+      105 |   await page.getByRole("link", { name: "review-pod", exact: true }).click();
+      106 |   await expect(
+      107 |     page.getByRole("link", { name: "Back to workload", exact: true }),
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-resource-history.spec.ts:104:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests/e2e/operator-scope-consistency.spec.ts:80:1 › multi-namespace scope is sent as repeated API parameters and empty scope sends no collection request 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "http://127.0.0.1:32128/api/v1/clusters/c-smoke-1/workloads/?limit=50&offset=0&namespaces=team-a&namespaces=team-b&kind=Deployment&sort=namespace_asc",
+    + ]
+
+      136 |     page.getByText("No namespaces selected", { exact: false }).first(),
+      137 |   ).toBeVisible();
+    > 138 |   expect(requests).toEqual([]);
+          |                    ^
+      139 | });
+      140 |
+      141 | test("direct secondary-project entry resolves its own namespaces before any workload request", async ({
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-scope-consistency.spec.ts:138:20
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-scope-consistency-ea632-sends-no-collection-request-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-scope-consistency-ea632-sends-no-collection-request-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-scope-consistency-ea632-sends-no-collection-request-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-scope-consistency-ea632-sends-no-collection-request-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-scope-consistency-ea632-sends-no-collection-request-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:95:1 › SMTP tests only saved configuration after an edited draft is saved 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 5
+    + Received  + 1
+
+    - Array [
+    -   Object {
+    -     "recipient": "ops@example.test",
+    -   },
+    - ]
+    + Array []
+
+    Call Log:
+    - Timeout 10000ms exceeded while waiting on the predicate
+
+      141 |   await dialog.getByPlaceholder("ops@example.com").fill("ops@example.test");
+      142 |   await testButton.click();
+    > 143 |   await expect.poll(() => tests).toEqual([{ recipient: "ops@example.test" }]);
+          |                                  ^
+      144 | });
+      145 |
+      146 | for (const status of [403, 404]) {
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:143:34
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-failure-recovery--50f63-er-an-edited-draft-is-saved-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 403 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/denied|permission/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/denied|permission/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/denied|permission/i).first()
+
+
+      182 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      183 |         .first(),
+    > 184 |     ).toBeVisible();
+          |       ^
+      185 |     await expect(
+      186 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      187 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:184:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 404 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/not found/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/not found/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/not found/i).first()
+
+
+      182 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      183 |         .first(),
+    > 184 |     ).toBeVisible();
+          |       ^
+      185 |     await expect(
+      186 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      187 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:184:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [mobile-chromium] › tests/e2e/operator-pipeline-editing.spec.ts:68:1 › pipeline edits keep its ID, opaque filters and labels through PUT 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /\/logging\/pipelines\/pipeline-workflow-1$/
+    Received string:  "http://127.0.0.1:32128/dashboard/logging/pipelines/pipeline-workflow-1?pipelinePage=1"
+    Timeout: 10000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 10000ms
+        24 × locator resolved to <html lang="en">…</html>
+           - unexpected value "http://127.0.0.1:32128/dashboard/logging/pipelines/pipeline-workflow-1?pipelinePage=1"
+
+
+      144 |     { method: "PUT", path: `/api/v1/logging/pipelines/${id}` },
+      145 |   ]);
+    > 146 |   await expect(page).toHaveURL(new RegExp(`/logging/pipelines/${id}\\?pipelinePage=1$`));
+          |                      ^
+      147 |   await page.reload();
+      148 |   await expect(
+      149 |     page.getByRole("heading", { name: "Checkout logs revised", exact: true }),
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-pipeline-editing.spec.ts:146:22
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-pipeline-editing--de8a8-ters-and-labels-through-PUT-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [mobile-chromium] › tests/e2e/operator-resource-history.spec.ts:5:1 › workload to pod retains failing status, URL logs state, and browser Back context 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('CrashLoopBackOff', { exact: true })
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('CrashLoopBackOff', { exact: true }) with timeout 10000ms
+      - waiting for getByText('CrashLoopBackOff', { exact: true })
+
+
+      102 |   await expect(
+      103 |     page.getByText("Crash Loop Back Off", { exact: true }),
+    > 104 |   ).toBeVisible();
+          |     ^
+      105 |   await page.getByRole("link", { name: "review-pod", exact: true }).click();
+      106 |   const back = page.getByRole("link", { name: "Back to workload", exact: true });
+      107 |   await expect(back).toBeVisible();
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-resource-history.spec.ts:104:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-resource-history--fd4e9-te-and-browser-Back-context-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [mobile-chromium] › tests/e2e/operator-restricted-navigation.spec.ts:208:1 › cluster reader gets one active inventory link and no secret or write controls 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Close navigation', exact: true })
+        - locator resolved to <button type="button" aria-label="Close navigation" class="fixed inset-0 z-40 border-0 bg-black/50 p-0 backdrop-blur-[1px] lg:hidden"></button>
+      - attempting click action
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <button aria-expanded="false" aria-controls="_r_2_" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">…</button> from <aside class="fixed inset-y-0 left-0 z-50 flex h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width] translate-x-0 lg:w-60">…</aside> subtree intercepts pointer events
+      - retrying click action
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <svg width="24" height="24" fill="none" stroke-width="2" aria-hidden="true" viewBox="0 0 24 24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" class="lucide lucide-chevron-down h-3.5 w-3.5">…</svg> from <aside class="fixed inset-y-0 left-0 z-50 flex h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width] translate-x-0 lg:w-60">…</aside> subtree intercepts pointer events
+      - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <button aria-expanded="false" aria-controls="_r_2_" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">…</button> from <aside class="fixed inset-y-0 left-0 z-50 flex h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width] translate-x-0 lg:w-60">…</aside> subtree intercepts pointer events
+        - retrying click action
+          - waiting 100ms
+        59 × waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <button aria-expanded="false" aria-controls="_r_2_" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">…</button> from <aside class="fixed inset-y-0 left-0 z-50 flex h-screen w-60 flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width] translate-x-0 lg:w-60">…</aside> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+
+
+      61 |     exact: true,
+      62 |   });
+    > 63 |   if (await button.isVisible()) await button.click();
+         |                                              ^
+      64 | }
+      65 | test("project-only Delivery lists remain reachable without granting read-only destinations or mutations", async ({
+      66 |   page,
+        at closeNavigation (/root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-restricted-navigation.spec.ts:63:46)
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-restricted-navigation.spec.ts:285:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-final/operator-restricted-naviga-bd78a-no-secret-or-write-controls-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-final/operator-restricted-naviga-bd78a-no-secret-or-write-controls-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-final/operator-restricted-naviga-bd78a-no-secret-or-write-controls-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-final/operator-restricted-naviga-bd78a-no-secret-or-write-controls-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-final/operator-restricted-naviga-bd78a-no-secret-or-write-controls-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12 failed
+    [chromium] › tests/e2e/operator-failure-recovery.spec.ts:95:1 › SMTP tests only saved configuration after an edited draft is saved 
+    [chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 403 renders recoverable read state without success controls 
+    [chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 404 renders recoverable read state without success controls 
+    [chromium] › tests/e2e/operator-pipeline-editing.spec.ts:68:1 › pipeline edits keep its ID, opaque filters and labels through PUT 
+    [chromium] › tests/e2e/operator-resource-history.spec.ts:5:1 › workload to pod retains failing status, URL logs state, and browser Back context 
+    [chromium] › tests/e2e/operator-scope-consistency.spec.ts:80:1 › multi-namespace scope is sent as repeated API parameters and empty scope sends no collection request 
+    [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:95:1 › SMTP tests only saved configuration after an edited draft is saved 
+    [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 403 renders recoverable read state without success controls 
+    [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:147:3 › Delivery target 404 renders recoverable read state without success controls 
+    [mobile-chromium] › tests/e2e/operator-pipeline-editing.spec.ts:68:1 › pipeline edits keep its ID, opaque filters and labels through PUT 
+    [mobile-chromium] › tests/e2e/operator-resource-history.spec.ts:5:1 › workload to pod retains failing status, URL logs state, and browser Back context 
+    [mobile-chromium] › tests/e2e/operator-restricted-navigation.spec.ts:208:1 › cluster reader gets one active inventory link and no secret or write controls 
+  62 passed (4.7m)

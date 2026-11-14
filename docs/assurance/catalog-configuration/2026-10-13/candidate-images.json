@@ -1,0 +1,20 @@
+{
+  "server": {
+    "registry": "localhost",
+    "repository": "astronomer-go-server",
+    "tag": "v2.0.1",
+    "digest": "sha256:0c5827c014116c36a0d36c6cc886c82c61042ec3815174f82298fec2f3a40f2e"
+  },
+  "worker": {
+    "registry": "localhost",
+    "repository": "astronomer-go-worker",
+    "tag": "v2.0.1",
+    "digest": "sha256:8e8649e1651bfde94f19c1aec8457d0e02d427b0a65b05dc8c70afb85e143497"
+  },
+  "frontend": {
+    "registry": "localhost",
+    "repository": "astronomer-frontend",
+    "tag": "v2.0.1",
+    "digest": "sha256:c04e5189c5a385d334c8aae370cd90604bb9b7cd3e387f9acd26cc9b01ccfeb8"
+  }
+}

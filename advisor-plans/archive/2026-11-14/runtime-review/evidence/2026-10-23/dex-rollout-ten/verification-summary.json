@@ -1,0 +1,20 @@
+{
+  "source_files_verified": 108,
+  "source_mismatches": [],
+  "make_check": {
+    "tests": 15796,
+    "passed": 15782,
+    "skipped": 14,
+    "failures": 0,
+    "errors": 0
+  },
+  "real_rollout_scenarios_passed": 7,
+  "gosec_findings": 0,
+  "govulncheck_reachable_findings": 0,
+  "govulncheck_module_only_findings": 1,
+  "history_commits_scanned": 2304,
+  "changed_source_secret_scan": "pass",
+  "owned_cluster_deleted": true,
+  "owned_kubeconfig_deleted": true,
+  "management_or_demo_deployment": false
+}

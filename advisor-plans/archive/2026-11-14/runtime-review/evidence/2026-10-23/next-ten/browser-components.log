@@ -1,0 +1,30 @@
+
+> astronomer-frontend@2.1.1 test:browser-components
+> playwright test --config=playwright.components.config.ts reliability.spec.ts --project=desktop --project=mobile
+
+[WebServer] (node:2159363) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2159379) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] (node:2159524) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2159599) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:2159731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop] › tests/browser-components/reliability.spec.ts:4:1 › widgets recover from an empty scope and share one refresh (630ms)
+  ✓  2 [desktop] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission (608ms)
+(node:2159902) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [mobile] › tests/browser-components/reliability.spec.ts:4:1 › widgets recover from an empty scope and share one refresh (656ms)
+  ✓  4 [mobile] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission (778ms)
+
+  4 passed (7.0s)

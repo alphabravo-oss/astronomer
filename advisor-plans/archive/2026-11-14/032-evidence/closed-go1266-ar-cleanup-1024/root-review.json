@@ -1,0 +1,76 @@
+{
+  "kind": "RootExactDerivedCacheCleanupReview",
+  "inventorySHA256": "fb2a8851d3a3f5e11ed33888356062da9bc5c8a582086a0d7eb377baf00d500e",
+  "validationSHA256": "22b32537cecd06be38ae4d8910e2ba59a115ddf480ecce669256bca1b85e8a2c",
+  "removalSHA256": "4db16dd92b96c5047384364c5762f0ca60244f81afa5c14333be5d376e120406",
+  "rootControls": "10 Python controls pass in2.239 seconds, including actual joined open-file child and exact single-fixture removal. Retained agent log separately records its own2.101-second run.",
+  "rootReview": "Complete original inventory/remover/control source and minimal successor differences reviewed. Only count128\u21921024 and cap3\u21928GiB change. Fresh validation of all1024 objects passes; each actual removed identity exactly matches the reviewed inventory and all paths are independently absent.",
+  "removedObjects": 1024,
+  "removedLogicalBytes": 2989585838,
+  "removedAllocatedBytes": 2991628288,
+  "finalCapacity": {
+    "path": ".",
+    "mountpoint": "/",
+    "total_kib": 354066236,
+    "used_kib": 268455868,
+    "available_kib": 71161092,
+    "available_gib": 67,
+    "free_percent": 20,
+    "minimum_free_gib": 20,
+    "minimum_free_percent": 20,
+    "meets_minimum": true
+  },
+  "scope": "Exact regular owned single-link Go1.26.6-header ar objects under derived Go build cache only. Qualification uses Go1.27.2. Sources, module inputs, toolchains, original evidence, executable binaries, images, frontend dependencies and database/PVCs are preserved.",
+  "limits": "Checks repeat exact identity/hash/header/provenance and process/FD/map fences before each unlink; they are not an atomic whole-system lock. This successor cleanup does not replace the earlier128-object receipts.",
+  "files": [
+    {
+      "original": "inventory.json",
+      "path": "inventory.json.gz",
+      "bytes": 52609962,
+      "sha256": "fb2a8851d3a3f5e11ed33888356062da9bc5c8a582086a0d7eb377baf00d500e",
+      "storedSHA256": "7aca159a0cee8914a4cdafe263b621cabdcd63f2b626383dde035193b53bded6"
+    },
+    {
+      "original": "root-validation.json",
+      "path": "root-validation.json.gz",
+      "bytes": 1793,
+      "sha256": "22b32537cecd06be38ae4d8910e2ba59a115ddf480ecce669256bca1b85e8a2c",
+      "storedSHA256": "4513221eed916928650441c379ce9087f0054273432d355c91a145e6b23ebd2c"
+    },
+    {
+      "original": "root-removal.json",
+      "path": "root-removal.json.gz",
+      "bytes": 52610499,
+      "sha256": "4db16dd92b96c5047384364c5762f0ca60244f81afa5c14333be5d376e120406",
+      "storedSHA256": "a60afd6b999366baa04a35ee7caf50547239739c5d7a324c94c63e9b5d0d22cd"
+    },
+    {
+      "original": "cleanup.py",
+      "path": "cleanup.py.gz",
+      "bytes": 8684,
+      "sha256": "526435bab106b700c739510ccab1881c30e8fedbac8397d562013b7c64ec0d57",
+      "storedSHA256": "00240342bbf95fc278181f6ec175aec7e68cbc99ce6073e2b83121ee876fc993"
+    },
+    {
+      "original": "controls.py",
+      "path": "controls.py.gz",
+      "bytes": 4650,
+      "sha256": "231a3809b8b98115ed1487ad010f4c9395a2b10345f8f7b4df99a1030d35fe99",
+      "storedSHA256": "a61b2a7c274d2c78b8b4dfe5efe718345c0eb5e8ff07495223de73122ab6a3fc"
+    },
+    {
+      "original": "agent-controls.log",
+      "path": "agent-controls.log.gz",
+      "bytes": 1766,
+      "sha256": "0bced7d1a9c15ff3d4e564a6266dad41b9082ae33177b42dc3380143a272e38f",
+      "storedSHA256": "02325fb478ed1489756fb120d3bb689ef92b060007cee7492b2b282b24f52990"
+    },
+    {
+      "original": "inventory.py",
+      "path": "inventory.py.gz",
+      "bytes": 7714,
+      "sha256": "b7b193336a95f1a261c993a8327edb80e628bdd96888c27af86c758b5ba8807e",
+      "storedSHA256": "2ab6e8055d5ea6b071d4713fc002d8fedd92efabad08afc6a6da0bd2a4933022"
+    }
+  ]
+}

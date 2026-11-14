@@ -1,0 +1,7 @@
+mise by @jdx – installing 1 tool
+mise python@3.15.0 Python 3.15.0
+mise ✓ python@3.15.0  2.8s  cpython-3.15.0+20261020-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+mise ████████████████ 1/1 · installed 1 tool in 2.8s
+mise WARN  python installed but not activated — it is not in any config file.
+To install and activate, run:
+  mise use python

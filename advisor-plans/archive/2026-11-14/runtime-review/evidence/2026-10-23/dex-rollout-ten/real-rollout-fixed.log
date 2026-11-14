@@ -1,0 +1,90 @@
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge
+=== RUN   TestDexWorkerRealChartRollout
+=== PAUSE TestDexWorkerRealChartRollout
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge
+=== CONT  TestDexWorkerRealChartRollout
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/chart_staged_mount
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/chart_staged_mount
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/old_ready_pod_and_failing_replacement
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/old_ready_pod_and_failing_replacement
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_init
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_init
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_secret
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_secret
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_dex_mount
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_dex_mount
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_stage_destination
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_stage_destination
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/writable_source
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/writable_source
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_empty_dir
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_empty_dir
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_direct_mount
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_direct_mount
+=== RUN   TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_old_ready_pod
+=== PAUSE TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_old_ready_pod
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/chart_staged_mount
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/writable_source
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_secret
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_old_ready_pod
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_direct_mount
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_empty_dir
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_dex_mount
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_stage_destination
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_init
+=== CONT  TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/old_ready_pod_and_failing_replacement
+--- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge (0.00s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_dex_mount (0.00s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_init (0.00s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_secret (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/chart_staged_mount (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/missing_empty_dir (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_old_ready_pod (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/writable_source (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/legacy_direct_mount (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/wrong_stage_destination (0.01s)
+    --- PASS: TestDexReadinessRecognizesChartStagingAndRejectsOldSurge/old_ready_pod_and_failing_replacement (0.00s)
+2026/10/23 16:52:30 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.1.3
+  API Version: 1.52
+  Operating System: Ubuntu 26.04 LTS
+  Total Memory: 31331 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 6e920776781462a3cd5dfbf793c592e45f80e15562161b4b994810eb89231ecb
+  Test ProcessID: 4d152c83-0e1a-446a-ab27-1ee7216a893a
+2026/10/23 16:52:30 🐳 Creating container for image postgres:17.11-alpine
+2026/10/23 16:52:31 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/10/23 16:52:31 ✅ Container created: 8a5dd0b0b4de
+2026/10/23 16:52:31 🐳 Starting container: 8a5dd0b0b4de
+2026/10/23 16:52:31 ✅ Container started: 8a5dd0b0b4de
+2026/10/23 16:52:31 ⏳ Waiting for container id 8a5dd0b0b4de image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/10/23 16:52:31 Shell not found in container
+2026/10/23 16:52:31 🔔 Container is ready: 8a5dd0b0b4de
+2026/10/23 16:52:31 ✅ Container created: d54e304d9037
+2026/10/23 16:52:31 🐳 Starting container: d54e304d9037
+2026/10/23 16:52:31 ✅ Container started: d54e304d9037
+2026/10/23 16:52:31 ⏳ Waiting for container id d54e304d9037 image: postgres:17.11-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/10/23 16:52:33 🔔 Container is ready: d54e304d9037
+=== NAME  TestDexWorkerRealChartRollout
+    dex_rollout_integration_test.go:180: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32846/testdb_tpl_9f7f0b26a3d005b657c85195166c50dd_inst_4184ae69?sslmode=disable
+    dex_rollout_integration_test.go:228: owned namespace=dex-contract-c472dd49 real chart bootstrap ready
+=== RUN   TestDexWorkerRealChartRollout/registration_rolls_and_enables_matching_provider
+=== RUN   TestDexWorkerRealChartRollout/fresh_apply_fixed_point
+=== RUN   TestDexWorkerRealChartRollout/foreign_secret_fields_survive_metadata_repair
+=== RUN   TestDexWorkerRealChartRollout/connector_mutation_restores_enabled_provider
+=== RUN   TestDexWorkerRealChartRollout/failed_rollout_stays_disabled_then_retry_converges
+=== RUN   TestDexWorkerRealChartRollout/manual_disable_survives_apply
+=== RUN   TestDexWorkerRealChartRollout/stale_operation_never_writes_kubernetes
+--- PASS: TestDexWorkerRealChartRollout (88.92s)
+    --- PASS: TestDexWorkerRealChartRollout/registration_rolls_and_enables_matching_provider (13.42s)
+    --- PASS: TestDexWorkerRealChartRollout/fresh_apply_fixed_point (0.31s)
+    --- PASS: TestDexWorkerRealChartRollout/foreign_secret_fields_survive_metadata_repair (13.50s)
+    --- PASS: TestDexWorkerRealChartRollout/connector_mutation_restores_enabled_provider (13.97s)
+    --- PASS: TestDexWorkerRealChartRollout/failed_rollout_stays_disabled_then_retry_converges (14.04s)
+    --- PASS: TestDexWorkerRealChartRollout/manual_disable_survives_apply (13.46s)
+    --- PASS: TestDexWorkerRealChartRollout/stale_operation_never_writes_kubernetes (0.03s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	90.649s

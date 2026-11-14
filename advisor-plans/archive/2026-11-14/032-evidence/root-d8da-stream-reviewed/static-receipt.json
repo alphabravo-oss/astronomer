@@ -1,0 +1,50 @@
+{
+  "sourceCommit": "d8da8574dad2c7f020bd05ee323d6d8f099380ad",
+  "steps": [
+    {
+      "name": "airgap",
+      "argv": [
+        "python3",
+        "scripts/tests/airgap_kit_test.py"
+      ],
+      "exitCode": 0,
+      "sha256": "601c4a17fbaee4ac6716c84b1e27e5b072858c32d6c7ce9e46c1411b1bf9df0d"
+    },
+    {
+      "name": "mirror",
+      "argv": [
+        "python3",
+        "scripts/tests/mirror_release_test.py"
+      ],
+      "exitCode": 0,
+      "sha256": "a789193d08c0ee03b746c3448b9271dd13e630b48b5793d959f845aae9606249"
+    },
+    {
+      "name": "boundary",
+      "argv": [
+        "node",
+        "scripts/check-dependency-boundaries.mjs"
+      ],
+      "exitCode": 0,
+      "sha256": "09bd3e06cb59bc74f8306381493c70abacdd3f6a7ebdfbfebc56efdc623fba9d"
+    },
+    {
+      "name": "complexity",
+      "argv": [
+        "node",
+        "scripts/check-complexity-budget.mjs"
+      ],
+      "exitCode": 0,
+      "sha256": "29a1fa6d971dd414e86ea04ad1ca10927982078ef443346125ff103d47f22bb4"
+    },
+    {
+      "name": "docs",
+      "argv": [
+        "make",
+        "docs-check"
+      ],
+      "exitCode": 0,
+      "sha256": "768a3e3779fd887b05e0018f804ca39ebafb19cd0d776946281308ab304f7235"
+    }
+  ]
+}

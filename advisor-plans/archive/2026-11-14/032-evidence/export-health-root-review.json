@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "sourceReviewed": "827c706ed76a527bbe48d245ff5aa8ddd5037cc3 + 33b47ec846c6b2e16ba62b2314aa92811a3f8ec3",
+  "rootIntegratedCommit": "38fb43d08c598e7ec0e47028c1086e2b25b1618a",
+  "independentFrozenGateCommit": "cd101917503a6dfd1b8183b8f1296289dfae81d3",
+  "sourceFiles": [
+    {
+      "path": "internal/observability/otel_tracing.go",
+      "sha256": "a4ecde99060e6b4821f8636a87215cbd0c94371e7ab77dabf7f8deba702e7255"
+    },
+    {
+      "path": "internal/observability/tracing_metrics.go",
+      "sha256": "ae9b8dfa9b5676d20e30d609fc285d16a57aac495e16fd6003bbf0a35f9befb3"
+    },
+    {
+      "path": "internal/observability/tracing_metrics_test.go",
+      "sha256": "27ee38f5cc92b4f69e248d0d9149ebdc4521da331fddbda713a5077af8739813"
+    },
+    {
+      "path": "internal/observability/otel_sdk_diagnostics_test.go",
+      "sha256": "75f8d63ab6ca68d892b1ae87a6779529920303e70d83437c1c9e00e26c313f8a"
+    },
+    {
+      "path": "internal/observability/otel_pipeline_test.go",
+      "sha256": "c4bee749903204399236882872bd5b3ed9874df2f411cf28ad4a432713ba909e"
+    },
+    {
+      "path": "deploy/chart/templates/prometheus-rules.yaml",
+      "sha256": "53eb3dce3b839a2b3dd2cb11e171c55d5e9958817ba487bdd6f46f2c782468a4"
+    },
+    {
+      "path": "deploy/trace_export_render_test.go",
+      "sha256": "7a41ba69555b19b9b137013777c5f3352be30942e480410601a2a481943e373b"
+    },
+    {
+      "path": "docs/runbooks/trace-export-failing.md",
+      "sha256": "d906cd3e438209c4a1830a3552f14cc4fade47b0130c741a46d1a44d34cb330c"
+    },
+    {
+      "path": "docs/metrics-v1.md",
+      "sha256": "bdc61be97be842fe47489e7e90c3ffc5160a6fcf11246c7435b04b09fd87ee84"
+    }
+  ],
+  "gateReceipt": "root-health-cd101917/receipt.json",
+  "review": "All source/test hunks reviewed. Nine health/alert inputs and all HTTP client Go inputs byte-match independent integrated review. Coupled HTTP includes W09 strict destination-policy reader and finite cross-origin constructor. All independent gates pass without skipped cases. Executor four raw log hashes independently checked; original synthetic SDK failure retained.",
+  "limits": [
+    "Frozen scoped packages only; no whole assembled candidate qualification.",
+    "Export counters count completed ExportSpans calls, not retry, queue-drop or durable delivery totals.",
+    "Collector runtime, complete application propagation and measured overhead remain pending."
+  ]
+}

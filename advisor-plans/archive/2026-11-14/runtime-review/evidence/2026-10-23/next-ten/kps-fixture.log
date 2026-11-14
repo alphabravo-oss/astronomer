@@ -1,0 +1,4 @@
+=== RUN   TestMonitoringK3sOverlayRendersWithKubePrometheusStack
+--- PASS: TestMonitoringK3sOverlayRendersWithKubePrometheusStack (0.28s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/deploy	0.287s

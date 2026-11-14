@@ -1,0 +1,207 @@
+./scripts/verify-enterprise.sh frontend
+
+==> Tool prerequisites and exact versions
+
+==> Frontend architecture and generated-code health
+
+> astronomer-frontend@1.2.0 code-health
+> npm run openapi:check && node ../scripts/check-frontend-raw-transport.mjs && node ../scripts/check-frontend-query-cancellation.mjs && node ../scripts/check-node-version-alignment.mjs && node ../scripts/code-health-inventory.mjs --check --verify-doc && node ../scripts/operation-task-inventory.mjs --check --verify-doc
+
+
+> astronomer-frontend@1.2.0 openapi:check
+> node ../scripts/generate-openapi-types.mjs --check && node ../scripts/generate-openapi-client.mjs --check
+
+Generated OpenAPI frontend client is current.
+Frontend raw transport inventory: 25 intentional Kubernetes adapter call(s); ordinary JSON calls must use generated operations.
+frontend query cancellation contract passed: 10 core hook modules
+Node runtime alignment passed: 24.21.0
+
+==> Frontend lint (zero errors; warnings reported)
+
+> astronomer-frontend@1.2.0 lint
+> eslint . --ext .ts,.tsx --max-warnings=0
+
+
+==> Frontend type-check
+
+> astronomer-frontend@1.2.0 type-check
+> tsc --noEmit
+
+
+==> Frontend unit tests
+
+> astronomer-frontend@1.2.0 format:test
+> node --test scripts/check-staged-formatting.test.mjs
+
+✔ staged formatting checks index blobs, ignores generated files and never rewrites (662.471449ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 732.900956
+
+> astronomer-frontend@1.2.0 test
+> vitest run
+
+
+ RUN  v5.0.0 /root/astronomer-all/astronomer/frontend
+
+ ❯ src/components/ui/__tests__/design-system-adoption.test.ts (8 tests | 3 failed) 133ms
+   ❯ design-system adoption (6)
+     × src/routes/dashboard/delivery/targets/$targetId/index.tsx uses ActionButton for page actions 10ms
+     × src/routes/dashboard/delivery/targets/index.tsx uses ActionButton for page actions 2ms
+     × src/routes/dashboard/delivery/sources/index.tsx uses ActionButton for page actions 2ms
+ ❯ src/routes/__tests__/operation-timeline-inventory.test.ts (5 tests | 2 failed) 18ms
+   ❯ operation timeline inventory (5)
+     × delivery/rollouts/$rolloutId/index.tsx renders the shared RolloutEventTimeline contract 10ms
+     × delivery/deployments/$deploymentId/index.tsx renders the shared DeploymentEventTimeline contract 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/routes/__tests__/operation-timeline-inventory.test.ts > operation timeline inventory > delivery/rollouts/$rolloutId/index.tsx renders the shared RolloutEventTimeline contract
+AssertionError: expected 'import { createFileRoute } from "@tan…' to contain 'RolloutEventTimeline'
+
+- Expected
++ Received
+
+- RolloutEventTimeline
++ import { createFileRoute } from "@tanstack/react-router";
++ import { RolloutDetailPage } from "./-page";
++
++ export const Route = createFileRoute(
++   "/dashboard/delivery/rollouts/$rolloutId/",
++ )({ component: RolloutDetailPage });
++
+
+ ❯ src/routes/__tests__/operation-timeline-inventory.test.ts:25:22
+     23|     (route, timeline) => {
+     24|       const source = readFileSync(join(routeRoot, route), "utf8");
+     25|       expect(source).toContain(timeline);
+       |                      ^
+     26|     },
+     27|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/routes/__tests__/operation-timeline-inventory.test.ts > operation timeline inventory > delivery/deployments/$deploymentId/index.tsx renders the shared DeploymentEventTimeline contract
+AssertionError: expected 'import { createFileRoute } from "@tan…' to contain 'DeploymentEventTimeline'
+
+- Expected
++ Received
+
+- DeploymentEventTimeline
++ import { createFileRoute } from "@tanstack/react-router";
++ import { DeploymentDetailPage } from "./-page";
++
++ export const Route = createFileRoute(
++   "/dashboard/delivery/deployments/$deploymentId/",
++ )({ component: DeploymentDetailPage });
++
+
+ ❯ src/routes/__tests__/operation-timeline-inventory.test.ts:25:22
+     23|     (route, timeline) => {
+     24|       const source = readFileSync(join(routeRoot, route), "utf8");
+     25|       expect(source).toContain(timeline);
+       |                      ^
+     26|     },
+     27|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/components/ui/__tests__/design-system-adoption.test.ts > design-system adoption > src/routes/dashboard/delivery/targets/$targetId/index.tsx uses ActionButton for page actions
+AssertionError: expected 'import { createFileRoute } from "@tan…' to contain '@/components/ui/action-button'
+
+- Expected
++ Received
+
+- @/components/ui/action-button
++ import { createFileRoute } from "@tanstack/react-router";
++ import { TargetDetailPage } from "./-page";
++
++ export const Route = createFileRoute("/dashboard/delivery/targets/$targetId/")({
++   component: TargetDetailPage,
++ });
++
+
+ ❯ src/components/ui/__tests__/design-system-adoption.test.ts:22:22
+     20|     it(`${file} uses ActionButton for page actions`, () => {
+     21|       const source = readFileSync(resolve(process.cwd(), file), "utf8"…
+     22|       expect(source).toContain("@/components/ui/action-button");
+       |                      ^
+     23|       expect(source).not.toMatch(/<button\b/);
+     24|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/components/ui/__tests__/design-system-adoption.test.ts > design-system adoption > src/routes/dashboard/delivery/targets/index.tsx uses ActionButton for page actions
+AssertionError: expected 'import { createFileRoute } from "@tan…' to contain '@/components/ui/action-button'
+
+- Expected
++ Received
+
+- @/components/ui/action-button
++ import { createFileRoute } from "@tanstack/react-router";
++ import { TargetsPage } from "./-page";
++
++ export const Route = createFileRoute("/dashboard/delivery/targets/")({
++   component: TargetsPage,
++ });
++
+
+ ❯ src/components/ui/__tests__/design-system-adoption.test.ts:22:22
+     20|     it(`${file} uses ActionButton for page actions`, () => {
+     21|       const source = readFileSync(resolve(process.cwd(), file), "utf8"…
+     22|       expect(source).toContain("@/components/ui/action-button");
+       |                      ^
+     23|       expect(source).not.toMatch(/<button\b/);
+     24|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/components/ui/__tests__/design-system-adoption.test.ts > design-system adoption > src/routes/dashboard/delivery/sources/index.tsx uses ActionButton for page actions
+AssertionError: expected 'import { createFileRoute } from "@tan…' to contain '@/components/ui/action-button'
+
+- Expected
++ Received
+
+- @/components/ui/action-button
++ import { createFileRoute } from "@tanstack/react-router";
++ import { SourcesPage } from "./-page";
++
++ export const Route = createFileRoute("/dashboard/delivery/sources/")({
++   validateSearch: (search: Record<string, unknown>) => {
++     const project = typeof search.project === "string" ? search.project : null;
++     const status = typeof search.status === "string" ? search.status : null;
++     return {
++       ...(project ? { project } : {}),
++       ...(status ? { status } : {}),
++     };
++   },
++   component: SourcesPage,
++ });
++
+
+ ❯ src/components/ui/__tests__/design-system-adoption.test.ts:22:22
+     20|     it(`${file} uses ActionButton for page actions`, () => {
+     21|       const source = readFileSync(resolve(process.cwd(), file), "utf8"…
+     22|       expect(source).toContain("@/components/ui/action-button");
+       |                      ^
+     23|       expect(source).not.toMatch(/<button\b/);
+     24|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed | 287 passed (289)
+      Tests  5 failed | 1787 passed (1792)
+   Start at  23:23:09
+   Duration  253.88s (environment 41%, import 36%, tests 15%, setup 5%, transform 3%)
+
+Environment  jsdom was created 289 times · 194.90s total, 41% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+make: *** [Makefile:170: verify-enterprise] Error 1

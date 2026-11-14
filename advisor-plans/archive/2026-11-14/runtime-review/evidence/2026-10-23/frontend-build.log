@@ -1,0 +1,103 @@
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 4480 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../tmp/astronomer-frontend-audit-dist/assets/jetbrains-mono-cyrillic-ext-wght-normal-EocZY2iu.woff2      2.02 kB
+../../../../tmp/astronomer-frontend-audit-dist/index.html                                                         4.97 kB │ gzip:   1.13 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2        7.50 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2             9.00 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2                10.25 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2                 11.23 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2         12.10 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2        15.19 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2                  18.74 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-greek-wght-normal-CkhJZR-_.woff2                     18.99 kB
+../../../../tmp/astronomer-frontend-audit-dist/.vite/manifest.json                                               24.17 kB │ gzip:   2.96 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2              25.96 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2            40.40 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-latin-wght-normal-Dx4kXJAl.woff2                     48.25 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2                 85.06 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/terminal-CWmg1heY.css                                       7.97 kB │ gzip:   2.11 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/index-huU2uYUa.css                                        118.24 kB │ gzip:  18.70 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/feature-flags-DAYXlW8D.js                                   0.10 kB │ gzip:   0.12 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/useRouter-CzTOuJdZ.js                                       0.14 kB │ gzip:   0.13 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/check-CquZ640R.js                                           0.15 kB │ gzip:   0.15 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/chevron-down-D-5L_5Bu.js                                    0.15 kB │ gzip:   0.15 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/x-u9XR48Bi.js                                               0.18 kB │ gzip:   0.16 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/arrow-down-B3Q-KRUo.js                                      0.19 kB │ gzip:   0.17 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/search-H3Fc-nRS.js                                          0.20 kB │ gzip:   0.18 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/useNavigate-D8rA6VVE.js                                     0.21 kB │ gzip:   0.18 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/cn-CPe4PNk0.js                                              0.25 kB │ gzip:   0.20 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/circle-x-CrUCScMs.js                                        0.25 kB │ gzip:   0.20 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/download-BVRiUkdx.js                                        0.26 kB │ gzip:   0.21 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/circle-alert-B2xybxTn.js                                    0.30 kB │ gzip:   0.21 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/triangle-alert-CkVeSXtJ.js                                  0.32 kB │ gzip:   0.24 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/refresh-cw-DjWMWlN3.js                                      0.34 kB │ gzip:   0.24 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/jsx-runtime-COQnYV8f.js                                     0.42 kB │ gzip:   0.29 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/copy-B3QTQilG.js                                            0.44 kB │ gzip:   0.31 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/bare-button-3-cV_k6W.js                                     0.44 kB │ gzip:   0.32 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/useLocation-BQLm4CgC.js                                     0.61 kB │ gzip:   0.38 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/input-CneJxnkS.js                                           0.69 kB │ gzip:   0.41 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/browser-state-ImeiBx0s.js                                   0.75 kB │ gzip:   0.46 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/textarea-CjwfpuQA.js                                        0.82 kB │ gzip:   0.48 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/store-BuTdyF8U.js                                           0.85 kB │ gzip:   0.40 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/star-DiwdnT1G.js                                            0.89 kB │ gzip:   0.44 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/status-store-DZGjxrJF.js                                    1.20 kB │ gzip:   0.59 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/auth-DgS9HVTt.js                                            1.40 kB │ gzip:   0.72 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/resources-Byo2y4P0.js                                       1.51 kB │ gzip:   0.72 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/preload-helper-BLdHbfdN.js                                  1.51 kB │ gzip:   0.79 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/skeleton-CCeOfgWN.js                                        1.60 kB │ gzip:   0.64 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/useSelector-CqhmnrdQ.js                                     1.88 kB │ gzip:   0.82 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/action-button-Cm8PQMvY.js                                   2.13 kB │ gzip:   1.05 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/permissions-CdwK8U-3.js                                     2.27 kB │ gzip:   0.86 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/theme-v0TuWqbD.js                                           2.81 kB │ gzip:   1.37 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/user-preferences-BNkt5JtK.js                                2.99 kB │ gzip:   1.34 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/exec-tab-Bhh-cYm7.js                                        3.08 kB │ gzip:   1.24 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/modal-shell-BerWhoTo.js                                     3.91 kB │ gzip:   1.66 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/extensions-B2LbmEO3.js                                      4.00 kB │ gzip:   1.34 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/header-cluster-actions-tj-5EeMK.js                          4.31 kB │ gzip:   1.84 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/dist-BB7GfFB0.js                                            5.21 kB │ gzip:   1.95 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/command-palette-dialog-DhyfymDE.js                          5.25 kB │ gzip:   2.14 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/query-states-Fy7EZc0y.js                                    5.29 kB │ gzip:   2.10 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/useMutation-DAdFi4w_.js                                     5.70 kB │ gzip:   1.82 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/-create-target-dialog-ww-Vt2AU.js                           6.36 kB │ gzip:   2.13 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/-native-rules-tab-BgFwFHk4.js                               7.24 kB │ gzip:   2.84 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/empty-state-BfK7WyAo.js                                     7.75 kB │ gzip:   3.43 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/operation-mutation-BdvV5o7h.js                              8.32 kB │ gzip:   3.15 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/react-sySUN5R7.js                                           8.53 kB │ gzip:   3.28 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/logs-tab-3rR8KfCU.js                                        9.12 kB │ gzip:   3.25 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/cluster-shell-By97dk4R.js                                  10.39 kB │ gzip:   3.60 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/charlie-admin-Dmwmsk5o.js                                  10.83 kB │ gzip:   3.61 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/clusters-D5w9ZEWd.js                                       11.93 kB │ gzip:   3.84 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/es2015-BIXnUwhX.js                                         13.62 kB │ gzip:   5.32 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/monaco-editor-M65EeQGE.js                                  13.97 kB │ gzip:   4.76 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/utils-CyeGGNFf.js                                          27.33 kB │ gzip:   8.57 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/toast-Dz-Sq2fA.js                                          34.41 kB │ gzip:   9.62 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/query-keys-s-XDS0ca.js                                     35.83 kB │ gzip:  10.99 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/charlie-drawer-BHJPH8dR.js                                 36.69 kB │ gzip:  10.80 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/wasm-inline-DSUyFn1L.js                                    36.89 kB │ gzip:  14.93 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/data-table-BaUgSeKg.js                                     37.91 kB │ gzip:  11.91 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/guided-resource-form-CW-vuMtQ.js                           38.52 kB │ gzip:   8.50 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/lock-CivIi_Yv.js                                           55.38 kB │ gzip:  19.75 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/form-0s1eKPi2.js                                           72.52 kB │ gzip:  17.99 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/dist-SY0paKdp.js                                           91.42 kB │ gzip:  31.03 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/terminal-DhARx1-Q.js                                      107.60 kB │ gzip:  30.91 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/data-table-BavTP6R9.js                                    160.40 kB │ gzip:  45.10 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/client-C5yVsQAT.js                                        237.24 kB │ gzip:  44.20 kB
+../../../../tmp/astronomer-frontend-audit-dist/assets/index-DofE7fxY.js                                       2,866.46 kB │ gzip: 750.91 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 650 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0mnode_modules/js-yaml/dist/js-yaml.mjs is dynamically imported by src/components/resources/create-resource-dialog.tsx, src/components/ui/yaml-view-dialog.tsx, src/lib/api/kubernetes-proxy.ts, src/lib/k8s-clone.ts but also statically imported by src/components/clusters/tool-install-page.tsx, src/components/clusters/tool-install-values.ts, src/components/clusters/tool-values.ts, src/components/monitoring/stack-preview-dialog.tsx, src/lib/helm-values-schema.ts, ..., dynamic import will not move module into another chunk.
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/components/extensions/DeclarativeWidget.tsx is dynamically imported by src/components/extensions/ExtensionSlot.tsx but also statically imported by src/routes/dashboard/extensions/$name/-page.tsx, dynamic import will not move module into another chunk.
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/components/extensions/SandboxedExtension.tsx is dynamically imported by src/components/extensions/ExtensionSlot.tsx but also statically imported by src/routes/dashboard/extensions/$name/-page.tsx, dynamic import will not move module into another chunk.
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/components/resources/create-resource-dialog.tsx is dynamically imported by src/components/layout/header-cluster-actions.tsx, src/components/resources/resource-action-menu.tsx, src/components/resources/resource-detail-edit-actions.tsx but also statically imported by src/components/resources/generic-resource-table.tsx, src/components/resources/resource-gateway-tables.tsx, src/components/resources/resource-network-tables.tsx, src/components/resources/resource-storage-tables.tsx, src/components/resources/workload-table-dialogs.tsx, dynamic import will not move module into another chunk.
+
+✓ built in 2.65s

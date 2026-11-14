@@ -1,0 +1,16 @@
+golangci-lint run ./...
+internal/drcrypto/keybundle.go:55:1: cognitive complexity 27 of func `listKeyFiles` is high (> 20) (gocognit)
+func listKeyFiles(source string) ([]string, error) {
+^
+internal/drcrypto/keybundle_catalog_test.go:12:1: cognitive complexity 36 of func `TestKeyBundleCatalogTrustRoundTrip` is high (> 20) (gocognit)
+
+^
+internal/drcrypto/keybundle_catalog_test.go:55:1: cognitive complexity 26 of func `TestKeyBundleCatalogTrustRejectsUnsafeArchives` is high (> 20) (gocognit)
+
+^
+internal/drcrypto/keybundle_catalog_test.go:140:1: cognitive complexity 31 of func `TestKeyBundleCatalogTrustLimits` is high (> 20) (gocognit)
+func TestKeyBundleCatalogTrustRejectsUnsafeSources(t *testing.T) {
+^
+4 issues:
+* gocognit: 4
+make: *** [Makefile:108: lint] Error 1

@@ -1,0 +1,33 @@
+{
+  "source_commit": "aad5bd60ba5b32a377741f99b6b15d4ec134ef08",
+  "started_at": "2026-10-09T22:13:40.654202+00:00",
+  "completed_at": "2026-10-09T22:13:55.092664+00:00",
+  "postgres_major": 18,
+  "cluster": "plan032-postgres18",
+  "database": "plan032_w09_review18",
+  "schema": "72|f",
+  "race": true,
+  "expected": 11,
+  "terminal": {
+    "TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration": "pass",
+    "TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger": "pass",
+    "TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites": "pass",
+    "TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether": "pass",
+    "TestCatalogRolloutIntentPreservesActorScopeAndRetryIdentity": "pass",
+    "TestCatalogRollbackIntentPreservesActorScopeAndRetryIdentity": "pass",
+    "TestCatalogOperationStatusReadsExactRolloutAndDeletion": "pass",
+    "TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership": "pass",
+    "TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory": "pass",
+    "TestProjectStatusPrefersDeletionLifecycle": "pass",
+    "TestOnlyUpgradeAdvancesInstallationRevision": "pass"
+  },
+  "missing": [],
+  "failed": [],
+  "all_structured_skips": [],
+  "test_exit_code": 0,
+  "sha256": {
+    "/root/.cache/astronomer-032/qualification/cnpg36/w08-catalog-root/pg18-integration.jsonl": "f2a223eaf9ec736d95c98a571e9db0d7b07c028fff7bd8fc52a89d15436ff5f7"
+  },
+  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; Catalogapp characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim",
+  "result": "PASS"
+}

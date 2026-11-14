@@ -1,0 +1,30 @@
+{
+  "full_go_gate": {
+    "exit_code": 0,
+    "tests": 15769,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 14,
+    "passed": 15755
+  },
+  "focused_real_postgres_race": {
+    "exit_code": 0,
+    "passed": 43,
+    "skipped": 0,
+    "failed": 0
+  },
+  "security": {
+    "exit_code": 0,
+    "gosec_results": 0,
+    "reachable_vulnerabilities": 0,
+    "module_only_findings": 1,
+    "history_commits_scanned": 2304,
+    "working_source_secret_scan_exit_code": 0
+  },
+  "source_files": 93,
+  "source_changes_during_gate": [],
+  "retired_obsolete_skips": 1,
+  "remaining_legacy_dex_skips": 7,
+  "deployed": false,
+  "lifecycle_cases_not_run": 174
+}

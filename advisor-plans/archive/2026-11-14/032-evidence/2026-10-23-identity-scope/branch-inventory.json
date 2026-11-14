@@ -1,0 +1,37 @@
+[
+  {
+    "ref": "main",
+    "commit": "24124b6e874bd0470b2a5603ef992262d2028263",
+    "dex_routes_present": true,
+    "dex_deployment_present": true,
+    "shared_identity_module_present": false
+  },
+  {
+    "ref": "origin/main",
+    "commit": "040870752fc1635ecbb08d64f9e4b71538a061f4",
+    "dex_routes_present": true,
+    "dex_deployment_present": true,
+    "shared_identity_module_present": false
+  },
+  {
+    "ref": "realign/2026-10-20",
+    "commit": "b1a9bd1021da7aca39a35a3829bdf58331a8dce7",
+    "dex_routes_present": true,
+    "dex_deployment_present": true,
+    "shared_identity_module_present": false
+  },
+  {
+    "ref": "fix/2.1-runtime-verification",
+    "commit": "e2223136030fa17541e6be082a511caf444b7067",
+    "dex_routes_present": true,
+    "dex_deployment_present": true,
+    "shared_identity_module_present": false
+  },
+  {
+    "ref": "implement/033-offering-assurance",
+    "commit": "4904e8c3c4aa6beb1e50b439a7923523887ad853",
+    "dex_routes_present": true,
+    "dex_deployment_present": true,
+    "shared_identity_module_present": false
+  }
+]

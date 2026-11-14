@@ -1,0 +1,7 @@
+mise by @jdx – installing 1 tool
+mise ✓ uv@0.13.0  1.9s  uv-x86_64-unknown-linux-gnu.tar.gz
+mise ████████████████ 1/1 · installed 1 tool in 1.9s
+Resolved 63 packages in 395ms
+error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+hint: To update the lockfile, run `uv lock`.

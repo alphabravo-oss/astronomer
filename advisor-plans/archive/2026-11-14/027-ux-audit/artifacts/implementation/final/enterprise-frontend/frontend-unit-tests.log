@@ -1,0 +1,17 @@
+
+> astronomer-frontend@1.2.0 test
+> vitest run
+
+
+ RUN  v5.0.0 /root/astronomer-all/astronomer/frontend
+
+
+ Test Files  289 passed (289)
+      Tests  1792 passed (1792)
+   Start at  23:28:37
+   Duration  253.78s (environment 41%, import 36%, tests 15%, setup 5%, transform 3%)
+
+Environment  jsdom was created 289 times · 194.11s total, 41% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

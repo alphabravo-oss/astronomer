@@ -1,0 +1,101 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "dompurify": {
+      "name": "dompurify",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1242880,
+          "name": "dompurify",
+          "dependency": "dompurify",
+          "title": "DOMPurify SAFE_FOR_TEMPLATES bypass: split template expressions survive in attached shadow root content on DOM output modes",
+          "url": "https://github.com/advisories/GHSA-cg2g-xh64-v4q7",
+          "severity": "critical",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=3.4.4 <=3.4.16"
+        },
+        {
+          "source": 1242881,
+          "name": "dompurify",
+          "dependency": "dompurify",
+          "title": "DOMPurify IN_PLACE: hook that removes a parent or sibling leaves the detached subtree's event handlers armed (incomplete fix for GHSA-p98j-92pf-mc4p)",
+          "url": "https://github.com/advisories/GHSA-mrv2-3pqr-j5jr",
+          "severity": "high",
+          "cwe": [
+            "CWE-79",
+            "CWE-693"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=3.4.16"
+        },
+        {
+          "source": 1242882,
+          "name": "dompurify",
+          "dependency": "dompurify",
+          "title": "DOMPurify: SMIL attributeName=href guard is skipped when PARSER_MEDIA_TYPE is application/xhtml+xml",
+          "url": "https://github.com/advisories/GHSA-c6gr-qvv4-5v3f",
+          "severity": "low",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=3.4.16"
+        }
+      ],
+      "effects": [
+        "monaco-editor"
+      ],
+      "range": "<=3.4.16",
+      "nodes": [
+        "node_modules/dompurify"
+      ],
+      "fixAvailable": true
+    },
+    "monaco-editor": {
+      "name": "monaco-editor",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        "dompurify"
+      ],
+      "effects": [],
+      "range": ">=0.56.0-dev-20260113",
+      "nodes": [
+        "node_modules/monaco-editor"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 2,
+      "total": 2
+    },
+    "dependencies": {
+      "prod": 283,
+      "dev": 444,
+      "optional": 51,
+      "peer": 5,
+      "peerOptional": 0,
+      "total": 731
+    }
+  }
+}

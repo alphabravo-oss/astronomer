@@ -1,0 +1,55 @@
+=== RUN   TestCompositeQueryCallbacksPreserveContextAndOrder
+--- PASS: TestCompositeQueryCallbacksPreserveContextAndOrder (0.00s)
+=== RUN   TestCompositeConnectCallbacksPreserveContextAndOrder
+--- PASS: TestCompositeConnectCallbacksPreserveContextAndOrder (0.00s)
+=== RUN   TestCompositePrepareCallbacksPreserveContextAndOrder
+--- PASS: TestCompositePrepareCallbacksPreserveContextAndOrder (0.00s)
+=== RUN   TestCompositeBatchCallbacksPreserveContextAndOrder
+--- PASS: TestCompositeBatchCallbacksPreserveContextAndOrder (0.00s)
+=== RUN   TestCompositeAcquireCallbacksPreserveContextAndOrder
+--- PASS: TestCompositeAcquireCallbacksPreserveContextAndOrder (0.00s)
+=== RUN   TestCompositeDoesNotClaimUnusedOptionalInterfaces
+--- PASS: TestCompositeDoesNotClaimUnusedOptionalInterfaces (0.00s)
+=== RUN   TestCompositePreservesOptionalCallbackPayloads
+--- PASS: TestCompositePreservesOptionalCallbackPayloads (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/db	1.033s
+=== RUN   TestStartMetricsServerServesMetrics
+2026/10/09 23:35:45 INFO worker job started event=worker_job_started job=reconcile.cluster
+2026/10/09 23:35:45 INFO worker job completed event=worker_job_completed job=reconcile.cluster status=success duration_ms=0
+--- PASS: TestStartMetricsServerServesMetrics (0.04s)
+=== RUN   TestWorkerMetricsShutdownBoundsBlockedScrape
+--- PASS: TestWorkerMetricsShutdownBoundsBlockedScrape (0.04s)
+=== RUN   TestWorkerMetricsShutdownDrainsCompletedScrape
+--- PASS: TestWorkerMetricsShutdownDrainsCompletedScrape (0.00s)
+=== RUN   TestWorkerMetricsServeFailureDoesNotWaitForCancellation
+--- PASS: TestWorkerMetricsServeFailureDoesNotWaitForCancellation (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker	1.289s
+=== RUN   TestAsynqTracingPayload_RoundTrip
+--- PASS: TestAsynqTracingPayload_RoundTrip (0.00s)
+=== RUN   TestWithTracingPayload_NoActiveSpan_PassThrough
+--- PASS: TestWithTracingPayload_NoActiveSpan_PassThrough (0.00s)
+=== RUN   TestContextWithAsynqTracing_AbsentFields
+--- PASS: TestContextWithAsynqTracing_AbsentFields (0.00s)
+=== RUN   TestTracingRejectsMalformedEndpointWithoutCredentialDisclosure
+2026/10/09 23:35:45 internal_logging.go:50: "msg"="Setting tracer provider to its current value. No delegate will be configured" "error"="no delegate configured in tracer provider"
+--- PASS: TestTracingRejectsMalformedEndpointWithoutCredentialDisclosure (0.00s)
+=== RUN   TestTracingDisabledInstallsNoopProvider
+--- PASS: TestTracingDisabledInstallsNoopProvider (0.00s)
+=== RUN   TestTracingFlushesRealOTLPResourceAndSpan
+2026/10/09 23:35:45 INFO otel tracing initialized sampler_ratio=1 service_name=astronomer-fixture
+--- PASS: TestTracingFlushesRealOTLPResourceAndSpan (0.01s)
+=== RUN   TestTracingShutdownBoundsUnresponsiveCollector
+2026/10/09 23:35:45 INFO otel tracing initialized sampler_ratio=1 service_name=astronomer-go
+--- PASS: TestTracingShutdownBoundsUnresponsiveCollector (0.05s)
+=== RUN   TestTracingEndpointPreservesExplicitPathAndLegacyHostPort
+--- PASS: TestTracingEndpointPreservesExplicitPathAndLegacyHostPort (0.00s)
+=== RUN   TestInitTracing_DisabledByDefault
+--- PASS: TestInitTracing_DisabledByDefault (0.00s)
+=== RUN   TestTracingSamplerHonorsExplicitZero
+--- PASS: TestTracingSamplerHonorsExplicitZero (0.00s)
+=== RUN   TestTracingResourceCarriesDeploymentIdentity
+--- PASS: TestTracingResourceCarriesDeploymentIdentity (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/observability	1.093s

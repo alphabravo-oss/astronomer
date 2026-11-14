@@ -1,0 +1,28 @@
+[
+  {
+    "gate": "postgres-race",
+    "exitCode": 0,
+    "counts": {
+      "pass": 4
+    },
+    "passParents": 4,
+    "passCountsByPackage": {
+      "keyrotate": 4
+    },
+    "logSHA256": "9c0664dd3a27d0e05a5ec1a16d52af9381fd46b9b1ff749ee4aabf27435d245c"
+  },
+  {
+    "gate": "full-package",
+    "exitCode": 0,
+    "counts": {
+      "pass": 252
+    },
+    "passParents": 166,
+    "passCountsByPackage": {
+      "keyrotate": 27,
+      "credential": 22,
+      "auth": 203
+    },
+    "logSHA256": "ef884e4e3e0743e75cab3f4615e2e6bc246d2d053a5352feb35a8da80df7f863"
+  }
+]

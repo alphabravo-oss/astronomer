@@ -1,0 +1,253 @@
+=== RUN   TestDexDurableClaimExclusiveAndTakeover
+=== PAUSE TestDexDurableClaimExclusiveAndTakeover
+=== RUN   TestDexDurableAttemptFencesEveryWrite
+=== PAUSE TestDexDurableAttemptFencesEveryWrite
+=== RUN   TestDexDurableWorkerRejectsLostLease
+=== PAUSE TestDexDurableWorkerRejectsLostLease
+=== RUN   TestDexDurableWorkerTerminalReplay
+=== PAUSE TestDexDurableWorkerTerminalReplay
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication
+=== RUN   TestDexDurableWorkerRetryConverges
+=== PAUSE TestDexDurableWorkerRetryConverges
+=== RUN   TestDexOperationRuntimeSuccessIsTerminalAndDuplicateSafe
+=== PAUSE TestDexOperationRuntimeSuccessIsTerminalAndDuplicateSafe
+=== RUN   TestDexOperationRuntimePersistsRetryWithoutLeakingCause
+=== PAUSE TestDexOperationRuntimePersistsRetryWithoutLeakingCause
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage
+=== CONT  TestDexDurableClaimExclusiveAndTakeover
+=== CONT  TestDexOperationRuntimePersistsRetryWithoutLeakingCause
+--- PASS: TestDexOperationRuntimePersistsRetryWithoutLeakingCause (0.00s)
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-4
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-4
+=== CONT  TestDexDurableWorkerRetryConverges
+=== CONT  TestDexOperationRuntimeSuccessIsTerminalAndDuplicateSafe
+--- PASS: TestDexOperationRuntimeSuccessIsTerminalAndDuplicateSafe (0.00s)
+=== CONT  TestDexDurableWorkerTerminalReplay
+=== RUN   TestDexDurableWorkerTerminalReplay/success
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/stale_pending
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/stale_pending
+=== CONT  TestDexDurableWorkerRejectsLostLease
+=== RUN   TestDexDurableWorkerRejectsLostLease/success
+=== PAUSE TestDexDurableWorkerRejectsLostLease/success
+=== RUN   TestDexDurableWorkerRejectsLostLease/retry
+=== CONT  TestDexDurableAttemptFencesEveryWrite
+=== RUN   TestDexDurableAttemptFencesEveryWrite/success
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2#01
+=== PAUSE TestDexDurableWorkerTerminalReplay/success
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/fresh_pending
+=== PAUSE TestDexDurableWorkerRejectsLostLease/retry
+=== RUN   TestDexDurableWorkerRejectsLostLease/failure
+=== PAUSE TestDexDurableWorkerRejectsLostLease/failure
+=== CONT  TestDexDurableWorkerRejectsLostLease/success
+=== PAUSE TestDexDurableAttemptFencesEveryWrite/success
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2#01
+=== RUN   TestDexDurableWorkerTerminalReplay/failure
+=== PAUSE TestDexDurableWorkerTerminalReplay/failure
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/fresh_pending
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/stale_retry
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/stale_retry
+=== CONT  TestDexDurableWorkerRejectsLostLease/retry
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-21
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-21
+=== CONT  TestDexDurableWorkerRejectsLostLease/failure
+=== RUN   TestDexDurableAttemptFencesEveryWrite/retry
+=== CONT  TestDexDurableWorkerTerminalReplay/failure
+=== CONT  TestDexDurableWorkerTerminalReplay/success
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/fresh_retry
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/fresh_retry
+=== PAUSE TestDexDurableAttemptFencesEveryWrite/retry
+=== RUN   TestDexDurableAttemptFencesEveryWrite/failure
+=== PAUSE TestDexDurableAttemptFencesEveryWrite/failure
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/expired_running
+=== RUN   TestDexDurableAttemptFencesEveryWrite/phase
+=== PAUSE TestDexDurableAttemptFencesEveryWrite/phase
+=== CONT  TestDexDurableAttemptFencesEveryWrite/success
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/expired_running
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/active_running
+=== CONT  TestDexDurableAttemptFencesEveryWrite/phase
+=== CONT  TestDexDurableAttemptFencesEveryWrite/retry
+=== CONT  TestDexDurableAttemptFencesEveryWrite/failure
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/active_running
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/succeeded
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/succeeded
+=== RUN   TestDexDurableRecoverySelectionAndDeduplication/failed
+=== PAUSE TestDexDurableRecoverySelectionAndDeduplication/failed
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/expired_running
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/failed
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/active_running
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/succeeded
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-22
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-22
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-55
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-55
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-109
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-109
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-73
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-73
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-58
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-58
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-64
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-64
+=== RUN   TestDexOperationRejectsInvalidPayloadBeforeStorage/case-1080
+=== PAUSE TestDexOperationRejectsInvalidPayloadBeforeStorage/case-1080
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/fresh_retry
+2026/10/23 14:12:14 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.1.3
+  API Version: 1.52
+  Operating System: Ubuntu 26.04 LTS
+  Total Memory: 31331 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 102075dd626fab3ade08b998fa5e00d4e190ac5db690103eee0d310bcaf89359
+  Test ProcessID: 1b900955-3e14-4b19-9dc9-1cda7fa84743
+2026/10/23 14:12:14 🐳 Creating container for image postgres:17.11-alpine
+2026/10/23 14:12:14 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/10/23 14:12:15 ✅ Container created: 0a02b0e782cc
+2026/10/23 14:12:15 🐳 Starting container: 0a02b0e782cc
+2026/10/23 14:12:15 ✅ Container started: 0a02b0e782cc
+2026/10/23 14:12:15 ⏳ Waiting for container id 0a02b0e782cc image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/10/23 14:12:15 Shell not found in container
+2026/10/23 14:12:15 🔔 Container is ready: 0a02b0e782cc
+2026/10/23 14:12:15 ✅ Container created: d9297b4b5a54
+2026/10/23 14:12:15 🐳 Starting container: d9297b4b5a54
+2026/10/23 14:12:15 ✅ Container started: d9297b4b5a54
+2026/10/23 14:12:15 ⏳ Waiting for container id d9297b4b5a54 image: postgres:17.11-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/10/23 14:12:17 🔔 Container is ready: d9297b4b5a54
+=== NAME  TestDexDurableWorkerRetryConverges
+    dex_operation_durability_integration_test.go:255: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_b3d7fd75?sslmode=disable
+=== NAME  TestDexDurableAttemptFencesEveryWrite/failure
+    dex_operation_durability_integration_test.go:82: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_8945efe0?sslmode=disable
+=== NAME  TestDexDurableWorkerRejectsLostLease/success
+    dex_operation_durability_integration_test.go:126: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_37fb3c07?sslmode=disable
+=== NAME  TestDexDurableAttemptFencesEveryWrite/success
+    dex_operation_durability_integration_test.go:82: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_c3a3e3a5?sslmode=disable
+=== NAME  TestDexDurableAttemptFencesEveryWrite/phase
+    dex_operation_durability_integration_test.go:82: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_fa466bf5?sslmode=disable
+=== NAME  TestDexDurableWorkerRejectsLostLease/retry
+    dex_operation_durability_integration_test.go:126: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_dfca73e8?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/succeeded
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_9b00422a?sslmode=disable
+=== NAME  TestDexDurableWorkerTerminalReplay/success
+    dex_operation_durability_integration_test.go:160: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_3b9a128e?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/fresh_retry
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_b051deb3?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/active_running
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_50a2ed41?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/failed
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_3633e165?sslmode=disable
+=== NAME  TestDexDurableClaimExclusiveAndTakeover
+    dex_operation_durability_integration_test.go:48: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_7bff22c9?sslmode=disable
+=== NAME  TestDexDurableWorkerTerminalReplay/failure
+    dex_operation_durability_integration_test.go:160: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_38fee46f?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/expired_running
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_488cb2d1?sslmode=disable
+=== NAME  TestDexDurableWorkerRejectsLostLease/failure
+    dex_operation_durability_integration_test.go:126: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_1da05558?sslmode=disable
+=== NAME  TestDexDurableAttemptFencesEveryWrite/retry
+    dex_operation_durability_integration_test.go:82: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_188855b1?sslmode=disable
+--- PASS: TestDexDurableWorkerRetryConverges (6.42s)
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/stale_retry
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/fresh_pending
+=== CONT  TestDexDurableRecoverySelectionAndDeduplication/stale_pending
+--- PASS: TestDexDurableWorkerTerminalReplay (0.00s)
+    --- PASS: TestDexDurableWorkerTerminalReplay/failure (6.44s)
+    --- PASS: TestDexDurableWorkerTerminalReplay/success (6.45s)
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-1080
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-64
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-73
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-109
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-58
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-22
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-21
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2#01
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-55
+=== CONT  TestDexOperationRejectsInvalidPayloadBeforeStorage/case-4
+--- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-1080 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-73 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-64 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-109 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-22 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-58 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-21 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-2#01 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-55 (0.00s)
+    --- PASS: TestDexOperationRejectsInvalidPayloadBeforeStorage/case-4 (0.00s)
+--- PASS: TestDexDurableWorkerRejectsLostLease (0.00s)
+    --- PASS: TestDexDurableWorkerRejectsLostLease/failure (6.46s)
+    --- PASS: TestDexDurableWorkerRejectsLostLease/retry (6.47s)
+    --- PASS: TestDexDurableWorkerRejectsLostLease/success (6.52s)
+--- PASS: TestDexDurableAttemptFencesEveryWrite (0.00s)
+    --- PASS: TestDexDurableAttemptFencesEveryWrite/phase (6.46s)
+    --- PASS: TestDexDurableAttemptFencesEveryWrite/failure (6.48s)
+    --- PASS: TestDexDurableAttemptFencesEveryWrite/success (6.50s)
+    --- PASS: TestDexDurableAttemptFencesEveryWrite/retry (6.54s)
+--- PASS: TestDexDurableClaimExclusiveAndTakeover (6.55s)
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/stale_retry
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_dca4d4dc?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/fresh_pending
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_b9bc938b?sslmode=disable
+=== NAME  TestDexDurableRecoverySelectionAndDeduplication/stale_pending
+    dex_operation_durability_integration_test.go:210: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32830/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_3f630ec3?sslmode=disable
+--- PASS: TestDexDurableRecoverySelectionAndDeduplication (0.00s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/succeeded (6.46s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/failed (6.47s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/fresh_retry (6.47s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/expired_running (6.54s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/active_running (6.57s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/fresh_pending (0.31s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/stale_retry (0.36s)
+    --- PASS: TestDexDurableRecoverySelectionAndDeduplication/stale_pending (0.37s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	8.233s
+=== RUN   TestDexApplyQueuesDurablyWithoutKubernetesAndReplaysExactlyOnce
+--- PASS: TestDexApplyQueuesDurablyWithoutKubernetesAndReplaysExactlyOnce (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	1.451s
+=== RUN   TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore
+=== PAUSE TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore
+=== CONT  TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore
+2026/10/23 14:12:57 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.1.3
+  API Version: 1.52
+  Operating System: Ubuntu 26.04 LTS
+  Total Memory: 31331 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 102075dd626fab3ade08b998fa5e00d4e190ac5db690103eee0d310bcaf89359
+  Test ProcessID: 89d5087a-3407-4a32-b9af-9e2fcc303b7b
+2026/10/23 14:12:57 🐳 Creating container for image postgres:17.11-alpine
+2026/10/23 14:12:57 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/10/23 14:12:57 ✅ Container created: 95ea898fec52
+2026/10/23 14:12:57 🐳 Starting container: 95ea898fec52
+2026/10/23 14:12:58 ✅ Container started: 95ea898fec52
+2026/10/23 14:12:58 ⏳ Waiting for container id 95ea898fec52 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/10/23 14:12:58 Shell not found in container
+2026/10/23 14:12:58 🔔 Container is ready: 95ea898fec52
+2026/10/23 14:12:58 ✅ Container created: adf910ed16e9
+2026/10/23 14:12:58 🐳 Starting container: adf910ed16e9
+2026/10/23 14:12:58 ✅ Container started: adf910ed16e9
+2026/10/23 14:12:58 ⏳ Waiting for container id adf910ed16e9 image: postgres:17.11-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/10/23 14:13:00 🔔 Container is ready: adf910ed16e9
+    dex_lifecycle_concurrency_integration_test.go:25: testdbconf: postgres://pgtdbuser:pgtdbpass@localhost:32832/testdb_tpl_6de0a74a2e7538a8f1d0ef39fb5c56d6_inst_e6f02fcd?sslmode=disable
+=== RUN   TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/enable
+=== RUN   TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/restore
+=== RUN   TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/mixed_version_connector_lifecycle_and_one_shot_bypass
+=== RUN   TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/connector_failure_is_atomic
+--- PASS: TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore (6.32s)
+    --- PASS: TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/enable (0.16s)
+    --- PASS: TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/restore (0.16s)
+    --- PASS: TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/mixed_version_connector_lifecycle_and_one_shot_bypass (0.03s)
+    --- PASS: TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore/connector_failure_is_atomic (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	7.582s

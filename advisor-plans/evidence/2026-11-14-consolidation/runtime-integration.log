@@ -1,0 +1,101 @@
+=== RUN   TestClusterAppsProjectsDeliveryBeforePagination
+=== PAUSE TestClusterAppsProjectsDeliveryBeforePagination
+=== CONT  TestClusterAppsProjectsDeliveryBeforePagination
+2026/11/14 04:15:04 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.1.3
+  API Version: 1.52
+  Operating System: Ubuntu 26.04 LTS
+  Total Memory: 31331 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 2f464142e9129496b077977fcd7e2e05899701762afaceff017c9b30bb9236de
+  Test ProcessID: 8417a9bc-32f9-4f59-a86b-91a60032506b
+2026/11/14 04:15:04 🐳 Creating container for image postgres:17.11-alpine
+2026/11/14 04:15:04 ⏳ Waiting for Reaper "3b0e0788" to be ready
+2026/11/14 04:15:04 🔥 Reaper obtained from Docker for this test session 3b0e0788
+2026/11/14 04:15:04 ✅ Container created: beb1cb3c454b
+2026/11/14 04:15:04 🐳 Starting container: beb1cb3c454b
+2026/11/14 04:15:04 ✅ Container started: beb1cb3c454b
+2026/11/14 04:15:04 ⏳ Waiting for container id beb1cb3c454b image: postgres:17.11-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/11/14 04:15:06 🔔 Container is ready: beb1cb3c454b
+    catalog_app_projection_integration_test.go:19: testdbconf: [DISPOSABLE_POSTGRES_DSN_REDACTED]
+--- PASS: TestClusterAppsProjectsDeliveryBeforePagination (4.72s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	6.284s
+=== RUN   TestDisposableDatabaseRestoreAndRequiredKeyGates
+=== PAUSE TestDisposableDatabaseRestoreAndRequiredKeyGates
+=== CONT  TestDisposableDatabaseRestoreAndRequiredKeyGates
+2026/11/14 04:15:03 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.1.3
+  API Version: 1.52
+  Operating System: Ubuntu 26.04 LTS
+  Total Memory: 31331 MB
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: 2f464142e9129496b077977fcd7e2e05899701762afaceff017c9b30bb9236de
+  Test ProcessID: 294e98b2-8c52-4068-bbfb-1127dbac1b4e
+2026/11/14 04:15:03 🐳 Creating container for image postgres:17.11-alpine
+2026/11/14 04:15:04 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/11/14 04:15:04 ✅ Container created: 3b0e078888b2
+2026/11/14 04:15:04 🐳 Starting container: 3b0e078888b2
+2026/11/14 04:15:04 ✅ Container started: 3b0e078888b2
+2026/11/14 04:15:04 ⏳ Waiting for container id 3b0e078888b2 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/11/14 04:15:04 Shell not found in container
+2026/11/14 04:15:04 🔔 Container is ready: 3b0e078888b2
+2026/11/14 04:15:04 ✅ Container created: 7ee9091fec08
+2026/11/14 04:15:04 🐳 Starting container: 7ee9091fec08
+2026/11/14 04:15:04 ✅ Container started: 7ee9091fec08
+2026/11/14 04:15:04 ⏳ Waiting for container id 7ee9091fec08 image: postgres:17.11-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/11/14 04:15:06 🔔 Container is ready: 7ee9091fec08
+    restore_integration_test.go:96: command pg_restore failed as observed (exit 1): [NUL][NUL][NUL][NUL][NUL]�pg_restore: error: could not execute query: ERROR:  function "astronomer_event_glob_match" already exists with same argument types
+        Command was: CREATE FUNCTION public.astronomer_event_glob_match(pattern text, event_name text) RETURNS boolean
+            LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
+            AS $$
+        DECLARE
+            pattern_pos integer := 1;
+            event_pos integer := 1;
+            star_pos integer := 0;
+            retry_event_pos integer := 0;
+            pattern_len integer := length(pattern);
+            event_len integer := length(event_name);
+            token text;
+        BEGIN
+            WHILE event_pos <= event_len LOOP
+                token := CASE
+                    WHEN pattern_pos <= pattern_len THEN substr(pattern, pattern_pos, 1)
+                    ELSE ''
+                END;
+                IF token = '?' OR token = substr(event_name, event_pos, 1) THEN
+                    pattern_pos := pattern_pos + 1;
+                    event_pos := event_pos + 1;
+                ELSIF token = '*' THEN
+                    star_pos := pattern_pos;
+                    pattern_pos := pattern_pos + 1;
+                    retry_event_pos := event_pos;
+                ELSIF star_pos > 0 THEN
+                    pattern_pos := star_pos + 1;
+                    retry_event_pos := retry_event_pos + 1;
+                    event_pos := retry_event_pos;
+                ELSE
+                    RETURN false;
+                END IF;
+            END LOOP;
+        
+            WHILE pattern_pos <= pattern_len AND substr(pattern, pattern_pos, 1) = '*' LOOP
+                pattern_pos := pattern_pos + 1;
+            END LOOP;
+            RETURN pattern_pos > pattern_len;
+        END;
+        $$;
+        
+        
+    restore_integration_test.go:99: PASS: PostgreSQL 17.11, Goose 88, authenticated dump/keys, optional trust, encrypted column; missing-key/schema-mismatch/restore-error rejected. No management database or writer touched.
+2026/11/14 04:15:16 🐳 Stopping container: 7ee9091fec08
+2026/11/14 04:15:16 ✅ Container stopped: 7ee9091fec08
+2026/11/14 04:15:16 🐳 Terminating container: 7ee9091fec08
+2026/11/14 04:15:17 🚫 Container terminated: 7ee9091fec08
+--- PASS: TestDisposableDatabaseRestoreAndRequiredKeyGates (13.33s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/drcrypto	14.499s

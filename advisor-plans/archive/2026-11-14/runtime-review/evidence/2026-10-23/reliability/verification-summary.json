@@ -1,0 +1,201 @@
+{
+  "source_manifest": "source-manifest.json",
+  "source_hashes_match_after_checks": true,
+  "source_files": 25,
+  "make_check": {
+    "exit_code": 0,
+    "go_flags": "-p=4",
+    "temporary_filesystem": "private directory on root filesystem; production reserve enforced",
+    "counts": {
+      "tests": 15689,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 32,
+      "passed": 15657
+    },
+    "test_seconds": 295.843002
+  },
+  "make_security": {
+    "exit_code": 0,
+    "configured_gosec_findings": 0,
+    "reachable_vulnerabilities": 0,
+    "module_only_advisories": 1,
+    "gitleaks_commits": 2304
+  },
+  "helm_lint": {
+    "exit_code": 0
+  },
+  "pinned_flux": {
+    "runtime": "v0.110.3",
+    "cli_utils": "v1.2.3",
+    "kustomize_api": "v1.19.2",
+    "cel": "v0.26.1",
+    "synthetic_cases_passed": 15,
+    "live_status_snapshots_passed": 3,
+    "server_dry_run_passed": true,
+    "deployed": false
+  },
+  "skips_unchanged_from_auth_slice": true,
+  "skipped_cases": [
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/deploy",
+      "test": "TestApplicationMetricsPromQL",
+      "reason": "=== RUN   TestApplicationMetricsPromQL\n    application_metrics_promql_test.go:37: promtool unavailable; rendered fixtures validated, PromQL evaluation NOT RUN\n--- SKIP: TestApplicationMetricsPromQL (0.26s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/deploy",
+      "test": "TestMonitoringK3sOverlayRendersWithKubePrometheusStack",
+      "reason": "=== RUN   TestMonitoringK3sOverlayRendersWithKubePrometheusStack\n    monitoring_values_test.go:121: KPS_CHART not set; skipping upstream kube-prometheus-stack render\n--- SKIP: TestMonitoringK3sOverlayRendersWithKubePrometheusStack (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/deploy",
+      "test": "TestDBPoolAlertPromQL",
+      "reason": "=== RUN   TestDBPoolAlertPromQL\n=== PAUSE TestDBPoolAlertPromQL\n=== CONT  TestDBPoolAlertPromQL\n    db_pool_alert_test.go:40: promtool unavailable; pool alert evaluation NOT RUN\n--- SKIP: TestDBPoolAlertPromQL (0.25s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+      "test": "TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback",
+      "reason": "=== RUN   TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback\n    database_publication_artifact_test.go:127: COSIGN_BIN must select qualified actual signer\n--- SKIP: TestSelectedCosignPublicationCopiesOriginalChildrenAndFeedToCanonicalReadback (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+      "test": "TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey",
+      "reason": "=== RUN   TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey\n    database_publication_artifact_test.go:199: COSIGN_BIN must select qualified actual signer\n--- SKIP: TestSelectedCosignPublicationRejectsChangedPayloadAndWrongSigningKey (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+      "test": "TestSelectedCosignDatabaseUpdateToCanonicalLoader",
+      "reason": "=== RUN   TestSelectedCosignDatabaseUpdateToCanonicalLoader\n    database_update_loader_test.go:248: COSIGN_BIN must select the qualified producer binary\n--- SKIP: TestSelectedCosignDatabaseUpdateToCanonicalLoader (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution",
+      "test": "TestSelectedCosignProducerToVerifiedLoader",
+      "reason": "=== RUN   TestSelectedCosignProducerToVerifiedLoader\n    verified_registry_test.go:289: COSIGN_BIN must select the qualified producer binary\n--- SKIP: TestSelectedCosignProducerToVerifiedLoader (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestFetchAndIngestOCIRepoLive",
+      "reason": "=== RUN   TestFetchAndIngestOCIRepoLive\n    catalog_oci_test.go:147: network-dependent; run manually against a reachable OCI registry\n--- SKIP: TestFetchAndIngestOCIRepoLive (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion",
+      "reason": "=== RUN   TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion\n    dex_config_test.go:741: synchronous apply contract replaced by durable Dex operation worker\n--- SKIP: TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestApply_FixedPointDoesNotMutateOrRollout",
+      "reason": "=== RUN   TestApply_FixedPointDoesNotMutateOrRollout\n    dex_config_test.go:853: synchronous apply contract replaced by durable Dex operation worker\n--- SKIP: TestApply_FixedPointDoesNotMutateOrRollout (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestApply_503WhenNoK8sRequester",
+      "reason": "=== RUN   TestApply_503WhenNoK8sRequester\n    dex_config_test.go:1028: HTTP apply no longer depends on immediate tunnel availability\n--- SKIP: TestApply_503WhenNoK8sRequester (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO",
+      "reason": "=== RUN   TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO\n    dex_config_test.go:1184: synchronous apply contract replaced by durable Dex operation worker\n--- SKIP: TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestRegisterAsSSO_CreatesProviderRow",
+      "reason": "=== RUN   TestRegisterAsSSO_CreatesProviderRow\n    dex_config_test.go:1255: synchronous registration contract replaced by durable Dex operation worker\n--- SKIP: TestRegisterAsSSO_CreatesProviderRow (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestRegisterAsSSO_AtomicFailurePreservesCredentialPair",
+      "reason": "=== RUN   TestRegisterAsSSO_AtomicFailurePreservesCredentialPair\n    dex_config_test.go:1381: synchronous registration contract replaced by durable Dex operation worker\n--- SKIP: TestRegisterAsSSO_AtomicFailurePreservesCredentialPair (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges",
+      "reason": "=== RUN   TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges\n    dex_config_test.go:1415: synchronous registration contract replaced by durable Dex operation worker\n--- SKIP: TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/handler",
+      "test": "TestRegisterAsSSOPlatformConfigFailurePreservesPair",
+      "reason": "=== RUN   TestRegisterAsSSOPlatformConfigFailurePreservesPair\n    dex_config_test.go:1769: synchronous registration contract replaced by durable Dex operation worker\n--- SKIP: TestRegisterAsSSOPlatformConfigFailurePreservesPair (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+      "test": "TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation",
+      "reason": "=== RUN   TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation\n    private_repository_test.go:41: owned private Helm repository address is not configured\n--- SKIP: TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+      "test": "TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate",
+      "reason": "=== RUN   TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate\n    proxy_identity_before_test.go:34: owned private Helm proxy address is not configured\n--- SKIP: TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+      "test": "TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity",
+      "reason": "=== RUN   TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity\n    proxy_operations_test.go:30: owned private Helm proxy address is not configured\n--- SKIP: TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+      "test": "TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins",
+      "reason": "=== RUN   TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins\n    proxy_operations_test.go:49: owned private Helm proxy address is not configured\n--- SKIP: TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+      "test": "TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined",
+      "reason": "=== RUN   TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined\n    proxy_operations_test.go:69: owned private Helm proxy address is not configured\n--- SKIP: TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestPrepareInvocationActualCryptoAndCanonicalProxyComposesOneCapturedDriver",
+      "reason": "=== RUN   TestPrepareInvocationActualCryptoAndCanonicalProxyComposesOneCapturedDriver\n    invocation_crypto_linux_test.go:41: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestPrepareInvocationActualCryptoAndCanonicalProxyComposesOneCapturedDriver (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestInvocationRunActualJoinedVerificationFailureRetainsCheckpointAndRecovery",
+      "reason": "=== RUN   TestInvocationRunActualJoinedVerificationFailureRetainsCheckpointAndRecovery\n    invocation_run_crypto_linux_test.go:21: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestInvocationRunActualJoinedVerificationFailureRetainsCheckpointAndRecovery (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestInvocationRunActualCancellationCannotLaunchOrReplayConcreteStages",
+      "reason": "=== RUN   TestInvocationRunActualCancellationCannotLaunchOrReplayConcreteStages\n    invocation_run_crypto_linux_test.go:63: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestInvocationRunActualCancellationCannotLaunchOrReplayConcreteStages (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestInvocationRunAuthenticatesEveryImageBeforeOwnedDatabaseBoundary",
+      "reason": "=== RUN   TestInvocationRunAuthenticatesEveryImageBeforeOwnedDatabaseBoundary\n    invocation_verified_run_crypto_linux_test.go:38: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestInvocationRunAuthenticatesEveryImageBeforeOwnedDatabaseBoundary (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestInvocationRunRejectsOneForeignImageSignerBeforeDatabaseCapture",
+      "reason": "=== RUN   TestInvocationRunRejectsOneForeignImageSignerBeforeDatabaseCapture\n    invocation_verified_run_crypto_linux_test.go:81: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestInvocationRunRejectsOneForeignImageSignerBeforeDatabaseCapture (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/default-preview",
+      "reason": "=== RUN   TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/default-preview\n    legacy_run_linux_test.go:36: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/default-preview (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/yes-execute",
+      "reason": "=== RUN   TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/yes-execute\n    legacy_run_linux_test.go:36: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/yes-execute (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/dry-overrides-yes",
+      "reason": "=== RUN   TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/dry-overrides-yes\n    legacy_run_linux_test.go:36: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode/dry-overrides-yes (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestConcreteReleaseDriverOrdersVerifiedBackupQuiescenceApplyAndObserve",
+      "reason": "=== RUN   TestConcreteReleaseDriverOrdersVerifiedBackupQuiescenceApplyAndObserve\n    release_driver_ordered_linux_test.go:328: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestConcreteReleaseDriverOrdersVerifiedBackupQuiescenceApplyAndObserve (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestConcreteReleaseDriverFailureAfterQuiescenceRestoresOnlyOriginalOwnedReplicas",
+      "reason": "=== RUN   TestConcreteReleaseDriverFailureAfterQuiescenceRestoresOnlyOriginalOwnedReplicas\n    release_driver_ordered_linux_test.go:351: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestConcreteReleaseDriverFailureAfterQuiescenceRestoresOnlyOriginalOwnedReplicas (0.00s)\n"
+    },
+    {
+      "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+      "test": "TestInvocationActualVerifyFailureCannotInventPublicBackupReport",
+      "reason": "=== RUN   TestInvocationActualVerifyFailureCannotInventPublicBackupReport\n    sanitized_report_linux_test.go:130: owned private canonical-proxy fixture address is not configured\n--- SKIP: TestInvocationActualVerifyFailureCannotInventPublicBackupReport (0.00s)\n"
+    }
+  ]
+}

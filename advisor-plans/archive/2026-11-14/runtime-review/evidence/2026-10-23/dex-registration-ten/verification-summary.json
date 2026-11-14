@@ -1,0 +1,32 @@
+{
+  "full_go_gate": {
+    "exit_code": 0,
+    "tests": 15769,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 14,
+    "passed": 15755
+  },
+  "focused_handler_migration_race": {
+    "exit_code": 0,
+    "passed": 54,
+    "skipped": 0,
+    "failed": 0
+  },
+  "security": {
+    "exit_code": 0,
+    "gosec_findings": 0,
+    "reachable_vulnerabilities": 0,
+    "module_only_findings": 1,
+    "history_commits_scanned": 2304,
+    "working_source_secret_scan_exit_code": 0
+  },
+  "source_hash_count": 103,
+  "source_changes_during_final_gate": [],
+  "latest_embedded_migration": 86,
+  "chart_target_schema": 86,
+  "schema_sync_check_exit_code": 0,
+  "remaining_legacy_dex_skips": 7,
+  "lifecycle_cases_not_run": 174,
+  "deployed": false
+}

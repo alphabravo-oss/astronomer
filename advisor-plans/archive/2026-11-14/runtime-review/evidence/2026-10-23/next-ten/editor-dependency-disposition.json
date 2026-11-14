@@ -1,0 +1,10 @@
+{
+  "dompurify": "3.4.17",
+  "monaco-editor": "0.57.0",
+  "monaco_vendored_dompurify": "3.4.15",
+  "vendored_source_sha256": "493e9f430fbdde595f9e12ff46aa5b3606a514d5c8556eb144da69612f77fc8e",
+  "shipped_min_assets": {
+    "frontend/dist/monaco/vs/editor-BdtEMBbM.js": "e1e745003eb416b7ca6a1956a333e6f8434ff48381824858cb63c99e9c8f8acf"
+  },
+  "disposition": "OPEN: override fixes package graph; production public Monaco assets retain vendored DOMPurify 3.4.15. Negative normal-mode sanitizer tests pass; affected optional modes were not established reachable. No security waiver or complete remediation claimed."
+}

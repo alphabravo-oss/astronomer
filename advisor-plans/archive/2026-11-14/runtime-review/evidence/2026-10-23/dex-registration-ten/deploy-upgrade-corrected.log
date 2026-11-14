@@ -1,0 +1,1234 @@
+--- FAIL: TestApplicationDashboardRenderScope (0.21s)
+    --- FAIL: TestApplicationDashboardRenderScope/astronomer (0.10s)
+        application_dashboard_render_test.go:14: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestApplicationDashboardRenderScope/custom-plane (0.11s)
+        application_dashboard_render_test.go:14: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestApplicationDashboardOptOut (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestApplicationMetricsPromQL (0.09s)
+    application_metrics_promql_test.go:15: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestApplicationMetricsRenderContract (0.16s)
+    --- FAIL: TestApplicationMetricsRenderContract/astronomer (0.07s)
+        application_metrics_render_test.go:13: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestApplicationMetricsRenderContract/custom-control (0.09s)
+        application_metrics_render_test.go:13: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestApplicationMetricsOptOut (0.15s)
+    --- FAIL: TestApplicationMetricsOptOut/base (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestApplicationMetricsOptOut/rules-disabled (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestCharlieMCPListenerScaffoldingIsDormantUntilAgentInstall (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestCharliePrivatePortsAreNotInBaseNetworkPolicy (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestCharlieExpiryAlertsAreContentFreeAndDeterministic (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestCharlieNetworkIsolationIsExactInRestrictedRender (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestFluxNativeDeliveryDefaultsOnWithLocalBootstrap (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestFluxDistributionNilPublicKeyringRendersEmptyArray (0.09s)
+    chart_flux_delivery_test.go:51: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestFluxNativeDeliveryCanBeEnabledExplicitly (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionDeliveryAcceptsOfflinePinnedCosignKey (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionDeliveryAcceptsOfflineOverlappingCosignKeyring (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionDeliveryAcceptsVerifiedDisconnectedDistribution (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDeliverySourceProxyCAAndEgressAreSecretBackedAndBounded (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDatabaseUpgradePreflightIsReadOnlyAndBounded (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionWorkloadImagesAreDigestOnly (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionRejectsMissingActiveImageDigest (0.08s)
+    chart_operational_contract_test.go:122: production render did not reject mutable frontend image:
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightOwnershipUsesHelmOnly (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightHookRBACSurvivesUntilJobAndIsLeastPrivilege (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks (0.39s)
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/cert-manager_only (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/cert-manager_explicit_opt_out (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/production_references_and_external_PVC (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            - at '': 'allOf' failed
+              - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/no_live_reads (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/Dex_cutover_exact_Secret_and_legacy_ConfigMap (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestTLSCertificateOnlyIncludesConfiguredListenerHosts (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightHookUpgradeReplacementContract (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightKubernetesReadsUseBoundedExplicitSemantics (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightBoundedReadRuntimeScenarios (0.76s)
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/authorization_propagation_eventually_succeeds (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/permanent_forbidden_fails_closed_after_bound (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/transport_failure_fails_closed_after_bound (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/actual_missing_Gateway_CRD_is_terminal_absence (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/actual_missing_cert-manager_CRD (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/trusted_CA_Secret_forbidden_is_not_missing (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/legacy_PVC_genuine_absence_is_allowed (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/legacy_PVC_forbidden_fails_closed (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/DSN_Secret_forbidden_is_not_missing (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            - at '': 'allOf' failed
+              - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/DSN_Secret_success_validates_TLS_without_disclosure (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            - at '': 'allOf' failed
+              - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestServiceAccountAndRuntimeRBACAreManagedReleaseResources (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestBootstrapSecretAndServerEnvAreWired (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestRenderedContainersDeclareImagePullPolicy (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestGlobalImageRegistryAndPullPolicyApplyToCoreImages (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestBundledPostgresMaxConnectionsIsDeclarative (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestSharedGatewayRoutesWithoutOwningGatewayOrTLS (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionCoreWorkloadsHaveNodeLevelHAContracts (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestEveryRenderedContainerHasCPUAndMemoryBounds (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestSecretsCarryResourcePolicyKeep (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionRequiresBackupsWired (0.16s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionRequiresKeyWrapWhenBackupsEnabled (0.15s)
+    chart_operational_contract_test.go:1109: production render accepted a database-only backup:
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionRequiresSeparateRetentionIdentity (0.08s)
+    chart_operational_contract_test.go:1137: production render reused the writer identity for retention:
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestWorkerDeploymentHasProbes (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestWorkerConcurrencySchemaAndRuntimeWiring (0.15s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestInternalPSKRotationRendersVerificationOnlyPredecessor (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestValuesSchemaAcceptsProductionWiring (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionPreflightNetworkPolicyRequiresNarrowAPICIDRs (0.25s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestEventRelayQueueCapacitySchemaAndServerWiring (0.17s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestAstronomerChartArchiveRendersOffline (0.10s)
+    chartrepo_test.go:110: offline embedded chart render failed: exit status 1
+--- FAIL: TestCompactProfileUsesSingleCNPGAndBoundedPools (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestCNPGUpgradeValidatesTargetBeforeAcceptingRetainedPVC (0.07s)
+    compact_profile_test.go:37: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRendersHardenedHookSecurityContexts (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRendersHardenedBackupJobSecurityContexts (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName (0.07s)
+    dex_runtime_secret_render_test.go:35: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexBundledIdentityTracksCustomReleaseNamespaceAndRuntimeName (0.07s)
+    dex_runtime_secret_render_test.go:94: render: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData (0.07s)
+    dex_runtime_secret_render_test.go:110: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable (0.08s)
+    dex_runtime_secret_render_test.go:163: render cutover: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexFreshInstallNeverRendersLegacyConfigMap (0.07s)
+    dex_runtime_secret_render_test.go:223: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexFreshInstallStagesCredentialFreeBootstrapConfig (0.07s)
+    dex_runtime_secret_render_test.go:231: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexCRDInstallerUsesClusterScopedRBAC (0.07s)
+    dex_runtime_secret_render_test.go:259: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexRenderedReleaseNeverArchivesCredentialCanaries (0.08s)
+    dex_runtime_secret_render_test.go:356: render fresh: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDistributionMirrorPolicyAndTrustReachActualServerAndWorker (0.08s)
+    distribution_network_render_test.go:36: unexpected rejected mirror configuration: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF8_DefaultRendersChartBootstrapSecret (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF8_ExistingSecretSuppressesChartSecretAndRewiresServer (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF8_ProductionWithoutBootstrapPasswordFails (0.08s)
+    dr_chart_render_test.go:65: production render without a pinned bootstrap password did not fail on F8:
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF4_KeyBackupInertWithoutWrappingSecret (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF4_KeyBackupRendersWhenWrappingSecretWired (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF4_DrillDecryptCheckInertWithoutWrappingSecret (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestF4_DrillDecryptCheckRendersWhenWired (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestInternalDenyBackendIsResolvedAndEndpointlessByConstruction (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology (0.24s)
+    --- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology/gateway (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology/ingress (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology/no_public_routing (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestLocalLonghornLifecyclePermissionsAreBounded (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers (0.14s)
+    --- FAIL: TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers/single (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers/ha (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestCloudNativePGBarmanCloudBackupAndPITRAreOptional (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestValkeySentinelModeRendersAuthenticatedThreeNodeFailover (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestBootstrapForcePasswordChangeRenders (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementBackup_DefaultOnButInertWithoutCredentials (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementBackup_NoBucketRendersNoCronJob (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementBackup_K3dOptsOut (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementBackupEnablementPropagatesToBothProcesses (0.15s)
+    --- FAIL: TestManagementBackupEnablementPropagatesToBothProcesses/true (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestManagementBackupEnablementPropagatesToBothProcesses/false (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestManagementLoggingConfigMap_RendersForLoki (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementLoggingConfigMap_RendersForElasticsearch (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementLoggingConfigMap_RendersForSplunk (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementLoggingConfigMap_RendersForHTTP (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementLoggingDaemonSet_RespectsImageRegistry (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementLogging_DisabledRendersNothing (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementLogging_RBACGrantsExist (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestNetworkPolicyRendersNamespaceDefaultDeny (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestNetworkPolicySupportsGranularExternalEgressCIDRs (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestNetworkPolicyRendersExpectedComponentPolicies (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestWorkerNetworkPolicyAllowsOnlyManagedMonitoringAPIs (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestServerNetworkPolicyAllowsManagedPrometheusAPI (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase (0.30s)
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/fresh (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/prepare (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/cutover (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/optional_workloads (0.07s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestOptionalProductionWorkloadsHaveDedicatedNarrowPolicies (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege (0.23s)
+    --- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege/fresh (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege/prepare (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege/cutover (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestDexCleanupNonJobPrerequisitesOutliveTheJobStart (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexMigrationHookPolicySurvivesDefaultDenyDisableTransition (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDexMigrationHookPolicyDoesNotInventAPIFallbackAndDeduplicatesCIDRs (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightNetworkPolicyHookIsDeterministicAndLeastPrivilege (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightNetworkPolicyExternalPostgresAndCIDRUnion (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestPreflightNetworkPolicyDisabledModes (0.24s)
+    --- FAIL: TestPreflightNetworkPolicyDisabledModes/network_policy_disabled (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightNetworkPolicyDisabledModes/default_deny_disabled (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestPreflightNetworkPolicyDisabledModes/preflight_disabled (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestPreflightNetworkPolicyDoesNotInventAPIFallback (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartManagedDeliveryTrustedRootIsTheDefault (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestEveryChartImageIsCoveredBySignaturePolicy (0.21s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestZotRegistryRendersEveryImageFromClusterLocalHost (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestOnlineProfileKeepsOnlineDefaults (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestImageRegistryWinsOverZotAndFallbacksRender (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestRuntimeConfigChangesRollServerAndWorker (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestRuntimeConfigChecksumPreservesPodAnnotations (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartKubeVersionRangeCoversK3s137 (0.41s)
+    runtime_hardening_render_test.go:78: kube 1.32.9 accepted or failed for the wrong reason: exit status 1 level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+    runtime_hardening_render_test.go:75: kube 1.33.0 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+    runtime_hardening_render_test.go:75: kube 1.35.0 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+    runtime_hardening_render_test.go:75: kube 1.37.0 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+    runtime_hardening_render_test.go:75: kube 1.37.4 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+    runtime_hardening_render_test.go:78: kube 1.38.0 accepted or failed for the wrong reason: exit status 1 level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestCNPGNetworkPolicyDefaultsStayClosed (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestDRToolingMatchesCNPGMajor (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestSingleNodeBackupOverlayWiresRustFS (0.07s)
+    runtime_hardening_render_test.go:391: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRefusesToRenderWithoutKeyMaterial (0.08s)
+    secret_material_render_test.go:34: keyless render error missing "secrets.secretKey is empty":
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRefusesTheHistoricalDevSentinels (0.16s)
+    --- FAIL: TestChartRefusesTheHistoricalDevSentinels/signing_key (0.07s)
+        secret_material_render_test.go:61: sentinel render error missing "secrets.secretKey is the chart's published development value":
+            level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestChartRefusesTheHistoricalDevSentinels/encryption_key (0.08s)
+        secret_material_render_test.go:61: sentinel render error missing "secrets.encryptionKey contains the chart's published development age key":
+            level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestChartRendersWithOperatorSuppliedKeys (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRendersKeylessWithExistingSecret (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRejectsExistingSecretWithBundledPostgres (0.07s)
+    secret_material_render_test.go:102: unsafe bundled database Secret posture was not rejected:
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestChartRejectsNonAgeOrDevKeyringEntries (0.15s)
+    --- FAIL: TestChartRejectsNonAgeOrDevKeyringEntries/dev_key_as_previous_entry (0.07s)
+        secret_material_render_test.go:118: render error missing "published development age key":
+            level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestChartRejectsNonAgeOrDevKeyringEntries/fernet_key (0.08s)
+        secret_material_render_test.go:118: render error missing "not an age identity":
+            level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestSelfManagedImageValuesRenderWithoutRegistryRePrefix (0.07s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestReleaseDigestsRenderForEveryFirstPartyImage (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestReleaseDigestsRenderForCoreThirdPartyImages (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestReferenceOnlyChartRenderUsesNativeSecretReferences (0.07s)
+    self_managed_secret_render_test.go:39: reference-only render failed: exit status 1
+--- FAIL: TestDexRuntimeSecretNameSchemaEnforcesDNS1123Subdomain (0.45s)
+    self_managed_secret_render_test.go:89: valid 253-byte DNS subdomain rejected: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer (0.07s)
+    self_managed_secret_render_test.go:139: production reference-only render failed: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        - at '': 'allOf' failed
+          - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestAgentClusterRoleHasNoWildcardRule (0.16s)
+    --- FAIL: TestAgentClusterRoleHasNoWildcardRule/frontend.enabled=true (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestAgentClusterRoleHasNoWildcardRule/frontend.enabled=false (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestAgentClusterRoleGrantsExpectedCoreAccess (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestAgentClusterRoleExtraRulesOverrideIsAdditive (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestToolUIRoutesAllPathsToIsolatedServerAndIssuesWildcard (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestToolUIRejectsHTTPOnlyAndWildcardHTTP01 (0.08s)
+    tool_ui_render_test.go:44: unexpected error: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestTraceExportRuleUsesRenderedMetricsServiceLabels (0.16s)
+    --- FAIL: TestTraceExportRuleUsesRenderedMetricsServiceLabels/astronomer (0.08s)
+        trace_export_render_test.go:12: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestTraceExportRuleUsesRenderedMetricsServiceLabels/custom-control (0.08s)
+        trace_export_render_test.go:12: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+--- FAIL: TestDBPoolAlertPromQL (0.08s)
+    db_pool_alert_test.go:16: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: values don't meet the specifications of the schema(s) in the following chart(s):
+        astronomer:
+        - at '/preflight/databaseSchema/targetVersion': value must be 85
+        
+--- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip (0.33s)
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/flat (0.08s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/signature (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/empty_trust_fails_closed (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/both (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/ca (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: values don't meet the specifications of the schema(s) in the following chart(s):
+            astronomer:
+            - at '/preflight/databaseSchema/targetVersion': value must be 85
+            
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/deploy	18.312s
+ok  	github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli	33.211s
+FAIL

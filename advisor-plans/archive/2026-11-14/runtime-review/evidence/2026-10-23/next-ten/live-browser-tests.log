@@ -1,0 +1,29 @@
+
+Running 20 tests using 1 worker
+
+(node:2241721) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [live-auth-setup] › tests/e2e-live/live-auth.setup.ts:9:1 › bootstrap admin signs in and persists the real session (1.2s)
+(node:2241920) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: overview has no serious or critical violations (3.1s)
+  ✓   3 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: clusters has no serious or critical violations (2.7s)
+  ✓   4 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: register has no serious or critical violations (2.3s)
+  ✓   5 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: delivery has no serious or critical violations (2.8s)
+  ✓   6 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: alerting has no serious or critical violations (2.5s)
+  ✓   7 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: audit has no serious or critical violations (3.8s)
+  ✓   8 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: access-control has no serious or critical violations (3.1s)
+  ✓   9 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: agents has no serious or critical violations (2.6s)
+  ✓  10 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: settings-general has no serious or critical violations (2.4s)
+  ✓  11 [live] › tests/e2e-live/a11y.live.spec.ts:36:3 › axe: settings-platform has no serious or critical violations (2.5s)
+  ✓  12 [live] › tests/e2e-live/charlie.live.spec.ts:6:1 › Charlie is a header icon + drawer, never a FAB (1.3s)
+  ✓  13 [live] › tests/e2e-live/clusters.live.spec.ts:4:1 › cluster list renders from the live API (873ms)
+  ✓  14 [live] › tests/e2e-live/dashboard.live.spec.ts:6:1 › overview counts agree with each other and with the clusters API (1.1s)
+  ✓  15 [live] › tests/e2e-live/dashboard.live.spec.ts:56:1 › settings is two layers deep and the hub redirects to General (954ms)
+  ✓  16 [live] › tests/e2e-live/metrics.live.spec.ts:5:1 › server exposes service_build_info on the metrics listener (143ms)
+  ✓  17 [live] › tests/e2e-live/palette.live.spec.ts:5:1 › command palette opens from the header, / and Ctrl+K and navigates (2.0s)
+  ✓  18 [live] › tests/e2e-live/settings.live.spec.ts:7:1 › settings page loads for the bootstrap admin (754ms)
+  ✓  19 [live] › tests/e2e-live/shell.live.spec.ts:14:1 › global rail → cluster panel → back through the breadcrumb (1.7s)
+  ✓  20 [live] › tests/e2e-live/shell.live.spec.ts:94:1 › footer carries one product line and no Charlie FAB covers content (815ms)
+
+  20 passed (40.5s)

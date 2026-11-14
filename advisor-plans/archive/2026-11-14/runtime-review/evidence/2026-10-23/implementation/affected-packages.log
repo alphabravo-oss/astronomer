@@ -1,0 +1,14 @@
+2026/10/23 06:04:01 WARN ==================== BOOTSTRAP ADMIN CREATED ==================== username=admin email=admin@astronomer.local password_source=ASTRONOMER_BOOTSTRAP_PASSWORD
+2026/10/23 06:04:01 WARN =================================================================
+2026/10/23 06:04:01 WARN ==================== BOOTSTRAP ADMIN CREATED ==================== username=root email=admin@alphabravo.io password_source=ASTRONOMER_BOOTSTRAP_PASSWORD
+2026/10/23 06:04:01 WARN =================================================================
+2026/10/23 06:04:01 WARN ==================== BOOTSTRAP ADMIN CREATED ==================== username=admin email=admin@astronomer.local password_source=ASTRONOMER_BOOTSTRAP_PASSWORD
+2026/10/23 06:04:01 WARN =================================================================
+--- FAIL: TestStreamValidationPreservesRequestCancellation (0.00s)
+    streamauth_boundary_test.go:76: revocation lookup was not exercised
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/auth	0.999s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.302s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel	0.934s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	31.114s
+FAIL

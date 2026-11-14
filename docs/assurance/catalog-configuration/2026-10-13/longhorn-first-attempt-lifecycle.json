@@ -1,0 +1,441 @@
+{
+  "slug": "longhorn",
+  "cluster_id": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+  "project_id": "1e705e58-3723-4985-96e5-c54c702aca86",
+  "chart_id": "6de20f32-4ab3-4aea-a7bc-f0ad5eed3c00",
+  "chart_version_id": "92fc9d9c-0a5a-4272-ae3e-b30b5d755908",
+  "chart_version": "1.12.1",
+  "profile": {
+    "version": "1.12.1",
+    "available": true,
+    "recommended": true,
+    "deprecated": false,
+    "revoked": false,
+    "supportTier": "upstream",
+    "artifact": {
+      "repository": "longhorn",
+      "name": "longhorn",
+      "version": "1.12.1",
+      "digest": "sha256:c8cf4b35a9d872cd5f7e44fd26d8e6ac7c2abaee42f4e2f2a0b0ebbc6e3a6116"
+    },
+    "compatibility": {
+      "kubernetes": ">=1.31.0 <1.36.0"
+    },
+    "configuration": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "ingress": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "title": "Ingress host",
+                "default": "sslip.io"
+              },
+              "enabled": {
+                "type": "boolean",
+                "title": "Enable Ingress",
+                "default": false
+              }
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "serviceMonitor": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "title": "Create ServiceMonitor",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          "longhornUI": {
+            "type": "object",
+            "properties": {
+              "replicas": {
+                "type": "integer",
+                "title": "UI replicas",
+                "default": 2,
+                "minimum": 1
+              }
+            }
+          },
+          "persistence": {
+            "type": "object",
+            "properties": {
+              "defaultClass": {
+                "type": "boolean",
+                "title": "Default StorageClass",
+                "default": true
+              },
+              "reclaimPolicy": {
+                "enum": [
+                  "Delete",
+                  "Retain"
+                ],
+                "type": "string",
+                "title": "Reclaim policy",
+                "default": "Delete"
+              },
+              "defaultClassReplicaCount": {
+                "type": "integer",
+                "title": "Replicas per volume",
+                "default": 3,
+                "maximum": 20,
+                "minimum": 1
+              }
+            }
+          },
+          "defaultSettings": {
+            "type": "object",
+            "properties": {
+              "defaultDataPath": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "title": "Default data path",
+                "default": null,
+                "description": "Dedicated host data path. Nodes must satisfy Longhorn host prerequisites; changing this field does not prepare their disks."
+              }
+            }
+          }
+        }
+      },
+      "presets": [
+        {
+          "id": "replicated",
+          "label": "Three-replica storage",
+          "description": "Requires at least three eligible prepared nodes. Keeps existing default StorageClasses and retains released volumes. Review disk capacity and host prerequisites.",
+          "values": {
+            "persistence": {
+              "defaultClass": false,
+              "defaultClassReplicaCount": 3,
+              "reclaimPolicy": "Retain"
+            }
+          }
+        },
+        {
+          "id": "evaluation",
+          "label": "Single-node evaluation",
+          "description": "One volume replica provides no node-failure redundancy. Keeps existing default StorageClasses and retains released volumes.",
+          "values": {
+            "persistence": {
+              "defaultClass": false,
+              "defaultClassReplicaCount": 1,
+              "reclaimPolicy": "Retain"
+            },
+            "defaultSettings": {
+              "defaultDataPath": "/var/lib/astronomer-qualification/longhorn",
+              "defaultReplicaCount": "1"
+            },
+            "longhornUI": {
+              "replicas": 1
+            },
+            "csi": {
+              "attacherReplicaCount": 1,
+              "provisionerReplicaCount": 1,
+              "resizerReplicaCount": 1,
+              "snapshotterReplicaCount": 1
+            }
+          }
+        }
+      ],
+      "defaultPreset": "replicated",
+      "namespace": "longhorn-system"
+    }
+  },
+  "namespace": "longhorn-system",
+  "release_name": "qual035-longhorn",
+  "values": {
+    "persistence": {
+      "defaultClass": false,
+      "defaultClassReplicaCount": 1,
+      "reclaimPolicy": "Retain"
+    },
+    "defaultSettings": {
+      "defaultDataPath": "/var/lib/astronomer-qualification/longhorn",
+      "defaultReplicaCount": "1"
+    },
+    "longhornUI": {
+      "replicas": 1
+    },
+    "csi": {
+      "attacherReplicaCount": 1,
+      "provisionerReplicaCount": 1,
+      "resizerReplicaCount": 1,
+      "snapshotterReplicaCount": 1
+    }
+  },
+  "started_at": "2026-10-13T00:31:52Z",
+  "preview": {
+    "data": {
+      "allowed": true,
+      "application": "longhorn",
+      "artifact_digest": "c8cf4b35a9d872cd5f7e44fd26d8e6ac7c2abaee42f4e2f2a0b0ebbc6e3a6116",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "cluster_access",
+          "status": "approval",
+          "title": "Cluster-scoped access",
+          "description": "This application creates cluster-scoped or privileged resources; review is required."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required; Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:1191ce2092c2225f7140e82bf82c5dd214980980b3a1a6e0d5bb618e68712aed"
+    }
+  },
+  "installation_id": "99d929bc-b25e-4d62-837b-5e2e62076a3e",
+  "operations": [
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:31:52Z",
+      "createdAt": "2026-10-13T00:31:52Z",
+      "deliveryMessage": "stored artifact: revision 'sha256:1cd78a23fe9094492ae9b8d26533ff9a7b2482f86fa2c467505df6c0071ad866'",
+      "deliveryObservationError": "",
+      "deliveryObservedAt": "2026-10-13T00:39:10Z",
+      "deliveryPhase": "ready",
+      "errorMessage": "",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:31:52Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "install",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "da2f2928-dc27-4ef7-b643-a8d273ac21f4",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:31:52Z",
+          "detail": {
+            "clusterId": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+            "namespace": "longhorn-system",
+            "releaseName": "qual035-longhorn"
+          },
+          "id": "ce4f6887-7959-4ae9-a054-a3fb9e38c237",
+          "level": "info",
+          "message": "creating Flux-managed catalog application",
+          "stage": "delivery"
+        },
+        {
+          "createdAt": "2026-10-13T00:31:52Z",
+          "detail": {
+            "rolloutId": "5c9deff2-c763-46f2-b09e-be66e32d0740",
+            "targetId": "067a04d0-bbb9-5b6b-851e-3ad6d430643d"
+          },
+          "id": "003b7965-e128-4662-8f40-1445cebee67e",
+          "level": "info",
+          "message": "Flux rollout queued",
+          "stage": "rollout"
+        },
+        {
+          "createdAt": "2026-10-13T00:31:52Z",
+          "detail": {},
+          "id": "3d10ba5c-c963-4cba-ab33-750c1ad6df14",
+          "level": "info",
+          "message": "operation completed",
+          "stage": "complete"
+        },
+        {
+          "createdAt": "2026-10-13T00:39:10Z",
+          "detail": {
+            "errorCode": "rollout_completed",
+            "message": "stored artifact: revision 'sha256:1cd78a23fe9094492ae9b8d26533ff9a7b2482f86fa2c467505df6c0071ad866'",
+            "phase": "ready",
+            "rolloutId": "5c9deff2-c763-46f2-b09e-be66e32d0740",
+            "targetId": "067a04d0-bbb9-5b6b-851e-3ad6d430643d",
+            "terminal": true
+          },
+          "id": "delivery-ready",
+          "level": "info",
+          "message": "Flux reports the application workloads ready: stored artifact: revision 'sha256:1cd78a23fe9094492ae9b8d26533ff9a7b2482f86fa2c467505df6c0071ad866'",
+          "stage": "workloads"
+        }
+      ],
+      "id": "78d72e98-c04a-4360-8bda-500812f14d00",
+      "journalStatus": "completed",
+      "operationType": "install",
+      "startedAt": "2026-10-13T00:31:52Z",
+      "status": "completed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:31:52Z"
+    },
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:40:25Z",
+      "createdAt": "2026-10-13T00:40:25Z",
+      "errorMessage": "enable Longhorn deletion confirmation: k8s request failed with status 403: {\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"settings.longhorn.io \\\"deleting-confirmation-flag\\\" is forbidden: User \\\"system:serviceaccount:astronomer:astronomer\\\" cannot patch resource \\\"settings\\\" in API group \\\"longhorn.io\\\" in the namespace \\\"longhorn-system\\\"\",\"reason\":\"Forbidden\",\"details\":{\"name\":\"deleting-confirmation-flag\",\"group\":\"longhorn.io\",\"kind\":\"settings\"},\"code\":403}\n",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:40:25Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "uninstall",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "e2c50527-c9b7-4329-9d6a-cfed0f6cae1b",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:40:25Z",
+          "detail": {
+            "error": "enable Longhorn deletion confirmation: k8s request failed with status 403: {\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"settings.longhorn.io \\\"deleting-confirmation-flag\\\" is forbidden: User \\\"system:serviceaccount:astronomer:astronomer\\\" cannot patch resource \\\"settings\\\" in API group \\\"longhorn.io\\\" in the namespace \\\"longhorn-system\\\"\",\"reason\":\"Forbidden\",\"details\":{\"name\":\"deleting-confirmation-flag\",\"group\":\"longhorn.io\",\"kind\":\"settings\"},\"code\":403}\n"
+          },
+          "id": "dda57e90-f7ff-472f-8dc7-f91fbfee0a12",
+          "level": "error",
+          "message": "operation failed",
+          "stage": "complete"
+        }
+      ],
+      "id": "ce8c0c3f-2d60-4fea-a7ac-18376a160c15",
+      "journalStatus": "failed",
+      "operationType": "uninstall",
+      "startedAt": "2026-10-13T00:40:25Z",
+      "status": "failed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:40:25Z"
+    },
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:42:27Z",
+      "createdAt": "2026-10-13T00:42:27Z",
+      "deliveryMessage": "",
+      "deliveryObservationError": "",
+      "deliveryObservedAt": "2026-10-13T00:47:47Z",
+      "deliveryPhase": "removed",
+      "errorMessage": "",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:42:27Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "uninstall",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "b7a5e77c-6299-4510-8b80-73ce083e10ea",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:27Z",
+          "detail": {
+            "namespace": "longhorn-system",
+            "result": "enabled",
+            "setting": "deleting-confirmation-flag"
+          },
+          "id": "64e1284f-3744-471e-bb0d-e1ab992780e0",
+          "level": "warn",
+          "message": "Longhorn persistent-data deletion confirmed through the adopted-cluster agent",
+          "stage": "uninstall.prepared"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:27Z",
+          "detail": {
+            "clusterId": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+            "namespace": "longhorn-system",
+            "releaseName": "qual035-longhorn"
+          },
+          "id": "b1bf7ad8-8379-4dc3-8378-a011b383c3d7",
+          "level": "info",
+          "message": "requesting fenced Flux application deletion",
+          "stage": "delivery"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:27Z",
+          "detail": {
+            "targetId": "067a04d0-bbb9-5b6b-851e-3ad6d430643d"
+          },
+          "id": "c3aa6121-efc6-4620-8839-956a989c6041",
+          "level": "info",
+          "message": "Flux target deletion requested",
+          "stage": "deletion"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:27Z",
+          "detail": {},
+          "id": "77da6789-627b-4f01-9cba-b27d66f69add",
+          "level": "info",
+          "message": "operation completed",
+          "stage": "complete"
+        },
+        {
+          "createdAt": "2026-10-13T00:47:47Z",
+          "detail": {
+            "errorCode": "",
+            "message": "",
+            "phase": "removed",
+            "rolloutId": "00000000-0000-0000-0000-000000000000",
+            "targetId": "067a04d0-bbb9-5b6b-851e-3ad6d430643d",
+            "terminal": true
+          },
+          "id": "delivery-removed",
+          "level": "info",
+          "message": "Flux reports the application removed",
+          "stage": "workloads"
+        }
+      ],
+      "id": "14f92d4e-255b-4781-87a2-d5c35ed8f175",
+      "journalStatus": "completed",
+      "operationType": "uninstall",
+      "startedAt": "2026-10-13T00:42:27Z",
+      "status": "completed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:42:27Z"
+    }
+  ]
+}

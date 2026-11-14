@@ -1,0 +1,13 @@
+
+> astronomer-frontend@2.1.1 test
+> vitest run src/components/dashboards/widget-grid.test.tsx src/lib/catalog-configuration.test.ts
+
+
+ RUN  v5.0.5 /root/work/astronomer-fixes/frontend
+
+
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+   Start at  06:55:36
+   Duration  2.89s (environment 47%, import 40%, setup 6%, transform 4%, tests 3%)
+

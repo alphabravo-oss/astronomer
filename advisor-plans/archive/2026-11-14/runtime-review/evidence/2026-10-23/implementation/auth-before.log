@@ -1,0 +1,114 @@
+--- FAIL: TestStreamRequiresAccessJWT (0.00s)
+    --- FAIL: TestStreamRequiresAccessJWT/totp_challenge/logs (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_challenge/events (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/refresh/shell (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/refresh/logs (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/refresh/exec (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_challenge/shell (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/refresh/events (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_challenge/exec (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_enroll_only/logs (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_enroll_only/shell (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_enroll_only/exec (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+    --- FAIL: TestStreamRequiresAccessJWT/totp_enroll_only/events (0.00s)
+        streamauth_boundary_test.go:41: non-access JWT accepted as a stream credential
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/auth	0.019s
+--- FAIL: TestAuthRequiresAccessJWT (0.00s)
+    --- FAIL: TestAuthRequiresAccessJWT/refresh/bearer (0.00s)
+        auth_boundary_test.go:56: status=204 handler_called=true, want status=401
+    --- FAIL: TestAuthRequiresAccessJWT/refresh/cookie (0.00s)
+        auth_boundary_test.go:56: status=204 handler_called=true, want status=401
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=6fe57897-e7a6-458f-89bf-90eac3438a0f target=127.0.0.1:34933 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=0f5f96f8-2971-4bfe-b888-6bfa8023f6c5 target=127.0.0.1:45549 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=9e7024a4-1f40-41a3-ae94-571273eeaae0 target=127.0.0.1:42311 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=19058ca3-5959-4e7a-8234-7ad4e9aa1f31 target=127.0.0.1:34401 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=6b6eb2bc-22b0-4a54-a738-fbaec38c80a5 target=127.0.0.1:40251 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=d0b01f3e-6a3a-4c89-9514-11ee90cf6778 target=127.0.0.1:36837 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=63102189-f1cf-4b7a-af27-a7d9b90ba6e4 target=127.0.0.1:45217 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=1ec2de9c-7f33-4da9-8e16-8f8d722c69f0 target=127.0.0.1:36351 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=65a9d3b4-6425-4fb4-9be5-d2dcbbd018d8 target=127.0.0.1:33971 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=46b0eb35-b4c9-4c2f-9286-04ebeab1ca68 target=127.0.0.1:46571 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=f9ae7d1f-911b-4902-9bc5-1cb7988c0c61 target=127.0.0.1:37103 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=8fda8d42-8043-4584-8902-b3583ca725a1 target=127.0.0.1:39749 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=2cc70eac-8be0-462a-95f0-05494a3762d6 target=127.0.0.1:43923 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=2846fe43-0e18-4105-a266-ac651fe2c288 target=127.0.0.1:37379 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=9bfe732d-3c01-4c9b-97ef-650fc6092fbe target=127.0.0.1:43177 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=1befbb14-21f6-492c-8e85-e5d248ea9867 target=127.0.0.1:42583 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=f1149645-4f37-4afe-9246-51cb003cc5ba target=127.0.0.1:41421 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=573b24ed-74ce-4149-ae94-18113b5d8dff target=127.0.0.1:39757 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=0ea60b67-9195-4911-bdc0-2de7205baf8a target=127.0.0.1:36283 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=f3d86196-4c64-4f48-828d-4f1d182b44f5 target=127.0.0.1:40559 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=d25ba830-987a-4c2f-bac2-28578413827b target=127.0.0.1:37479 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=e0690a9f-5c8f-4a45-be59-ef1ca772c1fe target=127.0.0.1:34373 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=62be5d26-37b3-4bed-96ea-15b666ba94ac target=127.0.0.1:40999 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=ae148777-624e-4ce6-8c63-056b95cb7a29 target=127.0.0.1:38549 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=91cc966b-6440-4383-b200-de2a5056a4e6 target=127.0.0.1:38963 path=/api/v1/ws/exec/
+2026/10/23 06:03:07 INFO ws cross-pod: forwarding to sibling cluster_id=f4cf0b3e-7de9-40f0-8908-c33b28e168da target=127.0.0.1:39115 path=/api/v1/ws/exec/
+--- FAIL: TestAPITokenCIDRBoundaryParity (0.00s)
+    --- FAIL: TestAPITokenCIDRBoundaryParity/denied_IPv6/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/denied_IPv4/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/spoofed_chain_prefix/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/mapped_IPv4/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/denied_IPv6/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/trusted_chain/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/spoofed_header/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/spoofed_chain_prefix/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/spoofed_chain_prefix/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/empty_networks/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/empty_networks/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/denied_IPv4/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/spoofed_header/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/matching_IPv4/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/invalid_client/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/denied_IPv4/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/matching_IPv6/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/trusted_proxy/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/malformed_CIDR/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/malformed_CIDR/stream (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/empty_networks/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/malformed_CIDR/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/invalid_client/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/spoofed_header/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/invalid_client/trusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+    --- FAIL: TestAPITokenCIDRBoundaryParity/denied_IPv6/untrusted_sibling (0.00s)
+        auth_boundary_test.go:137: status=204, want 401
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.059s
+FAIL

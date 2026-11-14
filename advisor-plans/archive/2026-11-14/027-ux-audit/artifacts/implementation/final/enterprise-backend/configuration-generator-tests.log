@@ -1,0 +1,11 @@
+✔ environment keys and defaults follow the configuration schema (1.997813ms)
+✔ schema drift cannot silently drop a bound field or default (5.549214ms)
+✔ unrecognized defaults and missing Vite configuration fail closed (0.333046ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 79.685219

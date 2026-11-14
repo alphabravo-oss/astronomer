@@ -1,0 +1,8 @@
+python3 scripts/toolchain.py --check
+Toolchain authority aligned: 181 components
+python3 -m unittest discover -s scripts/tests -p 'toolchain*test.py'
+.....................................
+----------------------------------------------------------------------
+Ran 37 tests in 4.904s
+
+OK

@@ -1,0 +1,21 @@
+{
+  "reason": "Abandoned Go temporary artifacts from this batch initial make-check terminated at 16:05 UTC; no live cwd/exe/fd/maps references",
+  "paths": [
+    {
+      "path": "/root/work/astronomer-test-tmp/go-build1580138374",
+      "bytes": 2855656486
+    },
+    {
+      "path": "/root/work/astronomer-test-tmp/go-link-4160127887",
+      "bytes": 161366976
+    },
+    {
+      "path": "/root/work/astronomer-test-tmp/go-link-551765544",
+      "bytes": 158681192
+    },
+    {
+      "path": "/root/work/astronomer-test-tmp/go-build119860896",
+      "bytes": 0
+    }
+  ]
+}

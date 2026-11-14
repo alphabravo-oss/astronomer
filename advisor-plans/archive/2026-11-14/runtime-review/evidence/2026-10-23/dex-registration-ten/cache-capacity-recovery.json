@@ -1,0 +1,7 @@
+{
+  "action": "go clean -cache",
+  "reason": "Rebuildable Go cache cleared to restore capacity margin for concurrent gate; no source or evidence removed",
+  "total": 362563825664,
+  "available": 96647540736,
+  "reserve": 72512765133
+}

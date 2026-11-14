@@ -1,0 +1,2709 @@
+diff --git a/.github/workflows/pr-validation.yaml b/.github/workflows/pr-validation.yaml
+index 2030131250..cb8cb1cac0 100644
+--- a/.github/workflows/pr-validation.yaml
++++ b/.github/workflows/pr-validation.yaml
+@@ -108,6 +108,10 @@ jobs:
+       - run: make frontend-check
+       - run: cd frontend && npm audit --audit-level=high
+       - run: make frontend-build
++      - run: npm --prefix frontend run bundle:check
++      - run: npm --prefix frontend run test:editor-sanitizer
++      - run: cd frontend && npx playwright install chromium firefox webkit --with-deps
++      - run: npm --prefix frontend run test:browser-components -- editor.spec.ts --project=desktop --project=firefox-desktop --project=webkit-desktop
+ 
+   helm:
+     name: helm lint
+diff --git a/deploy/chart/templates/management-plane-backup-cronjob.yaml b/deploy/chart/templates/management-plane-backup-cronjob.yaml
+index c3dab97271..e9e209f898 100644
+--- a/deploy/chart/templates/management-plane-backup-cronjob.yaml
++++ b/deploy/chart/templates/management-plane-backup-cronjob.yaml
+@@ -124,7 +124,8 @@ spec:
+                   # Top-level, non-empty Secret keys only: the Secret volume's
+                   # ..data/..<ts> directories and unset optional keys (e.g. an
+                   # empty ASTRONOMER_INTERNAL_PSK_PREVIOUS) are not bundled;
+-                  # dr-crypto accepts only non-empty top-level regular files.
++                  # dr-crypto accepts non-empty regular files and the two
++                  # explicitly supported catalog trust directories below.
+                   for key in /var/run/astronomer-keys-source/*; do
+                     if [ -s "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/; fi
+                   done
+@@ -139,11 +140,17 @@ spec:
+                   # Preserve the private catalog trust roots alongside the
+                   # database policy that references them.
+                   mkdir -p /var/run/astronomer-keys/catalog-ca
+-                  cp -aL /var/run/catalog-ca/. /var/run/astronomer-keys/catalog-ca/
++                  # Copy actual Secret keys, not Kubernetes' ..data links or
++                  # timestamp directories. Include ordinary dot-prefixed keys.
++                  for key in /var/run/catalog-ca/* /var/run/catalog-ca/.[!.]*; do
++                    if [ -f "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/catalog-ca/; fi
++                  done
+                   {{- end }}
+                   {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                   mkdir -p /var/run/astronomer-keys/catalog-signature-trust
+-                  cp -aL /var/run/catalog-signature-trust/. /var/run/astronomer-keys/catalog-signature-trust/
++                  for key in /var/run/catalog-signature-trust/* /var/run/catalog-signature-trust/.[!.]*; do
++                    if [ -f "${key}" ]; then cp -L "${key}" /var/run/astronomer-keys/catalog-signature-trust/; fi
++                  done
+                   {{- end }}
+                   dr-crypto key-bundle-create --source /var/run/astronomer-keys --output "${KEY_BUNDLE}"
+                   dr-crypto encrypt --input "${KEY_BUNDLE}" --output "${KEY_ENVELOPE}" \
+diff --git a/docs/charlie-operations.md b/docs/charlie-operations.md
+index 554cd9486d..fa1caae132 100644
+--- a/docs/charlie-operations.md
++++ b/docs/charlie-operations.md
+@@ -10,10 +10,13 @@ service never run in the Astronomer release.
+ 
+ - `feature.charlie=false` is the default. A never-onboarded installation creates
+   no Charlie runtime resources. Disabling an existing installation closes write
+-  admission, cancels/drains in-flight writes, stops the private listener and
+-  agent workload, and removes the MCP Service plus exact access NetworkPolicy.
+-  It deliberately retains the namespace, installation Secrets, owner-bound
+-  resume state, metadata, and audit/history for a safe re-enable.
++  admission and cancels/drains in-flight writes. Local runtime shutdown follows
++  agent-ceiling confirmation. A pending confirmation leaves suspension incomplete.
++  Full operational suspension also requires separate proof that the agent workload,
++  MCP Service and exact access NetworkPolicy are stopped/removed through their
++  delivery owner; the feature flag alone does not establish that result.
++  Retain the namespace, installation Secrets, owner-bound resume state, metadata,
++  and audit/history for a safe re-enable.
+ - Onboarding installs the two-replica product agent as a control-only runtime:
+   `runtime.enabled=true` with product-owned `runtime.modeCeiling=disabled`.
+   Configuration with `runtime.enabled=false` renders no workload or listener.
+@@ -23,7 +26,9 @@ service never run in the Astronomer release.
+   one private mTLS Product MCP configuration surface for initialization and
+   `tools/list` so an administrator can review a changed connector catalog.
+   `tools/call`, events, triggers, receipts, and writes remain stopped. Emergency
+-  disable and feature/connection disable remove this listener too.
++  disable blocks product calls immediately; successful feature runtime shutdown
++  closes the local listener. Pending ceiling confirmation retains the control
++  runtime needed to finish reconciliation.
+ - Effective authority is the least privilege of current product feature state,
+   connection state, emergency latch, Charlie-verified mode, current Astronomer
+   RBAC, affected-resource scope, disclosure digest, action classification,
+@@ -43,8 +48,8 @@ service never run in the Astronomer release.
+ 
+ Emergency response always starts with **Settings → Charlie → Mode → Emergency
+ Disable**. The local latch commits first, stops new sessions/triggers/MCP calls,
+-and tears down bridge transports even when the agent or Charlie Central is
+-unavailable. Admin status, emergency mode, uninstall, and disconnect endpoints
++even when the agent or Charlie Central is unavailable. The authenticated control
++transport remains available while ceiling confirmation is pending. Admin status, emergency mode, uninstall, and disconnect endpoints
+ remain available while the feature is off. Non-emergency mode changes remain
+ feature-gated in the handler. If the API
+ reports a write drain still in progress, the latch remains closed and disable
+@@ -323,3 +328,20 @@ replica identity reuse, multiple leaders, stale fencing accepted, missing audit
+ or receipt, disclosure of a destructive/downstream/open-ended tool, direct
+ server/worker egress to Charlie Central, credential/content leakage, cross-user
+ or cross-deployment visibility, or a write whose result cannot be reconciled.
++
++### Pending feature suspension
++
++A feature-disable request can return HTTP 409 with `agent ceiling confirmation
++is pending`. The durable emergency latch already blocks product writes, but
++`feature.charlie` remains enabled until the supported agent-ceiling confirmation
++succeeds. This is incomplete suspension, even if every displayed mode is
++`disabled`. Preserve the control runtime needed for reconciliation; do not force
++the feature flag in PostgreSQL or remove the agent workload to bypass the check.
++
++Recover agent readiness and its authenticated bridge through the normal delivery
++and enrollment workflows, then retry disabling the feature through Platform
++Settings. Verify the feature readback, private listener, and workload separately.
++The feature lifecycle's local `Shutdown` is not proof that Flux has suspended or
++removed the deployed agent. Keep identity, credentials and history for reversible
++recovery. If the agent cannot recover, offline suspension needs a separately
++reviewed distributed-fencing and delivery design; it is not an existing bypass.
+diff --git a/docs/decisions/0015-image-signature-admission.md b/docs/decisions/0015-image-signature-admission.md
+index a6541f5b22..ba89a5628b 100644
+--- a/docs/decisions/0015-image-signature-admission.md
++++ b/docs/decisions/0015-image-signature-admission.md
+@@ -8,6 +8,22 @@ tags: [security, supply-chain, deployment]
+ 
+ # Image signature admission with per-vendor authorities
+ 
++## Current implementation correction — 2026-10-23
++
++The decision below records the October 20 intent and offline checks. The current
++[policy](../../deploy/policy-controller/cip-astronomer.yaml) uses `static: pass`
++for CNPG operator, CNPG PostgreSQL, Dex and Fluent Bit because the pinned verifier
++cannot verify their bundle signatures. Only first-party release images and the
++cert-manager key authority receive cryptographic admission checks. Four further
++upstream repository groups use the unsigned exception. Thus the original claim
++of five third-party repositories verified at admission was incorrect.
++
++[The current verification guide](../verify-images.md) lists exact globs, limits,
++owner and review/exit criteria. Prefix globs and chart digest pinning do not form
++an exact digest allowlist. Compatible-verifier or signed-mirror qualification
++with positive and negative admission tests remains open; do not replace pass
++authorities without that evidence.
++
+ ## Context
+ 
+ astronomer-dev runs Sigstore policy-controller with `no-match-policy: deny` in the `astronomer` namespace. The hand-made policies verified first-party images keylessly but passed every third-party image (`ghcr.io/cloudnative-pg/**`, Dex, Valkey, BusyBox, PostgreSQL, Fluent Bit, cert-manager) with `static: pass`, and the `no-match-policy` was a hand edit of a Helm-managed ConfigMap. The delivery verifier also needed a hand-made Secret holding the Sigstore trusted root.
+@@ -30,7 +46,7 @@ Chosen option: per-vendor authorities. Checked with cosign 3.1.3 against the pin
+ 
+ ### Positive Consequences
+ 
+-- Five of the eight third-party repositories are now cryptographically verified at admission.
++- Intended benefit: verify signed vendors at admission. The current implementation falls short as documented in the dated correction above.
+ - A render test fails when any image the chart can produce matches no policy.
+ 
+ ### Negative Consequences
+diff --git a/docs/management-plane-dr-runbook.md b/docs/management-plane-dr-runbook.md
+index ebdd30220f..65976a1210 100644
+--- a/docs/management-plane-dr-runbook.md
++++ b/docs/management-plane-dr-runbook.md
+@@ -179,6 +179,15 @@ references. This restores the transport CA and offline publisher trust material
+ alongside the database-held catalog state; no private catalog URL, proxy
+ credential, or source credential is printed by the backup job.
+ 
++Use the `dr-crypto` extractor shipped with the backup producer or a newer
++compatible release. The bounded tar format preserves existing flat bundles and
++adds files one level below only `catalog-ca/` and `catalog-signature-trust/`.
++Older extractors reject these nested bundles. The extractor validates the whole
++archive before writing: at most 1,024 files, 1 MiB per file and 16 MiB total
++payload, with no links, traversal, duplicate paths or arbitrary directories.
++Extraction creates private directories (0700) and files (0600) and refuses an
++existing destination. Kubernetes Secret projection metadata is not archived.
++
+ ---
+ 
+ ## Preconditions
+@@ -237,7 +246,8 @@ Before starting, confirm you have:
+ ## Procedure
+ 
+ The high-level shape is: freeze the writers, drop and recreate the database,
+-restore the dump, thaw the writers, validate.
++restore the dump, validate schema/data/keys while writers remain stopped, then
++thaw the captured writer state and validate end-to-end.
+ 
+ ### 1. Capture the current state
+ 
+@@ -245,17 +255,29 @@ Even if the DB is corrupted, the rest of the chart's config is good — capture
+ it so you can compare after the restore.
+ 
+ ```bash
+-helm -n astronomer get values astronomer > /tmp/astronomer-values-pre-restore.yaml
+-kubectl -n astronomer get deploy,sts,svc,cronjob -o wide \
+-  > /tmp/astronomer-resources-pre-restore.txt
++set -Eeuo pipefail
++umask 077
++restore_state=$(mktemp -d "$PWD/astronomer-restore.XXXXXX")
++helm -n astronomer get values astronomer > "$restore_state/values.yaml"
++kubectl config current-context > "$restore_state/context.txt"
++kubectl -n astronomer get deploy,hpa,cronjob -o json > "$restore_state/controllers.json"
++kubectl -n astronomer get deploy,sts,svc,cronjob -o wide > "$restore_state/resources.txt"
+ ```
+ 
+-Take a screenshot of `helm -n astronomer get values astronomer` so you have
+-the production override values handy if the cluster goes fully sideways during
+-the procedure.
++Values can contain credentials: keep this directory private and copy it only to
++approved protected recovery storage. Do not put values or key material in
++screenshots, shell history or public evidence. Record the intended kube context,
++namespace, database host/name and backup manifest identity before any mutation.
+ 
+ ### 2. Stop the writers
+ 
++Capture each Deployment's original replica count and each CronJob's original
++suspend state from `controllers.json`. Pause any GitOps reconciler, HPA or other
++controller that can restore writer replicas, using its supported maintenance
++mechanism and retaining its previous configuration. Stop active backup Jobs and
++other database clients after identifying their owner. Verify no writer sessions
++remain; scaling Deployments alone does not establish this.
++
+ Scale the server and worker to zero so nothing else writes during the restore.
+ Leave the bundled Postgres (or your managed Postgres) running — you need it
+ to be reachable for the restore client.
+@@ -265,7 +287,8 @@ kubectl -n astronomer scale deploy/astronomer-server --replicas=0
+ kubectl -n astronomer scale deploy/astronomer-worker --replicas=0
+ # If the frontend Deployment exists, scale it too (it polls /health endpoints
+ # but no longer writes).
+-kubectl -n astronomer scale deploy/astronomer-frontend --replicas=0 || true
++# Only if captured above; retain its original replica count.
++kubectl -n astronomer scale deploy/astronomer-frontend --replicas=0
+ 
+ # Wait for pods to disappear.
+ kubectl -n astronomer wait --for=delete pod \
+@@ -293,15 +316,13 @@ kubectl -n astronomer exec -it sts/astronomer-postgres -- \
+ 
+ #### External (managed) Postgres
+ 
+-Start a temporary client Pod with `psql`:
+-
+-```bash
+-kubectl -n astronomer run psql-restore --rm -it --restart=Never \
+-  --image=postgres:17-alpine \
+-  --env="PGURL=$(kubectl -n astronomer get secret <dsn-secret> \
+-        -o jsonpath='{.data.<dsn-key>}' | base64 -d)" \
+-  -- psql "$PGURL" -d postgres
+-```
++Use a private, authenticated PostgreSQL client with a Secret-mounted libpq
++service/password file (`PGSERVICEFILE`/`PGPASSFILE`, mode 0600). In Kubernetes,
++mount an existing authorized Secret into an owned temporary client Pod; do not
++expand a DSN into `kubectl run --env`, command arguments or logs. Use a client
++version compatible with the dump and the target database. Select the maintenance
++`postgres` database for creation and the intended application database for
++restore. Keep the exact service name in the private recovery record.
+ 
+ You should land at a `postgres=#` prompt.
+ 
+@@ -314,6 +335,8 @@ You should land at a `postgres=#` prompt.
+ In the psql session opened above:
+ 
+ ```sql
++-- Compare these with the private recovery record before proceeding.
++SELECT current_database(), inet_server_addr(), inet_server_port(), current_user;
+ -- Kick any remaining sessions off the target DB.
+ SELECT pg_terminate_backend(pid)
+ FROM pg_stat_activity
+@@ -329,7 +352,8 @@ CREATE DATABASE astronomer OWNER astronomer;
+ 
+ Run `pg_restore` against the empty database. We pass `--no-owner --no-acl`
+ because the dump was produced with the same flags (it's environment-portable);
+-the schema's roles are recreated by the new DB's owner.
++restored objects are owned by the restore role. Required roles and extensions
++must already be available; these flags do not recreate roles.
+ 
+ #### Bundled Postgres
+ 
+@@ -344,7 +368,7 @@ kubectl -n astronomer exec -it astronomer-postgres-0 -- \
+     --username=astronomer \
+     --dbname=astronomer \
+     --no-owner --no-acl \
+-    --jobs=4 \
++    --single-transaction --exit-on-error \
+     --verbose \
+     /tmp/astronomer.pgcustom
+ ```
+@@ -353,21 +377,18 @@ kubectl -n astronomer exec -it astronomer-postgres-0 -- \
+ 
+ ```bash
+ pg_restore \
+-  --dbname "$PGURL" \
++  --dbname "service=astronomer-restore" \
+   --no-owner --no-acl \
+-  --jobs=4 \
++  --single-transaction --exit-on-error \
+   --verbose \
+   ./astronomer.pgcustom
+ ```
+ 
+-`--jobs=4` parallelises the data-load phase. Bump it up on a beefy DB; the
+-schema phase always runs single-threaded.
+-
+-Expect `pg_restore` to emit a small number of "errors ignored" — these are
+-typically `CREATE EXTENSION` no-ops or comments on system objects that the
+-restoring role doesn't own. As long as the final summary line reports the
+-expected object counts (the dump's TOC tells you what to expect), the restore
+-is good.
++Both examples require exit status 0. `--single-transaction --exit-on-error`
++rolls back on the first SQL error; do not combine it with parallel jobs. Any
++restore error leaves writers stopped. Diagnose permissions, extensions or dump
++compatibility, recreate only the confirmed disposable/restore target, and rerun.
++Never accept an "errors ignored" summary as success.
+ 
+ ### 6. Spot-check the data before bringing the app back
+ 
+@@ -376,15 +397,19 @@ Still using the psql session (reconnect to the `astronomer` database):
+ ```sql
+ \c astronomer
+ 
+--- Migration history matches what the chart's `migrate` Job expects.
+-SELECT version, dirty FROM schema_migrations ORDER BY version DESC LIMIT 5;
++-- Compare with the backup manifest and the server's embedded Goose migrations.
++WITH latest AS (
++  SELECT DISTINCT ON (version_id) version_id, is_applied
++  FROM public.goose_db_version ORDER BY version_id, id DESC
++)
++SELECT COALESCE(MAX(version_id), 0) AS applied_version
++FROM latest WHERE is_applied;
+ 
+ -- The big tables have rows.
+-SELECT 'clusters' AS t, count(*) FROM clusters
+-UNION ALL SELECT 'cluster_agents', count(*) FROM cluster_agents
+-UNION ALL SELECT 'projects', count(*) FROM projects
+-UNION ALL SELECT 'users', count(*) FROM users
+-UNION ALL SELECT 'audit_log', count(*) FROM audit_log;
++SELECT 'clusters' AS t, count(*) FROM public.clusters
++UNION ALL SELECT 'projects', count(*) FROM public.projects
++UNION ALL SELECT 'users', count(*) FROM public.users
++UNION ALL SELECT 'audit_log', count(*) FROM public.audit_log;
+ ```
+ 
+ Audit log row counts should match (or be very close to) the last good count
+@@ -392,26 +417,42 @@ you have from monitoring / your data warehouse. If `audit_log` is empty but
+ `clusters` is populated, the dump is partial — pick an older one and restart
+ from step 4.
+ 
+-### 7. Bring the writers back up
++### 7. Bring the writers back up only after all gates pass
+ 
+-```bash
+-kubectl -n astronomer scale deploy/astronomer-server --replicas=3
+-kubectl -n astronomer scale deploy/astronomer-worker --replicas=3
+-kubectl -n astronomer scale deploy/astronomer-frontend --replicas=3 || true
++Before any writer starts, require all of the following:
+ 
+-kubectl -n astronomer rollout status deploy/astronomer-server --timeout=300s
+-kubectl -n astronomer rollout status deploy/astronomer-worker --timeout=300s
+-```
++- The encrypted dump and every required key/trust artifact decrypt, authenticate
++  and match the backup manifest. Missing keys are a failed restore gate.
++- `pg_restore` exited 0 and the Goose applied version equals the backup's
++  recorded version. Confirm the intended application binary's embedded migration
++  set is compatible. Do not start the server to discover a mismatch: it migrates
++  automatically at boot. Schema mismatch keeps writers stopped.
++- Expected tenant/project/cluster and audit data is present, and encrypted
++  application values can be read with the recovered keys using the supported
++  recovery tooling. Counts alone do not prove decryptability or completeness.
+ 
+-Replica counts above mirror `values-production.yaml`. For dev / k3d, use `1`.
+-
+-Re-enable the backup CronJob:
++Restore server/worker/frontend replica counts from the captured
++`controllers.json`, not production defaults. For each captured Deployment:
+ 
+ ```bash
+-kubectl -n astronomer patch cronjob astronomer-management-backup \
+-  -p '{"spec":{"suspend":false}}'
++jq -r '.items[] | select(.kind == "Deployment") |
++  select(.metadata.name == "astronomer-server" or
++         .metadata.name == "astronomer-worker" or
++         .metadata.name == "astronomer-frontend") |
++  [.metadata.name, (.spec.replicas | tostring)] | @tsv' \
++  "$restore_state/controllers.json" |
++while IFS="$(printf '\t')" read -r deployment replicas; do
++  kubectl -n astronomer scale "deployment/$deployment" --replicas="$replicas" || exit 1
++done
++kubectl -n astronomer rollout status deploy/astronomer-server --timeout=300s
++kubectl -n astronomer rollout status deploy/astronomer-worker --timeout=300s
+ ```
+ 
++After validation, restore each CronJob's captured suspend state and the original
++HPA/GitOps configuration. A previously suspended CronJob stays suspended. On any
++failed gate, leave writers and backups stopped, retain private diagnostics and
++choose a known-good backup; never auto-resume from an exit trap.
++
+ ### 8. Validate end-to-end
+ 
+ 1. **Health probe**:
+@@ -659,7 +700,7 @@ lockstep when the CNPG image moves to a new major.
+ | Metric | Value |
+ |--------|-------|
+ | RPO    | up to 24h (gap to the last successful nightly dump). Take an ad-hoc dump before any risky change (`kubectl create job --from=cronjob/...`). |
+-| RTO    | ~15 min for a single-region, single-DB restore once the operator is at the keyboard. Roughly linear in DB size: ~30 GB dumps restore in ~10 min on managed Postgres with `--jobs=4`. |
++| RTO    | ~15 min for a single-region, single-DB restore once the operator is at the keyboard. Roughly linear in DB size: ~30 GB dumps restore in ~10 min on managed Postgres with `--single-transaction --exit-on-error`. |
+ | Data not covered | Redis (asynq queue state), in-flight Jobs at the moment of disaster, Prometheus metrics history (lives in your monitoring stack, not in Astronomer's DB). |
+ | Cross-region failover | Out of scope. The bucket is single-region by default. For multi-region resilience, set `managementBackup.s3.region` to a region that replicates to another region via the cloud provider's bucket replication. |
+ 
+diff --git a/docs/verify-images.md b/docs/verify-images.md
+index de68555192..887df2acc3 100644
+--- a/docs/verify-images.md
++++ b/docs/verify-images.md
+@@ -159,19 +159,37 @@ kubectl label ns astronomer policy.sigstore.dev/include=true
+ 
+ With `no-match-policy: deny` every image in an opted-in namespace must match a
+ policy; an image that matches a policy must satisfy one of its authorities.
+-The authorities, each proven with cosign 3.1.3 against the digests the chart
+-pins (2026-10-20):
++The checked-in authorities below are the current admission contract (reviewed
++2026-10-23). Historical cosign 3.1.3 checks of pinned digests on 2026-10-20
++were out-of-band verification; they are not admission verification:
+ 
+ | Images (glob) | Authority |
+ |---------------|-----------|
+ | `ghcr.io/alphabravo-oss/astronomer-**` | keyless, issuer `https://token.actions.githubusercontent.com`, subject `^https://github\.com/alphabravo-oss/astronomer/\.github/workflows/release\.yaml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$` |
+-| `ghcr.io/cloudnative-pg/cloudnative-pg**` (operator; bootstrap init container of every instance pod) | keyless, `cloudnative-pg/cloudnative-pg` `release-publish.yml@refs/tags/v*` |
+-| `ghcr.io/cloudnative-pg/postgresql**` | keyless, `cloudnative-pg/postgres-containers` workflows |
+-| `ghcr.io/dexidp/dex**` | keyless, `dexidp/dex` workflows at release tags. The chart now defaults Dex to `ghcr.io/dexidp/dex` (same digest as Docker Hub, which carries no signature). |
+-| `index.docker.io/fluent/fluent-bit**` | keyless, `fluent/fluent-bit` workflows on `master` (`Release from staging`) |
++| `ghcr.io/cloudnative-pg/cloudnative-pg**` (operator and bootstrap init container) | `static: pass` — upstream bundle-signature compatibility exception |
++| `ghcr.io/cloudnative-pg/postgresql**` | `static: pass` — upstream bundle-signature compatibility exception |
++| `ghcr.io/dexidp/dex**` | `static: pass` — upstream bundle-signature compatibility exception |
++| `index.docker.io/fluent/fluent-bit**` | `static: pass` — upstream bundle-signature compatibility exception |
+ | `quay.io/jetstack/cert-manager-**` (HTTP-01 solver pods) | cert-manager's long-lived key `cert-manager-pubkey-2021-09-20.pem`, `hashAlgorithm: sha512`, no Rekor entry (cert-manager does **not** sign keyless) |
+ | `index.docker.io/library/{busybox,postgres}**`, `index.docker.io/valkey/valkey**`, `ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar**` | `static: pass` — these upstreams publish no cosign signature at all, so no authority can verify them. The chart pins them by digest (`image.requireDigest`); to close the gap mirror them into a registry you sign and replace the pass with a key authority. |
+-| `localhost/**`, `127.0.0.1/**` | `static: fail` (unsigned local builds) |
++| `localhost/**`, `localhost:*/**`, `127.0.0.1/**`, `127.0.0.1:*/**` | `static: fail` (unsigned local builds) |
++
++The four bundle-signature exceptions exist because the pinned policy-controller
++0.13.1 could not verify their OCI-referrer bundles. The separate unsigned-upstream
++exception covers BusyBox, Docker PostgreSQL, Valkey and the Barman sidecar. None
++of these static passes verifies a signature or enforces a particular digest.
++Chart digest pinning constrains chart output; it does not constrain other Pods
++created in the namespace. The actual `**` globs are repository-prefix matches,
++not exact repository allowlists.
++
++Release/platform maintainers (ADR owner: AlphaBravoCompany) own these exceptions.
++Review them for every release, image-pin change and verifier upgrade. Before
++removing an exception, qualify a compatible verifier or a signed mirror with
++positive signed-image admission and negative unsigned/wrong-identity/wrong-digest
++admission tests, including controller-created Pods. Narrow the prefix globs with
++matching tests in the same policy change. Record the tested digests, identities,
++verifier version and next review in release evidence. These are open policy
++remediation tasks; this documentation correction changes no live authority.
+ 
+ `deploy/policy_controller_test.go` renders the chart (live astronomer-dev
+ values, every optional component, bundled defaults) and fails when any image
+diff --git a/frontend/package-lock.json b/frontend/package-lock.json
+index 782babea4f..297d8c8af3 100644
+--- a/frontend/package-lock.json
++++ b/frontend/package-lock.json
+@@ -3322,6 +3322,72 @@
+         "node": ">=14.0.0"
+       }
+     },
++    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/core": {
++      "version": "1.11.1",
++      "dev": true,
++      "inBundle": true,
++      "license": "MIT",
++      "optional": true,
++      "dependencies": {
++        "@emnapi/wasi-threads": "1.2.2",
++        "tslib": "^2.4.0"
++      }
++    },
++    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/runtime": {
++      "version": "1.11.1",
++      "dev": true,
++      "inBundle": true,
++      "license": "MIT",
++      "optional": true,
++      "dependencies": {
++        "tslib": "^2.4.0"
++      }
++    },
++    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/wasi-threads": {
++      "version": "1.2.2",
++      "dev": true,
++      "inBundle": true,
++      "license": "MIT",
++      "optional": true,
++      "dependencies": {
++        "tslib": "^2.4.0"
++      }
++    },
++    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@napi-rs/wasm-runtime": {
++      "version": "1.1.4",
++      "dev": true,
++      "inBundle": true,
++      "license": "MIT",
++      "optional": true,
++      "dependencies": {
++        "@tybys/wasm-util": "^0.10.1"
++      },
++      "funding": {
++        "type": "github",
++        "url": "https://github.com/sponsors/Brooooooklyn"
++      },
++      "peerDependencies": {
++        "@emnapi/core": "^1.7.1",
++        "@emnapi/runtime": "^1.7.1"
++      }
++    },
++    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@tybys/wasm-util": {
++      "version": "0.10.2",
++      "dev": true,
++      "inBundle": true,
++      "license": "MIT",
++      "optional": true,
++      "dependencies": {
++        "tslib": "^2.4.0"
++      }
++    },
++    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/tslib": {
++      "version": "2.8.1",
++      "dev": true,
++      "inBundle": true,
++      "license": "0BSD",
++      "optional": true
++    },
+     "node_modules/@tailwindcss/oxide-win32-arm64-msvc": {
+       "version": "4.3.3",
+       "resolved": "https://registry.npmjs.org/@tailwindcss/oxide-win32-arm64-msvc/-/oxide-win32-arm64-msvc-4.3.3.tgz",
+@@ -5594,9 +5660,9 @@
+       "license": "MIT"
+     },
+     "node_modules/dompurify": {
+-      "version": "3.4.16",
+-      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.16.tgz",
+-      "integrity": "sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==",
++      "version": "3.4.17",
++      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
++      "integrity": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==",
+       "license": "(MPL-2.0 OR Apache-2.0)",
+       "peer": true,
+       "optionalDependencies": {
+diff --git a/frontend/package.json b/frontend/package.json
+index 0d9a1177be..a77c26b6fa 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -23,12 +23,14 @@
+     "type-check": "tsc --noEmit",
+     "test": "vitest run",
+     "test:watch": "vitest",
++    "pretest:browser-components": "node scripts/prepare-static-assets.mjs",
+     "test:browser-components": "playwright test --config=playwright.components.config.ts",
+     "test:e2e": "playwright test --config=playwright.live.config.ts",
+     "pretest:e2e:visual": "node scripts/generate-e2e-stubs.mjs",
+     "test:e2e:visual": "playwright test tests/e2e/visual-regression.spec.ts --project=chromium --project=tablet-chromium --project=mobile-chromium",
+     "pretest:e2e:stubbed": "node scripts/generate-e2e-stubs.mjs",
+-    "test:e2e:stubbed": "playwright test --project=chromium --project=mobile-chromium"
++    "test:e2e:stubbed": "playwright test --project=chromium --project=mobile-chromium",
++    "test:editor-sanitizer": "node scripts/build-monaco.mjs && node --test scripts/check-editor-sanitizer.test.mjs scripts/verify-editor-build.test.mjs"
+   },
+   "dependencies": {
+     "@fontsource-variable/inter": "5.3.0",
+@@ -88,7 +90,7 @@
+     "vitest": "5.0.5"
+   },
+   "overrides": {
+-    "dompurify": "3.4.16",
++    "dompurify": "3.4.17",
+     "nanoid": "3.3.20",
+     "postcss": "8.5.29"
+   }
+diff --git a/frontend/scripts/check-csp-build.mjs b/frontend/scripts/check-csp-build.mjs
+index d55d459c61..87aac04f7d 100644
+--- a/frontend/scripts/check-csp-build.mjs
++++ b/frontend/scripts/check-csp-build.mjs
+@@ -1,3 +1,4 @@
++import { verifyEditorBuild } from "./verify-editor-build.mjs";
+ import { access, readFile, readdir } from "node:fs/promises";
+ 
+ const distDirectory = new URL("../dist/", import.meta.url);
+@@ -24,7 +25,7 @@ if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(index)) {
+ await Promise.all([
+   access(new URL("theme-bootstrap.js", distDirectory)),
+   access(new URL("wterm.wasm", distDirectory)),
+-  access(new URL("monaco/vs/loader.js", distDirectory)),
++  access(new URL("monaco/editor.js", distDirectory)),
+ ]);
+ 
+ const textAssets = (await filesBelow(distDirectory)).filter((url) =>
+@@ -33,7 +34,7 @@ const textAssets = (await filesBelow(distDirectory)).filter((url) =>
+ let hasSameOriginMonacoConfig = false;
+ for (const asset of textAssets) {
+   const content = await readFile(asset, "utf8");
+-  hasSameOriginMonacoConfig ||= content.includes("/monaco/vs");
++  hasSameOriginMonacoConfig ||= content.includes("/monaco/editor.js");
+   if (content.includes("data:font/")) {
+     throw new Error(`${asset.pathname} embeds a font blocked by CSP`);
+   }
+@@ -57,3 +58,5 @@ if (/\s'unsafe-(?:inline|eval)'(?:\s|$)/.test(scriptSources)) {
+ if (!nginx.includes("worker-src 'self' blob:")) {
+   throw new Error("frontend CSP does not permit same-origin Monaco workers");
+ }
++
++await verifyEditorBuild(new URL("monaco/", distDirectory));
+diff --git a/frontend/scripts/prepare-static-assets.mjs b/frontend/scripts/prepare-static-assets.mjs
+index 7044384844..1daa4255cf 100644
+--- a/frontend/scripts/prepare-static-assets.mjs
++++ b/frontend/scripts/prepare-static-assets.mjs
+@@ -1,11 +1,6 @@
+-import { cp, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
++import { copyFile, mkdir, readFile } from "node:fs/promises";
+ 
+ const publicDirectory = new URL("../public/", import.meta.url);
+-const monacoSource = new URL(
+-  "../node_modules/monaco-editor/min/vs/",
+-  import.meta.url,
+-);
+-const monacoDestination = new URL("../public/monaco/vs/", import.meta.url);
+ const wtermSource = new URL(
+   "../node_modules/@wterm/core/wasm/wterm.wasm",
+   import.meta.url,
+@@ -26,24 +21,6 @@ if (!wtermDestinationContents?.equals(wtermSourceContents)) {
+   await copyFile(wtermSource, wtermDestination);
+ }
+ 
+-// This directory is generated exclusively from the lockfile-pinned package.
+-await rm(monacoDestination, { recursive: true, force: true });
+-await mkdir(new URL("../public/monaco/", import.meta.url), { recursive: true });
+-await cp(monacoSource, monacoDestination, { recursive: true });
+-
+-// Monaco upstream embeds its icon font in CSS. Extract it so font-src can stay
+-// limited to same-origin files instead of admitting every data: font.
+-const editorCssUrl = new URL("editor/editor.main.css", monacoDestination);
+-const editorCss = await readFile(editorCssUrl, "utf8");
+-const embeddedCodicon = editorCss.match(/url\(data:font\/ttf;base64,([^)]+)\)/);
+-if (!embeddedCodicon) {
+-  throw new Error("Monaco's embedded codicon font was not found");
+-}
+-await writeFile(
+-  new URL("editor/codicon.ttf", monacoDestination),
+-  Buffer.from(embeddedCodicon[1], "base64"),
+-);
+-await writeFile(
+-  editorCssUrl,
+-  editorCss.replace(embeddedCodicon[0], "url(./codicon.ttf)"),
+-);
++// Build the supported ESM sources with the locked patched sanitizer; never
++// copy Monaco's prebuilt AMD assets containing its independently vendored copy.
++await import("./build-monaco.mjs");
+diff --git a/frontend/src/components/clusters/tool-catalog-fields.tsx b/frontend/src/components/clusters/tool-catalog-fields.tsx
+index f899abd5ae..07761cf062 100644
+--- a/frontend/src/components/clusters/tool-catalog-fields.tsx
++++ b/frontend/src/components/clusters/tool-catalog-fields.tsx
+@@ -3,7 +3,7 @@ import { CatalogResourceContext } from "@/components/catalog/catalog-resource-fi
+ import {
+   catalogConfigurationSchema,
+   mergeCatalogValues,
+-  changedValuePaths,
++  changedValueSegments,
+ } from "@/lib/catalog-configuration";
+ import { catalogValueErrors } from "@/lib/catalog-values-validation";
+ import {
+@@ -54,13 +54,9 @@ export function ToolCatalogFields({
+             value={values}
+             onChange={(next) =>
+               onChange(
+-                changedValuePaths(values, next).reduce(
++                changedValueSegments(values, next).reduce(
+                   (result, path) =>
+-                    setValueAtPath(
+-                      result,
+-                      path.split("."),
+-                      getValueAtPath(next, path.split(".")),
+-                    ),
++                    setValueAtPath(result, path, getValueAtPath(next, path)),
+                   overrides,
+                 ),
+               )
+diff --git a/frontend/src/components/dashboards/widget-grid.test.tsx b/frontend/src/components/dashboards/widget-grid.test.tsx
+index 3671b92e2f..6090fe0f2e 100644
+--- a/frontend/src/components/dashboards/widget-grid.test.tsx
++++ b/frontend/src/components/dashboards/widget-grid.test.tsx
+@@ -1,55 +1,112 @@
+-import { render, screen, waitFor } from "@testing-library/react";
+-import { WidgetGrid } from "./widget-grid";
++import { act, cleanup, render, screen } from "@testing-library/react";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { WidgetGrid, type WidgetFetcher } from "./widget-grid";
+ import type { RenderedWidget } from "@/lib/api/dashboards";
+ 
+-// Regression: WidgetGrid must not re-fetch every widget just because the parent
+-// re-rendered and handed it a new `fetcher` function identity. The cluster
+-// detail page re-renders on every SSE metrics tick, so an identity-keyed effect
+-// would fan out to the /render endpoint (→ Prometheus/Grafana per widget) on
+-// every tick — a request storm far exceeding each widget's refreshSeconds.
+-describe("WidgetGrid — stable fetch scheduling", () => {
+-  it("does not re-run the fetch when the parent passes a new fetcher identity", async () => {
+-    const firstFetcher = vi
+-      .fn<() => Promise<RenderedWidget[]>>()
+-      .mockResolvedValue([]);
+-
+-    const { rerender } = render(<WidgetGrid fetcher={firstFetcher} />);
+-    await waitFor(() => expect(firstFetcher).toHaveBeenCalledTimes(1));
+-
+-    // Parent re-renders three times, each time creating a brand-new fetcher
+-    // function (as happens with an inline `() => renderForCluster(id)`).
+-    for (let i = 0; i < 3; i++) {
+-      const nextFetcher = vi
+-        .fn<() => Promise<RenderedWidget[]>>()
+-        .mockResolvedValue([]);
+-      rerender(<WidgetGrid fetcher={nextFetcher} />);
+-      // Give any (incorrectly re-triggered) effect a chance to fire.
+-      await Promise.resolve();
+-      // The new fetcher identity must NOT cause an extra fetch.
+-      expect(nextFetcher).not.toHaveBeenCalled();
+-    }
+-
+-    // Still exactly one fetch across all the parent re-renders.
+-    expect(firstFetcher).toHaveBeenCalledTimes(1);
++const widget = (name: string, seconds = 5): RenderedWidget => ({
++  id: name,
++  name,
++  widgetType: "prom_stat",
++  specResolved: {},
++  grid: { x: 0, y: 0, w: 4, h: 2 },
++  refreshSeconds: seconds,
++});
++let client: QueryClient;
++beforeEach(() => {
++  vi.useFakeTimers();
++  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++});
++afterEach(() => {
++  cleanup();
++  client.clear();
++  vi.useRealTimers();
++});
++const tick = async (ms = 1) => {
++  await act(async () => {
++    await vi.advanceTimersByTimeAsync(ms);
+   });
++};
++const grid = (fetcher: WidgetFetcher, scope = "a") => (
++  <QueryClientProvider client={client}>
++    <WidgetGrid scope={["cluster", scope]} fetcher={fetcher} />
++  </QueryClientProvider>
++);
+ 
+-  it("refuses non-HTTPS iframe URLs from a render payload", async () => {
+-    const fetcher = vi.fn<() => Promise<RenderedWidget[]>>().mockResolvedValue([
++it("shares one grid refresh and ignores parent fetcher identity changes", async () => {
++  const fetcher = vi.fn().mockResolvedValue([widget("one"), widget("two")]);
++  const view = render(grid(fetcher));
++  await tick();
++  expect(fetcher).toHaveBeenCalledTimes(1);
++  const next = vi.fn().mockResolvedValue([widget("one"), widget("two")]);
++  view.rerender(grid(next));
++  await tick();
++  expect(next).not.toHaveBeenCalled();
++  await tick(5000);
++  expect(next).toHaveBeenCalledTimes(1);
++});
++it("recovers from an initial error and from an empty scope", async () => {
++  const fetcher = vi
++    .fn()
++    .mockRejectedValueOnce(new Error("offline"))
++    .mockResolvedValue([widget("recovered")]);
++  const view = render(grid(fetcher));
++  await tick();
++  expect(screen.getByText("Widgets: offline")).toBeInTheDocument();
++  await tick(60001);
++  expect(screen.getByText("recovered")).toBeInTheDocument();
++  view.rerender(grid(vi.fn().mockResolvedValue([]), "empty"));
++  await tick();
++  expect(screen.queryByText("recovered")).not.toBeInTheDocument();
++  view.rerender(grid(vi.fn().mockResolvedValue([widget("new scope")]), "b"));
++  await tick();
++  expect(screen.getByText("new scope")).toBeInTheDocument();
++});
++it("aborts old scopes and unmounts, and never accepts a late old-scope response", async () => {
++  let resolve!: (value: RenderedWidget[]) => void;
++  let oldSignal: AbortSignal | undefined;
++  const old: WidgetFetcher = (signal) => {
++    oldSignal = signal;
++    return new Promise((done) => {
++      resolve = done;
++    });
++  };
++  let newSignal: AbortSignal | undefined;
++  const next: WidgetFetcher = async (signal) => {
++    newSignal = signal;
++    return [widget("current")];
++  };
++  const view = render(grid(old));
++  await tick();
++  view.rerender(grid(next, "b"));
++  await tick();
++  expect(oldSignal?.aborted).toBe(true);
++  await act(async () => resolve([widget("stale")]));
++  await tick();
++  expect(screen.queryByText("stale")).not.toBeInTheDocument();
++  expect(screen.getByText("current")).toBeInTheDocument();
++  // Make an active request at unmount, rather than asserting a finished one aborts.
++  view.rerender(
++    grid((signal) => {
++      newSignal = signal;
++      return new Promise(() => {});
++    }, "c"),
++  );
++  await tick();
++  view.unmount();
++  expect(newSignal?.aborted).toBe(true);
++});
++it("refuses unsafe iframe URLs", async () => {
++  const fetcher = vi
++    .fn()
++    .mockResolvedValue([
+       {
+-        id: "unsafe-widget",
+-        name: "Unsafe widget",
++        ...widget("unsafe"),
+         widgetType: "url_iframe",
+-        specResolved: { url: "javascript:alert(document.domain)" },
+-        grid: { x: 0, y: 0, w: 4, h: 2 },
+-        refreshSeconds: 60,
++        specResolved: { url: "javascript:alert(1)" },
+       },
+     ]);
+-
+-    const { container } = render(<WidgetGrid fetcher={fetcher} />);
+-
+-    expect(
+-      await screen.findByText("Missing or unsafe HTTPS URL"),
+-    ).toBeInTheDocument();
+-    expect(container.querySelector("iframe")).toBeNull();
+-  });
++  const { container } = render(grid(fetcher));
++  await tick();
++  expect(screen.getByText("Missing or unsafe HTTPS URL")).toBeInTheDocument();
++  expect(container.querySelector("iframe")).toBeNull();
+ });
+diff --git a/frontend/src/components/dashboards/widget-grid.tsx b/frontend/src/components/dashboards/widget-grid.tsx
+index b4b1fab3d1..c4061d136c 100644
+--- a/frontend/src/components/dashboards/widget-grid.tsx
++++ b/frontend/src/components/dashboards/widget-grid.tsx
+@@ -20,83 +20,48 @@
+  *   - url_iframe: same as grafana_panel but no panel-id postfix.
+  */
+ 
+-import { useEffect, useRef, useState } from "react";
++import { queryKeys } from "@/lib/query-keys";
++import { useQuery } from "@tanstack/react-query";
+ import { AlertCircle } from "lucide-react";
+ import type { RenderedWidget, WidgetSpec } from "@/lib/api/dashboards";
+ import { Tooltip } from "@/components/ui/tooltip";
+ import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+ 
+-export type WidgetFetcher = () => Promise<RenderedWidget[]>;
++export type WidgetFetcher = (signal?: AbortSignal) => Promise<RenderedWidget[]>;
+ 
+ export function WidgetGrid({
+   fetcher,
++  scope,
+   emptyHint,
+   hideWhenEmpty,
+   title,
+ }: {
+   fetcher: WidgetFetcher;
++  scope: readonly string[];
+   emptyHint?: string;
+   hideWhenEmpty?: boolean;
+   title?: string;
+ }) {
+-  const [widgets, setWidgets] = useState<RenderedWidget[] | null>(null);
+-  const [error, setError] = useState<string | null>(null);
+-  const [loading, setLoading] = useState(true);
+-
+-  // Keep the latest fetcher in a ref so parent re-renders (which hand us a new
+-  // `fetcher` identity on every render — the cluster detail page re-renders on
+-  // each SSE metrics tick) do NOT tear down the effect and reschedule every
+-  // widget timer. The effect below runs once and reads fetcherRef.current, so
+-  // polling stays on each widget's own refreshSeconds cadence instead of
+-  // firing the full /render fan-out on every parent render.
+-  const fetcherRef = useRef(fetcher);
+-  useEffect(() => {
+-    fetcherRef.current = fetcher;
+-  }, [fetcher]);
+-
+-  useEffect(() => {
+-    let mounted = true;
+-    let timers: ReturnType<typeof setTimeout>[] = [];
+-
+-    // Refresh on a per-widget cadence. We schedule one timer per widget
+-    // based on its refreshSeconds; consecutive client polls inside the
+-    // server's 30s cache window share an upstream fetch. Scheduling is
+-    // driven off the freshly fetched list (not the `widgets` state, which
+-    // is null at mount and stale inside this effect closure), so the
+-    // interval actually keeps firing after the first load.
+-    const schedule = (list: RenderedWidget[]) => {
+-      timers.forEach(clearTimeout);
+-      timers = [];
+-      list.forEach((w) => {
+-        const sec = Math.max(5, w.refreshSeconds || 60);
+-        timers.push(setTimeout(load, sec * 1000));
+-      });
+-    };
+-
+-    const load = async () => {
+-      try {
+-        const list = await fetcherRef.current();
+-        if (!mounted) return;
+-        setWidgets(list);
+-        setError(null);
+-        schedule(list);
+-      } catch (e) {
+-        if (!mounted) return;
+-        setError(e instanceof Error ? e.message : String(e));
+-      } finally {
+-        if (mounted) setLoading(false);
+-      }
+-    };
+-
+-    void load();
+-
+-    return () => {
+-      mounted = false;
+-      timers.forEach(clearTimeout);
+-    };
+-    // Intentionally empty deps: the fetcher is read through fetcherRef so a new
+-    // fetcher identity from a parent re-render doesn't reschedule the grid.
+-  }, []);
++  // The endpoint renders the entire grid. Poll once at its fastest requested
++  // cadence, sharing requests/cache per scope and aborting unused requests.
++  const query = useQuery({
++    queryKey: queryKeys.dashboardWidgets(scope),
++    queryFn: ({ signal }) => fetcher(signal),
++    staleTime: 5_000,
++    retry: false,
++    refetchOnWindowFocus: false,
++    refetchInterval: ({ state }) => {
++      const list = state.data;
++      return list?.length
++        ? Math.min(
++            ...list.map((widget) => Math.max(5, widget.refreshSeconds || 60)),
++          ) * 1000
++        : 60_000;
++    },
++  });
++  const widgets = query.data;
++  const error = query.error?.message;
++  const loading = query.isPending;
+ 
+   if (loading && !widgets) {
+     return (
+@@ -127,9 +92,7 @@ export function WidgetGrid({
+   return (
+     <section className="space-y-2">
+       {title ? (
+-        <h3 className="text-sm font-medium text-muted-foreground">
+-          {title}
+-        </h3>
++        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+       ) : null}
+       <div className="grid grid-cols-12 gap-3 auto-rows-[80px]">
+         {widgets.map((w) => (
+diff --git a/frontend/src/components/ui/monaco-editor.tsx b/frontend/src/components/ui/monaco-editor.tsx
+index 404a873572..252bb0a243 100644
+--- a/frontend/src/components/ui/monaco-editor.tsx
++++ b/frontend/src/components/ui/monaco-editor.tsx
+@@ -1,7 +1,39 @@
+ import Editor, { loader } from "@monaco-editor/react";
++import { lazy, type ComponentProps } from "react";
+ 
+-// @monaco-editor/react otherwise defaults to jsDelivr. The matching Monaco
+-// version from package-lock is copied into the production image at build time.
+-loader.config({ paths: { vs: "/monaco/vs" } });
++// Same-origin ESM assets are built from the locked package with the patched
++// sanitizer. No CDN or prebuilt AMD fallback can reintroduce the vendored copy.
++const LoadedEditor = lazy(async () => {
++  const css = document.createElement("link");
++  css.rel = "stylesheet";
++  css.href = "/monaco/editor.css";
++  const styled = new Promise<void>((resolve, reject) => {
++    css.onload = () => resolve();
++    css.onerror = () => reject(new Error("Unable to load editor styles"));
++  });
++  document.head.append(css);
++  self.MonacoEnvironment = {
++    getWorker(_moduleId, label) {
++      const name =
++        label === "json"
++          ? "json"
++          : ["css", "scss", "less"].includes(label)
++            ? "css"
++            : ["html", "handlebars", "razor"].includes(label)
++              ? "html"
++              : ["typescript", "javascript"].includes(label)
++                ? "ts"
++                : "editor";
++      const url = `/monaco/${name}.worker.js`;
++      return new Worker(url, { type: "module" });
++    },
++  };
++  const url = "/monaco/editor.js";
++  const [monaco] = await Promise.all([import(/* @vite-ignore */ url), styled]);
++  loader.config({ monaco });
++  return { default: Editor };
++});
+ 
+-export default Editor;
++export default function MonacoEditor(props: ComponentProps<typeof Editor>) {
++  return <LoadedEditor {...props} />;
++}
+diff --git a/frontend/src/components/ui/yaml-editor.tsx b/frontend/src/components/ui/yaml-editor.tsx
+index cf2782912e..d7e79f9fd0 100644
+--- a/frontend/src/components/ui/yaml-editor.tsx
++++ b/frontend/src/components/ui/yaml-editor.tsx
+@@ -1,3 +1,4 @@
++import { flushSync } from "react-dom";
+ import { lazy, Suspense, useRef, useCallback } from "react";
+ import { CheckCircle2, Copy, Download, Save, Loader2 } from "lucide-react";
+ import { cn } from "@/lib/utils";
+@@ -137,7 +138,11 @@ export function YamlEditor({
+             language="yaml"
+             theme="vs-dark"
+             value={value}
+-            onChange={(v) => onChange?.(v || "")}
++            onChange={(v) => {
++              // Monaco owns an imperative model. Commit its edit before the next
++              // input event so a stale controlled value cannot overwrite typing.
++              flushSync(() => onChange?.(v || ""));
++            }}
+             onMount={handleEditorDidMount}
+             options={{
+               readOnly,
+diff --git a/frontend/src/lib/api/dashboards.ts b/frontend/src/lib/api/dashboards.ts
+index 3e8c13ff69..429d986cc5 100644
+--- a/frontend/src/lib/api/dashboards.ts
++++ b/frontend/src/lib/api/dashboards.ts
+@@ -254,21 +254,31 @@ export async function testDatasource(
+ // Render endpoints
+ // ============================================================
+ 
+-export async function renderGlobal(): Promise<RenderedWidget[]> {
+-  const response = await getDashboardsGlobal();
++export async function renderGlobal(
++  signal?: AbortSignal,
++): Promise<RenderedWidget[]> {
++  const response = await getDashboardsGlobal({ signal });
+   return response.data.map(mapRenderedWidget);
+ }
+ 
+ export async function renderForCluster(
+   clusterId: string,
++  signal?: AbortSignal,
+ ): Promise<RenderedWidget[]> {
+-  const response = await getDashboardsClustersById({ path: { id: clusterId } });
++  const response = await getDashboardsClustersById({
++    signal,
++    path: { id: clusterId },
++  });
+   return response.data.map(mapRenderedWidget);
+ }
+ 
+ export async function renderForProject(
+   projectId: string,
++  signal?: AbortSignal,
+ ): Promise<RenderedWidget[]> {
+-  const response = await getDashboardsProjectsById({ path: { id: projectId } });
++  const response = await getDashboardsProjectsById({
++    signal,
++    path: { id: projectId },
++  });
+   return response.data.map(mapRenderedWidget);
+ }
+diff --git a/frontend/src/lib/catalog-configuration.test.ts b/frontend/src/lib/catalog-configuration.test.ts
+index d4e3f97232..4e44702b07 100644
+--- a/frontend/src/lib/catalog-configuration.test.ts
++++ b/frontend/src/lib/catalog-configuration.test.ts
+@@ -93,3 +93,34 @@ describe("version-bound configuration", () => {
+     ).toEqual([]);
+   });
+ });
++
++it("keeps literal dotted/slashed property segments distinct through YAML edits", async () => {
++  const { changedValueSegments } = await import("./catalog-configuration");
++  const { getValueAtPath, setValueAtPath, dumpHelmValuesYAML } =
++    await import("./helm-values-schema");
++  const before = {
++    annotations: { "example.com/key": "old", example: { "com/key": "nested" } },
++    hosts: ["one"],
++    custom: { untouched: true },
++  };
++  const after = {
++    ...before,
++    annotations: { ...before.annotations, "example.com/key": "new" },
++    hosts: ["two"],
++  };
++  expect(changedValueSegments(before, after)).toEqual([
++    ["annotations", "example.com/key"],
++    ["hosts"],
++  ]);
++  const patch = changedValueSegments(before, after).reduce(
++    (result, path) => setValueAtPath(result, path, getValueAtPath(after, path)),
++    {},
++  );
++  expect(
++    parseHelmValuesYAML(dumpHelmValuesYAML(mergeCatalogValues(before, patch))),
++  ).toEqual(after);
++  expect(changedValuePaths(before, after)).toEqual([
++    'annotations["example.com/key"]',
++    "hosts",
++  ]);
++});
+diff --git a/frontend/src/lib/catalog-configuration.ts b/frontend/src/lib/catalog-configuration.ts
+index db74e414e1..70dca75ece 100644
+--- a/frontend/src/lib/catalog-configuration.ts
++++ b/frontend/src/lib/catalog-configuration.ts
+@@ -50,19 +50,36 @@ export function initialCatalogValues(
+     ),
+   );
+ }
+-export function changedValuePaths(
++/** Machine paths retain literal property names; arrays are atomic overrides. */
++export function changedValueSegments(
+   before: HelmValuesObject,
+   after: HelmValuesObject,
+-  prefix = "",
+-): string[] {
++  prefix: string[] = [],
++): string[][] {
+   return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap(
+     (key) => {
+-      const path = prefix ? `${prefix}.${key}` : key;
++      const path = [...prefix, key];
+       if (isObject(before[key]) && isObject(after[key]))
+-        return changedValuePaths(before[key], after[key], path);
++        return changedValueSegments(before[key], after[key], path);
+       return JSON.stringify(before[key]) === JSON.stringify(after[key])
+         ? []
+         : [path];
+     },
+   );
+ }
++
++/** Display labels only; never split these labels back into machine paths. */
++export function changedValuePaths(
++  before: HelmValuesObject,
++  after: HelmValuesObject,
++): string[] {
++  return changedValueSegments(before, after).map((path) =>
++    path
++      .map((part, index) =>
++        /^[A-Za-z_][A-Za-z0-9_]*$/.test(part)
++          ? `${index ? "." : ""}${part}`
++          : `[${JSON.stringify(part)}]`,
++      )
++      .join(""),
++  );
++}
+diff --git a/frontend/src/lib/query-keys.ts b/frontend/src/lib/query-keys.ts
+index e617f73eea..bdb0c2d300 100644
+--- a/frontend/src/lib/query-keys.ts
++++ b/frontend/src/lib/query-keys.ts
+@@ -13,6 +13,8 @@ import type { ResourceType } from "@/lib/api/resources";
+ // arrays at call sites — add a factory entry instead (enforced by lint).
+ 
+ export const queryKeys = {
++  dashboardWidgets: (scope: readonly string[]) =>
++    ["dashboard-widgets", ...scope] as const,
+   networkPolicyTemplates: ["network-policy-templates"] as const,
+   networkPolicyApplications: (clusterID: string) =>
+     ["clusters", clusterID, "network-policy-applications"] as const,
+diff --git a/frontend/src/routes/dashboard/-page.tsx b/frontend/src/routes/dashboard/-page.tsx
+index af47ec002a..4f50200778 100644
+--- a/frontend/src/routes/dashboard/-page.tsx
++++ b/frontend/src/routes/dashboard/-page.tsx
+@@ -97,7 +97,9 @@ export function DashboardPage() {
+           <ActionButton
+             intent="primary"
+             icon={<Plus className="h-4 w-4" />}
+-            onClick={() => void navigate({ to: "/dashboard/clusters/register" })}
++            onClick={() =>
++              void navigate({ to: "/dashboard/clusters/register" })
++            }
+           >
+             Register cluster
+           </ActionButton>
+@@ -111,7 +113,11 @@ export function DashboardPage() {
+           tone={verdict.tone}
+           sentence={verdict.sentence}
+           numbers={[
+-            { id: "clusters", label: "clusters", value: loading ? "—" : fleet.total },
++            {
++              id: "clusters",
++              label: "clusters",
++              value: loading ? "—" : fleet.total,
++            },
+             {
+               id: "disconnected",
+               label: "disconnected",
+@@ -253,7 +259,7 @@ export function DashboardPage() {
+       </PageSection>
+ 
+       <section className="space-y-3">
+-        <WidgetGrid fetcher={renderGlobal} hideWhenEmpty />
++        <WidgetGrid scope={["global"]} fetcher={renderGlobal} hideWhenEmpty />
+       </section>
+       <ExtensionSlot
+         point="dashboardWidget"
+@@ -280,7 +286,8 @@ function fleetVerdict(
+   if (total === 0)
+     return {
+       tone: "info",
+-      sentence: "No clusters registered yet. Register one to start managing it.",
++      sentence:
++        "No clusters registered yet. Register one to start managing it.",
+     };
+   if (counts.disconnected > 0 || critical > 0)
+     return {
+@@ -312,18 +319,39 @@ const boardColumns: Array<{
+   dot: string;
+   status?: string;
+ }> = [
+-  { key: "healthy", label: "Healthy", dot: "bg-status-success", status: "active" },
+-  { key: "attention", label: "Needs attention", dot: "bg-status-warning", status: "error" },
++  {
++    key: "healthy",
++    label: "Healthy",
++    dot: "bg-status-success",
++    status: "active",
++  },
++  {
++    key: "attention",
++    label: "Needs attention",
++    dot: "bg-status-warning",
++    status: "error",
++  },
+   {
+     key: "disconnected",
+     label: "Disconnected",
+     dot: "bg-status-error",
+     status: "disconnected",
+   },
+-  { key: "registering", label: "Registering", dot: "bg-status-info", status: "pending" },
++  {
++    key: "registering",
++    label: "Registering",
++    dot: "bg-status-info",
++    status: "pending",
++  },
+ ];
+ 
+-function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
++function HealthBoard({
++  fleet,
++  loading,
++}: {
++  fleet: FleetModel;
++  loading: boolean;
++}) {
+   return (
+     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+       {boardColumns.map((column) => {
+@@ -336,7 +364,10 @@ function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }
+           >
+             <div className="flex items-center justify-between border-b border-border px-4 py-2">
+               <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+-                <span aria-hidden className={cn("h-2 w-2 rounded-full", column.dot)} />
++                <span
++                  aria-hidden
++                  className={cn("h-2 w-2 rounded-full", column.dot)}
++                />
+                 {column.label}
+               </span>
+               <span
+@@ -390,13 +421,26 @@ function HealthBoard({ fleet, loading }: { fleet: FleetModel; loading: boolean }
+   );
+ }
+ 
+-function AgentsPanel({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
++function AgentsPanel({
++  fleet,
++  loading,
++}: {
++  fleet: FleetModel;
++  loading: boolean;
++}) {
+   const versions = new Map<string, number>();
+   for (const cluster of fleet.clusters) {
+     if (!cluster.agentVersion) continue;
+-    versions.set(cluster.agentVersion, (versions.get(cluster.agentVersion) ?? 0) + 1);
++    versions.set(
++      cluster.agentVersion,
++      (versions.get(cluster.agentVersion) ?? 0) + 1,
++    );
+   }
+-  const rows: Array<{ key: FleetHealth; label: string; tone: "success" | "warning" | "error" | "default" }> = [
++  const rows: Array<{
++    key: FleetHealth;
++    label: string;
++    tone: "success" | "warning" | "error" | "default";
++  }> = [
+     { key: "healthy", label: "Connected", tone: "success" },
+     { key: "attention", label: "Connected, degraded", tone: "warning" },
+     { key: "disconnected", label: "Disconnected", tone: "error" },
+@@ -432,10 +476,20 @@ function AgentsPanel({ fleet, loading }: { fleet: FleetModel; loading: boolean }
+   );
+ }
+ 
+-function CapacityList({ fleet, loading }: { fleet: FleetModel; loading: boolean }) {
++function CapacityList({
++  fleet,
++  loading,
++}: {
++  fleet: FleetModel;
++  loading: boolean;
++}) {
+   if (loading) {
+     return (
+-      <div role="status" aria-busy className="rounded-lg border border-border bg-card p-4">
++      <div
++        role="status"
++        aria-busy
++        className="rounded-lg border border-border bg-card p-4"
++      >
+         <SkeletonText lines={4} />
+       </div>
+     );
+@@ -471,7 +525,8 @@ function CapacityList({ fleet, loading }: { fleet: FleetModel; loading: boolean
+               {cluster.displayName || cluster.name}
+             </RouterLink>
+             <p className="text-meta text-muted-foreground">
+-              {plural(cluster.nodeCount ?? 0, "node")} · {plural(cluster.podCount ?? 0, "pod")}
++              {plural(cluster.nodeCount ?? 0, "node")} ·{" "}
++              {plural(cluster.podCount ?? 0, "pod")}
+             </p>
+           </div>
+           <CapacityBar label="CPU" value={cluster.cpuPercentage} />
+@@ -490,13 +545,17 @@ function CapacityBar({
+   value: number | null | undefined;
+ }) {
+   const pct =
+-    value == null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value));
++    value == null || !Number.isFinite(value)
++      ? null
++      : Math.max(0, Math.min(100, value));
+   return (
+     <div className="min-w-0">
+       <div className="flex items-center justify-between text-meta text-muted-foreground">
+         <span>{label}</span>
+         <span className="tabular-nums text-foreground">
+-          {pct == null ? "—" : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`}
++          {pct == null
++            ? "—"
++            : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`}
+         </span>
+       </div>
+       <div
+@@ -609,7 +668,9 @@ function DeliveryStrip({
+                     aria-hidden
+                     className={cn(
+                       "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+-                      item.severity === "error" ? "bg-status-error" : "bg-status-warning",
++                      item.severity === "error"
++                        ? "bg-status-error"
++                        : "bg-status-warning",
+                     )}
+                   />
+                   <span className="min-w-0">
+@@ -662,12 +723,19 @@ function HealthRow({
+       className="flex items-center justify-between px-3 py-2.5 transition-colors hover:bg-accent/40"
+     >
+       <span className="flex min-w-0 items-center gap-2">
+-        <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+-        {icon ? <span className="shrink-0 text-muted-foreground">{icon}</span> : null}
++        <span
++          aria-hidden
++          className={cn("h-2 w-2 shrink-0 rounded-full", dot)}
++        />
++        {icon ? (
++          <span className="shrink-0 text-muted-foreground">{icon}</span>
++        ) : null}
+         <span className="truncate text-sm text-foreground">{label}</span>
+       </span>
+       <span className="flex shrink-0 items-center gap-2">
+-        {hint && <span className="text-meta text-muted-foreground">{hint}</span>}
++        {hint && (
++          <span className="text-meta text-muted-foreground">{hint}</span>
++        )}
+         <span
+           data-value=""
+           className="text-sm font-medium tabular-nums text-foreground"
+diff --git a/frontend/src/routes/dashboard/clusters/$id/-page.tsx b/frontend/src/routes/dashboard/clusters/$id/-page.tsx
+index fd655f5b5a..e48e7b2622 100644
+--- a/frontend/src/routes/dashboard/clusters/$id/-page.tsx
++++ b/frontend/src/routes/dashboard/clusters/$id/-page.tsx
+@@ -262,7 +262,8 @@ export function ClusterDetailPage() {
+           above an empty placeholder. */}
+       {cluster?.id ? (
+         <WidgetGrid
+-          fetcher={() => renderForCluster(cluster.id)}
++          scope={["cluster", cluster.id]}
++          fetcher={(signal) => renderForCluster(cluster.id, signal)}
+           title="Widgets"
+           hideWhenEmpty
+         />
+diff --git a/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.test.tsx b/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.test.tsx
+index adab2da011..87256975ed 100644
+--- a/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.test.tsx
++++ b/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.test.tsx
+@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
+ import { describe, expect, it, vi } from "vitest";
+ import type { PermissionDecision } from "@/lib/permissions";
+ import type { NodeDetail } from "@/types";
+-import { NodeDetailPageBody } from "./index";
++import { NodeDetailPageBody } from "./-page";
+ 
+ function wrapper({ children }: { children: ReactNode }) {
+   const client = new QueryClient({
+@@ -112,6 +112,8 @@ describe("NodeDetailPageBody per-action pending", () => {
+     expect(screen.getByRole("button", { name: /drain/i })).toBeDisabled();
+     // ...but the unrelated "Add label" control in the Overview tab must stay
+     // enabled — this is the bug the per-action pending fix closes.
+-    expect(screen.getByRole("button", { name: "Add label" })).not.toBeDisabled();
++    expect(
++      screen.getByRole("button", { name: "Add label" }),
++    ).not.toBeDisabled();
+   });
+ });
+diff --git a/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.tsx b/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.tsx
+index aaf6f8923f..ac935598e9 100644
+--- a/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.tsx
++++ b/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.tsx
+@@ -1,244 +1,4 @@
+-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+-import { useTabParam } from "@/lib/use-tab-param";
+-import { useState } from "react";
+-import { useNodeDetail } from "@/lib/hooks/clusters";
+-import { StatusBadge } from "@/components/ui/status-badge";
+-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+-import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
+-import { QueryStates } from "@/components/ui/query-states";
+-import {
+-  ageMetaItem,
+-  KindBadge,
+-  MastheadDetails,
+-} from "@/components/resources/resource-masthead-details";
+-import { ResourceMasthead, PageShell } from "@/components/ui/page";
+-import { TabStrip } from "@/components/ui/tabs";
+-import { k8sResourcePath } from "@/lib/k8s-paths";
+-import { usePermissionDecision } from "@/lib/permission-hooks";
+-import { Server } from "lucide-react";
+-import { NodeHeaderActions } from "./-node-header-actions";
+-import { NodeTabContent, type NodeTabId } from "./-node-tab-content";
+-import { NodeMetadataModals } from "./-node-metadata-modals";
+-import { useNodeActions } from "./-node-actions";
+-
+-// ── Tabs ──
+-
+-const TABS = [
+-  { id: "overview", label: "Overview" },
+-  { id: "pods", label: "Pods" },
+-  { id: "conditions", label: "Conditions" },
+-  { id: "info", label: "Info" },
+-  { id: "taints", label: "Taints" },
+-  { id: "images", label: "Images" },
+-  { id: "events", label: "Events" },
+-] as const satisfies { id: NodeTabId; label: string }[];
+-
+-// ── Main Page ──
+-
+-function NodeDetailPage() {
+-  const params = Route.useParams();
+-  return (
+-    <NodeDetailPageBody clusterId={params.id} nodeName={params.nodeName} />
+-  );
+-}
+-
+-// Split from NodeDetailPage so tests can render the real page body without
+-// needing an active router match for Route.useParams() (the route's own
+-// params hook requires a live router context; the body doesn't).
+-export function NodeDetailPageBody({
+-  clusterId,
+-  nodeName,
+-}: {
+-  clusterId: string;
+-  nodeName: string;
+-}) {
+-  const navigate = useNavigate();
+-  const [activeTab, setActiveTab] = useTabParam<NodeTabId>(
+-    TABS.map((t) => t.id),
+-    "overview",
+-  );
+-
+-  const nodeQuery = useNodeDetail(clusterId, nodeName);
+-  const { data: node, isLoading, refetch } = nodeQuery;
+-  const [showYaml, setShowYaml] = useState(false);
+-  const nodeScope = { type: "cluster" as const, id: clusterId };
+-  const nodeUpdateDecision = usePermissionDecision(
+-    "nodes",
+-    "update",
+-    nodeScope,
+-  );
+-  const nodeManageDecision = usePermissionDecision(
+-    "nodes",
+-    "manage",
+-    nodeScope,
+-  );
+-  const nodeUpdateBlockedReason = nodeUpdateDecision.allowed
+-    ? undefined
+-    : nodeUpdateDecision.disabledReason;
+-
+-  const actions = useNodeActions({
+-    clusterId,
+-    nodeName,
+-    refetch,
+-    nodeUpdateDecision,
+-    nodeManageDecision,
+-  });
+-
+-  if (isLoading || nodeQuery.isError) {
+-    return (
+-      <QueryStates
+-        query={nodeQuery}
+-        permission="nodes:read"
+-        notFound={
+-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+-            <Server className="h-8 w-8 mb-3" />
+-            <p>Node not found</p>
+-          </div>
+-        }
+-      >
+-        {() => null}
+-      </QueryStates>
+-    );
+-  }
+-
+-  if (!node) {
+-    return (
+-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+-        <Server className="h-8 w-8 mb-3" />
+-        <p>Node not found</p>
+-      </div>
+-    );
+-  }
+-
+-  return (
+-    <PageShell>
+-      <p className="sr-only" role="status" aria-live="polite">
+-        {actions.nodeOperation.isPending
+-          ? `Node operation ${actions.nodeOperation.operationState.phase}`
+-          : ""}
+-      </p>
+-      {/* Header */}
+-      <ResourceMasthead
+-        backTo={`/dashboard/clusters/${clusterId}/nodes`}
+-        backLabel="Back to nodes"
+-        eyebrow={<KindBadge kind="Node" />}
+-        title={node.name}
+-        mono
+-        details={
+-          <MastheadDetails
+-            isPod={false}
+-            obj={{
+-              metadata: {
+-                labels: node.labels,
+-                annotations: node.annotations,
+-              },
+-              status: {
+-                conditions: node.conditions.map((c) => ({ ...c })),
+-              },
+-            }}
+-          />
+-        }
+-        status={
+-          <>
+-            <StatusBadge status={node.status} />
+-            {node.unschedulable && (
+-              <StatusBadge
+-                status="warning"
+-                label="Unschedulable"
+-                shape="square"
+-              />
+-            )}
+-          </>
+-        }
+-        meta={[
+-          { label: "Roles", value: node.roles.join(", ") },
+-          ...[ageMetaItem(node.createdAt)].filter((item) => !!item),
+-          { label: "Version", value: node.nodeInfo.kubeletVersion },
+-        ]}
+-        actions={
+-          <NodeHeaderActions
+-            clusterId={clusterId}
+-            nodeName={nodeName}
+-            unschedulable={node.unschedulable}
+-            onViewYaml={() => setShowYaml(true)}
+-            onCordon={actions.handleCordon}
+-            onUncordon={actions.handleUncordon}
+-            onDrainClick={() => actions.setShowDrain(true)}
+-            onDeleted={() =>
+-              void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
+-            }
+-            cordonPending={actions.cordonPending}
+-            uncordonPending={actions.uncordonPending}
+-            drainPending={actions.drainPending}
+-            nodeUpdateDecision={nodeUpdateDecision}
+-            nodeManageDecision={nodeManageDecision}
+-          />
+-        }
+-      />
+-
+-      {/* Tabs */}
+-      <TabStrip
+-        tabs={TABS.map((tab) => {
+-          const count =
+-            tab.id === "pods"
+-              ? node.pods.length
+-              : tab.id === "taints"
+-                ? node.taints.length
+-                : tab.id === "events"
+-                  ? node.events.length
+-                  : 0;
+-          return {
+-            key: tab.id,
+-            label: tab.label,
+-            count: count > 0 ? count : undefined,
+-          };
+-        })}
+-        value={activeTab}
+-        onChange={setActiveTab}
+-        aria-label="Node detail"
+-      />
+-
+-      {/* Tab Content */}
+-      <NodeTabContent
+-        activeTab={activeTab}
+-        node={node}
+-        actions={actions}
+-        canUpdate={nodeUpdateDecision.allowed}
+-        blockedReason={nodeUpdateBlockedReason}
+-      />
+-
+-      {/* YAML Dialog */}
+-      <YamlViewDialog
+-        open={showYaml}
+-        onClose={() => setShowYaml(false)}
+-        clusterId={clusterId}
+-        k8sPath={k8sResourcePath("nodes", nodeName)}
+-        title={`Node: ${nodeName}`}
+-        allowEdit={nodeUpdateDecision.allowed}
+-        forceConflictPermission={nodeManageDecision}
+-      />
+-
+-      {/* Drain Confirm Dialog */}
+-      <ConfirmDialog
+-        open={actions.showDrain}
+-        onClose={() => actions.setShowDrain(false)}
+-        onConfirm={actions.handleDrain}
+-        title="Drain Node"
+-        description="This will cordon the node and evict all non-DaemonSet pods. Workloads will be rescheduled to other nodes."
+-        confirmValue={nodeName}
+-        confirmText="Drain"
+-        variant="destructive"
+-        loading={actions.drainPending}
+-      />
+-
+-      <NodeMetadataModals
+-        actions={actions}
+-        canUpdate={nodeUpdateDecision.allowed}
+-        blockedReason={nodeUpdateBlockedReason}
+-      />
+-    </PageShell>
+-  );
+-}
++import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+ 
+ export const Route = createFileRoute(
+   "/dashboard/clusters/$id/nodes/$nodeName/",
+@@ -246,5 +6,5 @@ export const Route = createFileRoute(
+   // ?tab= deep-link (P2.4): typed passthrough — useTabParam's allowlist stays the real validator.
+   validateSearch: (search: Record<string, unknown>) =>
+     search as { tab?: string } & Record<string, unknown>,
+-  component: NodeDetailPage,
++  component: lazyRouteComponent(() => import("./-page"), "NodeDetailPage"),
+ });
+diff --git a/frontend/src/routes/dashboard/projects/$id/index.tsx b/frontend/src/routes/dashboard/projects/$id/index.tsx
+index da85ec36f2..3ac3efafc3 100644
+--- a/frontend/src/routes/dashboard/projects/$id/index.tsx
++++ b/frontend/src/routes/dashboard/projects/$id/index.tsx
+@@ -65,11 +65,10 @@ function ProjectOverviewPage() {
+           the operator explicitly pins something here. */}
+       {project?.id ? (
+         <section className="space-y-2">
+-          <h3 className="text-sm font-medium text-muted-foreground">
+-            Widgets
+-          </h3>
++          <h3 className="text-sm font-medium text-muted-foreground">Widgets</h3>
+           <WidgetGrid
+-            fetcher={() => renderForProject(project.id)}
++            scope={["project", project.id]}
++            fetcher={(signal) => renderForProject(project.id, signal)}
+             emptyHint=""
+           />
+         </section>
+diff --git a/frontend/tests/browser-components/table.tsx b/frontend/tests/browser-components/table.tsx
+index e34452f7f5..0a5822526a 100644
+--- a/frontend/tests/browser-components/table.tsx
++++ b/frontend/tests/browser-components/table.tsx
+@@ -1,9 +1,12 @@
++import { EditorFixture } from "./editor";
+ import { useState } from "react";
+ import { createRoot } from "react-dom/client";
+ import { DataTable } from "@/components/ui/data-table";
+ import "./styles.css";
+ import { InhibitionFixture, ModalFixture } from "./modal";
+ 
++import { ReliabilityFixture } from "./reliability";
++
+ const rows = Array.from({ length: 1200 }, (_, index) => ({
+   id: String(index).padStart(4, "0"),
+   name: `Item ${String(index).padStart(4, "0")}`,
+@@ -69,7 +72,11 @@ function TableFixture() {
+   );
+ }
+ createRoot(document.getElementById("root")!).render(
+-  new URLSearchParams(location.search).has("inhibition") ? (
++  new URLSearchParams(location.search).has("editor") ? (
++    <EditorFixture />
++  ) : new URLSearchParams(location.search).has("reliability") ? (
++    <ReliabilityFixture />
++  ) : new URLSearchParams(location.search).has("inhibition") ? (
+     <InhibitionFixture />
+   ) : new URLSearchParams(location.search).has("modal") ? (
+     <ModalFixture />
+diff --git a/frontend/tests/browser-components/vite.config.ts b/frontend/tests/browser-components/vite.config.ts
+index 8301befed9..bfa1216062 100644
+--- a/frontend/tests/browser-components/vite.config.ts
++++ b/frontend/tests/browser-components/vite.config.ts
+@@ -1,3 +1,4 @@
++import { readFileSync } from "node:fs";
+ import { defineConfig } from "vite";
+ import { fileURLToPath } from "node:url";
+ import react from "@vitejs/plugin-react";
+@@ -6,9 +7,18 @@ import tailwindcss from "@tailwindcss/vite";
+ // Separate build: the fixture and its controls never enter the operator bundle.
+ export default defineConfig({
+   root: fileURLToPath(new URL(".", import.meta.url)),
++  publicDir: fileURLToPath(new URL("../../public", import.meta.url)),
+   plugins: [tailwindcss(), react()],
+   resolve: {
+     alias: { "@": fileURLToPath(new URL("../../src", import.meta.url)) },
+   },
++  preview: {
++    headers: {
++      "Content-Security-Policy": readFileSync(
++        new URL("../../nginx.conf", import.meta.url),
++        "utf8",
++      ).match(/add_header Content-Security-Policy "([^"\n]+)"/)![1],
++    },
++  },
+   build: { outDir: "../../.cache/browser-components", emptyOutDir: true },
+ });
+diff --git a/frontend/tests/e2e-live/charlie.live.spec.ts b/frontend/tests/e2e-live/charlie.live.spec.ts
+index 143417d6ef..cbc89eecf5 100644
+--- a/frontend/tests/e2e-live/charlie.live.spec.ts
++++ b/frontend/tests/e2e-live/charlie.live.spec.ts
+@@ -8,7 +8,8 @@ test("Charlie is a header icon + drawer, never a FAB", async ({ page }) => {
+   await expect(page.getByTestId("app-shell")).toBeVisible();
+   await expect(page.locator("button.fixed.bottom-5")).toHaveCount(0);
+ 
+-  const flags = await page.context().request.get("/api/v1/settings/feature-flags/");
++  const flags = await page.context().request.get("/api/v1/settings/features/");
++  expect(flags.status()).toBe(200);
+   const body = flags.ok()
+     ? ((await flags.json()) as { data?: Record<string, boolean> })
+     : { data: undefined };
+diff --git a/go.mod b/go.mod
+index 42aa505820..a36806f4a4 100644
+--- a/go.mod
++++ b/go.mod
+@@ -20,6 +20,7 @@ require (
+ 	github.com/go-playground/validator/v10 v10.30.5
+ 	github.com/go-viper/mapstructure/v2 v2.5.0
+ 	github.com/golang-jwt/jwt/v5 v5.3.1
++	github.com/google/cel-go v0.29.2
+ 	github.com/google/uuid v1.6.0
+ 	github.com/gowebpki/jcs v1.0.2
+ 	github.com/hashicorp/vault/api v1.23.0
+@@ -79,6 +80,7 @@ require (
+ )
+ 
+ require (
++	cel.dev/expr v0.25.2 // indirect
+ 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
+ 	dario.cat/mergo v1.0.2 // indirect
+ 	filippo.io/hpke v0.4.0 // indirect
+@@ -90,6 +92,7 @@ require (
+ 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
+ 	github.com/Masterminds/squirrel v1.5.4 // indirect
+ 	github.com/Microsoft/go-winio v0.6.4 // indirect
++	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
+ 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+ 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
+ 	github.com/aws/smithy-go v1.28.5 // indirect
+@@ -277,6 +280,7 @@ require (
+ 	go.uber.org/multierr v1.11.0 // indirect
+ 	go.yaml.in/yaml/v2 v2.4.4 // indirect
+ 	go.yaml.in/yaml/v3 v3.0.5 // indirect
++	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
+ 	golang.org/x/text v0.43.0 // indirect
+ 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
+ 	google.golang.org/genproto/googleapis/api v0.0.0-20261019180522-ce908d29299b // indirect
+diff --git a/go.sum b/go.sum
+index 6fd907e369..adf7c5063e 100644
+--- a/go.sum
++++ b/go.sum
+@@ -2,6 +2,8 @@ al.essio.dev/pkg/shellescape v1.5.1 h1:86HrALUujYS/h+GtqoB26SBEdkWfmMI6FubjXlsXy
+ al.essio.dev/pkg/shellescape v1.5.1/go.mod h1:6sIqp7X2P6mThCQ7twERpZTuigpr6KbZWtls1U8I890=
+ c2sp.org/CCTV/age v0.0.0-20260829155415-4448f2097b2d h1:Blprhc2SbChNZtWcU+BLTM4YdoqYAS9V7cJgOwJKyAs=
+ c2sp.org/CCTV/age v0.0.0-20260829155415-4448f2097b2d/go.mod h1:SrHC2C7r5GkDk8R+NFVzYy/sdj0Ypg9htaPXQq5Cqeo=
++cel.dev/expr v0.25.2 h1:K6j46C81hXtZQfuX60cVWQFBJahKSE2gfRbNuvr5bFs=
++cel.dev/expr v0.25.2/go.mod h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=
+ cloud.google.com/go v0.123.0 h1:2NAUJwPR47q+E35uaJeYoNhuNEM9kM8SjgRgdeOJUSE=
+ cloud.google.com/go v0.123.0/go.mod h1:xBoMV08QcqUGuPW65Qfm1o9Y4zKZBpGS+7bImXLTAZU=
+ cloud.google.com/go/auth v0.24.1-0.20261001053825-dbc26066f70a h1:jW1ZLFy9oa5ai8LOI40z6s+DL1cO/L1KSm9hVGnibn8=
+@@ -75,6 +77,8 @@ github.com/alicebob/miniredis/v2 v2.39.0 h1:M7WbmV5BmV56L8KTG0rw6vEQ+woTOghpDgin
+ github.com/alicebob/miniredis/v2 v2.39.0/go.mod h1:TcL7YfarKPGDAthEtl5NBeHZfeUQj6OXMm/+iu5cLMM=
+ github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=
+ github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be/go.mod h1:ySMOLuWl6zY27l47sB3qLNK6tF2fkHG55UZxx8oIVo4=
++github.com/antlr4-go/antlr/v4 v4.13.1 h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=
++github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=
+ github.com/apapsch/go-jsonmerge/v2 v2.0.0 h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=
+ github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
+ github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
+@@ -342,6 +346,8 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
+ github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
+ github.com/google/btree v1.1.3 h1:CVpQJjYgC4VbzxeGVHfvZrv1ctoYCAI8vbl07Fcxlyg=
+ github.com/google/btree v1.1.3/go.mod h1:qOPhT0dTNdNzV6Z/lhRX0YXUafgPLFUh+gZMl761Gm4=
++github.com/google/cel-go v0.29.2 h1:ZtDxkeiMmz0mxbKDYiNkE5Lk7V5edMRcaaDf2jX002k=
++github.com/google/cel-go v0.29.2/go.mod h1:X0bD6iVNR8pkROSOoHVdgTkzmRcosof7WQqCD6wcMc8=
+ github.com/google/certificate-transparency-go v1.4.0 h1:78uNaR2knzCoKKXXDSAGVkz9XPkDg5xXJRP9tP6+rr0=
+ github.com/google/certificate-transparency-go v1.4.0/go.mod h1:iR17ZgSaXRzSa5qvjFl8TnVD5h8ky2JMVio+dzoKMgA=
+ github.com/google/gnostic-models v0.7.1 h1:SisTfuFKJSKM5CPZkffwi6coztzzeYUhc3v4yxLWH8c=
+diff --git a/internal/agent/delivery/probe.go b/internal/agent/delivery/probe.go
+index b72d96b6b9..464f6f1d72 100644
+--- a/internal/agent/delivery/probe.go
++++ b/internal/agent/delivery/probe.go
+@@ -166,7 +166,7 @@ func deploymentReady(deployment *appsv1.Deployment, name string) bool {
+ 	// controller. Other controllers must satisfy their Deployment availability
+ 	// condition normally.
+ 	if name == "source-controller" {
+-		return true
++		return sourceControllerWarmStandbyReady(deployment)
+ 	}
+ 	for _, condition := range deployment.Status.Conditions {
+ 		if condition.Type == appsv1.DeploymentAvailable && condition.Status == "True" {
+diff --git a/internal/agent/delivery/probe_shared_test.go b/internal/agent/delivery/probe_shared_test.go
+index 61b7476298..b157b0d878 100644
+--- a/internal/agent/delivery/probe_shared_test.go
++++ b/internal/agent/delivery/probe_shared_test.go
+@@ -142,6 +142,8 @@ func TestSharedProbeWarmStandbyAndOldCurrentTimestamp(t *testing.T) {
+ 	sourceController := snapshot.Deployments[0]
+ 	replicas := int32(2)
+ 	sourceController.Spec.Replicas = &replicas
++	sourceController.Status.Replicas = replicas
++	sourceController.Status.UpdatedReplicas = replicas
+ 	sourceController.Status.Conditions = nil
+ 	inventory, _, err := probe.InspectObserved(context.Background())
+ 	if err != nil || !inventory.Ready {
+diff --git a/internal/agent/delivery/probe_test.go b/internal/agent/delivery/probe_test.go
+index c0f732e0e6..622dece88c 100644
+--- a/internal/agent/delivery/probe_test.go
++++ b/internal/agent/delivery/probe_test.go
+@@ -33,7 +33,7 @@ func readyController(t *testing.T, name string, remoteBases bool) *appsv1.Deploy
+ 	return &appsv1.Deployment{
+ 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: DeliverySystemNamespace, Generation: 2, Labels: map[string]string{"app.kubernetes.io/version": fluxdistribution.Version()}},
+ 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: images[name].Reference + "@" + images[name].Digest, Args: args}}}}},
+-		Status:     appsv1.DeploymentStatus{ObservedGeneration: 2, AvailableReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}},
++		Status:     appsv1.DeploymentStatus{ObservedGeneration: 2, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}},
+ 	}
+ }
+ 
+@@ -41,6 +41,8 @@ func TestDeploymentReadyAllowsSourceControllerWarmStandby(t *testing.T) {
+ 	controller := readyController(t, "source-controller", false)
+ 	replicas := int32(2)
+ 	controller.Spec.Replicas = &replicas
++	controller.Status.Replicas = replicas
++	controller.Status.UpdatedReplicas = replicas
+ 	controller.Status.ReadyReplicas = 1
+ 	controller.Status.AvailableReplicas = 1
+ 	controller.Status.Conditions = []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionFalse}}
+diff --git a/internal/agent/delivery/system.go b/internal/agent/delivery/system.go
+index 996f28ca3e..30d6edf2c8 100644
+--- a/internal/agent/delivery/system.go
++++ b/internal/agent/delivery/system.go
+@@ -351,8 +351,9 @@ func systemObjects(release protocol.DeliverySystemReleaseV2) []*unstructured.Uns
+ 	objects = append(objects, systemObject(kustomizationGVK, systemObjectName, labels, map[string]any{"spec": map[string]any{
+ 		"interval": release.Interval, "retryInterval": "1m", "timeout": release.Timeout, "path": "./", "prune": true, "wait": true,
+ 		"force": false, "suspend": release.Suspend, "serviceAccountName": systemApplierName,
+-		"sourceRef": map[string]any{"apiVersion": "source.toolkit.fluxcd.io/v1", "kind": "OCIRepository", "name": systemObjectName},
+-		"postBuild": map[string]any{"substitute": map[string]any{"ASTRONOMER_SYSTEM_GENERATION": fmt.Sprintf("%d", release.Generation)}},
++		"healthCheckExprs": systemDeploymentHealthChecks(),
++		"sourceRef":        map[string]any{"apiVersion": "source.toolkit.fluxcd.io/v1", "kind": "OCIRepository", "name": systemObjectName},
++		"postBuild":        map[string]any{"substitute": map[string]any{"ASTRONOMER_SYSTEM_GENERATION": fmt.Sprintf("%d", release.Generation)}},
+ 	}}))
+ 	return objects
+ }
+diff --git a/internal/agent/delivery/system_inventory.go b/internal/agent/delivery/system_inventory.go
+index 76a35ff877..33f504f70a 100644
+--- a/internal/agent/delivery/system_inventory.go
++++ b/internal/agent/delivery/system_inventory.go
+@@ -186,7 +186,17 @@ func deploymentComponent(item *appsv1.Deployment, identity componentIdentity) pr
+ 	if item.Spec.Replicas != nil {
+ 		desired = *item.Spec.Replicas
+ 	}
+-	return workloadComponent(item.Namespace, "Deployment", item.Name, desired, item.Status.ReadyReplicas, item.Spec.Template.Spec.Containers, item.CreationTimestamp.Time, identity)
++	component := workloadComponent(item.Namespace, "Deployment", item.Name, desired, item.Status.ReadyReplicas, item.Spec.Template.Spec.Containers, item.CreationTimestamp.Time, identity)
++	if item.Namespace == DeliverySystemNamespace && item.Name == "source-controller" {
++		component.Health = "degraded"
++		if sourceControllerWarmStandbyReady(item) {
++			component.Health = "healthy"
++		} else if item.Status.AvailableReplicas < 1 || item.Status.ReadyReplicas < 1 {
++			component.Health = "unavailable"
++		}
++		component.Detail += " Only the elected source-controller serves artifacts; the second replica is a warm standby."
++	}
++	return component
+ }
+ 
+ func statefulSetComponent(item *appsv1.StatefulSet, identity componentIdentity) protocol.SystemComponent {
+diff --git a/internal/agent/observation_delivery_integration_test.go b/internal/agent/observation_delivery_integration_test.go
+index e2b71b05ca..a2edc189bf 100644
+--- a/internal/agent/observation_delivery_integration_test.go
++++ b/internal/agent/observation_delivery_integration_test.go
+@@ -33,7 +33,7 @@ func TestSharedDeliveryRealInformerReadsAndControllerChanges(t *testing.T) {
+ 	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller"} {
+ 		image := images[name]
+ 		args := []string{"--no-cross-namespace-refs=true", "--no-remote-bases=true"}
+-		objects = append(objects, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: agentdelivery.DeliverySystemNamespace, Generation: 1, ResourceVersion: "1", Labels: map[string]string{"app.kubernetes.io/version": fluxdistribution.Version()}}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: image.Reference + "@" + image.Digest, Args: args}}}}}, Status: appsv1.DeploymentStatus{ObservedGeneration: 1, AvailableReplicas: 1, ReadyReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}}})
++		objects = append(objects, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: agentdelivery.DeliverySystemNamespace, Generation: 1, ResourceVersion: "1", Labels: map[string]string{"app.kubernetes.io/version": fluxdistribution.Version()}}, Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "manager", Image: image.Reference + "@" + image.Digest, Args: args}}}}}, Status: appsv1.DeploymentStatus{ObservedGeneration: 1, Replicas: 1, UpdatedReplicas: 1, AvailableReplicas: 1, ReadyReplicas: 1, Conditions: []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue}}}})
+ 	}
+ 	client := fake.NewClientset(objects...)
+ 	subscriber, _, _ := startObservationSubscriber(t, client)
+diff --git a/internal/auth/api_token_scopes.go b/internal/auth/api_token_scopes.go
+index a1db7cd322..958253e27d 100644
+--- a/internal/auth/api_token_scopes.go
++++ b/internal/auth/api_token_scopes.go
+@@ -15,6 +15,8 @@ import (
+ 	"net"
+ 	"net/http"
+ 	"strings"
++
++	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+ )
+ 
+ // API token scope vocabulary. The CRUD UI surfaces these as a checkbox
+@@ -215,6 +217,21 @@ func IPAllowed(nets []*net.IPNet, remote net.IP) bool {
+ 	return false
+ }
+ 
++// APITokenIPAllowed applies the same token restriction to REST and streams.
++// ClientIP uses only the canonical address established by trusted proxy
++// middleware; arbitrary forwarding headers must never grant token access.
++func APITokenIPAllowed(r *http.Request, allowedCIDRs string) bool {
++	if strings.TrimSpace(allowedCIDRs) == "" {
++		return true
++	}
++	nets, err := ParseAllowedCIDRs(allowedCIDRs)
++	client := reqctx.ClientIP(r)
++	if err != nil || client == nil {
++		return false
++	}
++	return IPAllowed(nets, net.IP(client.AsSlice()))
++}
++
+ // cidrParseError mirrors net.ParseError shape so callers can switch on
+ // .Error() the same way; kept private because the package doesn't
+ // need a richer type today.
+diff --git a/internal/auth/streamauth.go b/internal/auth/streamauth.go
+index fd10176f45..fe4b3a0f6b 100644
+--- a/internal/auth/streamauth.go
++++ b/internal/auth/streamauth.go
+@@ -44,7 +44,7 @@ func BearerFromHeader(headerVal string) string {
+ //   - An API token (prefix `astro_`), looked up by sha256 hash in the
+ //     api_tokens table. The query also enforces is_revoked=false at the SQL
+ //     level. ExpiresAt is checked here. The owning user must be active.
+-//   - A JWT, validated against the JWTManager's key set.
++//   - An access JWT, validated against the JWTManager's key set.
+ //
+ // On any failure (missing/expired/revoked/inactive-user/bad-signature) returns
+ // (uuid.Nil, false) so callers can write a uniform 401. A missing JWT manager
+@@ -85,6 +85,9 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
+ 		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
+ 			return uuid.Nil, false
+ 		}
++		if !APITokenIPAllowed(r, apiToken.AllowedCidrs) {
++			return uuid.Nil, false
++		}
+ 		dbUser, err := q.GetUserByID(r.Context(), apiToken.UserID)
+ 		if err != nil || !dbUser.IsActive {
+ 			return uuid.Nil, false
+@@ -102,11 +105,11 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
+ 		return dbUser.ID, true
+ 	}
+ 
+-	claims, err := j.ValidateToken(token)
++	claims, err := j.ValidateTokenContext(r.Context(), token)
+ 	if err != nil {
+ 		return uuid.Nil, false
+ 	}
+-	if claims.UserID == uuid.Nil {
++	if claims.TokenType != AccessToken || claims.UserID == uuid.Nil {
+ 		return uuid.Nil, false
+ 	}
+ 	return claims.UserID, true
+diff --git a/internal/charlie/feature_lifecycle_test.go b/internal/charlie/feature_lifecycle_test.go
+index f394250cc5..f5110d781d 100644
+--- a/internal/charlie/feature_lifecycle_test.go
++++ b/internal/charlie/feature_lifecycle_test.go
+@@ -109,3 +109,26 @@ func TestFeatureDisableStopsRuntimeForInactiveConnection(t *testing.T) {
+ 		t.Fatalf("inactive shutdowns=%d", runtime.shutdowns)
+ 	}
+ }
++
++// Losing the control transport while the agent ceiling is unconfirmed would
++// prevent the supported disable path from converging. The durable emergency
++// latch is not permission to tear this transport down prematurely.
++func TestFeatureDisableRetainsControlRuntimeWhileAgentCeilingPending(t *testing.T) {
++	t.Parallel()
++	runtime := &featureRuntimeFake{}
++	fence := NewWriteFence()
++	lifecycle := &FeatureLifecycle{
++		connection: func(context.Context) (sqlc.CharlieConnection, error) {
++			return sqlc.CharlieConnection{ID: uuid.New(), Active: true}, nil
++		},
++		mode:    featureModeFake{err: errors.New("Charlie is locally disabled; agent ceiling confirmation is pending")},
++		runtime: runtime, writes: fence, timeout: time.Second, auditor: &authorityAuditFake{},
++	}
++	err := lifecycle.Disable(t.Context(), uuid.NewString())
++	if err == nil || !strings.Contains(err.Error(), "agent ceiling confirmation is pending") {
++		t.Fatalf("pending ceiling was acknowledged: %v", err)
++	}
++	if runtime.shutdowns != 0 {
++		t.Fatal("pending ceiling lost its control runtime")
++	}
++}
+diff --git a/internal/db/sqlc/querier.go b/internal/db/sqlc/querier.go
+index f067441c5d..e9f5c068a6 100644
+--- a/internal/db/sqlc/querier.go
++++ b/internal/db/sqlc/querier.go
+@@ -307,6 +307,7 @@ type Querier interface {
+ 	CountPipelinesByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+ 	CountPodSecurityTemplates(ctx context.Context) (int64, error)
+ 	CountProjectRoles(ctx context.Context) (int64, error)
++	CountProjectedClusterApps(ctx context.Context, clusterID uuid.UUID) (int64, error)
+ 	CountProjects(ctx context.Context) (int64, error)
+ 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+ 	CountProjectsByClusterFiltered(ctx context.Context, arg CountProjectsByClusterFilteredParams) (int64, error)
+@@ -1936,6 +1937,9 @@ type Querier interface {
+ 	ListProjectRoleBindingsByProject(ctx context.Context, arg ListProjectRoleBindingsByProjectParams) ([]ProjectRoleBinding, error)
+ 	ListProjectRoles(ctx context.Context, arg ListProjectRolesParams) ([]ProjectRole, error)
+ 	ListProjectSubscriptions(ctx context.Context, projectID uuid.UUID) ([]ProjectCatalogSubscription, error)
++	// The Apps read model projects durable Delivery state before pagination. It
++	// never mutates/deletes compatibility rows while serving a read.
++	ListProjectedClusterApps(ctx context.Context, arg ListProjectedClusterAppsParams) ([]ListProjectedClusterAppsRow, error)
+ 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
+ 	ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error)
+ 	// Scope-filtered ListProjects: the projects the caller is bound to directly,
+diff --git a/internal/drcrypto/keybundle.go b/internal/drcrypto/keybundle.go
+index 7da54babe5..760591b935 100644
+--- a/internal/drcrypto/keybundle.go
++++ b/internal/drcrypto/keybundle.go
+@@ -10,23 +10,27 @@ import (
+ 	"encoding/json"
+ 	"errors"
+ 	"io"
++	"io/fs"
+ 	"os"
+ 	"path/filepath"
+ 	"regexp"
+ 	"slices"
++	"strings"
+ 	"time"
+ )
+ 
+ const (
+ 	maxKeyFileBytes          = 1 << 20
+ 	maxKeyBundleBytes        = 16 << 20
++	maxKeyBundleFiles        = 1024
+ 	legacyCBCKDFIterations   = 10_000
+ 	legacyCBCMaxPayloadBytes = maxKeyBundleBytes + 32
+ )
+ 
+ var (
+-	secretKeyNamePattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9])?$`)
+-	requiredKeys         = []string{"ASTRONOMER_ENCRYPTION_KEY", "SECRET_KEY"}
++	secretKeyNamePattern  = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9])?$`)
++	catalogKeyNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,253}$`)
++	requiredKeys          = []string{"ASTRONOMER_ENCRYPTION_KEY", "SECRET_KEY"}
+ )
+ 
+ func decodeNumbers(raw []byte, into any) error {
+@@ -35,40 +39,79 @@ func decodeNumbers(raw []byte, into any) error {
+ 	return decoder.Decode(into)
+ }
+ 
+-// listKeyFiles validates source and returns its sorted key file names.
++func catalogTrustDirectory(name string) bool {
++	return name == "catalog-ca" || name == "catalog-signature-trust"
++}
++
++func validKeyMemberPath(name string) bool {
++	directory, file, nested := strings.Cut(name, "/")
++	if !nested {
++		return secretKeyNamePattern.MatchString(name)
++	}
++	return catalogTrustDirectory(directory) && catalogKeyNamePattern.MatchString(file) && file != "." && !strings.HasPrefix(file, "..")
++}
++
++// listKeyFiles allows flat keys and one level of catalog trust files only.
+ func listKeyFiles(source string) ([]string, error) {
+ 	info, err := os.Lstat(source)
+ 	if err != nil || !info.IsDir() {
+ 		return nil, failf("key source must be a regular directory")
+ 	}
+-	entries, err := os.ReadDir(source)
+-	if err != nil {
++	collector := keySourceCollector{source: source, directories: map[string]bool{}}
++	if err := filepath.WalkDir(source, collector.walk); err != nil {
+ 		return nil, err
+ 	}
+-	if len(entries) == 0 {
+-		return nil, failf("key source directory is empty")
+-	}
+-	names := make([]string, 0, len(entries))
+-	var total int64
+-	for _, entry := range entries {
+-		fileInfo, err := os.Lstat(filepath.Join(source, entry.Name()))
+-		if err != nil || !fileInfo.Mode().IsRegular() || !secretKeyNamePattern.MatchString(entry.Name()) {
+-			return nil, failf("key source may contain only top-level regular files")
+-		}
+-		if fileInfo.Size() <= 0 || fileInfo.Size() > maxKeyFileBytes {
+-			return nil, failf("key file %s has an unsafe size", entry.Name())
++	for _, populated := range collector.directories {
++		if !populated {
++			return nil, failf("catalog trust directory is empty")
+ 		}
+-		total += fileInfo.Size()
+-		names = append(names, entry.Name())
+ 	}
+-	if total > maxKeyBundleBytes {
+-		return nil, failf("key bundle exceeds the size limit")
+-	}
+-	if err := requireKeys(func(name string) bool { return slices.Contains(names, name) }); err != nil {
++	if err := requireKeys(func(name string) bool { return slices.Contains(collector.names, name) }); err != nil {
+ 		return nil, err
+ 	}
+-	slices.Sort(names)
+-	return names, nil
++	slices.Sort(collector.names)
++	return collector.names, nil
++}
++
++type keySourceCollector struct {
++	source      string
++	names       []string
++	directories map[string]bool
++	total       int64
++}
++
++func (c *keySourceCollector) walk(path string, entry fs.DirEntry, walkErr error) error {
++	if walkErr != nil {
++		return walkErr
++	}
++	if path == c.source {
++		return nil
++	}
++	name, err := filepath.Rel(c.source, path)
++	if err != nil {
++		return err
++	}
++	name = filepath.ToSlash(name)
++	if entry.IsDir() && catalogTrustDirectory(name) {
++		c.directories[name] = false
++		return nil
++	}
++	fileInfo, err := entry.Info()
++	if err != nil || !fileInfo.Mode().IsRegular() || !validKeyMemberPath(name) {
++		return failf("key source may contain only regular files at the top level or in supported catalog trust directories")
++	}
++	if fileInfo.Size() <= 0 || fileInfo.Size() > maxKeyFileBytes {
++		return failf("key file %s has an unsafe size", name)
++	}
++	c.total += fileInfo.Size()
++	c.names = append(c.names, name)
++	if c.total > maxKeyBundleBytes || len(c.names) > maxKeyBundleFiles {
++		return failf("key bundle exceeds the size or file count limit")
++	}
++	if directory, _, nested := strings.Cut(name, "/"); nested {
++		c.directories[directory] = true
++	}
++	return nil
+ }
+ 
+ func requireKeys(has func(string) bool) error {
+@@ -80,21 +123,36 @@ func requireKeys(has func(string) bool) error {
+ 	return nil
+ }
+ 
+-// CreateKeyBundle writes a deterministic tar of the top-level regular files
++// CreateKeyBundle writes a deterministic tar of validated flat and catalog keys
+ // in source (sorted, mode 0600, mtime 0, uid/gid 0).
+ func CreateKeyBundle(source, output string) error {
+ 	names, err := listKeyFiles(source)
+ 	if err != nil {
+ 		return err
+ 	}
++	root, err := os.OpenRoot(source)
++	if err != nil {
++		return err
++	}
++	defer func() { _ = root.Close() }()
+ 	return writeAtomically(output, func(out io.Writer) error {
+ 		archive := tar.NewWriter(out)
++		var total int
+ 		for _, name := range names {
+-			content, err := os.ReadFile(filepath.Join(source, name)) // #nosec G304 -- validated top-level regular file
++			content, err := readKeySourceFile(root, name)
+ 			if err != nil {
+ 				return err
+ 			}
++			total += len(content)
++			if total > maxKeyBundleBytes {
++				return failf("key bundle exceeds the size limit")
++			}
+ 			header := &tar.Header{Typeflag: tar.TypeReg, Name: name, Size: int64(len(content)), Mode: 0o600, ModTime: time.Unix(0, 0), Format: tar.FormatUSTAR}
++			// Kubernetes permits 253-byte Secret keys; USTAR's basename field
++			// is only 100 bytes. Preserve the existing format whenever it fits.
++			if len(filepath.Base(name)) > 100 {
++				header.Format = tar.FormatPAX
++			}
+ 			if err := archive.WriteHeader(header); err != nil {
+ 				return err
+ 			}
+@@ -106,6 +164,28 @@ func CreateKeyBundle(source, output string) error {
+ 	})
+ }
+ 
++// Recheck size while reading, and contain file resolution within source even if
++// a staged file changes after directory validation.
++func readKeySourceFile(root *os.Root, name string) ([]byte, error) {
++	file, err := root.Open(name)
++	if err != nil {
++		return nil, err
++	}
++	defer func() { _ = file.Close() }()
++	info, err := file.Stat()
++	if err != nil || !info.Mode().IsRegular() {
++		return nil, failf("key source member must be a regular file")
++	}
++	content, err := io.ReadAll(io.LimitReader(file, maxKeyFileBytes+1))
++	if err != nil {
++		return nil, err
++	}
++	if len(content) == 0 || len(content) > maxKeyFileBytes {
++		return nil, failf("key file has an unsafe size")
++	}
++	return content, nil
++}
++
+ type keyMember struct {
+ 	name    string
+ 	content []byte
+@@ -115,9 +195,12 @@ func readKeyMember(reader *tar.Reader, header *tar.Header, seen map[string]bool)
+ 	if header.Typeflag != tar.TypeReg || seen[header.Name] {
+ 		return keyMember{}, failf("key bundle contains a link, non-file, or duplicate member")
+ 	}
+-	if filepath.Base(header.Name) != header.Name || !secretKeyNamePattern.MatchString(header.Name) {
++	if !validKeyMemberPath(header.Name) || seen[header.Name+"/"] {
+ 		return keyMember{}, failf("key bundle contains an unsafe member path")
+ 	}
++	if directory, _, nested := strings.Cut(header.Name, "/"); nested && seen[directory] {
++		return keyMember{}, failf("key bundle contains a file/directory path collision")
++	}
+ 	if header.Size <= 0 || header.Size > maxKeyFileBytes {
+ 		return keyMember{}, failf("key bundle member has an unsafe size")
+ 	}
+@@ -151,10 +234,13 @@ func readKeyBundle(bundle string) ([]keyMember, error) {
+ 		if err != nil {
+ 			return nil, err
+ 		}
+-		if total += header.Size; total > maxKeyBundleBytes {
+-			return nil, failf("key bundle exceeds the size limit")
++		if total += header.Size; total > maxKeyBundleBytes || len(members) >= maxKeyBundleFiles {
++			return nil, failf("key bundle exceeds the size or file count limit")
+ 		}
+ 		seen[member.name] = true
++		if directory, _, nested := strings.Cut(member.name, "/"); nested {
++			seen[directory+"/"] = true
++		}
+ 		members = append(members, member)
+ 	}
+ 	return members, requireKeys(func(name string) bool { return seen[name] })
+@@ -162,7 +248,12 @@ func readKeyBundle(bundle string) ([]keyMember, error) {
+ 
+ func writeKeyFiles(directory string, members []keyMember) error {
+ 	for _, m := range members {
+-		handle, err := os.OpenFile(filepath.Join(directory, m.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- validated single-segment name
++		if parent, _, nested := strings.Cut(m.name, "/"); nested {
++			if err := os.MkdirAll(filepath.Join(directory, parent), 0o700); err != nil {
++				return err
++			}
++		}
++		handle, err := os.OpenFile(filepath.Join(directory, m.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- validated bounded member path in private extraction directory
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -178,8 +269,8 @@ func writeKeyFiles(directory string, members []keyMember) error {
+ }
+ 
+ // ExtractKeyBundle validates the whole bundle before creating destination
+-// (0700) with 0600 files; links, nested paths, duplicates and oversize
+-// members are refused.
++// (0700) with 0600 files and optional 0700 catalog trust directories. Links,
++// arbitrary nesting, duplicates, path collisions and oversize members are refused.
+ func ExtractKeyBundle(bundle, destination string) error {
+ 	if err := requireRegularFile(bundle, "key bundle"); err != nil {
+ 		return err
+diff --git a/internal/handler/catalog.go b/internal/handler/catalog.go
+index 5d9bab4363..c1f0410a85 100644
+--- a/internal/handler/catalog.go
++++ b/internal/handler/catalog.go
+@@ -77,7 +77,8 @@ type CatalogQuerier interface {
+ 	// Sprint 082 — lazy hydration writeback for default_values + readme.
+ 	UpdateHelmChartVersionContent(ctx context.Context, arg sqlc.UpdateHelmChartVersionContentParams) error
+ 	// Sprint 082 — joined Apps tab listing (chart name/icon/version + repo).
+-	ListInstalledChartsWithMetadataByCluster(ctx context.Context, arg sqlc.ListInstalledChartsWithMetadataByClusterParams) ([]sqlc.InstalledChartWithMetadata, error)
++	ListProjectedClusterApps(context.Context, sqlc.ListProjectedClusterAppsParams) ([]sqlc.ListProjectedClusterAppsRow, error)
++	CountProjectedClusterApps(context.Context, uuid.UUID) (int64, error)
+ 	// Installed Charts
+ 	ListInstalledCharts(ctx context.Context, arg sqlc.ListInstalledChartsParams) ([]sqlc.InstalledChart, error)
+ 	ListInstalledChartsByCluster(ctx context.Context, arg sqlc.ListInstalledChartsByClusterParams) ([]sqlc.InstalledChart, error)
+diff --git a/internal/handler/catalog_installed_enriched.go b/internal/handler/catalog_installed_enriched.go
+index b7ef8b053d..b87319c828 100644
+--- a/internal/handler/catalog_installed_enriched.go
++++ b/internal/handler/catalog_installed_enriched.go
+@@ -49,17 +49,17 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
+ 	}
+ 	offset := queryOffset32(r)
+ 
+-	rows, err := h.queries.ListInstalledChartsWithMetadataByCluster(r.Context(), sqlc.ListInstalledChartsWithMetadataByClusterParams{
+-		ClusterID: clusterID,
+-		Limit:     limit,
+-		Offset:    offset,
++	rows, err := h.queries.ListProjectedClusterApps(r.Context(), sqlc.ListProjectedClusterAppsParams{
++		ClusterID:   clusterID,
++		QueryLimit:  limit,
++		QueryOffset: offset,
+ 	})
+ 	if err != nil {
+ 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.ListError, "Failed to list cluster apps")
+ 		return
+ 	}
+ 
+-	total, err := h.queries.CountInstalledChartsByCluster(r.Context(), clusterID)
++	total, err := h.queries.CountProjectedClusterApps(r.Context(), clusterID)
+ 	if err != nil {
+ 		apiutil.WriteError(w, r, http.StatusInternalServerError, apiutil.CountError, "Failed to count cluster apps")
+ 		return
+@@ -67,7 +67,14 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
+ 
+ 	out := make([]map[string]any, 0, len(rows))
+ 	for _, row := range rows {
+-		out = append(out, enrichedInstalledRowJSON(row))
++		row.InstalledChart.Status = row.ProjectedStatus
++		out = append(out, enrichedInstalledRowJSON(sqlc.InstalledChartWithMetadata{
++			InstalledChart: row.InstalledChart, ChartVersion: row.ChartVersion,
++			ChartAppVersion: row.ChartAppVersion, ChartID: row.ChartID,
++			ChartName: row.ChartName, ChartDisplayName: row.ChartDisplayName,
++			ChartDescription: row.ChartDescription, ChartIconUrl: row.ChartIconUrl,
++			ChartCategory: row.ChartCategory, RepoName: row.RepoName, RepoType: row.RepoType,
++		}))
+ 	}
+ 
+ 	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
+diff --git a/internal/handler/catalog_oci_test.go b/internal/handler/catalog_oci_test.go
+index 4314434975..2297447765 100644
+--- a/internal/handler/catalog_oci_test.go
++++ b/internal/handler/catalog_oci_test.go
+@@ -139,10 +139,5 @@ func TestFetchAndIngestOCIRepoNoCharts(t *testing.T) {
+ 	}
+ }
+ 
+-// TestFetchAndIngestOCIRepoLive is intentionally skipped — running it would
+-// require network access to a real OCI registry, and the test environment
+-// has no such guarantee. Restore by removing the Skip and pointing it at a
+-// reachable registry to validate end-to-end ingest manually.
+-func TestFetchAndIngestOCIRepoLive(t *testing.T) {
+-	t.Skip("network-dependent; run manually against a reachable OCI registry")
+-}
++// Real TLS registry and PostgreSQL ingestion coverage lives in
++// internal/catalog/oci_integration_test.go (the shared production implementation).
+diff --git a/internal/handler/project_catalogs_test.go b/internal/handler/project_catalogs_test.go
+index 5338b66baf..7dc0bf40ca 100644
+--- a/internal/handler/project_catalogs_test.go
++++ b/internal/handler/project_catalogs_test.go
+@@ -1016,3 +1016,10 @@ func TestCreateProjectCatalog_RejectsTopLevelCredentials(t *testing.T) {
+ 		t.Fatalf("a catalog was created from a rejected request: %d rows", len(q.catalogs))
+ 	}
+ }
++
++func (m *minimalCatalogQuerier) ListProjectedClusterApps(context.Context, sqlc.ListProjectedClusterAppsParams) ([]sqlc.ListProjectedClusterAppsRow, error) {
++	return nil, nil
++}
++func (m *minimalCatalogQuerier) CountProjectedClusterApps(context.Context, uuid.UUID) (int64, error) {
++	return 0, nil
++}
+diff --git a/internal/ops/upgradecli/invocation_verified_run_crypto_linux_test.go b/internal/ops/upgradecli/invocation_verified_run_crypto_linux_test.go
+index 85518bf94e..f58c9ee420 100644
+--- a/internal/ops/upgradecli/invocation_verified_run_crypto_linux_test.go
++++ b/internal/ops/upgradecli/invocation_verified_run_crypto_linux_test.go
+@@ -29,7 +29,7 @@ import (
+ 	"github.com/alphabravocompany/astronomer-go/internal/ops/upgrade"
+ )
+ 
+-// Real offline signatures for all seven pinned image subjects and the target
++// Real offline signatures for all six pinned image subjects and the target
+ // chart flow through PrepareInvocation and Invocation.Run. A joined synthetic
+ // gh child accepts ONLY the exact historical attestation argv; this is not
+ // GitHub attestation provenance. The synthetic kubectl fails at the first
+@@ -47,8 +47,8 @@ func TestInvocationRunAuthenticatesEveryImageBeforeOwnedDatabaseBoundary(t *test
+ 		t.Fatal("complete cryptographic Verify was not acknowledged separately from failed Backup", err)
+ 	}
+ 	reads := imageReads()
+-	if len(reads) != 7 {
+-		t.Fatal("all seven image subjects were not verified", reads)
++	if len(reads) != 6 {
++		t.Fatal("all six image subjects were not verified", reads)
+ 	}
+ 	for role, count := range reads {
+ 		if count < 1 {
+@@ -140,8 +140,8 @@ func invocationImageSignatureClient(t *testing.T, fixture *localChartCryptoFixtu
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if len(manifest.Astronomer.Images) != 7 {
+-		t.Fatal("exact candidate seven-image fixture required")
++	if len(manifest.Astronomer.Images) != 6 {
++		t.Fatal("exact candidate six-image fixture required")
+ 	}
+ 	bodies := map[string][]byte{}
+ 	signatureRoles := map[string]string{}
+diff --git a/internal/ops/upgradecli/legacy_run_linux_test.go b/internal/ops/upgradecli/legacy_run_linux_test.go
+index 774a4c09a4..1f59cb5c96 100644
+--- a/internal/ops/upgradecli/legacy_run_linux_test.go
++++ b/internal/ops/upgradecli/legacy_run_linux_test.go
+@@ -62,8 +62,8 @@ func TestRunLegacyUpgradeActualVerifiedBackupFailureRetainsOriginalExitAndMode(t
+ 				t.Fatal("pre-backup failure created a public report", readErr)
+ 			}
+ 			imageReads := reads()
+-			if len(imageReads) != 7 {
+-				t.Fatal("legacy runner bypassed actual seven-image crypto verification")
++			if len(imageReads) != 6 {
++				t.Fatal("legacy runner bypassed actual six-image crypto verification")
+ 			}
+ 			for _, count := range imageReads {
+ 				if count < 1 {
+diff --git a/internal/server/middleware/auth.go b/internal/server/middleware/auth.go
+index 9193026fd3..c45b0acc0e 100644
+--- a/internal/server/middleware/auth.go
++++ b/internal/server/middleware/auth.go
+@@ -5,9 +5,7 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"errors"
+-	"net"
+ 	"net/http"
+-	"net/netip"
+ 	"strings"
+ 	"time"
+ 
+@@ -133,13 +131,10 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
+ 					// (no restriction). Parse errors fail closed so a
+ 					// misconfigured token can't silently bypass the
+ 					// check.
+-					if strings.TrimSpace(apiToken.AllowedCidrs) != "" {
+-						nets, perr := auth.ParseAllowedCIDRs(apiToken.AllowedCidrs)
+-						if perr != nil || !auth.IPAllowed(nets, netIP(reqctx.ClientIP(r))) {
+-							auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
+-							authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
+-							return
+-						}
++					if !auth.APITokenIPAllowed(r, apiToken.AllowedCidrs) {
++						auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
++						authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
++						return
+ 					}
+ 					clientIP := reqctx.ClientIP(r)
+ 					if jwtManager == nil || jwtManager.ClaimAPITokenActivity(tokenHash) {
+@@ -174,11 +169,9 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
+ 					authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
+ 					return
+ 				}
+-				// Purpose-bound tokens (TOTP challenge etc.) are NEVER accepted
+-				// as session credentials. They're valid for their dedicated
+-				// endpoint only — POST /auth/totp/verify reads them via
+-				// JWTManager.ValidateToken + Purpose check directly.
+-				if claims.TokenType == auth.PurposeToken {
++				// Refresh and purpose-bound tokens are valid only at their
++				// dedicated endpoints, never as ordinary API credentials.
++				if claims.TokenType != auth.AccessToken {
+ 					authError(w, r, apiutil.AuthenticationRequired, "Token is not valid for this endpoint")
+ 					return
+ 				}
+@@ -242,13 +235,6 @@ func requestUserFromSessionIdentity(identity auth.SessionIdentity, method string
+ 	}
+ }
+ 
+-func netIP(address *netip.Addr) net.IP {
+-	if address == nil {
+-		return nil
+-	}
+-	return net.IP(address.AsSlice())
+-}
+-
+ // RequireAuth is an alias for Auth that makes it explicit at the call site
+ // that authentication is mandatory for the wrapped routes.
+ func RequireAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
+diff --git a/internal/server/middleware/idempotency.go b/internal/server/middleware/idempotency.go
+index 2d6bb9576c..dc2fb80fca 100644
+--- a/internal/server/middleware/idempotency.go
++++ b/internal/server/middleware/idempotency.go
+@@ -43,8 +43,6 @@ import (
+ 	"sync"
+ 	"time"
+ 
+-	"github.com/go-chi/chi/v5"
+-
+ 	"github.com/alphabravocompany/astronomer-go/internal/api/apiutil"
+ 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+ )
+@@ -339,6 +337,7 @@ func idempotencyRequestDigest(r *http.Request) (string, error) {
+ 	writeDigestPart("astronomer-idempotency-request-v1")
+ 	writeDigestPart(strings.ToUpper(r.Method))
+ 	writeDigestPart(canonicalRequestRoute(r))
++	writeDigestPart(idempotencyProjectScope(r))
+ 	writeDigestPart(canonicalQuery(r))
+ 	_, _ = fmt.Fprintf(hash, "%d:", len(body))
+ 	_, _ = hash.Write(body)
+@@ -349,14 +348,21 @@ func canonicalRequestRoute(r *http.Request) string {
+ 	if r == nil || r.URL == nil {
+ 		return ""
+ 	}
+-	if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
+-		if pattern := strings.TrimSpace(routeContext.RoutePattern()); pattern != "" {
+-			return pattern
+-		}
+-	}
++	// A router pattern discards concrete resource IDs and can replay one
++	// target's response for a different target matched by the same route.
+ 	return r.URL.EscapedPath()
+ }
+ 
++func idempotencyProjectScope(r *http.Request) string {
++	// Scope resolution and authorization must run before this middleware.
++	// Delivery normalizes header/query/body scope into this route parameter;
++	// never derive a replay scope from an unvalidated client header.
++	if projectID, err := reqctx.ProjectID(r); err == nil {
++		return projectID.String()
++	}
++	return ""
++}
++
+ func canonicalQuery(r *http.Request) string {
+ 	if r == nil || r.URL == nil {
+ 		return ""
+@@ -404,7 +410,7 @@ func cloneIdempotentHeaders(h http.Header) http.Header {
+ 
+ // idempotencyKey derives the dedup key for a request, or "" when the request
+ // is not a dedup candidate (read method, or no header). The key is scoped by
+-// authenticated user + method + path so one client's key can never collide
++// authenticated user + method + concrete path + resolved project so one client's key can never collide
+ // with another's, mirroring the domain:user:method:path scope the DB-backed
+ // handler-layer flow uses.
+ func idempotencyKey(r *http.Request) string {
+@@ -419,5 +425,12 @@ func idempotencyKey(r *http.Request) string {
+ 	if u, ok := reqctx.AuthenticatedUser(r.Context()); ok && u != nil {
+ 		userScope = "u:" + u.ID
+ 	}
+-	return strings.Join([]string{userScope, strings.ToUpper(r.Method), canonicalRequestRoute(r), hdr}, ":")
++	hash := sha256.New()
++	for _, part := range []string{userScope, strings.ToUpper(r.Method), canonicalRequestRoute(r), idempotencyProjectScope(r), hdr} {
++		// Length framing prevents ':' in a path/header from shifting field
++		// boundaries. The cache is process-local, so no persisted-key migration
++		// is needed when its scope changes.
++		_, _ = fmt.Fprintf(hash, "%d:%s", len(part), part)
++	}
++	return hex.EncodeToString(hash.Sum(nil))
+ }
+diff --git a/internal/server/middleware/idempotency_test.go b/internal/server/middleware/idempotency_test.go
+index 352685c0ab..be6fa24153 100644
+--- a/internal/server/middleware/idempotency_test.go
++++ b/internal/server/middleware/idempotency_test.go
+@@ -294,3 +294,41 @@ func TestIdempotency_IsolatesAuthenticatedUsers(t *testing.T) {
+ 		t.Fatalf("handler calls = %d, want one per user", got)
+ 	}
+ }
++
++func TestIdempotencyKeySeparatesPathAndHeader(t *testing.T) {
++	t.Parallel()
++	first := httptest.NewRequest(http.MethodPost, "/items/a:b", nil)
++	first.Header.Set("Idempotency-Key", "c")
++	second := httptest.NewRequest(http.MethodPost, "/items/a", nil)
++	second.Header.Set("Idempotency-Key", "b:c")
++	if idempotencyKey(first) == idempotencyKey(second) {
++		t.Fatal("path and header delimiters conflated two requests")
++	}
++}
++
++func TestIdempotencyTransientFailureAllowsRetry(t *testing.T) {
++	t.Parallel()
++	ctx, cancel := context.WithCancel(context.Background())
++	t.Cleanup(cancel)
++	calls := 0
++	handler := idempotencyWith(ctx, time.Minute, time.Now)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++		calls++
++		if calls == 1 {
++			w.WriteHeader(http.StatusServiceUnavailable)
++			return
++		}
++		w.WriteHeader(http.StatusNoContent)
++	}))
++	for attempt, status := range []int{http.StatusServiceUnavailable, http.StatusNoContent, http.StatusNoContent} {
++		request := httptest.NewRequest(http.MethodPost, "/items", nil)
++		request.Header.Set("Idempotency-Key", "retry")
++		response := httptest.NewRecorder()
++		handler.ServeHTTP(response, request)
++		if response.Code != status || (response.Header().Get("Idempotent-Replayed") == "true") != (attempt == 2) {
++			t.Fatalf("attempt=%d status=%d replay=%q", attempt, response.Code, response.Header().Get("Idempotent-Replayed"))
++		}
++	}
++	if calls != 2 {
++		t.Fatalf("handler ran %d times, want 2", calls)
++	}
++}
+diff --git a/internal/tunnel/stream_auth_test.go b/internal/tunnel/stream_auth_test.go
+index e884e90827..e6d0135f37 100644
+--- a/internal/tunnel/stream_auth_test.go
++++ b/internal/tunnel/stream_auth_test.go
+@@ -56,3 +56,36 @@ func requestWithClusterID(rawURL string, clusterID uuid.UUID) *http.Request {
+ 	routeCtx.URLParams.Add("cluster_id", clusterID.String())
+ 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+ }
++
++func TestExecRejectsNonAccessJWTBeforeUpgrade(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"refresh", auth.PurposeTOTPChallenge, auth.PurposeTOTPEnrollOnly} {
++		t.Run(kind, func(t *testing.T) {
++			t.Parallel()
++			manager := auth.MustNewJWTManager("test-exec-boundary", 60)
++			userID := uuid.New()
++			var token string
++			var err error
++			if kind == "refresh" {
++				token, err = manager.GenerateRefreshToken(userID)
++			} else {
++				token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
++			}
++			if err != nil {
++				t.Fatal(err)
++			}
++			consumer := &ExecConsumer{jwt: manager}
++			router := chi.NewRouter()
++			router.Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", consumer.HandleExec)
++			request := httptest.NewRequest(http.MethodGet, "/api/v1/ws/exec/"+uuid.NewString()+"/default/pod/app/", nil)
++			request.Header.Set("Authorization", "Bearer "+token)
++			request.Header.Set("Connection", "Upgrade")
++			request.Header.Set("Upgrade", "websocket")
++			response := httptest.NewRecorder()
++			router.ServeHTTP(response, request)
++			if response.Code != http.StatusUnauthorized || response.Header().Get("Upgrade") != "" {
++				t.Fatalf("status=%d upgrade=%q, want rejection before websocket upgrade", response.Code, response.Header().Get("Upgrade"))
++			}
++		})
++	}
++}
+diff --git a/internal/tunnel/ws_owner_proxy.go b/internal/tunnel/ws_owner_proxy.go
+index aa10c91c6b..172cd5bebb 100644
+--- a/internal/tunnel/ws_owner_proxy.go
++++ b/internal/tunnel/ws_owner_proxy.go
+@@ -27,6 +27,8 @@ import (
+ 	"net/http/httputil"
+ 	"net/url"
+ 	"strings"
++
++	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+ )
+ 
+ // ForwardWSToOwnerPod reverse-proxies an HTTP-Upgrade WebSocket
+@@ -98,6 +100,12 @@ func ForwardWSToOwnerPod(hub *Hub, log *slog.Logger, w http.ResponseWriter, r *h
+ 		Rewrite: func(req *httputil.ProxyRequest) {
+ 			req.SetURL(target)
+ 			req.SetXForwarded()
++			// TrustedRealIP can normalize RemoteAddr to a bare IP, which
++			// SetXForwarded cannot parse as host:port. Forward only that
++			// canonical client; the sibling still enforces its proxy trust.
++			if client := reqctx.ClientIP(req.In); client != nil {
++				req.Out.Header.Set("X-Forwarded-For", client.String())
++			}
+ 			req.Out.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
+ 			// Do not forward an externally supplied X-Forwarded-Host into the
+ 			// sibling's trusted internal request context.

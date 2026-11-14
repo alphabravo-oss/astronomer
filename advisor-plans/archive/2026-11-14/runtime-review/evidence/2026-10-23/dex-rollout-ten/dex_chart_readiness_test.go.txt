@@ -1,0 +1,82 @@
+package handler
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestDexReadinessRecognizesChartStagingAndRejectsOldSurge(t *testing.T) {
+	t.Parallel()
+	const staged = `{"metadata":{"generation":2},"spec":{"replicas":1,"template":{"metadata":{"annotations":{"astronomer.io/dex-runtime-resource-version":"42","astronomer.io/dex-runtime-generation":"3"}},"spec":{"volumes":[{"name":"config","emptyDir":{}},{"name":"config-source","secret":{"secretName":"runtime"}}],"initContainers":[{"name":"stage-config","volumeMounts":[{"name":"config-source","mountPath":"/var/run/dex-config-source","readOnly":true},{"name":"config","mountPath":"/var/run/dex-config"}]}],"containers":[{"name":"dex","volumeMounts":[{"name":"config","mountPath":"/etc/dex","readOnly":true}]}]}}},"status":{"replicas":1,"observedGeneration":2,"updatedReplicas":1,"readyReplicas":1,"availableReplicas":1,"conditions":[{"type":"Available","status":"True"}]}}`
+	for _, tc := range []struct {
+		name string
+		edit func(map[string]any)
+		want bool
+	}{
+		{"chart_staged_mount", func(map[string]any) {}, true},
+		{"old_ready_pod_and_failing_replacement", func(d map[string]any) { d["status"].(map[string]any)["replicas"] = float64(2) }, false},
+		{"missing_init", func(d map[string]any) { dexTestPod(d)["initContainers"] = []any{} }, false},
+		{"wrong_secret", func(d map[string]any) {
+			dexTestPod(d)["volumes"].([]any)[1].(map[string]any)["secret"].(map[string]any)["secretName"] = "foreign"
+		}, false},
+		{"missing_dex_mount", func(d map[string]any) { dexTestPod(d)["containers"] = []any{} }, false},
+		{"wrong_stage_destination", func(d map[string]any) {
+			dexTestPod(d)["initContainers"].([]any)[0].(map[string]any)["volumeMounts"].([]any)[1].(map[string]any)["mountPath"] = "/wrong"
+		}, false},
+		{"writable_source", func(d map[string]any) {
+			dexTestPod(d)["initContainers"].([]any)[0].(map[string]any)["volumeMounts"].([]any)[0].(map[string]any)["readOnly"] = false
+		}, false},
+		{"missing_empty_dir", func(d map[string]any) { delete(dexTestPod(d)["volumes"].([]any)[0].(map[string]any), "emptyDir") }, false},
+		{"legacy_direct_mount", func(d map[string]any) {
+			dexTestPod(d)["volumes"] = []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": "runtime"}}}
+		}, true},
+		{"legacy_old_ready_pod", func(d map[string]any) {
+			dexTestPod(d)["volumes"] = []any{map[string]any{"name": "config", "secret": map[string]any{"secretName": "runtime"}}}
+			d["status"].(map[string]any)["replicas"] = float64(2)
+		}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var doc map[string]any
+			if err := json.Unmarshal([]byte(staged), &doc); err != nil {
+				t.Fatal(err)
+			}
+			tc.edit(doc)
+			raw, err := json.Marshal(doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var deployment dexDeployment
+			if err := json.Unmarshal(raw, &deployment); err != nil {
+				t.Fatal(err)
+			}
+			if got := dexDeploymentReady(deployment, "runtime", "42", 3); got != tc.want {
+				t.Fatalf("ready=%v want=%v", got, tc.want)
+			}
+		})
+	}
+}
+func dexTestPod(d map[string]any) map[string]any {
+	return d["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+}
+
+func TestDexHealthPath(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ issuer, want string }{
+		{"https://dex.example.com", "/healthz"},
+		{"https://dex.example.com/", "/healthz"},
+		{"https://dex.example.com/dex", "/dex/healthz"},
+		{"https://dex.example.com/auth/dex/", "/auth/dex/healthz"},
+		{"https://dex.example.com/auth%20dex", "/auth%20dex/healthz"},
+		{"", ""}, {"/dex", ""}, {"ftp://dex.example.com", ""},
+		{"https://dex.example.com/dex?bad=1", ""}, {"https://dex.example.com/dex#bad", ""},
+	} {
+		t.Run(tc.issuer, func(t *testing.T) {
+			t.Parallel()
+			got, err := dexHealthPath(tc.issuer)
+			if got != tc.want || (err != nil) != (tc.want == "") {
+				t.Fatalf("path=%q error=%v", got, err)
+			}
+		})
+	}
+}

@@ -1,0 +1,139 @@
+{
+  "date": "2026-11-14",
+  "repository": "alphabravo-oss/astronomer",
+  "baseline": "040870752fc1635ecbb08d64f9e4b71538a061f4",
+  "implementation_commit": "12fcad7f9ddc3d3e10f24388d0bff72f4c268cf9",
+  "source_identity": "source-files.sha256 covers 5134 files, including the final scan policy committed with the planning consolidation. Verified unchanged after the final gates.",
+  "toolchain": {
+    "go": "1.27.4",
+    "node": "24.22.0",
+    "npm": "11.19.1",
+    "go_builder_digest": "sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf"
+  },
+  "checks": {
+    "make_check": {
+      "result": "PASS",
+      "counts": {
+        "tests": 15568,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 7
+      },
+      "race": true,
+      "seconds": 333.285,
+      "log": "go-check.log"
+    },
+    "frontend": {
+      "result": "PASS",
+      "files": 346,
+      "tests": 2408,
+      "unit_seconds": 324.06,
+      "gates": [
+        "type-check",
+        "lint",
+        "unit --maxWorkers=2",
+        "build",
+        "CSP",
+        "bundle:check",
+        "openapi:check",
+        "editor sanitizer/provenance (3 tests)",
+        "format:check (48 staged files)"
+      ],
+      "log": "frontend-check.log"
+    },
+    "make_security": {
+      "result": "PASS",
+      "gosec_high_findings": 0,
+      "called_go_vulnerabilities": 0,
+      "imported_package_vulnerabilities": 0,
+      "required_module_only_advisories": [
+        "GO-2026-5932",
+        "GO-2026-6860",
+        "GO-2026-6866"
+      ],
+      "log": "go-security.log",
+      "full_history_note": "This gate scanned the 2304-commit baseline; new commits receive a separate full-history scan before publication."
+    },
+    "npm_audit": {
+      "result": "PASS",
+      "vulnerabilities": 0,
+      "report": "npm-audit.json"
+    },
+    "identity_and_migrations": {
+      "result": "PASS",
+      "log": "identity-integration.log"
+    },
+    "provisioning": {
+      "result": "PASS",
+      "tests": 6,
+      "real_backends": [
+        "PostgreSQL 17.11",
+        "Kubernetes owned temporary namespace"
+      ],
+      "log": "provisioning-integration.log"
+    },
+    "catalog_and_backup_restore": {
+      "result": "PASS",
+      "schema": 88,
+      "log": "runtime-integration.log"
+    },
+    "router_permissions": {
+      "result": "PASS",
+      "routes": 894,
+      "matched_table_rows": 894,
+      "real_backends": [
+        "PostgreSQL 17.11",
+        "Redis 8.10.2"
+      ],
+      "log": "router-integration.log"
+    },
+    "router_authorization": {
+      "result": "PASS",
+      "denied_read_only_mutations": 243,
+      "denial_audit_rows": 243,
+      "admitted_admin_routes": 793,
+      "log": "authorization-integration.log"
+    },
+    "helm": {
+      "result": "PASS",
+      "log": "helm.log"
+    },
+    "builder_pin": {
+      "result": "PASS",
+      "log": "builder-pin.log"
+    },
+    "compressed_archive_scan": {
+      "result": "PASS",
+      "max_archive_depth": 3,
+      "findings": 0,
+      "log": "archive-secret-scan.log"
+    },
+    "secret_policy_negative_controls": {
+      "result": "PASS",
+      "cases": 3,
+      "report": "secret-policy-fixtures.json"
+    }
+  },
+  "planning": {
+    "sole_plan": "../../CURRENT.md",
+    "previous_top_level_documents": 31,
+    "archived_files": 1461,
+    "carried_acceptance_items": 359,
+    "unique_ids": true,
+    "historical_counts_are_not_current_denominators": true
+  },
+  "catalog": {
+    "main": "856f3356e811f63dd3514cb3ac950cbe36189891",
+    "assurance_branch": "d02c4e1",
+    "merged": true,
+    "signed_publication_and_live_qualification": "OPEN"
+  },
+  "limits": [
+    "Seven external-tool/chart prerequisites are explicitly skipped; see go-skip-inventory.json.",
+    "No full live browser suite, signed release, live cutover or independent-estate campaign was performed in this consolidation.",
+    "Migration 87 is destructive; source/schema 88 must follow the coordinated cutover runbook before deployment.",
+    "Shared provisioning adapters and journal are implemented; worker/API/catalog lifecycle integration remains open.",
+    "Source builds were validation builds from the frozen working tree, not immutable release artifacts.",
+    "Three required-module advisories are not imported/called findings; no claim that every dependency module is vulnerability-free."
+  ]
+}

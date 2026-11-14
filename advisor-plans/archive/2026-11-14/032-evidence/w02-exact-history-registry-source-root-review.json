@@ -1,0 +1,202 @@
+{
+  "verdict": "SOURCE_APPROVED_STATIC_HISTORY_ONLY",
+  "proposalIndexSHA256": "81d0140587649ee28738b0810d2ed378c2eaaf496319d07bfa41840cc8426130",
+  "artifacts": [
+    {
+      "path": "/tmp/w02-history-policy-proposal/security-history-policy.py",
+      "sha256": "b5f08569b288aaf1aab214537995827d4c0d04cbc8cbc023370f26f7926a06c5",
+      "bytes": 27139
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/security_history_policy_test.py",
+      "sha256": "cf22b10602665e687010356029772f45dcacc35fefb0106c57f4f76a59e73a91",
+      "bytes": 15357
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/security_history_git_test.py",
+      "sha256": "07ae5d4e2cf3815a628a303632f3e34bb803ba32367a9fc0010fa30873d7bc03",
+      "bytes": 11036
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/build_registry.py",
+      "sha256": "0657d53a91703b076328ce85dd820365007ae29c0e86adffc6ce369ddfffe953",
+      "bytes": 7549
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/reproduce_all_columns.py",
+      "sha256": "a4bc0e17f53cd4ab6c5abed061a16acbd2dcae942361c661dcfdecdc841d4088",
+      "bytes": 4148
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/all-columns-bound.json",
+      "sha256": "468e1abdeda936ce608ae8ea2734add83fe1ce0630c5606a858a2e1ac61fbce2",
+      "bytes": 2781206
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/history-sites.json.gz",
+      "sha256": "be70a52a65723797440a63e011a64638256624839f690849130159b24f5e5e86",
+      "bytes": 692321
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/history-sites-manifest.json",
+      "sha256": "107ceb18d776d0d1ec27d7e5e9282788cd223b9213614084ea1396e006edf8e3",
+      "bytes": 4533
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/fixtures-git-final.log",
+      "sha256": "0a0a9d5a2fd49b6ab1246a008ecb46a7198815cd2951a3a43bacb5028958177f",
+      "bytes": 105
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/fixtures-input-bound-final.log",
+      "sha256": "b7defeb680008683f222299d5cd94d0e08a6806474a6c8a581c2fe67decccd48",
+      "bytes": 109
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/build-first.log",
+      "sha256": "2bb1cafd100328b56956682aad890355a1d8b49cea6ca98f88e9b6dd1ff0cd67",
+      "bytes": 571
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/build-gap-diagnostic.log",
+      "sha256": "e1488473a6ccd71d20ed1b8efe284fa9c2fcb15be81efc5742be39e48d11d1ef",
+      "bytes": 483
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/all-columns-first.log",
+      "sha256": "bf19ec6c1c6964f9aca0fd62fa31d44727748c4a01e7228d79ac4a28092615db",
+      "bytes": 469
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/all-columns-corrected.log",
+      "sha256": "0ca33d7961eecb398c9a90a3df9faa031a38dde3964a07bc618745996fb65aa7",
+      "bytes": 291
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/all-columns-line-replay.log",
+      "sha256": "962537f056135349740b9723b91295b1d87d687134b226d74792751096bc7914",
+      "bytes": 234
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/all-columns-bound.log",
+      "sha256": "994fd54f900e1357cba16d8d766c6e3a33318d3b7bc6ac633f671c6c5a089362",
+      "bytes": 234
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/build-span-bound-first.log",
+      "sha256": "2580f94ccb8995d5ff11f672d1977d7eb5562ec9e0734accbbe65a15e0a09530",
+      "bytes": 1571
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/build-span-bound-second.log",
+      "sha256": "5d1e51ff7cd76386b18939dc91923cbc6228c4b9da4c2e2a6f6b75cfa9a55411",
+      "bytes": 451
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/fixtures-git-event-bound.log",
+      "sha256": "f61ec67637879435e5686986bbf7ae896eddf3c28e3283a459ffcc41930bbdb6",
+      "bytes": 734
+    },
+    {
+      "path": "/tmp/w02-history-policy-proposal/fixtures-git-event-corrected.log",
+      "sha256": "b7ca4dd267e6969ef2502dc554e66de7512e50b6058cef04941ff6005e073176",
+      "bytes": 104
+    }
+  ],
+  "registryManifest": {
+    "schema_version": 1,
+    "record_count": 3184,
+    "registry_gzip_sha256": "be70a52a65723797440a63e011a64638256624839f690849130159b24f5e5e86",
+    "registry_json_sha256": "e79f957d62d2fb88b33c999ef54002947e4f5dd98cf311ff9327e1d09125fc34",
+    "original_report_gzip_sha256": "f324dc575c454e1fb3b2920e3b6c9bacb92e6dbd5ddd0d58627b9abc8d035b39",
+    "original_report_json_sha256": "c8bda38901d02becf668d4231193bedbabad18d78af46a03a53bdaeb63d9be6d",
+    "site_evidence_sha256": "de6203c1be20d0763c3245ea0aab591e9ec8f3a92f9e2c03ddda1078dfefbfa6",
+    "column_evidence_sha256": "cdc8b35fec6944534f9c1f9a9b55b811640eec0583a83ac9b4157bee17e80720",
+    "column_replay_sha256": "468e1abdeda936ce608ae8ea2734add83fe1ce0630c5606a858a2e1ac61fbce2",
+    "scanner": {
+      "module": "github.com/zricethezav/gitleaks/v8 v8.30.1",
+      "executable_sha256": "e24d16ea35db03f63d96be68102966dff343ad7010847ea1e5f936ffded29798",
+      "config_sha256": "4078c0f9c3918d37830163126705f814093343c7d28e726919af09bca9cfd5d7",
+      "column_source_sha256": {
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/config/gitleaks.toml": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf",
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/location.go": "cbbad8f3fa7d5a4ad4f6cbbd0a06a89eb8c5b728a19505ee004f068964a82faf",
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/detect.go": "2bac563a09f22ff76c56b200c3b9b5dc865c1de699eb0ba2a27cca741fa9bd13",
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/sources/git.go": "1fb86062416b83f756be89165e4ef1244f038a6e59c6ab5c014d330909de8e8f",
+        "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/text.go": "cea8ba5be609f953b08aeef08bd51d94425abbf02cc8c0232a3d8fbcdc127e75",
+        "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/gitdiff.go": "d42dbd1fda41807911a694cf9726900daddf8f30d59651e2f585fe820a6bf898"
+      }
+    },
+    "review_owner": "Plan032 executor and root static review; not a human release approver",
+    "review_evidence": [
+      {
+        "path": "advisor-plans/032-evidence/historical-secret-triage-root-review.json",
+        "sha256": "0546f4cf40ebe4ca9961583ae2c470206f46d33eef0bfee45a8e00b1e0803c04"
+      },
+      {
+        "path": "advisor-plans/032-evidence/w02-all38-history-column-origin-root-review.json",
+        "sha256": "d2bb2510369f1759669884f33723e4a7560a8b0021924d8a1f19d393df92beb6"
+      }
+    ],
+    "expires_at": "2026-10-16T00:00:00Z",
+    "release_scope": "first-party-full-history",
+    "inputs": {
+      "original_report": {
+        "path": "original-report.json.gz",
+        "sha256": "f324dc575c454e1fb3b2920e3b6c9bacb92e6dbd5ddd0d58627b9abc8d035b39"
+      },
+      "site_evidence": {
+        "path": "site-evidence.json",
+        "sha256": "de6203c1be20d0763c3245ea0aab591e9ec8f3a92f9e2c03ddda1078dfefbfa6"
+      },
+      "column_evidence": {
+        "path": "root38-columns.json",
+        "sha256": "cdc8b35fec6944534f9c1f9a9b55b811640eec0583a83ac9b4157bee17e80720"
+      },
+      "column_replay": {
+        "path": "all-columns.json",
+        "sha256": "468e1abdeda936ce608ae8ea2734add83fe1ce0630c5606a858a2e1ac61fbce2"
+      },
+      "column_sources": {
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/config/gitleaks.toml": {
+          "path": "scanner-source/0-gitleaks.toml",
+          "sha256": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf"
+        },
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/location.go": {
+          "path": "scanner-source/1-location.go",
+          "sha256": "cbbad8f3fa7d5a4ad4f6cbbd0a06a89eb8c5b728a19505ee004f068964a82faf"
+        },
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/detect.go": {
+          "path": "scanner-source/2-detect.go",
+          "sha256": "2bac563a09f22ff76c56b200c3b9b5dc865c1de699eb0ba2a27cca741fa9bd13"
+        },
+        "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/sources/git.go": {
+          "path": "scanner-source/3-git.go",
+          "sha256": "1fb86062416b83f756be89165e4ef1244f038a6e59c6ab5c014d330909de8e8f"
+        },
+        "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/text.go": {
+          "path": "scanner-source/4-text.go",
+          "sha256": "cea8ba5be609f953b08aeef08bd51d94425abbf02cc8c0232a3d8fbcdc127e75"
+        },
+        "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/gitdiff.go": {
+          "path": "scanner-source/5-gitdiff.go",
+          "sha256": "d42dbd1fda41807911a694cf9726900daddf8f30d59651e2f585fe820a6bf898"
+        }
+      }
+    }
+  },
+  "independentVerification": {
+    "allArtifactBytesAndHashes": true,
+    "allActualEvidenceInputsBound": true,
+    "actualGitProofSites": 3184,
+    "proofClasses": 9,
+    "rootIndependentByteLocationReplaySites": 3184,
+    "immutableGitPatchInputs": 50,
+    "syntheticAndDisposableGitParents": 17,
+    "failures": 0
+  },
+  "limits": [
+    "No fresh current candidate scan or collection provenance qualification.",
+    "No acceptance of newly matched sites, current native HIGH findings, or human release approval.",
+    "Original immutable historical tuples and all findings remain retained; registry expires 2026-10-16."
+  ]
+}

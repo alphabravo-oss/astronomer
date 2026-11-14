@@ -1,0 +1,65 @@
+{
+  "utc": "2026-10-10T04:59:43.996492+00:00",
+  "review": "APPROVE_SCOPED_NORMAL_MIGRATION_EVIDENCE",
+  "source": "1ef00f79f5471923d4cda0f74fd763290956b2f7",
+  "runtimeDriverSHA256": "b2fbe5cee6d13ecc4b007b06c6d7d91705fdccb3393b9d2e79b5ec58725a3c29",
+  "rootFullRead": [
+    "run_after.py",
+    "test_after.py",
+    "canonical migrator source",
+    "shared owned process helper and ownership fences"
+  ],
+  "rootIndependentControls": "9 Python controls PASS0.904s",
+  "rootIndependentGitReconstruction": "7146 files/c69c813d69e493d11bd77ba522cf5644e38d5da0d9dd29abd76e98df7fb64639 exactly matches all12 steps and both before/after receipts",
+  "majors": [
+    {
+      "major": 17,
+      "receiptSHA256": "a51fde4e601aa867acc59ca773bee6e17ad000e0c5f64a4bd3a1488dd92198cd",
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "migratorSHA256": "2570a28753452ebb10b2367df386e6d6488231ecc44e550f8826f841867d2b8b",
+      "sixGuardedOwnedStepsPass": true,
+      "normalEdges": [
+        "75\u219277",
+        "77\u219276",
+        "76\u219275",
+        "75\u219277"
+      ],
+      "indexesExactValidReadyAfterEveryEdge": true,
+      "wholeSourceBeforeAfter": {
+        "schema_version": 2,
+        "source_file_count": 7146,
+        "source_tree_sha256": "c69c813d69e493d11bd77ba522cf5644e38d5da0d9dd29abd76e98df7fb64639"
+      },
+      "numericFatalGuards": 26,
+      "minimumFreePercent": 20
+    },
+    {
+      "major": 18,
+      "receiptSHA256": "04937ce4211c1b2022e03807bba897b2aa3fcc73c94184fed92888b585312f56",
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "migratorSHA256": "2570a28753452ebb10b2367df386e6d6488231ecc44e550f8826f841867d2b8b",
+      "sixGuardedOwnedStepsPass": true,
+      "normalEdges": [
+        "75\u219277",
+        "77\u219276",
+        "76\u219275",
+        "75\u219277"
+      ],
+      "indexesExactValidReadyAfterEveryEdge": true,
+      "wholeSourceBeforeAfter": {
+        "schema_version": 2,
+        "source_file_count": 7146,
+        "source_tree_sha256": "c69c813d69e493d11bd77ba522cf5644e38d5da0d9dd29abd76e98df7fb64639"
+      },
+      "numericFatalGuards": 26,
+      "minimumFreePercent": 20
+    }
+  ],
+  "preserved": "Dedicated owned databases only; credentials absent from migrator argv; retained private references; no user cluster/data mutation",
+  "limits": [
+    "No interrupted invalid concurrent-index recovery fault yet",
+    "AFTER measured query/traversal checks pending",
+    "New production query/index source not integrated until qualified",
+    "Whole W07 remains IN_PROGRESS"
+  ]
+}

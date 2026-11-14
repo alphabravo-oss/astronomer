@@ -1,0 +1,317 @@
+//go:build integration
+
+package handler
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/internal/testdb"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/alphabravocompany/astronomer-go/pkg/crypto"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+)
+
+type dexRegistrationFixture struct {
+	pool  *pgxpool.Pool
+	q     *sqlc.Queries
+	h     *DexHandler
+	actor uuid.UUID
+	enc   *crypto.Encryptor
+}
+
+func newDexRegistrationFixture(t *testing.T) *dexRegistrationFixture {
+	t.Helper()
+	pool := testdb.Pool(t)
+	q := sqlc.New(pool)
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, err := crypto.NewEncryptor(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &dexRegistrationFixture{pool: pool, q: q, h: NewDexHandler(q), actor: uuid.New(), enc: enc}
+	f.h.SetEncryptor(enc)
+	f.h.SetRunTx(func(ctx context.Context, fn func(DexMutationTx) error) error {
+		return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return fn(sqlc.New(tx)) })
+	})
+	f.exec(t, `INSERT INTO users(id,email,username) VALUES($1,$2,$2)`, f.actor, f.actor.String()+"@example.invalid")
+	cluster := uuid.New()
+	f.exec(t, `INSERT INTO clusters(id,name,display_name) VALUES($1,$2,$2)`, cluster, cluster.String())
+	f.exec(t, `INSERT INTO dex_settings(id,issuer_url,cluster_id,namespace,release_name,runtime_secret_name,chart_release_name,deployment_name,service_name) VALUES($1,'https://dex.example.com',$2,'dex','dex','runtime','dex','dex','dex')`, dexSettingsSingletonID, cluster)
+	f.exec(t, `INSERT INTO dex_connectors(name,type,config) VALUES('saml','saml','{"ssoURL":"https://idp.example.com/saml","entityIssuer":"https://idp.example.com/metadata"}')`)
+	f.exec(t, `UPDATE platform_configuration SET server_url='https://platform.example.com' WHERE id=1`)
+	old := f.seal(t, []byte("old-paired-secret"))
+	clients := f.seal(t, []byte(`[{"id":"astronomer","secret":"old-paired-secret","redirectURIs":["https://platform.example.com/api/v1/auth/callback/dex"]}]`))
+	f.exec(t, `UPDATE dex_settings SET public_clients_key_id=$1,public_clients_algorithm=$2,public_clients_ciphertext=$3,public_clients_nonce=$4 WHERE id=$5`, clients.KeyID, clients.Algorithm, clients.Ciphertext, clients.Nonce, dexSettingsSingletonID)
+	f.exec(t, `INSERT INTO sso_configurations(provider,is_enabled,client_id,client_secret_key_id,client_secret_algorithm,client_secret_ciphertext,client_secret_nonce) VALUES('dex',true,'astronomer',$1,$2,$3,$4)`, old.KeyID, old.Algorithm, old.Ciphertext, old.Nonce)
+	return f
+}
+func (f *dexRegistrationFixture) exec(t *testing.T, query string, args ...any) {
+	t.Helper()
+	if _, err := f.pool.Exec(t.Context(), query, args...); err != nil {
+		t.Fatal(err)
+	}
+}
+func (f *dexRegistrationFixture) seal(t *testing.T, plain []byte) crypto.Sealed {
+	t.Helper()
+	value, err := f.enc.Encrypt(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+func (f *dexRegistrationFixture) register(t *testing.T, key, secret string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"client_id": "astronomer", "client_secret": secret, "display_name": "Sign in with Dex"})
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/register-as-sso/", bytes.NewReader(body))
+	r.Header.Set("Idempotency-Key", key)
+	r = r.WithContext(reqctx.WithUser(t.Context(), &reqctx.User{ID: f.actor.String(), AuthMethod: "jwt"}))
+	w := httptest.NewRecorder()
+	f.h.RegisterAsSSO(w, r)
+	if strings.Contains(w.Body.String(), secret) && secret != "" {
+		t.Fatal("response exposed client secret")
+	}
+	return w
+}
+func (f *dexRegistrationFixture) state(t *testing.T) (sqlc.DexSetting, sqlc.SsoConfiguration) {
+	t.Helper()
+	settings, err := f.q.GetDexSettings(t.Context(), dexSettingsSingletonID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := f.q.GetSSOConfigurationByProvider(t.Context(), "dex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return settings, provider
+}
+func (f *dexRegistrationFixture) counts(t *testing.T, want int) {
+	t.Helper()
+	var a, b, c int
+	err := f.pool.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM dex_operations),(SELECT count(*) FROM task_outbox WHERE task_type='dex:apply_operation'),(SELECT count(*) FROM audit_outbox WHERE action='dex.register_sso.queued')`).Scan(&a, &b, &c)
+	if err != nil || a != want || b != want || c != want {
+		t.Fatalf("operation/outbox/audit=%d/%d/%d want=%d err=%v", a, b, c, want, err)
+	}
+}
+func (f *dexRegistrationFixture) operation(t *testing.T) sqlc.DexOperation {
+	t.Helper()
+	var id uuid.UUID
+	if err := f.pool.QueryRow(t.Context(), `SELECT id FROM dex_operations`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	row, err := f.q.GetDexOperation(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return row
+}
+
+func TestDexRegistrationDurableAdmissionReplayAndConflict(t *testing.T) {
+	t.Parallel()
+	f := newDexRegistrationFixture(t)
+	before, oldProvider := f.state(t)
+	w := f.register(t, "register-1", "new-paired-secret")
+	if w.Code != http.StatusAccepted || w.Header().Get("Location") == "" || w.Header().Get("Retry-After") != "2" {
+		t.Fatalf("admission=%d %s", w.Code, w.Body.String())
+	}
+	f.counts(t, 1)
+	settings, provider := f.state(t)
+	operation := f.operation(t)
+	if settings.RuntimeGeneration != before.RuntimeGeneration+1 || provider.IsEnabled || !bytes.Equal(provider.ClientSecretCiphertext, oldProvider.ClientSecretCiphertext) || operation.RuntimeGeneration != settings.RuntimeGeneration || operation.Status != "pending" {
+		t.Fatal("admission did not stage and disable atomically")
+	}
+	clients, _, err := f.h.loadPublicClients(t.Context(), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := f.h.validateDexRegistrationPayload(operation, clients)
+	if err != nil || payload.ClientID != "astronomer" {
+		t.Fatalf("queued credential pair invalid: %v", err)
+	}
+	plain, err := f.enc.Decrypt(payload.ClientSecret)
+	if err != nil || string(plain) != "new-paired-secret" {
+		t.Fatal("queued credential did not round trip")
+	}
+	clear(plain)
+	if !containsString(mergeStringList(clients[0]["redirectURIs"], nil), "https://platform.example.com/api/v1/auth/callback/dex/") {
+		t.Fatal("missing slash callback")
+	}
+	replay := f.register(t, "register-1", "new-paired-secret")
+	if replay.Code != http.StatusAccepted || replay.Header().Get("Location") != w.Header().Get("Location") {
+		t.Fatalf("replay=%d %s", replay.Code, replay.Body.String())
+	}
+	after, afterProvider := f.state(t)
+	if !reflect.DeepEqual(settings, after) || !reflect.DeepEqual(provider, afterProvider) || !reflect.DeepEqual(operation, f.operation(t)) {
+		t.Fatal("replay mutated admitted state")
+	}
+	f.counts(t, 1)
+	conflict := f.register(t, "register-1", "different-secret")
+	if conflict.Code != http.StatusConflict {
+		t.Fatalf("conflict=%d %s", conflict.Code, conflict.Body.String())
+	}
+	after, afterProvider = f.state(t)
+	if !reflect.DeepEqual(settings, after) || !reflect.DeepEqual(provider, afterProvider) || !reflect.DeepEqual(operation, f.operation(t)) {
+		t.Fatal("conflict mutated admitted state")
+	}
+	f.counts(t, 1)
+}
+
+func TestDexRegistrationFailuresPreserveDurablePair(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"provider-read", "platform-read", "stage", "audit"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			f := newDexRegistrationFixture(t)
+			before, provider := f.state(t)
+			switch mode {
+			case "provider-read":
+				f.exec(t, `ALTER TABLE sso_configurations RENAME TO unavailable_sso`)
+			case "platform-read":
+				f.exec(t, `ALTER TABLE platform_configuration RENAME TO unavailable_platform`)
+			case "stage", "audit":
+				f.exec(t, `CREATE FUNCTION reject_dex_test_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected private write failure'; END $$`)
+				if mode == "stage" {
+					f.exec(t, `CREATE TRIGGER reject_dex_test BEFORE INSERT OR UPDATE ON dex_settings FOR EACH ROW EXECUTE FUNCTION reject_dex_test_write()`)
+				} else {
+					f.exec(t, `CREATE TRIGGER reject_dex_test BEFORE INSERT ON audit_outbox FOR EACH ROW EXECUTE FUNCTION reject_dex_test_write()`)
+				}
+			}
+			w := f.register(t, "failed-register", "new-paired-secret")
+			if w.Code < 400 || strings.Contains(w.Body.String(), "injected private") {
+				t.Fatalf("failure=%d %s", w.Code, w.Body.String())
+			}
+			if mode == "provider-read" && w.Code != http.StatusServiceUnavailable {
+				t.Fatalf("provider lookup must fail closed: %d", w.Code)
+			}
+			if mode == "provider-read" {
+				f.exec(t, `ALTER TABLE unavailable_sso RENAME TO sso_configurations`)
+			}
+			if mode == "platform-read" {
+				f.exec(t, `ALTER TABLE unavailable_platform RENAME TO platform_configuration`)
+			}
+			after, afterProvider := f.state(t)
+			if !reflect.DeepEqual(before, after) || !reflect.DeepEqual(provider, afterProvider) {
+				t.Fatal("failed admission changed exact settings/provider pair")
+			}
+			f.counts(t, 0)
+		})
+	}
+}
+
+// This guard provides no simulated Kubernetes responses. These tests must fail
+// before crossing the transport boundary; PostgreSQL and encryption are real.
+type forbiddenDexKubernetes struct{}
+
+func (forbiddenDexKubernetes) Do(context.Context, string, string, string, []byte, map[string]string) (*protocol.K8sResponsePayload, error) {
+	panic("invalid registration crossed Kubernetes boundary")
+}
+
+func TestDexRegistrationWorkerRejectsInvalidStateBeforeKubernetes(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"corrupt-envelope", "malformed-payload", "unknown-field", "empty-client", "empty-name", "wrong-secret", "wrong-client", "corrupt-secret", "stale-generation"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			f := newDexRegistrationFixture(t)
+			if w := f.register(t, "worker-register", "new-paired-secret"); w.Code != http.StatusAccepted {
+				t.Fatalf("setup=%d %s", w.Code, w.Body.String())
+			}
+			operation := f.operation(t)
+			switch mode {
+			case "corrupt-envelope":
+				f.exec(t, `UPDATE dex_operations SET payload_ciphertext=$1 WHERE id=$2`, []byte("invalid ciphertext"), operation.ID)
+			case "stale-generation":
+				f.exec(t, `UPDATE dex_settings SET runtime_generation=runtime_generation+1 WHERE id=$1`, dexSettingsSingletonID)
+			default:
+				plain, err := f.enc.Decrypt(crypto.FromParts(operation.PayloadKeyID, operation.PayloadAlgorithm, operation.PayloadCiphertext, operation.PayloadNonce))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var payload dexRegisterPayload
+				if err := json.Unmarshal(plain, &payload); err != nil {
+					t.Fatal(err)
+				}
+				clear(plain)
+				switch mode {
+				case "empty-client":
+					payload.ClientID = ""
+				case "empty-name":
+					payload.DisplayName = ""
+				case "wrong-secret":
+					payload.ClientSecret = f.seal(t, []byte("different-secret"))
+				case "wrong-client":
+					payload.ClientID = "other-client"
+				case "corrupt-secret":
+					payload.ClientSecret.Ciphertext = []byte("invalid ciphertext")
+				}
+				raw, _ := json.Marshal(payload)
+				if mode == "malformed-payload" {
+					raw = []byte(`not-json`)
+				}
+				if mode == "unknown-field" {
+					raw = append(raw[:len(raw)-1], []byte(`,"unexpected":true}`)...)
+				}
+				sealed := f.seal(t, raw)
+				clear(raw)
+				f.exec(t, `UPDATE dex_operations SET payload_key_id=$1,payload_algorithm=$2,payload_ciphertext=$3,payload_nonce=$4 WHERE id=$5`, sealed.KeyID, sealed.Algorithm, sealed.Ciphertext, sealed.Nonce, operation.ID)
+			}
+			before, provider := f.state(t)
+			f.h.SetK8sRequester(forbiddenDexKubernetes{})
+			runtime := tasks.DexOperationRuntime{Queries: f.q, Executor: f.h}
+			err := runtime.Handle(t.Context(), asynq.NewTask(tasks.DexOperationType, []byte(`{"operation_id":"`+operation.ID.String()+`"}`)))
+			if err == nil || err.Error() != "Dex operation reconcile failed" {
+				t.Fatalf("worker error=%v", err)
+			}
+			after, afterProvider := f.state(t)
+			if !reflect.DeepEqual(before, after) || !reflect.DeepEqual(provider, afterProvider) {
+				t.Fatal("invalid operation changed credential pair")
+			}
+			row := f.operation(t)
+			if row.Status != "retrying" || row.ErrorCode != "reconcile_retrying" || row.LockedUntil.Valid {
+				t.Fatal("worker failed to persist bounded retry")
+			}
+		})
+	}
+}
+
+func TestDexOperationUnknownActionRejectedBeforeDependencies(t *testing.T) {
+	t.Parallel()
+	h := &DexHandler{k8s: forbiddenDexKubernetes{}}
+	if err := h.ExecuteDexOperation(t.Context(), sqlc.DexOperation{Action: "unknown"}); err == nil || err.Error() != "unsupported Dex operation action" {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestDexRegistrationBlankDisplayNameRejectedBeforeAdmission(t *testing.T) {
+	t.Parallel()
+	f := newDexRegistrationFixture(t)
+	before, provider := f.state(t)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/register-as-sso/", strings.NewReader(`{"client_secret":"new-paired-secret","display_name":"   "}`))
+	r.Header.Set("Idempotency-Key", "blank-display")
+	r = r.WithContext(reqctx.WithUser(t.Context(), &reqctx.User{ID: f.actor.String(), AuthMethod: "jwt"}))
+	w := httptest.NewRecorder()
+	f.h.RegisterAsSSO(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("blank display status=%d", w.Code)
+	}
+	after, afterProvider := f.state(t)
+	if !reflect.DeepEqual(before, after) || !reflect.DeepEqual(provider, afterProvider) {
+		t.Fatal("invalid display name changed credential pair")
+	}
+	f.counts(t, 0)
+}

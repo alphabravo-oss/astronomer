@@ -1,0 +1,31 @@
+{
+  "source_checkout": "/root/astronomer-all/astronomer",
+  "source_head": "4904e8c3c4aa6beb1e50b439a7923523887ad853",
+  "source_files": {
+    "scripts/qualify-offerings/api.go": "7f90c1a1a0d501cead0e13bda346d9df5dfd057c36a3f36e5e0dddb227c3ba1a",
+    "scripts/qualify-offerings/app_canary.go": "ae7e95d5b6ee991f77c95805acabec057e81eed44c255522bdf2f3fcee5f3f75",
+    "scripts/qualify-offerings/app_executor.go": "375973540d6a2fcc3661928682b95376cc5acab8ba62f54e80117e88d5ac57b7",
+    "scripts/qualify-offerings/app_executor_test.go": "21abc226d7c3b46166aa3434bfd2fe906921479c9ff3e315603b5c27ff497785",
+    "scripts/qualify-offerings/main.go": "8a3485e493987eafc31b2688bb58ae3cc4ef6e0b60007fbddd4a6dd26f81603e",
+    "scripts/qualify-offerings/main_test.go": "299837637032124b2bb3cd58061819a7ee572b558b76f42184d1263970738e33",
+    "scripts/qualify-offerings/model.go": "e9f5124f48a4277e1ba6cbbf2ad38572e0f428d37281aeb3f3470c1b50a372db",
+    "scripts/qualify-offerings/preflight.go": "b354cc852111e064d195b0e36a57cb3649016a714da03d8edfcb80b31b150547",
+    "scripts/qualify-offerings/run.go": "df7465f8addb86cf604f609e28766acdb93cf2a80d57c9fcc82a8c0483ae1570",
+    "scripts/qualify-offerings/tool_canary_cert.go": "d7d5892a44ccc46bce64ceeacb8c534843697b488cc670ccb69735978c5124a4",
+    "scripts/qualify-offerings/tool_canary_dispatch.go": "86aa656fc2e4ad7d30f9719cdb7a34c6883f28622e540074ff96e0da1f84f396",
+    "scripts/qualify-offerings/tool_canary_gatekeeper.go": "363f331a2782c2bacd41ebf75338a47d5a5f91e9576f7aa7234d450f6660f4d6",
+    "scripts/qualify-offerings/tool_canary_istio.go": "522978a3fd3a9e9b06292dd5a5873fdbf41de3952735a9280cb3891b02e4fc67",
+    "scripts/qualify-offerings/tool_canary_observability.go": "f5ff297171e6011a3ef24e750c8937ca83a6795900392f36dec3b532d4fda231",
+    "scripts/qualify-offerings/tool_canary_storage.go": "42df88d03e69da3bf7459f9be8f8653f530a206f79c2dec7b86879813761ed50",
+    "scripts/qualify-offerings/tool_canary_trivy.go": "5957bcac83609307319cedbd2e75ef79598637c92a899e6235aec6e0d5963d7b",
+    "scripts/qualify-offerings/tool_executor.go": "4ad1dd7aec5b5adeb56ee0a5f1839dab0fbda969ba1efde471bb3c7f72ed4ebc",
+    "scripts/qualify-offerings/tool_executor_test.go": "ba00a29c5b1b4881da93a6cf9d713aee3f26b9e80a8fb25e9e2b4ff68ab4adc7",
+    "scripts/qualify-offerings/verify.go": "eae1725ad6a94ba12a9d84a1461a79044175b11017fc90a0672c0ff05184f208"
+  },
+  "binary_sha256": "52817cbf8814ceec86a4a762ec5da2ed2a9e31ddcf2a3cdba8fd48b090ad5729",
+  "executed_modes": [
+    "inventory",
+    "preflight"
+  ],
+  "ported_to_candidate": false
+}

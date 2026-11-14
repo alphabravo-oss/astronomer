@@ -1,0 +1,591 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e
+> node scripts/generate-e2e-stubs.mjs
+
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e
+> playwright test --project=chromium --project=mobile-chromium operator- pod-drilldown.spec.ts resource-drilldown.spec.ts critical-workflows-keyboard.spec.ts resource-actions-keyboard.spec.ts --workers=2
+
+
+Running 134 tests using 2 workers
+(node:3284977) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3285122) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3285121) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·······F·(node:3285715) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··F·(node:3285985) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·····················F(node:3287077) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3287529) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+············F(node:3288727) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+······F(node:3289301) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·····(node:3289635) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··········F(node:3290504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3290697) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·
+··T(node:3291100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+···················F(node:3292360) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·F(node:3292612) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·············F(node:3293981) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F·(node:3294775) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·········
+
+  1) [chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › acknowledged history preserves filters, server page and off-page deep link through reload 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 2
+
+      Object {
+    -   "limit": "50",
+    -   "offset": StringMatching /^(0|50)$/,
+    -   "severity": "critical",
+    -   "status": "acknowledged",
+    +   "limit": "5",
+    +   "status": "firing",
+      }
+
+      323 |     for (const read of reads) {
+      324 |       expect(read.method).toBe("GET");
+    > 325 |       expect(read.query).toEqual({
+          |                          ^
+      326 |         status,
+      327 |         severity: "critical",
+      328 |         limit: "50",
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-alert-investigation.spec.ts:325:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › resolved history preserves filters, server page and off-page deep link through reload 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 2
+
+      Object {
+    -   "limit": "50",
+    -   "offset": StringMatching /^(0|50)$/,
+    -   "severity": "critical",
+    -   "status": "resolved",
+    +   "limit": "5",
+    +   "status": "firing",
+      }
+
+      323 |     for (const read of reads) {
+      324 |       expect(read.method).toBe("GET");
+    > 325 |       expect(read.query).toEqual({
+          |                          ^
+      326 |         status,
+      327 |         severity: "critical",
+      328 |         limit: "50",
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-alert-investigation.spec.ts:325:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests/e2e/operator-failure-recovery.spec.ts:256:1 › deleting a custom resource returns to its canonical type and retains project and namespace 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected: predicate to succeed
+    Received: "http://127.0.0.1:32138/dashboard/clusters/c-smoke-1/custom-resources/cert-manager.io/v1/certificates?project=project-review&namespaces="
+    Timeout:  10000ms
+
+
+      318 |     .fill("delete-review");
+      319 |   await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+    > 320 |   await expect(page).toHaveURL(
+          |                      ^
+      321 |     (url) =>
+      322 |       url.pathname.replace(/\/$/, "") === collection &&
+      323 |       url.searchParams.get("project") === "project-review" &&
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-failure-recovery.spec.ts:320:22
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests/e2e/operator-navigation-contract.spec.ts:133:1 › installed tools retain the Management onboarding template destination 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Applied navigation template', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Applied navigation template', { exact: true }) resolved to 2 elements:
+        1) <h2 class="text-lg font-semibold text-foreground truncate">Applied navigation template</h2> aka getByRole('heading', { name: 'Applied navigation template' })
+        2) <span class="font-mono text-foreground">Applied navigation template</span> aka locator('span').filter({ hasText: 'Applied navigation template' })
+
+    Call log:
+      - Expect "toBeVisible" getByText('Applied navigation template', { exact: true }) with timeout 10000ms
+      - waiting for getByText('Applied navigation template', { exact: true })
+
+
+      197 |   await expect(
+      198 |     page.getByText("Applied navigation template", { exact: true }),
+    > 199 |   ).toBeVisible();
+          |     ^
+      200 |   await page.screenshot({
+      201 |     path: info.outputPath("installed-tools-template.png"),
+      202 |   });
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-navigation-contract.spec.ts:199:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 403 preserves a recoverable pod investigation 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/denied|permission/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/denied|permission/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/denied|permission/i).first()
+
+
+      290 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      291 |         .first(),
+    > 292 |     ).toBeVisible();
+          |       ^
+      293 |     await expect(
+      294 |       page.getByRole("link", { name: "Back", exact: true }),
+      295 |     ).toHaveAttribute("href", `${base}/deployments`);
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-resource-history.spec.ts:292:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 404 preserves a recoverable pod investigation 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/not found/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/not found/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/not found/i).first()
+
+
+      290 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      291 |         .first(),
+    > 292 |     ).toBeVisible();
+          |       ^
+      293 |     await expect(
+      294 |       page.getByRole("link", { name: "Back", exact: true }),
+      295 |     ).toHaveAttribute("href", `${base}/deployments`);
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-resource-history.spec.ts:292:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium] › tests/e2e/resource-actions-keyboard.spec.ts:228:1 › keyboard-only resource create, scale, restart, YAML preview/apply, and delete works responsively 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: 'Create Deployment' }).getByRole('button', { name: 'Done' })
+
+
+      268 |   await createSubmit.focus();
+      269 |   await page.keyboard.press("Enter");
+    > 270 |   await createDialog.getByRole("button", { name: "Done" }).click();
+          |                                                            ^
+      271 |   await expect(createDialog).not.toBeVisible();
+      272 |
+      273 |   const row = page.locator("tbody tr").filter({ hasText: NAME }).first();
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/resource-actions-keyboard.spec.ts:270:60
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/resource-actions-keyboard--b308e-d-delete-works-responsively-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/resource-actions-keyboard--b308e-d-delete-works-responsively-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/resource-actions-keyboard--b308e-d-delete-works-responsively-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/resource-actions-keyboard--b308e-d-delete-works-responsively-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/resource-actions-keyboard--b308e-d-delete-works-responsively-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [mobile-chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › acknowledged history preserves filters, server page and off-page deep link through reload 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 2
+
+      Object {
+    -   "limit": "50",
+    -   "offset": StringMatching /^(0|50)$/,
+    -   "severity": "critical",
+    -   "status": "acknowledged",
+    +   "limit": "5",
+    +   "status": "firing",
+      }
+
+      323 |     for (const read of reads) {
+      324 |       expect(read.method).toBe("GET");
+    > 325 |       expect(read.query).toEqual({
+          |                          ^
+      326 |         status,
+      327 |         severity: "critical",
+      328 |         limit: "50",
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-alert-investigation.spec.ts:325:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-alert-investigati-5baeb-ge-deep-link-through-reload-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [mobile-chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › resolved history preserves filters, server page and off-page deep link through reload 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 4
+    + Received  + 2
+
+      Object {
+    -   "limit": "50",
+    -   "offset": StringMatching /^(0|50)$/,
+    -   "severity": "critical",
+    -   "status": "resolved",
+    +   "limit": "5",
+    +   "status": "firing",
+      }
+
+      323 |     for (const read of reads) {
+      324 |       expect(read.method).toBe("GET");
+    > 325 |       expect(read.query).toEqual({
+          |                          ^
+      326 |         status,
+      327 |         severity: "critical",
+      328 |         limit: "50",
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-alert-investigation.spec.ts:325:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-alert-investigati-0e9a8-ge-deep-link-through-reload-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:256:1 › deleting a custom resource returns to its canonical type and retains project and namespace 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected: predicate to succeed
+    Received: "http://127.0.0.1:32138/dashboard/clusters/c-smoke-1/custom-resources/cert-manager.io/v1/certificates?project=project-review&namespaces="
+    Timeout:  10000ms
+
+
+      318 |     .fill("delete-review");
+      319 |   await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+    > 320 |   await expect(page).toHaveURL(
+          |                      ^
+      321 |     (url) =>
+      322 |       url.pathname.replace(/\/$/, "") === collection &&
+      323 |       url.searchParams.get("project") === "project-review" &&
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-failure-recovery.spec.ts:320:22
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-failure-recovery--27cf4-tains-project-and-namespace-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [mobile-chromium] › tests/e2e/operator-navigation-contract.spec.ts:133:1 › installed tools retain the Management onboarding template destination 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Applied navigation template', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('Applied navigation template', { exact: true }) resolved to 2 elements:
+        1) <h2 class="text-lg font-semibold text-foreground truncate">Applied navigation template</h2> aka getByRole('heading', { name: 'Applied navigation template' })
+        2) <span class="font-mono text-foreground">Applied navigation template</span> aka locator('span').filter({ hasText: 'Applied navigation template' })
+
+    Call log:
+      - Expect "toBeVisible" getByText('Applied navigation template', { exact: true }) with timeout 10000ms
+      - waiting for getByText('Applied navigation template', { exact: true })
+
+
+      197 |   await expect(
+      198 |     page.getByText("Applied navigation template", { exact: true }),
+    > 199 |   ).toBeVisible();
+          |     ^
+      200 |   await page.screenshot({
+      201 |     path: info.outputPath("installed-tools-template.png"),
+      202 |   });
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-navigation-contract.spec.ts:199:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-navigation-contra-9778e-arding-template-destination-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [mobile-chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 403 preserves a recoverable pod investigation 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/denied|permission/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/denied|permission/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/denied|permission/i).first()
+
+
+      290 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      291 |         .first(),
+    > 292 |     ).toBeVisible();
+          |       ^
+      293 |     await expect(
+      294 |       page.getByRole("link", { name: "Back", exact: true }),
+      295 |     ).toHaveAttribute("href", `${base}/deployments`);
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-resource-history.spec.ts:292:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-resource-history--f709d-coverable-pod-investigation-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [mobile-chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 404 preserves a recoverable pod investigation 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/not found/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/not found/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/not found/i).first()
+
+
+      290 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      291 |         .first(),
+    > 292 |     ).toBeVisible();
+          |       ^
+      293 |     await expect(
+      294 |       page.getByRole("link", { name: "Back", exact: true }),
+      295 |     ).toHaveAttribute("href", `${base}/deployments`);
+        at /root/astronomer-all/astronomer/frontend/tests/e2e/operator-resource-history.spec.ts:292:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-root-final/operator-resource-history--1cc1a-coverable-pod-investigation-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13 failed
+    [chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › acknowledged history preserves filters, server page and off-page deep link through reload 
+    [chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › resolved history preserves filters, server page and off-page deep link through reload 
+    [chromium] › tests/e2e/operator-failure-recovery.spec.ts:256:1 › deleting a custom resource returns to its canonical type and retains project and namespace 
+    [chromium] › tests/e2e/operator-navigation-contract.spec.ts:133:1 › installed tools retain the Management onboarding template destination 
+    [chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 403 preserves a recoverable pod investigation 
+    [chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 404 preserves a recoverable pod investigation 
+    [chromium] › tests/e2e/resource-actions-keyboard.spec.ts:228:1 › keyboard-only resource create, scale, restart, YAML preview/apply, and delete works responsively 
+    [mobile-chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › acknowledged history preserves filters, server page and off-page deep link through reload 
+    [mobile-chromium] › tests/e2e/operator-alert-investigation.spec.ts:199:3 › resolved history preserves filters, server page and off-page deep link through reload 
+    [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:256:1 › deleting a custom resource returns to its canonical type and retains project and namespace 
+    [mobile-chromium] › tests/e2e/operator-navigation-contract.spec.ts:133:1 › installed tools retain the Management onboarding template destination 
+    [mobile-chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 403 preserves a recoverable pod investigation 
+    [mobile-chromium] › tests/e2e/operator-resource-history.spec.ts:259:3 › unavailable originating workload 404 preserves a recoverable pod investigation 
+  121 passed (2.8m)

@@ -1,0 +1,418 @@
+diff --git a/internal/auth/api_token_scopes.go b/internal/auth/api_token_scopes.go
+index a1db7cd322..958253e27d 100644
+--- a/internal/auth/api_token_scopes.go
++++ b/internal/auth/api_token_scopes.go
+@@ -15,6 +15,8 @@ import (
+ 	"net"
+ 	"net/http"
+ 	"strings"
++
++	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+ )
+ 
+ // API token scope vocabulary. The CRUD UI surfaces these as a checkbox
+@@ -215,6 +217,21 @@ func IPAllowed(nets []*net.IPNet, remote net.IP) bool {
+ 	return false
+ }
+ 
++// APITokenIPAllowed applies the same token restriction to REST and streams.
++// ClientIP uses only the canonical address established by trusted proxy
++// middleware; arbitrary forwarding headers must never grant token access.
++func APITokenIPAllowed(r *http.Request, allowedCIDRs string) bool {
++	if strings.TrimSpace(allowedCIDRs) == "" {
++		return true
++	}
++	nets, err := ParseAllowedCIDRs(allowedCIDRs)
++	client := reqctx.ClientIP(r)
++	if err != nil || client == nil {
++		return false
++	}
++	return IPAllowed(nets, net.IP(client.AsSlice()))
++}
++
+ // cidrParseError mirrors net.ParseError shape so callers can switch on
+ // .Error() the same way; kept private because the package doesn't
+ // need a richer type today.
+diff --git a/internal/auth/streamauth.go b/internal/auth/streamauth.go
+index fd10176f45..fe4b3a0f6b 100644
+--- a/internal/auth/streamauth.go
++++ b/internal/auth/streamauth.go
+@@ -44,7 +44,7 @@ func BearerFromHeader(headerVal string) string {
+ //   - An API token (prefix `astro_`), looked up by sha256 hash in the
+ //     api_tokens table. The query also enforces is_revoked=false at the SQL
+ //     level. ExpiresAt is checked here. The owning user must be active.
+-//   - A JWT, validated against the JWTManager's key set.
++//   - An access JWT, validated against the JWTManager's key set.
+ //
+ // On any failure (missing/expired/revoked/inactive-user/bad-signature) returns
+ // (uuid.Nil, false) so callers can write a uniform 401. A missing JWT manager
+@@ -85,6 +85,9 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
+ 		if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
+ 			return uuid.Nil, false
+ 		}
++		if !APITokenIPAllowed(r, apiToken.AllowedCidrs) {
++			return uuid.Nil, false
++		}
+ 		dbUser, err := q.GetUserByID(r.Context(), apiToken.UserID)
+ 		if err != nil || !dbUser.IsActive {
+ 			return uuid.Nil, false
+@@ -102,11 +105,11 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
+ 		return dbUser.ID, true
+ 	}
+ 
+-	claims, err := j.ValidateToken(token)
++	claims, err := j.ValidateTokenContext(r.Context(), token)
+ 	if err != nil {
+ 		return uuid.Nil, false
+ 	}
+-	if claims.UserID == uuid.Nil {
++	if claims.TokenType != AccessToken || claims.UserID == uuid.Nil {
+ 		return uuid.Nil, false
+ 	}
+ 	return claims.UserID, true
+diff --git a/internal/server/middleware/auth.go b/internal/server/middleware/auth.go
+index 9193026fd3..c45b0acc0e 100644
+--- a/internal/server/middleware/auth.go
++++ b/internal/server/middleware/auth.go
+@@ -5,9 +5,7 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"errors"
+-	"net"
+ 	"net/http"
+-	"net/netip"
+ 	"strings"
+ 	"time"
+ 
+@@ -133,13 +131,10 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
+ 					// (no restriction). Parse errors fail closed so a
+ 					// misconfigured token can't silently bypass the
+ 					// check.
+-					if strings.TrimSpace(apiToken.AllowedCidrs) != "" {
+-						nets, perr := auth.ParseAllowedCIDRs(apiToken.AllowedCidrs)
+-						if perr != nil || !auth.IPAllowed(nets, netIP(reqctx.ClientIP(r))) {
+-							auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
+-							authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
+-							return
+-						}
++					if !auth.APITokenIPAllowed(r, apiToken.AllowedCidrs) {
++						auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
++						authError(w, r, apiutil.IPNotAllowlisted, "Token not permitted from this IP address")
++						return
+ 					}
+ 					clientIP := reqctx.ClientIP(r)
+ 					if jwtManager == nil || jwtManager.ClaimAPITokenActivity(tokenHash) {
+@@ -174,11 +169,9 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
+ 					authError(w, r, apiutil.AuthenticationRequired, "Invalid or expired token")
+ 					return
+ 				}
+-				// Purpose-bound tokens (TOTP challenge etc.) are NEVER accepted
+-				// as session credentials. They're valid for their dedicated
+-				// endpoint only — POST /auth/totp/verify reads them via
+-				// JWTManager.ValidateToken + Purpose check directly.
+-				if claims.TokenType == auth.PurposeToken {
++				// Refresh and purpose-bound tokens are valid only at their
++				// dedicated endpoints, never as ordinary API credentials.
++				if claims.TokenType != auth.AccessToken {
+ 					authError(w, r, apiutil.AuthenticationRequired, "Token is not valid for this endpoint")
+ 					return
+ 				}
+@@ -242,13 +235,6 @@ func requestUserFromSessionIdentity(identity auth.SessionIdentity, method string
+ 	}
+ }
+ 
+-func netIP(address *netip.Addr) net.IP {
+-	if address == nil {
+-		return nil
+-	}
+-	return net.IP(address.AsSlice())
+-}
+-
+ // RequireAuth is an alias for Auth that makes it explicit at the call site
+ // that authentication is mandatory for the wrapped routes.
+ func RequireAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
+diff --git a/internal/tunnel/stream_auth_test.go b/internal/tunnel/stream_auth_test.go
+index e884e90827..e6d0135f37 100644
+--- a/internal/tunnel/stream_auth_test.go
++++ b/internal/tunnel/stream_auth_test.go
+@@ -56,3 +56,36 @@ func requestWithClusterID(rawURL string, clusterID uuid.UUID) *http.Request {
+ 	routeCtx.URLParams.Add("cluster_id", clusterID.String())
+ 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+ }
++
++func TestExecRejectsNonAccessJWTBeforeUpgrade(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"refresh", auth.PurposeTOTPChallenge, auth.PurposeTOTPEnrollOnly} {
++		t.Run(kind, func(t *testing.T) {
++			t.Parallel()
++			manager := auth.MustNewJWTManager("test-exec-boundary", 60)
++			userID := uuid.New()
++			var token string
++			var err error
++			if kind == "refresh" {
++				token, err = manager.GenerateRefreshToken(userID)
++			} else {
++				token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
++			}
++			if err != nil {
++				t.Fatal(err)
++			}
++			consumer := &ExecConsumer{jwt: manager}
++			router := chi.NewRouter()
++			router.Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", consumer.HandleExec)
++			request := httptest.NewRequest(http.MethodGet, "/api/v1/ws/exec/"+uuid.NewString()+"/default/pod/app/", nil)
++			request.Header.Set("Authorization", "Bearer "+token)
++			request.Header.Set("Connection", "Upgrade")
++			request.Header.Set("Upgrade", "websocket")
++			response := httptest.NewRecorder()
++			router.ServeHTTP(response, request)
++			if response.Code != http.StatusUnauthorized || response.Header().Get("Upgrade") != "" {
++				t.Fatalf("status=%d upgrade=%q, want rejection before websocket upgrade", response.Code, response.Header().Get("Upgrade"))
++			}
++		})
++	}
++}
+diff --git a/internal/tunnel/ws_owner_proxy.go b/internal/tunnel/ws_owner_proxy.go
+index aa10c91c6b..172cd5bebb 100644
+--- a/internal/tunnel/ws_owner_proxy.go
++++ b/internal/tunnel/ws_owner_proxy.go
+@@ -27,6 +27,8 @@ import (
+ 	"net/http/httputil"
+ 	"net/url"
+ 	"strings"
++
++	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+ )
+ 
+ // ForwardWSToOwnerPod reverse-proxies an HTTP-Upgrade WebSocket
+@@ -98,6 +100,12 @@ func ForwardWSToOwnerPod(hub *Hub, log *slog.Logger, w http.ResponseWriter, r *h
+ 		Rewrite: func(req *httputil.ProxyRequest) {
+ 			req.SetURL(target)
+ 			req.SetXForwarded()
++			// TrustedRealIP can normalize RemoteAddr to a bare IP, which
++			// SetXForwarded cannot parse as host:port. Forward only that
++			// canonical client; the sibling still enforces its proxy trust.
++			if client := reqctx.ClientIP(req.In); client != nil {
++				req.Out.Header.Set("X-Forwarded-For", client.String())
++			}
+ 			req.Out.Header.Set("X-Astronomer-Forwarded-By", loc.Address())
+ 			// Do not forward an externally supplied X-Forwarded-Host into the
+ 			// sibling's trusted internal request context.
+diff --git a/internal/auth/streamauth_boundary_test.go b/internal/auth/streamauth_boundary_test.go
+new file mode 100644
+index 0000000000..3dfa5b28b8
+--- /dev/null
++++ b/internal/auth/streamauth_boundary_test.go
+@@ -0,0 +1,64 @@
++package auth
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++)
++
++func TestStreamRequiresAccessJWT(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"access", "refresh", PurposeTOTPChallenge, PurposeTOTPEnrollOnly} {
++		for _, stream := range []string{StreamKindExec, StreamKindShell, StreamKindLogs, StreamKindEvents} {
++			t.Run(kind+"/"+stream, func(t *testing.T) {
++				t.Parallel()
++				manager := MustNewJWTManager("test-stream-boundary", 60)
++				userID := uuid.New()
++				var token string
++				var err error
++				switch kind {
++				case "access":
++					token, err = manager.GenerateAccessToken(userID)
++				case "refresh":
++					token, err = manager.GenerateRefreshToken(userID)
++				default:
++					token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
++				}
++				if err != nil {
++					t.Fatal(err)
++				}
++				request := httptest.NewRequest(http.MethodGet, "/stream", nil)
++				request.Header.Set("Authorization", "Bearer "+token)
++				got, ok := AuthorizeStreamRequestWithTickets(request, nil, manager, nil, stream, uuid.New())
++				if kind == "access" {
++					if !ok || got != userID {
++						t.Fatal("valid access JWT rejected")
++					}
++				} else if ok || got != uuid.Nil {
++					t.Fatal("non-access JWT accepted as a stream credential")
++				}
++			})
++		}
++	}
++}
++
++func TestStreamValidationPreservesRequestCancellation(t *testing.T) {
++	t.Parallel()
++	manager := MustNewJWTManager("test-stream-context", 60)
++	token, err := manager.GenerateAccessToken(uuid.New())
++	if err != nil {
++		t.Fatal(err)
++	}
++	manager.SetRevocationChecker(newFakeRevocationChecker())
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	request := httptest.NewRequestWithContext(ctx, http.MethodGet, "/stream", nil)
++	request.Header.Set("Authorization", "Bearer "+token)
++	if _, ok := AuthorizeStreamRequest(request, nil, manager); ok {
++		t.Fatal("canceled revocation lookup authenticated the stream")
++	}
++}
+diff --git a/internal/server/middleware/auth_boundary_test.go b/internal/server/middleware/auth_boundary_test.go
+new file mode 100644
+index 0000000000..1f6fff6afb
+--- /dev/null
++++ b/internal/server/middleware/auth_boundary_test.go
+@@ -0,0 +1,142 @@
++package middleware
++
++import (
++	"log/slog"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/auth"
++	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
++)
++
++func TestAuthRequiresAccessJWT(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"access", "refresh", auth.PurposeTOTPChallenge, auth.PurposeTOTPEnrollOnly} {
++		for _, transport := range []string{"bearer", "cookie"} {
++			t.Run(kind+"/"+transport, func(t *testing.T) {
++				t.Parallel()
++				manager := newTestJWTManager()
++				userID := uuid.New()
++				var token string
++				var err error
++				switch kind {
++				case "access":
++					token, err = manager.GenerateAccessToken(userID)
++				case "refresh":
++					token, err = manager.GenerateRefreshToken(userID)
++				default:
++					token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
++				}
++				if err != nil {
++					t.Fatal(err)
++				}
++				request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil)
++				if transport == "cookie" {
++					request.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
++				} else {
++					request.Header.Set("Authorization", "Bearer "+token)
++				}
++				called := false
++				handler := Auth(manager)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++					called = true
++					w.WriteHeader(http.StatusNoContent)
++				}))
++				response := httptest.NewRecorder()
++				handler.ServeHTTP(response, request)
++				want := http.StatusUnauthorized
++				if kind == "access" {
++					want = http.StatusNoContent
++				}
++				if response.Code != want || called != (kind == "access") {
++					t.Fatalf("status=%d handler_called=%v, want status=%d", response.Code, called, want)
++				}
++			})
++		}
++	}
++}
++
++// Exercise the same client identity and CIDR contract through REST, direct
++// streaming, and the real HTTP reverse proxy to a trusted/untrusted sibling.
++func TestAPITokenCIDRBoundaryParity(t *testing.T) {
++	t.Parallel()
++	cases := []struct {
++		name, cidrs, remote, forwarded, trusted string
++		allowed                                 bool
++	}{
++		{name: "matching IPv4", cidrs: "192.0.2.0/24", remote: "192.0.2.7:1234", allowed: true},
++		{name: "denied IPv4", cidrs: "192.0.2.0/24", remote: "198.51.100.7:1234"},
++		{name: "matching IPv6", cidrs: "2001:db8::/32", remote: "[2001:db8::7]:1234", allowed: true},
++		{name: "denied IPv6", cidrs: "2001:db8::/32", remote: "[2001:db9::7]:1234"},
++		{name: "mapped IPv4", cidrs: "192.0.2.0/24", remote: "[::ffff:192.0.2.7]:1234", allowed: true},
++		{name: "malformed CIDR", cidrs: "192.0.2.0/24,broken", remote: "192.0.2.7:1234"},
++		{name: "empty networks", cidrs: ", ,", remote: "192.0.2.7:1234"},
++		{name: "unrestricted", cidrs: " ", remote: "192.0.2.7:1234", allowed: true},
++		{name: "invalid client", cidrs: "192.0.2.0/24", remote: "invalid"},
++		{name: "spoofed header", cidrs: "192.0.2.0/24", remote: "198.51.100.7:1234", forwarded: "192.0.2.7"},
++		{name: "trusted proxy", cidrs: "192.0.2.0/24", remote: "10.0.0.1:1234", forwarded: "192.0.2.7", trusted: "10.0.0.0/8", allowed: true},
++		{name: "trusted chain", cidrs: "192.0.2.0/24", remote: "10.0.0.1:1234", forwarded: "192.0.2.7, 10.0.0.2", trusted: "10.0.0.0/8", allowed: true},
++		{name: "spoofed chain prefix", cidrs: "192.0.2.0/24", remote: "10.0.0.1:1234", forwarded: "192.0.2.7, 198.51.100.7", trusted: "10.0.0.0/8"},
++	}
++	for _, tc := range cases {
++		for _, mode := range []string{"REST", "stream", "trusted sibling", "untrusted sibling"} {
++			t.Run(tc.name+"/"+mode, func(t *testing.T) {
++				t.Parallel()
++				manager := newTestJWTManager()
++				q := newFakeWithCIDRs(t, tc.cidrs)
++				var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++					_, ok := auth.AuthorizeStreamRequestWithTickets(r, q, manager, nil, auth.StreamKindExec, uuid.Nil)
++					if !ok {
++						w.WriteHeader(http.StatusUnauthorized)
++						return
++					}
++					w.WriteHeader(http.StatusNoContent)
++				})
++				if mode == "REST" {
++					handler = AuthWithQueries(manager, q)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++						w.WriteHeader(http.StatusNoContent)
++					}))
++				}
++				if strings.HasSuffix(mode, "sibling") {
++					trust := ""
++					if mode == "trusted sibling" {
++						trust = "127.0.0.0/8,::1/128"
++					}
++					upstream := httptest.NewServer(TrustedRealIP(trust)(handler))
++					t.Cleanup(upstream.Close)
++					clusterID := uuid.NewString()
++					hub := tunnel.NewHub(slog.Default())
++					hub.SetLocator(tunnel.NewFakeLocatorForTest("self:9000", map[string]string{
++						clusterID: strings.TrimPrefix(upstream.URL, "http://"),
++					}))
++					handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++						if !tunnel.ForwardWSToOwnerPod(hub, slog.Default(), w, r, clusterID) {
++							t.Error("request did not reach sibling")
++						}
++					})
++				}
++				request := httptest.NewRequest(http.MethodGet, "/api/v1/ws/exec/", nil)
++				request.Header.Set("Authorization", "Bearer astro_test_token")
++				request.Header.Set("X-Forwarded-For", tc.forwarded)
++				request.RemoteAddr = tc.remote
++				response := httptest.NewRecorder()
++				TrustedRealIP(tc.trusted)(handler).ServeHTTP(response, request)
++				allowed := tc.allowed
++				if mode == "untrusted sibling" && strings.TrimSpace(tc.cidrs) != "" {
++					allowed = false
++				}
++				want := http.StatusUnauthorized
++				if allowed {
++					want = http.StatusNoContent
++				}
++				if response.Code != want {
++					t.Fatalf("status=%d, want %d", response.Code, want)
++				}
++			})
++		}
++	}
++}

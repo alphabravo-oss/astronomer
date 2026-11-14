@@ -1,0 +1,10 @@
+{
+  "allocatedAt": "2026-10-10T00:52:20.404818+00:00",
+  "privateReference": "/root/.cache/astronomer-032/qualification/w10/workflow-database.json",
+  "database": "plan032_w10_workflow",
+  "clusterUID": "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e",
+  "primary": "plan032-postgres18-2",
+  "newDatabaseCreated": true,
+  "credentialsPrinted": false,
+  "initialFailedFence": "Initial kubectl exec omitted -i; empty absence-query output rejected before CREATE. Corrected -i checks returned 0 before and 1 after creation."
+}

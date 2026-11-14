@@ -1,0 +1,790 @@
+{
+  "checks": [
+    {
+      "apiVersion": "apps/v1",
+      "current": "(!has(metadata.deletionTimestamp) && (has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation) && has(spec.replicas) && spec.replicas > 0 && has(status.updatedReplicas) && status.updatedReplicas == spec.replicas && has(status.replicas) && status.replicas == spec.replicas) && (has(status.availableReplicas) && has(status.readyReplicas) && ((metadata.name == 'source-controller' && metadata.namespace == 'astronomer-delivery-system') ? status.availableReplicas > 0 && status.readyReplicas > 0 : status.availableReplicas >= spec.replicas && status.readyReplicas >= spec.replicas)) && !(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True'))",
+      "failed": "(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True')) || ((has(status.conditions) && status.conditions.exists(c, c.type == 'Progressing' && c.status == 'False' && has(c.reason) && c.reason == 'ProgressDeadlineExceeded')) && !((metadata.name == 'source-controller' && metadata.namespace == 'astronomer-delivery-system') && ((!has(metadata.deletionTimestamp) && (has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation) && has(spec.replicas) && spec.replicas > 0 && has(status.updatedReplicas) && status.updatedReplicas == spec.replicas && has(status.replicas) && status.replicas == spec.replicas) && (has(status.availableReplicas) && has(status.readyReplicas) && ((metadata.name == 'source-controller' && metadata.namespace == 'astronomer-delivery-system') ? status.availableReplicas > 0 && status.readyReplicas > 0 : status.availableReplicas >= spec.replicas && status.readyReplicas >= spec.replicas)) && !(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True')))))",
+      "inProgress": "!(has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation)",
+      "kind": "Deployment"
+    }
+  ],
+  "fixtures": [
+    {
+      "expected": "current",
+      "name": "leader and standby beyond deadline",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "leader lost",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "artifact endpoint unavailable",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "inProgress",
+      "name": "leader recovering",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "observedGeneration": 2,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "inProgress",
+      "name": "unobserved generation",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 3,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "inProgress",
+      "name": "missing observed generation",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "old leader while new revision fails",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 1
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "extra old replica",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 3,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "missing standby replica",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 1,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "replica creation failure",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "True",
+              "type": "ReplicaFailure"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "inProgress",
+      "name": "scaled to zero",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 0,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "observedGeneration": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "deleting",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "deletionTimestamp": "2026-10-23T06:34:26Z",
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "ordinary controller unavailable",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "helm-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "failed",
+      "name": "same name outside system",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "source-controller",
+          "namespace": "other"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": null,
+              "lastUpdateTime": null,
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    },
+    {
+      "expected": "current",
+      "name": "ordinary controller complete",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "labels": {
+            "app.kubernetes.io/version": "v2.9.6"
+          },
+          "name": "helm-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2,
+          "selector": null,
+          "strategy": {},
+          "template": {
+            "metadata": {},
+            "spec": {
+              "containers": [
+                {
+                  "image": "ghcr.io/fluxcd/source-controller:v1.9.6@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+                  "name": "manager",
+                  "resources": {}
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "availableReplicas": 2,
+          "observedGeneration": 2,
+          "readyReplicas": 2,
+          "replicas": 2,
+          "updatedReplicas": 2
+        }
+      }
+    }
+  ]
+}

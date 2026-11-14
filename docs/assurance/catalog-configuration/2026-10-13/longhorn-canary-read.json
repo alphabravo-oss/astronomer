@@ -1,0 +1,514 @@
+{
+  "pod": {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "qual035-read",
+      "namespace": "longhorn-system",
+      "uid": "a3d5ec52-7276-4e57-bcf0-ed2fbf81735e",
+      "resourceVersion": "8202840",
+      "generation": 1,
+      "creationTimestamp": "2026-10-13T00:54:24Z",
+      "labels": {
+        "qualification": "catalog035"
+      },
+      "annotations": {
+        "cni.projectcalico.org/containerID": "41b6af2ec75dfbd98f89110a7d36eab8e46dbe91ce92eefea0aacfd6cc92f8d5",
+        "cni.projectcalico.org/podIP": "",
+        "cni.projectcalico.org/podIPs": ""
+      },
+      "managedFields": [
+        {
+          "manager": "Python-urllib",
+          "operation": "Update",
+          "apiVersion": "v1",
+          "time": "2026-10-13T00:54:24Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:metadata": {
+              "f:labels": {
+                ".": {},
+                "f:qualification": {}
+              }
+            },
+            "f:spec": {
+              "f:containers": {
+                "k:{\"name\":\"canary\"}": {
+                  ".": {},
+                  "f:command": {},
+                  "f:image": {},
+                  "f:imagePullPolicy": {},
+                  "f:name": {},
+                  "f:resources": {
+                    ".": {},
+                    "f:limits": {
+                      ".": {},
+                      "f:cpu": {},
+                      "f:memory": {}
+                    },
+                    "f:requests": {
+                      ".": {},
+                      "f:cpu": {},
+                      "f:memory": {}
+                    }
+                  },
+                  "f:terminationMessagePath": {},
+                  "f:terminationMessagePolicy": {},
+                  "f:volumeMounts": {
+                    ".": {},
+                    "k:{\"mountPath\":\"/data\"}": {
+                      ".": {},
+                      "f:mountPath": {},
+                      "f:name": {}
+                    }
+                  }
+                }
+              },
+              "f:dnsPolicy": {},
+              "f:enableServiceLinks": {},
+              "f:restartPolicy": {},
+              "f:schedulerName": {},
+              "f:securityContext": {},
+              "f:terminationGracePeriodSeconds": {},
+              "f:volumes": {
+                ".": {},
+                "k:{\"name\":\"data\"}": {
+                  ".": {},
+                  "f:name": {},
+                  "f:persistentVolumeClaim": {
+                    ".": {},
+                    "f:claimName": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "manager": "calico",
+          "operation": "Update",
+          "apiVersion": "v1",
+          "time": "2026-10-13T00:54:38Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:metadata": {
+              "f:annotations": {
+                ".": {},
+                "f:cni.projectcalico.org/containerID": {},
+                "f:cni.projectcalico.org/podIP": {},
+                "f:cni.projectcalico.org/podIPs": {}
+              }
+            }
+          },
+          "subresource": "status"
+        },
+        {
+          "manager": "k3s",
+          "operation": "Update",
+          "apiVersion": "v1",
+          "time": "2026-10-13T00:54:38Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:status": {
+              "f:conditions": {
+                "k:{\"type\":\"ContainersReady\"}": {
+                  ".": {},
+                  "f:lastProbeTime": {},
+                  "f:lastTransitionTime": {},
+                  "f:observedGeneration": {},
+                  "f:reason": {},
+                  "f:status": {},
+                  "f:type": {}
+                },
+                "k:{\"type\":\"Initialized\"}": {
+                  ".": {},
+                  "f:lastProbeTime": {},
+                  "f:lastTransitionTime": {},
+                  "f:observedGeneration": {},
+                  "f:reason": {},
+                  "f:status": {},
+                  "f:type": {}
+                },
+                "k:{\"type\":\"PodReadyToStartContainers\"}": {
+                  ".": {},
+                  "f:lastProbeTime": {},
+                  "f:lastTransitionTime": {},
+                  "f:observedGeneration": {},
+                  "f:status": {},
+                  "f:type": {}
+                },
+                "k:{\"type\":\"PodScheduled\"}": {
+                  "f:observedGeneration": {}
+                },
+                "k:{\"type\":\"Ready\"}": {
+                  ".": {},
+                  "f:lastProbeTime": {},
+                  "f:lastTransitionTime": {},
+                  "f:observedGeneration": {},
+                  "f:reason": {},
+                  "f:status": {},
+                  "f:type": {}
+                }
+              },
+              "f:containerStatuses": {},
+              "f:hostIP": {},
+              "f:hostIPs": {},
+              "f:observedGeneration": {},
+              "f:phase": {},
+              "f:podIP": {},
+              "f:podIPs": {
+                ".": {},
+                "k:{\"ip\":\"10.42.13.15\"}": {
+                  ".": {},
+                  "f:ip": {}
+                }
+              },
+              "f:startTime": {}
+            }
+          },
+          "subresource": "status"
+        }
+      ]
+    },
+    "spec": {
+      "volumes": [
+        {
+          "name": "data",
+          "persistentVolumeClaim": {
+            "claimName": "qual035-data"
+          }
+        },
+        {
+          "name": "kube-api-access-p2czz",
+          "projected": {
+            "sources": [
+              {
+                "serviceAccountToken": {
+                  "expirationSeconds": 3607,
+                  "path": "token"
+                }
+              },
+              {
+                "configMap": {
+                  "name": "kube-root-ca.crt",
+                  "items": [
+                    {
+                      "key": "ca.crt",
+                      "path": "ca.crt"
+                    }
+                  ]
+                }
+              },
+              {
+                "downwardAPI": {
+                  "items": [
+                    {
+                      "path": "namespace",
+                      "fieldRef": {
+                        "apiVersion": "v1",
+                        "fieldPath": "metadata.namespace"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "defaultMode": 420
+          }
+        }
+      ],
+      "containers": [
+        {
+          "name": "canary",
+          "image": "busybox:1.37.0",
+          "command": [
+            "sh",
+            "-ec",
+            "test \"$(cat /data/marker)\" = catalog035-retained-data && cat /data/marker"
+          ],
+          "resources": {
+            "limits": {
+              "cpu": "100m",
+              "memory": "32Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          },
+          "volumeMounts": [
+            {
+              "name": "data",
+              "mountPath": "/data"
+            },
+            {
+              "name": "kube-api-access-p2czz",
+              "readOnly": true,
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount"
+            }
+          ],
+          "terminationMessagePath": "/dev/termination-log",
+          "terminationMessagePolicy": "File",
+          "imagePullPolicy": "IfNotPresent"
+        }
+      ],
+      "restartPolicy": "Never",
+      "terminationGracePeriodSeconds": 30,
+      "dnsPolicy": "ClusterFirst",
+      "serviceAccountName": "default",
+      "serviceAccount": "default",
+      "nodeName": "astronomer-dev-1-mj",
+      "securityContext": {},
+      "schedulerName": "default-scheduler",
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ],
+      "priority": 0,
+      "enableServiceLinks": true,
+      "preemptionPolicy": "PreemptLowerPriority"
+    },
+    "status": {
+      "observedGeneration": 1,
+      "phase": "Succeeded",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "observedGeneration": 1,
+          "status": "False",
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-10-13T00:54:38Z"
+        },
+        {
+          "type": "Initialized",
+          "observedGeneration": 1,
+          "status": "True",
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-10-13T00:54:24Z",
+          "reason": "PodCompleted"
+        },
+        {
+          "type": "Ready",
+          "observedGeneration": 1,
+          "status": "False",
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-10-13T00:54:24Z",
+          "reason": "PodCompleted"
+        },
+        {
+          "type": "ContainersReady",
+          "observedGeneration": 1,
+          "status": "False",
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-10-13T00:54:24Z",
+          "reason": "PodCompleted"
+        },
+        {
+          "type": "PodScheduled",
+          "observedGeneration": 1,
+          "status": "True",
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-10-13T00:54:24Z"
+        }
+      ],
+      "hostIP": "5.78.179.107",
+      "hostIPs": [
+        {
+          "ip": "5.78.179.107"
+        },
+        {
+          "ip": "2a01:4ff:1f0:d272::1"
+        }
+      ],
+      "podIP": "10.42.13.15",
+      "podIPs": [
+        {
+          "ip": "10.42.13.15"
+        }
+      ],
+      "startTime": "2026-10-13T00:54:24Z",
+      "containerStatuses": [
+        {
+          "name": "canary",
+          "state": {
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-10-13T00:54:36Z",
+              "finishedAt": "2026-10-13T00:54:36Z",
+              "containerID": "containerd://d4edf5d7051b90d1f90ab9f98cd83908de1bfbb5b40c8e34b1e584b7a428e874"
+            }
+          },
+          "lastState": {},
+          "ready": false,
+          "restartCount": 0,
+          "image": "docker.io/library/busybox:1.37.0",
+          "imageID": "docker.io/library/busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e",
+          "containerID": "containerd://d4edf5d7051b90d1f90ab9f98cd83908de1bfbb5b40c8e34b1e584b7a428e874",
+          "started": false,
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "16Mi"
+          },
+          "resources": {
+            "limits": {
+              "cpu": "100m",
+              "memory": "32Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "16Mi"
+            }
+          },
+          "volumeMounts": [
+            {
+              "name": "data",
+              "mountPath": "/data"
+            },
+            {
+              "name": "kube-api-access-p2czz",
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ],
+          "user": {
+            "linux": {
+              "uid": 0,
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                10
+              ]
+            }
+          }
+        }
+      ],
+      "qosClass": "Burstable"
+    }
+  },
+  "pvc": {
+    "kind": "PersistentVolumeClaim",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "qual035-data",
+      "namespace": "longhorn-system",
+      "uid": "51926511-489b-4cda-8cc7-eb48db1ac8ce",
+      "resourceVersion": "8202360",
+      "creationTimestamp": "2026-10-13T00:52:51Z",
+      "labels": {
+        "qualification": "catalog035"
+      },
+      "annotations": {
+        "pv.kubernetes.io/bind-completed": "yes",
+        "pv.kubernetes.io/bound-by-controller": "yes",
+        "volume.beta.kubernetes.io/storage-provisioner": "driver.longhorn.io",
+        "volume.kubernetes.io/storage-provisioner": "driver.longhorn.io"
+      },
+      "finalizers": [
+        "kubernetes.io/pvc-protection"
+      ],
+      "managedFields": [
+        {
+          "manager": "Python-urllib",
+          "operation": "Update",
+          "apiVersion": "v1",
+          "time": "2026-10-13T00:52:51Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:metadata": {
+              "f:labels": {
+                ".": {},
+                "f:qualification": {}
+              }
+            },
+            "f:spec": {
+              "f:accessModes": {},
+              "f:resources": {
+                "f:requests": {
+                  ".": {},
+                  "f:storage": {}
+                }
+              },
+              "f:storageClassName": {},
+              "f:volumeMode": {}
+            }
+          }
+        },
+        {
+          "manager": "k3s",
+          "operation": "Update",
+          "apiVersion": "v1",
+          "time": "2026-10-13T00:53:26Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:metadata": {
+              "f:annotations": {
+                ".": {},
+                "f:pv.kubernetes.io/bind-completed": {},
+                "f:pv.kubernetes.io/bound-by-controller": {},
+                "f:volume.beta.kubernetes.io/storage-provisioner": {},
+                "f:volume.kubernetes.io/storage-provisioner": {}
+              }
+            },
+            "f:spec": {
+              "f:volumeName": {}
+            }
+          }
+        },
+        {
+          "manager": "k3s",
+          "operation": "Update",
+          "apiVersion": "v1",
+          "time": "2026-10-13T00:53:26Z",
+          "fieldsType": "FieldsV1",
+          "fieldsV1": {
+            "f:status": {
+              "f:accessModes": {},
+              "f:capacity": {
+                ".": {},
+                "f:storage": {}
+              },
+              "f:phase": {}
+            }
+          },
+          "subresource": "status"
+        }
+      ]
+    },
+    "spec": {
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "resources": {
+        "requests": {
+          "storage": "64Mi"
+        }
+      },
+      "volumeName": "pvc-51926511-489b-4cda-8cc7-eb48db1ac8ce",
+      "storageClassName": "longhorn",
+      "volumeMode": "Filesystem"
+    },
+    "status": {
+      "phase": "Bound",
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "capacity": {
+        "storage": "64Mi"
+      }
+    }
+  },
+  "log": "catalog035-retained-data",
+  "observed_at": "2026-10-13T00:54:40Z"
+}

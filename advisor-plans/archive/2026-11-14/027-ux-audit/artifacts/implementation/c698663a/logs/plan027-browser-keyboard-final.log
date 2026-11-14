@@ -1,0 +1,19 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e
+> node scripts/generate-e2e-stubs.mjs
+
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e
+> playwright test --project=chromium --project=mobile-chromium critical-workflows-keyboard.spec.ts --grep snapshot restore --workers=1
+
+
+Running 4 tests using 1 worker
+(node:3180112) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3180308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·(node:3180456) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·
+  4 passed (6.0s)

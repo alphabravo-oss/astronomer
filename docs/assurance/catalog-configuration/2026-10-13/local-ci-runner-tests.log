@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: the pinned patch is exact and idempotent, with unexpected sources rejected
+ok 1 - the pinned patch is exact and idempotent, with unexpected sources rejected
+  ---
+  duration_ms: 2.875559
+  type: 'test'
+  ...
+# Subtest: workspace permissions preserve executable identity and allow generator recreation
+ok 2 - workspace permissions preserve executable identity and allow generator recreation
+  ---
+  duration_ms: 17.937327
+  type: 'test'
+  ...
+# Subtest: secondary repositories fetch real commits while the candidate stays synthetic
+ok 3 - secondary repositories fetch real commits while the candidate stays synthetic
+  ---
+  duration_ms: 148.52611
+  type: 'test'
+  ...
+# Subtest: Git shim patch is version-bound, exact and idempotent
+ok 4 - Git shim patch is version-bound, exact and idempotent
+  ---
+  duration_ms: 1.772089
+  type: 'test'
+  ...
+# Subtest: dependency patches reject changed versions and ambiguous implementations
+ok 5 - dependency patches reject changed versions and ambiguous implementations
+  ---
+  duration_ms: 3.277355
+  type: 'test'
+  ...
+# Subtest: real result collection retains matrix failures regardless of completion order
+ok 6 - real result collection retains matrix failures regardless of completion order
+  ---
+  duration_ms: 3.764723
+  type: 'test'
+  ...
+# Subtest: wave completion records startup failures and preserves failed scheduler state
+ok 7 - wave completion records startup failures and preserves failed scheduler state
+  ---
+  duration_ms: 1.395088
+  type: 'test'
+  ...
+# Subtest: toJSON(needs) exposes actual results and outputs, with missing results failing closed
+ok 8 - toJSON(needs) exposes actual results and outputs, with missing results failing closed
+  ---
+  duration_ms: 4.221823
+  type: 'test'
+  ...
+# Subtest: the unchanged PR aggregate receives every real dependency result
+ok 9 - the unchanged PR aggregate receives every real dependency result
+  ---
+  duration_ms: 606.878036
+  type: 'test'
+  ...
+# Subtest: installed runner dependencies load and exit cleanly on the active Node runtime
+ok 10 - installed runner dependencies load and exit cleanly on the active Node runtime
+  ---
+  duration_ms: 778.855703
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 999.531399

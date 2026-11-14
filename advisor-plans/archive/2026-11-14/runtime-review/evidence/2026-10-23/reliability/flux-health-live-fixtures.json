@@ -1,0 +1,141 @@
+{
+  "checks": [
+    {
+      "apiVersion": "apps/v1",
+      "current": "(!has(metadata.deletionTimestamp) && (has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation) && has(spec.replicas) && spec.replicas > 0 && has(status.updatedReplicas) && status.updatedReplicas == spec.replicas && has(status.replicas) && status.replicas == spec.replicas) && (has(status.availableReplicas) && has(status.readyReplicas) && ((metadata.name == 'source-controller' && metadata.namespace == 'astronomer-delivery-system') ? status.availableReplicas > 0 && status.readyReplicas > 0 : status.availableReplicas >= spec.replicas && status.readyReplicas >= spec.replicas)) && !(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True'))",
+      "failed": "(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True')) || ((has(status.conditions) && status.conditions.exists(c, c.type == 'Progressing' && c.status == 'False' && has(c.reason) && c.reason == 'ProgressDeadlineExceeded')) && !((metadata.name == 'source-controller' && metadata.namespace == 'astronomer-delivery-system') && ((!has(metadata.deletionTimestamp) && (has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation) && has(spec.replicas) && spec.replicas > 0 && has(status.updatedReplicas) && status.updatedReplicas == spec.replicas && has(status.replicas) && status.replicas == spec.replicas) && (has(status.availableReplicas) && has(status.readyReplicas) && ((metadata.name == 'source-controller' && metadata.namespace == 'astronomer-delivery-system') ? status.availableReplicas > 0 && status.readyReplicas > 0 : status.availableReplicas >= spec.replicas && status.readyReplicas >= spec.replicas)) && !(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True')))))",
+      "inProgress": "!(has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation)",
+      "kind": "Deployment"
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "live source-controller",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 3,
+          "name": "source-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2
+        },
+        "status": {
+          "availableReplicas": 1,
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-10-23T05:42:13Z",
+              "lastUpdateTime": "2026-10-23T05:42:13Z",
+              "message": "Deployment does not have minimum availability.",
+              "reason": "MinimumReplicasUnavailable",
+              "status": "False",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": "2026-10-23T05:52:33Z",
+              "lastUpdateTime": "2026-10-23T05:52:33Z",
+              "message": "ReplicaSet \"source-controller-85d9548df5\" has timed out progressing.",
+              "reason": "ProgressDeadlineExceeded",
+              "status": "False",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 3,
+          "readyReplicas": 1,
+          "replicas": 2,
+          "terminatingReplicas": 0,
+          "unavailableReplicas": 1,
+          "updatedReplicas": 2
+        }
+      },
+      "expected": "current"
+    },
+    {
+      "name": "live helm-controller",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "name": "helm-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2
+        },
+        "status": {
+          "availableReplicas": 2,
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-10-23T05:42:21Z",
+              "lastUpdateTime": "2026-10-23T05:42:21Z",
+              "message": "Deployment has minimum availability.",
+              "reason": "MinimumReplicasAvailable",
+              "status": "True",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": "2026-10-23T05:42:13Z",
+              "lastUpdateTime": "2026-10-23T05:42:21Z",
+              "message": "ReplicaSet \"helm-controller-6b66dd9d84\" has successfully progressed.",
+              "reason": "NewReplicaSetAvailable",
+              "status": "True",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 2,
+          "replicas": 2,
+          "terminatingReplicas": 0,
+          "updatedReplicas": 2
+        }
+      },
+      "expected": "current"
+    },
+    {
+      "name": "live kustomize-controller",
+      "object": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+          "generation": 2,
+          "name": "kustomize-controller",
+          "namespace": "astronomer-delivery-system"
+        },
+        "spec": {
+          "replicas": 2
+        },
+        "status": {
+          "availableReplicas": 2,
+          "conditions": [
+            {
+              "lastTransitionTime": "2026-10-23T05:42:21Z",
+              "lastUpdateTime": "2026-10-23T05:42:21Z",
+              "message": "Deployment has minimum availability.",
+              "reason": "MinimumReplicasAvailable",
+              "status": "True",
+              "type": "Available"
+            },
+            {
+              "lastTransitionTime": "2026-10-23T05:42:13Z",
+              "lastUpdateTime": "2026-10-23T05:42:21Z",
+              "message": "ReplicaSet \"kustomize-controller-664456475d\" has successfully progressed.",
+              "reason": "NewReplicaSetAvailable",
+              "status": "True",
+              "type": "Progressing"
+            }
+          ],
+          "observedGeneration": 2,
+          "readyReplicas": 2,
+          "replicas": 2,
+          "terminatingReplicas": 0,
+          "updatedReplicas": 2
+        }
+      },
+      "expected": "current"
+    }
+  ],
+  "observed_at": "2026-10-23T06:39:13.567432+00:00"
+}

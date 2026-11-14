@@ -1,0 +1,19 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e
+> node scripts/generate-e2e-stubs.mjs
+
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e
+> playwright test --project=chromium --project=mobile-chromium operator-summary-navigation operator-shell-responsive --workers=1
+
+
+Running 12 tests using 1 worker
+(node:3185647) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3185760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·····(node:3186708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·····
+  12 passed (34.4s)

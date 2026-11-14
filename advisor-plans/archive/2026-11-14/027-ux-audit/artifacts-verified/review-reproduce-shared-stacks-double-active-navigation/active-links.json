@@ -1,0 +1,22 @@
+[
+  {
+    "text": "Astronomerby AlphaBravo",
+    "href": "/dashboard",
+    "class": "flex items-center gap-2.5 min-w-0 active"
+  },
+  {
+    "text": "Overview",
+    "href": "/dashboard",
+    "class": "flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50 active"
+  },
+  {
+    "text": "Metrics",
+    "href": "/dashboard/monitoring",
+    "class": "flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors bg-accent text-foreground font-medium active"
+  },
+  {
+    "text": "Shared stacks",
+    "href": "/dashboard/monitoring/stacks",
+    "class": "flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors bg-accent text-foreground font-medium active"
+  }
+]

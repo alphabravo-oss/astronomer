@@ -1,0 +1,751 @@
+{
+  "slug": "loki",
+  "cluster_id": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+  "project_id": "1e705e58-3723-4985-96e5-c54c702aca86",
+  "chart_id": "52dd6171-869e-41b0-8eab-c1ce039ae8a5",
+  "chart_version_id": "be176268-32e6-4ada-8da5-249625211475",
+  "chart_version": "7.3.0",
+  "profile": {
+    "version": "7.3.0",
+    "available": true,
+    "recommended": true,
+    "deprecated": false,
+    "revoked": false,
+    "supportTier": "experimental",
+    "artifact": {
+      "repository": "grafana",
+      "name": "loki",
+      "version": "7.3.0",
+      "digest": "sha256:04a339f712d770a1f599f05fc0a5a3cde18e43914e49ae6a49f7171be86bcc09"
+    },
+    "compatibility": {
+      "kubernetes": ">=1.31.0 <1.36.0"
+    },
+    "configuration": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "loki": {
+            "type": "object",
+            "title": "Storage and authentication",
+            "properties": {
+              "storage": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "filesystem",
+                      "s3",
+                      "gcs",
+                      "azure",
+                      "swift",
+                      "alibabacloud",
+                      "bos",
+                      "cos"
+                    ],
+                    "type": "string",
+                    "title": "Storage type",
+                    "default": "s3"
+                  },
+                  "bucketNames": {
+                    "type": "object",
+                    "properties": {
+                      "admin": {
+                        "type": "string",
+                        "title": "Admin bucket"
+                      },
+                      "ruler": {
+                        "type": "string",
+                        "title": "Ruler bucket"
+                      },
+                      "chunks": {
+                        "type": "string",
+                        "title": "Chunks bucket"
+                      }
+                    },
+                    "x-astronomer-show-when": {
+                      "path": "loki.storage.type",
+                      "equals": "s3"
+                    }
+                  }
+                }
+              },
+              "auth_enabled": {
+                "type": "boolean",
+                "title": "Enable tenant authentication",
+                "default": true
+              },
+              "commonConfig": {
+                "type": "object",
+                "properties": {
+                  "replication_factor": {
+                    "type": "integer",
+                    "title": "Replication factor",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          },
+          "read": {
+            "type": "object",
+            "title": "Read workloads",
+            "properties": {
+              "replicas": {
+                "type": "integer",
+                "title": "Read replicas",
+                "minimum": 0
+              }
+            },
+            "x-astronomer-advanced": true
+          },
+          "write": {
+            "type": "object",
+            "title": "Write workloads",
+            "properties": {
+              "replicas": {
+                "type": "integer",
+                "title": "Write replicas",
+                "minimum": 0
+              }
+            },
+            "x-astronomer-advanced": true
+          },
+          "backend": {
+            "type": "object",
+            "title": "Backend workloads",
+            "properties": {
+              "replicas": {
+                "type": "integer",
+                "title": "Backend replicas",
+                "minimum": 0
+              }
+            },
+            "x-astronomer-advanced": true
+          },
+          "gateway": {
+            "type": "object",
+            "title": "Gateway",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "title": "Enable gateway",
+                "default": true
+              }
+            }
+          },
+          "monitoring": {
+            "type": "object",
+            "title": "Metrics integration",
+            "properties": {
+              "serviceMonitor": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "title": "Create ServiceMonitor",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          "singleBinary": {
+            "type": "object",
+            "title": "Single replica",
+            "properties": {
+              "replicas": {
+                "type": "integer",
+                "title": "Single binary replicas",
+                "default": 0,
+                "minimum": 0
+              },
+              "persistence": {
+                "type": "object",
+                "title": "Log storage",
+                "properties": {
+                  "size": {
+                    "type": "string",
+                    "title": "Volume size",
+                    "default": "10Gi",
+                    "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "title": "Retain logs on a persistent volume",
+                    "default": true
+                  },
+                  "storageClass": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "title": "StorageClass",
+                    "description": "Leave empty to use the cluster default StorageClass.",
+                    "x-astronomer-resource": "storageclasses"
+                  }
+                }
+              }
+            },
+            "x-astronomer-show-when": {
+              "path": "deploymentMode",
+              "equals": "SingleBinary"
+            }
+          },
+          "deploymentMode": {
+            "enum": [
+              "SingleBinary",
+              "SimpleScalable",
+              "Distributed"
+            ],
+            "type": "string",
+            "title": "Deployment mode",
+            "default": "SimpleScalable"
+          }
+        }
+      },
+      "presets": [
+        {
+          "id": "evaluation",
+          "label": "Single replica evaluation",
+          "description": "Ephemeral filesystem storage on one replica. Logs are lost when the pod is replaced. For evaluation only.",
+          "values": {
+            "backend": {
+              "replicas": 0
+            },
+            "chunksCache": {
+              "enabled": false
+            },
+            "deploymentMode": "SingleBinary",
+            "loki": {
+              "auth_enabled": false,
+              "commonConfig": {
+                "replication_factor": 1
+              },
+              "schemaConfig": {
+                "configs": [
+                  {
+                    "from": "2024-04-01",
+                    "index": {
+                      "period": "24h",
+                      "prefix": "loki_index_"
+                    },
+                    "object_store": "filesystem",
+                    "schema": "v13",
+                    "store": "tsdb"
+                  }
+                ]
+              },
+              "storage": {
+                "type": "filesystem"
+              }
+            },
+            "read": {
+              "replicas": 0
+            },
+            "resultsCache": {
+              "enabled": false
+            },
+            "singleBinary": {
+              "persistence": {
+                "enabled": false
+              },
+              "replicas": 1
+            },
+            "write": {
+              "replicas": 0
+            }
+          }
+        },
+        {
+          "id": "persistent",
+          "label": "Persistent single replica",
+          "description": "One replica with a 50Gi persistent volume. Select a StorageClass and review capacity and retention. This configuration is not highly available.",
+          "values": {
+            "backend": {
+              "replicas": 0
+            },
+            "chunksCache": {
+              "enabled": false
+            },
+            "deploymentMode": "SingleBinary",
+            "loki": {
+              "auth_enabled": false,
+              "commonConfig": {
+                "replication_factor": 1
+              },
+              "schemaConfig": {
+                "configs": [
+                  {
+                    "from": "2024-04-01",
+                    "index": {
+                      "period": "24h",
+                      "prefix": "loki_index_"
+                    },
+                    "object_store": "filesystem",
+                    "schema": "v13",
+                    "store": "tsdb"
+                  }
+                ]
+              },
+              "storage": {
+                "type": "filesystem"
+              }
+            },
+            "read": {
+              "replicas": 0
+            },
+            "resultsCache": {
+              "enabled": false
+            },
+            "singleBinary": {
+              "persistence": {
+                "enabled": true,
+                "size": "1Gi",
+                "storageClass": "local-path"
+              },
+              "replicas": 1
+            },
+            "write": {
+              "replicas": 0
+            },
+            "lokiCanary": {
+              "enabled": false
+            },
+            "test": {
+              "enabled": false
+            }
+          }
+        }
+      ],
+      "defaultPreset": "evaluation",
+      "namespace": "astronomer-loki"
+    }
+  },
+  "namespace": "qual035-loki",
+  "release_name": "qual035-loki",
+  "values": {
+    "backend": {
+      "replicas": 0
+    },
+    "chunksCache": {
+      "enabled": false
+    },
+    "deploymentMode": "SingleBinary",
+    "loki": {
+      "auth_enabled": false,
+      "commonConfig": {
+        "replication_factor": 1
+      },
+      "schemaConfig": {
+        "configs": [
+          {
+            "from": "2024-04-01",
+            "index": {
+              "period": "24h",
+              "prefix": "loki_index_"
+            },
+            "object_store": "filesystem",
+            "schema": "v13",
+            "store": "tsdb"
+          }
+        ]
+      },
+      "storage": {
+        "type": "filesystem"
+      }
+    },
+    "read": {
+      "replicas": 0
+    },
+    "resultsCache": {
+      "enabled": false
+    },
+    "singleBinary": {
+      "persistence": {
+        "enabled": true,
+        "size": "1Gi",
+        "storageClass": "local-path"
+      },
+      "replicas": 1
+    },
+    "write": {
+      "replicas": 0
+    },
+    "lokiCanary": {
+      "enabled": false
+    },
+    "test": {
+      "enabled": false
+    },
+    "podLabels": {
+      "catalog-qualification": "035-upgrade"
+    }
+  },
+  "started_at": "2026-10-13T00:31:22Z",
+  "preview": {
+    "data": {
+      "allowed": true,
+      "application": "loki",
+      "artifact_digest": "04a339f712d770a1f599f05fc0a5a3cde18e43914e49ae6a49f7171be86bcc09",
+      "catalog_digest": "sha256:56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+      "checks": [
+        {
+          "code": "catalog_trust",
+          "status": "ready",
+          "title": "Catalog trust",
+          "description": "Catalog index identity and digest are verified."
+        },
+        {
+          "code": "artifact_identity",
+          "status": "ready",
+          "title": "Immutable artifact",
+          "description": "Chart version and digest match the reviewed catalog configuration."
+        },
+        {
+          "code": "kubernetes_version",
+          "status": "ready",
+          "title": "Kubernetes compatibility",
+          "description": "Cluster v1.35.7+k3s1 satisfies >=1.31.0 <1.36.0."
+        },
+        {
+          "code": "cluster_connectivity",
+          "status": "ready",
+          "title": "Cluster connectivity",
+          "description": "The target cluster is connected."
+        },
+        {
+          "code": "persistent_storage",
+          "status": "advisory",
+          "title": "Persistent storage",
+          "description": "Persistent storage is required (recommended 100Gi); Flux will confirm the target StorageClass during reconciliation."
+        },
+        {
+          "code": "values",
+          "status": "ready",
+          "title": "Configuration",
+          "description": "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders."
+        }
+      ],
+      "values_digest": "sha256:1214eb3139950e4ce849d58c5324607f4b6971322eacfc01a65b9a98e550beb7"
+    }
+  },
+  "installation_id": "6b6fc890-ed3e-49f1-8fc7-ff6302bfb28e",
+  "operations": [
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:31:22Z",
+      "createdAt": "2026-10-13T00:31:22Z",
+      "deliveryMessage": "stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+      "deliveryObservationError": "",
+      "deliveryObservedAt": "2026-10-13T00:39:23Z",
+      "deliveryPhase": "ready",
+      "errorMessage": "",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:31:22Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "install",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "a697761b-4e41-4626-8e03-9ca6b41aafa2",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:31:22Z",
+          "detail": {
+            "clusterId": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+            "namespace": "qual035-loki",
+            "releaseName": "qual035-loki"
+          },
+          "id": "3334c911-2f3e-4406-9478-552dc8a6dfd4",
+          "level": "info",
+          "message": "creating Flux-managed catalog application",
+          "stage": "delivery"
+        },
+        {
+          "createdAt": "2026-10-13T00:31:22Z",
+          "detail": {
+            "rolloutId": "3df98cb5-bea9-44b5-972e-40fe217d0b2d",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8"
+          },
+          "id": "4019a96b-751b-49d4-a788-1ca1dc86983f",
+          "level": "info",
+          "message": "Flux rollout queued",
+          "stage": "rollout"
+        },
+        {
+          "createdAt": "2026-10-13T00:31:22Z",
+          "detail": {},
+          "id": "36a2ff7a-eec0-4d74-abcf-09a67c56ed3e",
+          "level": "info",
+          "message": "operation completed",
+          "stage": "complete"
+        },
+        {
+          "createdAt": "2026-10-13T00:39:23Z",
+          "detail": {
+            "errorCode": "rollout_completed",
+            "message": "stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+            "phase": "ready",
+            "rolloutId": "3df98cb5-bea9-44b5-972e-40fe217d0b2d",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8",
+            "terminal": true
+          },
+          "id": "delivery-ready",
+          "level": "info",
+          "message": "Flux reports the application workloads ready: stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+          "stage": "workloads"
+        }
+      ],
+      "id": "9c7bd73a-37fb-4031-93b8-b952bf37f2e2",
+      "journalStatus": "completed",
+      "operationType": "install",
+      "startedAt": "2026-10-13T00:31:22Z",
+      "status": "completed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:31:22Z"
+    },
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:40:28Z",
+      "createdAt": "2026-10-13T00:40:28Z",
+      "deliveryMessage": "stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+      "deliveryObservationError": "",
+      "deliveryObservedAt": "2026-10-13T00:40:56Z",
+      "deliveryPhase": "ready",
+      "errorMessage": "",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:40:28Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "upgrade",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "2d46ad6b-ea44-453c-acef-52fdf705c09a",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:40:28Z",
+          "detail": {
+            "clusterId": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+            "namespace": "qual035-loki",
+            "releaseName": "qual035-loki"
+          },
+          "id": "bef979cc-df44-4800-b347-4a95d786739a",
+          "level": "info",
+          "message": "advancing Flux-managed catalog application",
+          "stage": "delivery"
+        },
+        {
+          "createdAt": "2026-10-13T00:40:28Z",
+          "detail": {
+            "rolloutId": "ed443e37-f556-4140-a603-dcae3a834917",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8"
+          },
+          "id": "dbb3acee-5a8e-4642-91cd-dd6bb65a54ef",
+          "level": "info",
+          "message": "Flux upgrade rollout queued",
+          "stage": "rollout"
+        },
+        {
+          "createdAt": "2026-10-13T00:40:28Z",
+          "detail": {},
+          "id": "b587cdeb-9046-4fb9-a2cd-a45f6da4605a",
+          "level": "info",
+          "message": "operation completed",
+          "stage": "complete"
+        },
+        {
+          "createdAt": "2026-10-13T00:40:56Z",
+          "detail": {
+            "errorCode": "rollout_completed",
+            "message": "stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+            "phase": "ready",
+            "rolloutId": "ed443e37-f556-4140-a603-dcae3a834917",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8",
+            "terminal": true
+          },
+          "id": "delivery-ready",
+          "level": "info",
+          "message": "Flux reports the application workloads ready: stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+          "stage": "workloads"
+        }
+      ],
+      "id": "1c84e063-3775-4af9-b3c6-6760151e8188",
+      "journalStatus": "completed",
+      "operationType": "upgrade",
+      "startedAt": "2026-10-13T00:40:28Z",
+      "status": "completed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:40:28Z"
+    },
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:42:28Z",
+      "createdAt": "2026-10-13T00:42:28Z",
+      "deliveryMessage": "stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+      "deliveryObservationError": "",
+      "deliveryObservedAt": "2026-10-13T00:47:53Z",
+      "deliveryPhase": "ready",
+      "errorMessage": "",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:42:28Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "rollback",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "f530b4ff-4fe6-49b0-b682-150ba574aa3b",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:28Z",
+          "detail": {
+            "clusterId": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+            "namespace": "qual035-loki",
+            "releaseName": "qual035-loki"
+          },
+          "id": "79d72556-4e1a-45a4-9dc4-1d5bebad026c",
+          "level": "info",
+          "message": "rolling back Flux application to its previous immutable version",
+          "stage": "delivery"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:28Z",
+          "detail": {
+            "rolloutId": "9bf42f60-2630-4969-91d4-0050f9411c30",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8"
+          },
+          "id": "645c96b2-ebe1-4f5a-bf9c-2a8fb363cd84",
+          "level": "info",
+          "message": "Flux rollback rollout queued",
+          "stage": "rollout"
+        },
+        {
+          "createdAt": "2026-10-13T00:42:28Z",
+          "detail": {},
+          "id": "a1bd5dff-58f4-44b5-8d69-82c96394426c",
+          "level": "info",
+          "message": "operation completed",
+          "stage": "complete"
+        },
+        {
+          "createdAt": "2026-10-13T00:47:53Z",
+          "detail": {
+            "errorCode": "rollout_completed",
+            "message": "stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+            "phase": "ready",
+            "rolloutId": "9bf42f60-2630-4969-91d4-0050f9411c30",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8",
+            "terminal": true
+          },
+          "id": "delivery-ready",
+          "level": "info",
+          "message": "Flux reports the application workloads ready: stored artifact: revision 'sha256:897362cdfd92a58641753d79fb1cbf78482c59785e972f61fee590d71123c0eb'",
+          "stage": "workloads"
+        }
+      ],
+      "id": "acaf6cad-8491-479b-8c06-812b051c5f7b",
+      "journalStatus": "completed",
+      "operationType": "rollback",
+      "startedAt": "2026-10-13T00:42:28Z",
+      "status": "completed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:42:28Z"
+    },
+    {
+      "attemptCount": 1,
+      "completedAt": "2026-10-13T00:52:19Z",
+      "createdAt": "2026-10-13T00:52:19Z",
+      "deliveryMessage": "",
+      "deliveryObservationError": "",
+      "deliveryObservedAt": "2026-10-13T00:53:47Z",
+      "deliveryPhase": "removed",
+      "errorMessage": "",
+      "events": [
+        {
+          "createdAt": "2026-10-13T00:52:19Z",
+          "detail": {
+            "attemptCount": 1,
+            "operationType": "uninstall",
+            "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+            "targetType": "installed_chart"
+          },
+          "id": "0e3e3907-a9c2-48dd-bb58-09fbf4bafb15",
+          "level": "info",
+          "message": "operation execution started",
+          "stage": "queue"
+        },
+        {
+          "createdAt": "2026-10-13T00:52:19Z",
+          "detail": {
+            "clusterId": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+            "namespace": "qual035-loki",
+            "releaseName": "qual035-loki"
+          },
+          "id": "afb61922-47a4-4dcf-9d24-f74429d2b203",
+          "level": "info",
+          "message": "requesting fenced Flux application deletion",
+          "stage": "delivery"
+        },
+        {
+          "createdAt": "2026-10-13T00:52:19Z",
+          "detail": {
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8"
+          },
+          "id": "49ccf9eb-e48e-4655-bb8c-041203a3b549",
+          "level": "info",
+          "message": "Flux target deletion requested",
+          "stage": "deletion"
+        },
+        {
+          "createdAt": "2026-10-13T00:52:19Z",
+          "detail": {},
+          "id": "913644d9-228c-48e7-a851-b9d0356c19c7",
+          "level": "info",
+          "message": "operation completed",
+          "stage": "complete"
+        },
+        {
+          "createdAt": "2026-10-13T00:53:47Z",
+          "detail": {
+            "errorCode": "",
+            "message": "",
+            "phase": "removed",
+            "rolloutId": "00000000-0000-0000-0000-000000000000",
+            "targetId": "fe77b1d8-f88a-59d1-b643-3c46ae767ec8",
+            "terminal": true
+          },
+          "id": "delivery-removed",
+          "level": "info",
+          "message": "Flux reports the application removed",
+          "stage": "workloads"
+        }
+      ],
+      "id": "36a27dcb-f8c1-446b-a06e-d7ae4e95a4be",
+      "journalStatus": "completed",
+      "operationType": "uninstall",
+      "startedAt": "2026-10-13T00:52:19Z",
+      "status": "completed",
+      "targetKey": "[HISTORICAL_RESOURCE_UUID]",
+      "targetType": "installed_chart",
+      "updatedAt": "2026-10-13T00:52:19Z"
+    }
+  ]
+}

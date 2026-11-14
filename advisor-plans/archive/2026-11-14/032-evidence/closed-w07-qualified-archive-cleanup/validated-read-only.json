@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "status": "VALIDATED_READ_ONLY_NO_DELETION",
+  "executeRequested": false,
+  "startedAt": "2026-10-10T06:17:12.146008+00:00",
+  "cleanupScriptSHA256": "11d63a43d0552f3ee04a724c401f420d888730472f78de19a07006d0693de899",
+  "inventorySHA256": "9b2c88ab86ddb637396c0ae4c42314c73ec28837917e42d171fb739efd1c7c40",
+  "removed": [],
+  "validatedCount": 574,
+  "limits": [
+    "Exact manifest only; all sources/evidence/original executable inputs/toolchains/modules/images/PVCs/frontend packages preserved.",
+    "Requires parent review/approval of exact manifest and implementation before --execute; validation is read-only.",
+    "Concurrent filesystem/process changes cannot be made atomic across the whole system; refuse active Go commands and repeat exact fences before each unlink."
+  ],
+  "capacityBefore": {
+    "scriptSHA256": "234bf4838a9537f65abe2bd2829b0f1b5e7991042ee92b1aa89de5cc8419fc15",
+    "exitCode": 1,
+    "json": {
+      "path": ".",
+      "mountpoint": "/",
+      "total_kib": 354066236,
+      "used_kib": 271838876,
+      "available_kib": 67778084,
+      "available_gib": 64,
+      "free_percent": 19,
+      "minimum_free_gib": 20,
+      "minimum_free_percent": 20,
+      "meets_minimum": false
+    }
+  },
+  "capacityAfter": {
+    "scriptSHA256": "234bf4838a9537f65abe2bd2829b0f1b5e7991042ee92b1aa89de5cc8419fc15",
+    "exitCode": 1,
+    "json": {
+      "path": ".",
+      "mountpoint": "/",
+      "total_kib": 354066236,
+      "used_kib": 271840088,
+      "available_kib": 67776872,
+      "available_gib": 64,
+      "free_percent": 19,
+      "minimum_free_gib": 20,
+      "minimum_free_percent": 20,
+      "meets_minimum": false
+    }
+  },
+  "finishedAt": "2026-10-10T06:17:32.825063+00:00",
+  "removedLogicalBytes": 0,
+  "removedAllocatedBytes": 0
+}

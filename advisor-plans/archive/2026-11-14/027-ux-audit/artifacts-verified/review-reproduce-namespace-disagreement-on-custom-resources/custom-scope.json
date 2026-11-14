@@ -1,0 +1,7 @@
+{
+  "requests": [
+    "http://127.0.0.1:32127/api/v1/clusters/c-smoke-1/k8s/apis/cert-manager.io/v1/certificates?limit=50",
+    "http://127.0.0.1:32127/api/v1/clusters/c-smoke-1/k8s/apis/cert-manager.io/v1/certificates?limit=50"
+  ],
+  "url": "http://127.0.0.1:32127/dashboard/clusters/c-smoke-1/custom-resources/cert-manager.io/v1/certificates?namespaces=team-a"
+}

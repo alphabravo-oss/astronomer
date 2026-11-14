@@ -1,0 +1,5 @@
+
+> astronomer-frontend@2.1.1 type-check
+> tsc --noEmit
+
+tests/browser-components/reliability.tsx(33,7): error TS2741: Property '"defaultPreset"' is missing in type '{ namespace: string; presets: never[]; schema: { type: string; properties: { annotations: { type: string; properties: { "example.com/key": { type: string; title: string; }; example: { type: string; properties: { ...; }; }; }; }; }; }; }' but required in type '{ schema: Record<string, unknown>; namespace: string; defaultPreset: string; presets: { id: string; label: string; description: string; values: Record<string, unknown>; }[]; }'.

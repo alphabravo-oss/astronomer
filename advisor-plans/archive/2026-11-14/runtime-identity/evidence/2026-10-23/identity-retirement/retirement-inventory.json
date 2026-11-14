@@ -1,0 +1,14 @@
+{
+  "cmd/dexconfigcheck": true,
+  "internal/dexconfig": true,
+  "internal/handler/dex.go": true,
+  "internal/server/dex_bootstrap.go": true,
+  "internal/server/routes_dex.go": true,
+  "internal/worker/tasks/dex_operation.go": true,
+  "frontend/src/lib/api/dex.ts": true,
+  "frontend/src/types/dex.ts": true,
+  "chart_broker_templates_absent": true,
+  "openapi_broker_paths_absent": true,
+  "openapi_materialization_absent": true,
+  "inventory_broker_absent": true
+}

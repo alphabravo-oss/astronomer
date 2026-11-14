@@ -1,0 +1,6 @@
+
+> astronomer-frontend@2.1.1 openapi:check
+> python3 ../scripts/categorical-contracts.py check-browser && node ../scripts/generate-openapi-types.mjs --check && node ../scripts/generate-openapi-client.mjs --check
+
+Categorical authority aligned: 44 named categories
+Generated OpenAPI frontend client is current.

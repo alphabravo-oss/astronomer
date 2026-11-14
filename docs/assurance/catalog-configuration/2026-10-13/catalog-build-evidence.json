@@ -1,0 +1,52 @@
+{
+  "canonical_catalog": {
+    "sha256": "56f31adcf7ade0d77bf91fd227cb3f52faf724180d6bd4f35e9e7e92e67cd8b4",
+    "size": 80480
+  },
+  "distribution_digest": "sha256:5099796624be9c477c59816f70f9baba560fa5ae12408a1dc1703ff7937ca432",
+  "inputs_and_evidence": {
+    "artifact-lock.json": {
+      "sha256": "c2f11c14ed6a42ffc07097f0a7f646251627ee603b345a1261967fd661209843",
+      "size": 6376
+    },
+    "catalog.json": {
+      "sha256": "9ed89d92515db7fea8ee5097a4f450b483f5112e9d9ac43eb33e4f63711dbc8d",
+      "size": 26489
+    },
+    "generated/release-manifest.json": {
+      "sha256": "f168a5f43348e984e7e57b977c862221fb6fba6ba87d8847e2028309d876b04f",
+      "size": 5315
+    },
+    "pyproject.toml": {
+      "sha256": "ebd3a560ab58ae0d085117c84b61e895dda405eba7a6f317f3fcbe71a0eae1a0",
+      "size": 1175
+    },
+    "qualification/installed-tools.json": {
+      "sha256": "ee55a2ef29794e724321eeb74a6e3e1be7a05fcf95d5f9247767dd27273154e1",
+      "size": 1960
+    },
+    "qualification/pip-audit.json": {
+      "sha256": "f8ddb02888e722c1776b9820734459456ea3c8e215bd166fbd47216b94977d95",
+      "size": 3630
+    },
+    "qualification/tooling-sbom.cdx.json": {
+      "sha256": "09aff08aa64bf8e9a1a6c7e2548525a5f637c7cd0eb8e2ad8f006f91da7c90b4",
+      "size": 78348
+    },
+    "requirements-all.txt": {
+      "sha256": "15017ccc542c0c2d9e56c4df7d5a91bf0165a8de2891939d4762c68ec8e2c7e0",
+      "size": 35574
+    },
+    "uv.lock": {
+      "sha256": "ffa6fe534bed39aec1b2b007159d38d3bdfbc4d207e5478b332fbf96a68145d5",
+      "size": 133809
+    }
+  },
+  "limitations": [
+    "tooling SBOM covers the Python build environment; not Helm workloads",
+    "this evidence document is not a SLSA level assessment"
+  ],
+  "schema_version": 1,
+  "scope": "catalog-build-evidence",
+  "source_commit": "856f3356e811f63dd3514cb3ac950cbe36189891"
+}

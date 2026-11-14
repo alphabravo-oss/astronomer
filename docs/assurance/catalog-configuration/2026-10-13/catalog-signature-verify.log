@@ -1,0 +1,6 @@
+
+Verification for ghcr.io/alphabravo-oss/astronomer-application-catalog@sha256:5099796624be9c477c59816f70f9baba560fa5ae12408a1dc1703ff7937ca432 --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates

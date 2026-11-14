@@ -1,0 +1,990 @@
+--- FAIL: TestApplicationDashboardRenderScope (0.19s)
+    --- FAIL: TestApplicationDashboardRenderScope/astronomer (0.10s)
+        application_dashboard_render_test.go:14: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestApplicationDashboardRenderScope/custom-plane (0.09s)
+        application_dashboard_render_test.go:14: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestApplicationDashboardOptOut (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestApplicationMetricsPromQL (0.09s)
+    application_metrics_promql_test.go:15: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestApplicationMetricsRenderContract (0.18s)
+    --- FAIL: TestApplicationMetricsRenderContract/astronomer (0.09s)
+        application_metrics_render_test.go:13: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestApplicationMetricsRenderContract/custom-control (0.09s)
+        application_metrics_render_test.go:13: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestApplicationMetricsOptOut (0.20s)
+    --- FAIL: TestApplicationMetricsOptOut/base (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestApplicationMetricsOptOut/rules-disabled (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestCharlieMCPListenerScaffoldingIsDormantUntilAgentInstall (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCharliePrivatePortsAreNotInBaseNetworkPolicy (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCharlieExpiryAlertsAreContentFreeAndDeterministic (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCharlieNetworkIsolationIsExactInRestrictedRender (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestFluxNativeDeliveryDefaultsOnWithLocalBootstrap (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestFluxDistributionNilPublicKeyringRendersEmptyArray (0.10s)
+    chart_flux_delivery_test.go:51: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestFluxNativeDeliveryCanBeEnabledExplicitly (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionDeliveryAcceptsOfflinePinnedCosignKey (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionDeliveryAcceptsOfflineOverlappingCosignKeyring (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionDeliveryAcceptsVerifiedDisconnectedDistribution (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDeliverySourceProxyCAAndEgressAreSecretBackedAndBounded (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDatabaseUpgradePreflightIsReadOnlyAndBounded (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionWorkloadImagesAreDigestOnly (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartHooksAreLimitedToLifecycleJobsAndPreflightPrerequisites (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightOwnershipUsesHelmOnly (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightHookRBACSurvivesUntilJobAndIsLeastPrivilege (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks (0.49s)
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/cert-manager_only (0.11s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/cert-manager_explicit_opt_out (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/production_references_and_external_PVC (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/no_live_reads (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightRBACResourceNamesFollowRenderedChecks/Dex_cutover_exact_Secret_and_legacy_ConfigMap (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestTLSCertificateOnlyIncludesConfiguredListenerHosts (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightHookUpgradeReplacementContract (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightKubernetesReadsUseBoundedExplicitSemantics (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightBoundedReadRuntimeScenarios (0.97s)
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/authorization_propagation_eventually_succeeds (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/permanent_forbidden_fails_closed_after_bound (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/transport_failure_fails_closed_after_bound (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/actual_missing_Gateway_CRD_is_terminal_absence (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/actual_missing_cert-manager_CRD (0.11s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/trusted_CA_Secret_forbidden_is_not_missing (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/legacy_PVC_genuine_absence_is_allowed (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/legacy_PVC_forbidden_fails_closed (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/DSN_Secret_forbidden_is_not_missing (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightBoundedReadRuntimeScenarios/DSN_Secret_success_validates_TLS_without_disclosure (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestServiceAccountAndRuntimeRBACAreManagedReleaseResources (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestBootstrapSecretAndServerEnvAreWired (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestRenderedContainersDeclareImagePullPolicy (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestGlobalImageRegistryAndPullPolicyApplyToCoreImages (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestBundledPostgresMaxConnectionsIsDeclarative (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestSharedGatewayRoutesWithoutOwningGatewayOrTLS (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionCoreWorkloadsHaveNodeLevelHAContracts (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestEveryRenderedContainerHasCPUAndMemoryBounds (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestSecretsCarryResourcePolicyKeep (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionRequiresBackupsWired (0.17s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionRequiresKeyWrapWhenBackupsEnabled (0.26s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionRequiresSeparateRetentionIdentity (0.20s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestWorkerDeploymentHasProbes (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestWorkerConcurrencySchemaAndRuntimeWiring (0.17s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestInternalPSKRotationRendersVerificationOnlyPredecessor (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestValuesSchemaAcceptsProductionWiring (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionPreflightNetworkPolicyRequiresNarrowAPICIDRs (0.25s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestEventRelayQueueCapacitySchemaAndServerWiring (0.19s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestAstronomerChartArchiveRendersOffline (0.11s)
+    chartrepo_test.go:110: offline embedded chart render failed: exit status 1
+--- FAIL: TestCompactProfileUsesSingleCNPGAndBoundedPools (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCNPGUpgradeValidatesTargetBeforeAcceptingRetainedPVC (0.09s)
+    compact_profile_test.go:37: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartRendersHardenedHookSecurityContexts (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartRendersHardenedBackupJobSecurityContexts (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName (0.08s)
+    dex_runtime_secret_render_test.go:35: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexBundledIdentityTracksCustomReleaseNamespaceAndRuntimeName (0.08s)
+    dex_runtime_secret_render_test.go:94: render: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData (0.09s)
+    dex_runtime_secret_render_test.go:110: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable (0.08s)
+    dex_runtime_secret_render_test.go:163: render cutover: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexFreshInstallNeverRendersLegacyConfigMap (0.09s)
+    dex_runtime_secret_render_test.go:223: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexFreshInstallStagesCredentialFreeBootstrapConfig (0.08s)
+    dex_runtime_secret_render_test.go:231: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexCRDInstallerUsesClusterScopedRBAC (0.09s)
+    dex_runtime_secret_render_test.go:259: render Dex runtime contract: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexRenderedReleaseNeverArchivesCredentialCanaries (0.08s)
+    dex_runtime_secret_render_test.go:356: render fresh: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDistributionMirrorPolicyAndTrustReachActualServerAndWorker (0.11s)
+    distribution_network_render_test.go:36: unexpected rejected mirror configuration: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestF8_DefaultRendersChartBootstrapSecret (0.12s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestF8_ExistingSecretSuppressesChartSecretAndRewiresServer (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestF4_KeyBackupInertWithoutWrappingSecret (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestF4_KeyBackupRendersWhenWrappingSecretWired (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestF4_DrillDecryptCheckInertWithoutWrappingSecret (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestF4_DrillDecryptCheckRendersWhenWired (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestInternalDenyBackendIsResolvedAndEndpointlessByConstruction (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology (0.33s)
+    --- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology/gateway (0.12s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology/ingress (0.12s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestInternalDenyServiceFollowsPublicRoutingTopology/no_public_routing (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestLocalLonghornLifecyclePermissionsAreBounded (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers (0.22s)
+    --- FAIL: TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers/single (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestCloudNativePGModeRendersSingleOrHAClusterAndGeneratedAppSecretConsumers/ha (0.12s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestCloudNativePGBarmanCloudBackupAndPITRAreOptional (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestValkeySentinelModeRendersAuthenticatedThreeNodeFailover (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestBootstrapForcePasswordChangeRenders (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementBackup_DefaultOnButInertWithoutCredentials (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementBackup_NoBucketRendersNoCronJob (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementBackup_K3dOptsOut (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementBackupEnablementPropagatesToBothProcesses (0.18s)
+    --- FAIL: TestManagementBackupEnablementPropagatesToBothProcesses/true (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestManagementBackupEnablementPropagatesToBothProcesses/false (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLoggingConfigMap_RendersForLoki (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLoggingConfigMap_RendersForElasticsearch (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLoggingConfigMap_RendersForSplunk (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLoggingConfigMap_RendersForHTTP (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLoggingDaemonSet_RespectsImageRegistry (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLogging_DisabledRendersNothing (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementLogging_RBACGrantsExist (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestNetworkPolicyRendersNamespaceDefaultDeny (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestNetworkPolicySupportsGranularExternalEgressCIDRs (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestNetworkPolicyRendersExpectedComponentPolicies (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestWorkerNetworkPolicyAllowsOnlyManagedMonitoringAPIs (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestServerNetworkPolicyAllowsManagedPrometheusAPI (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase (0.38s)
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/fresh (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/prepare (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/cutover (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase/optional_workloads (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestOptionalProductionWorkloadsHaveDedicatedNarrowPolicies (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege (0.30s)
+    --- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege/fresh (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege/prepare (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestDexMigrationHookNetworkPoliciesArePhaseScopedAndLeastPrivilege/cutover (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestDexCleanupNonJobPrerequisitesOutliveTheJobStart (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexMigrationHookPolicySurvivesDefaultDenyDisableTransition (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDexMigrationHookPolicyDoesNotInventAPIFallbackAndDeduplicatesCIDRs (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs (0.12s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightNetworkPolicyHookIsDeterministicAndLeastPrivilege (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightNetworkPolicyExternalPostgresAndCIDRUnion (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightNetworkPolicyDisabledModes (0.40s)
+    --- FAIL: TestPreflightNetworkPolicyDisabledModes/network_policy_disabled (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestPreflightNetworkPolicyDisabledModes/default_deny_disabled (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestPreflightNetworkPolicyDoesNotInventAPIFallback (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartManagedDeliveryTrustedRootIsTheDefault (0.08s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestEveryChartImageIsCoveredBySignaturePolicy (0.10s)
+    policy_controller_test.go:186: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestLiveOverlaySwitchesToChartManagedTrustSecret (0.09s)
+    policy_controller_test.go:290: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestZotRegistryRendersEveryImageFromClusterLocalHost (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestOnlineProfileKeepsOnlineDefaults (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestImageRegistryWinsOverZotAndFallbacksRender (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestRuntimeConfigChangesRollServerAndWorker (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestRuntimeConfigChecksumPreservesPodAnnotations (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartKubeVersionRangeCoversK3s137 (0.53s)
+    runtime_hardening_render_test.go:75: kube 1.33.0 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+    runtime_hardening_render_test.go:75: kube 1.35.0 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+    runtime_hardening_render_test.go:75: kube 1.37.0 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+    runtime_hardening_render_test.go:75: kube 1.37.4 rejected: level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestLiveReleaseValuesRenderOnK3s137 (0.08s)
+    runtime_hardening_render_test.go:88: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCNPGNetworkPolicyCoversHandMadeRuntimePolicies (0.09s)
+    runtime_hardening_render_test.go:167: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestCNPGNetworkPolicyDefaultsStayClosed (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartManagedObjectStoreMatchesLiveObjectStore (0.09s)
+    runtime_hardening_render_test.go:261: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestScheduledBackupImmediateAndShutdownKnobs (0.09s)
+    runtime_hardening_render_test.go:289: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartManagedObjectStoreRequiresCredentialsRef (0.08s)
+    runtime_hardening_render_test.go:321: missing credentials ref accepted: exit status 1 level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestDRToolingMatchesCNPGMajor (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestSingleNodeBackupOverlayWiresRustFS (0.08s)
+    runtime_hardening_render_test.go:391: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartRendersWithOperatorSuppliedKeys (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestChartRendersKeylessWithExistingSecret (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestReleaseDigestsRenderForEveryFirstPartyImage (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestReleaseDigestsRenderForCoreThirdPartyImages (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestReferenceOnlyChartRenderUsesNativeSecretReferences (0.09s)
+    self_managed_secret_render_test.go:39: reference-only render failed: exit status 1
+--- FAIL: TestDexRuntimeSecretNameSchemaEnforcesDNS1123Subdomain (0.47s)
+    self_managed_secret_render_test.go:89: valid 253-byte DNS subdomain rejected: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer (0.10s)
+    self_managed_secret_render_test.go:139: production reference-only render failed: exit status 1
+        level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestAgentClusterRoleHasNoWildcardRule (0.18s)
+    --- FAIL: TestAgentClusterRoleHasNoWildcardRule/frontend.enabled=true (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestAgentClusterRoleHasNoWildcardRule/frontend.enabled=false (0.09s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestAgentClusterRoleGrantsExpectedCoreAccess (0.09s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestAgentClusterRoleExtraRulesOverrideIsAdditive (0.10s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestToolUIRoutesAllPathsToIsolatedServerAndIssuesWildcard (0.11s)
+    management_logging_render_test.go:40: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestTraceExportRuleUsesRenderedMetricsServiceLabels (0.19s)
+    --- FAIL: TestTraceExportRuleUsesRenderedMetricsServiceLabels/astronomer (0.09s)
+        trace_export_render_test.go:12: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestTraceExportRuleUsesRenderedMetricsServiceLabels/custom-control (0.10s)
+        trace_export_render_test.go:12: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+--- FAIL: TestDBPoolAlertPromQL (0.10s)
+    db_pool_alert_test.go:16: helm template failed: exit status 1
+        stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+        Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+        
+        Use --debug flag to render out invalid YAML
+--- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip (0.32s)
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/both (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/empty_trust_fails_closed (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/ca (0.10s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/signature (0.11s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+    --- FAIL: TestManagementBackupCatalogTrustActualCLIRoundTrip/flat (0.11s)
+        management_logging_render_test.go:40: helm template failed: exit status 1
+            stderr=level=INFO msg="found symbolic link in path. Contents of linked file included and used" path=/root/work/astronomer-fixes/deploy/chart/dashboards resolved=/root/work/astronomer-fixes/deploy/dashboards
+            Error: execution error at (astronomer/templates/preflight-job.yaml:533:3): preflight.databaseSchema must match files/release-compatibility.json; run scripts/compatibility-contract.py generate
+            
+            Use --debug flag to render out invalid YAML
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/deploy	19.358s
+FAIL

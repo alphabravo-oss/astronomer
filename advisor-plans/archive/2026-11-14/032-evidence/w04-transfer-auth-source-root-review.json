@@ -1,0 +1,18 @@
+{
+  "draftPatchSHA256": "f8229e7bdb30411132d794d7ef6324e57063456c0e977f13ddb137b471e86391",
+  "fullPatchLinesReviewed": 1482,
+  "draftPathsSHA256Verified": 10,
+  "baselineGitPathsSHA256Verified": 2,
+  "verdict": "APPROVED source; exact0700 fixture correction and JSON reader ownership reviewed separately; corrected actual gates pending",
+  "scope": "Operator-owned registry Bearer challenge/token scope and original supplier transfer; signed consumer authority remains distinct",
+  "properties": [
+    "Constructor-owned exact registry/repository/realm/service; no ambient cookie/credential cache",
+    "Anonymous and explicitly configured private token GET; strict128KiB response; no redirects or credential diagnostics",
+    "Exact Content-Range/identity response bounded64MiB chunks; whole compressed digest and shared two-pass no-write inspector",
+    "Owned0700 dir FD and0600 staged file; sync, no-overwrite hardlink and inode-bound cleanup",
+    "Signed feed acceptance remains before consumer payload transfer"
+  ],
+  "realSupplierWholeTransfer": "NOT RUN",
+  "durableGenerationAndScanUsedProvenance": "NOT IMPLEMENTED",
+  "wholeW04Complete": false
+}

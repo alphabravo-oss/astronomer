@@ -1,0 +1,10 @@
+--- FAIL: TestKeyBundleCatalogTrustRoundTrip (0.00s)
+    --- FAIL: TestKeyBundleCatalogTrustRoundTrip/[catalog-ca] (0.00s)
+        keybundle_catalog_test.go:29: key source may contain only top-level regular files
+    --- FAIL: TestKeyBundleCatalogTrustRoundTrip/[catalog-signature-trust] (0.00s)
+        keybundle_catalog_test.go:29: key source may contain only top-level regular files
+    --- FAIL: TestKeyBundleCatalogTrustRoundTrip/[catalog-ca_catalog-signature-trust] (0.00s)
+        keybundle_catalog_test.go:29: key source may contain only top-level regular files
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/drcrypto	0.004s
+FAIL

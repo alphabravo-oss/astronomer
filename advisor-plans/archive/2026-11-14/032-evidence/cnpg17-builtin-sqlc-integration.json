@@ -1,0 +1,35 @@
+{
+  "source_commit": "660e1e7b7a2d56f7ce2f45295b8c9b6c70b91e17",
+  "started_at": "2026-10-09T22:31:56.073762+00:00",
+  "completed_at": "2026-10-09T22:32:05.919590+00:00",
+  "postgres_major": 17,
+  "cluster": "plan032-postgres",
+  "database": "plan032_w09_review17",
+  "schema": "72|f",
+  "race": false,
+  "expected": 14,
+  "terminal": {
+    "TestAutomaticScanningPostgres": "pass",
+    "TestVerifiedVersionTransitionPreservesOwnershipAndFencesContent": "pass",
+    "TestProvisionerPostgresMultiSourceAssets": "pass",
+    "TestBuiltInRolloutAuditIntentIsStableAndPopulated": "pass",
+    "TestStableIDIsDeterministicAndDomainSeparated": "pass",
+    "TestPlanCatalogSourcesReusesCurrentSourceAndPreservesIdentity": "pass",
+    "TestPlanCatalogSourcesBindsMultipleSourcesDeterministically": "pass",
+    "TestPlanCatalogSourcesRejectsAmbiguousNormalization": "pass",
+    "TestRetryableTransactionError": "pass",
+    "TestRetryAfterRequiresNewerExplicitRequest": "pass",
+    "TestTargetObservationAllowsFluxSelfHealingAfterRolloutFailure": "pass",
+    "TestTargetObservationPreservesTerminalAndRetrySemantics": "pass",
+    "TestPostgresBuiltinRegistrationRetryPresenceAndOrdering": "pass",
+    "TestPostgresBuiltinCanceledTransactionReleasesSessionLock": "pass"
+  },
+  "missing": [],
+  "failed": [],
+  "all_structured_skips": [],
+  "test_exit_code": 0,
+  "sha256": {
+    "/root/.cache/astronomer-032/qualification/cnpg36/w08-builtin-root/pg17-integration.jsonl": "30f3a3cd6f08da18d7dc9165185ba226551ae768ece5d529333cbd6db170dc9f"
+  },
+  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; Builtin characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim"
+}

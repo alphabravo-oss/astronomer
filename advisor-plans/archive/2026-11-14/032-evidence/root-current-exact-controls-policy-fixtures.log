@@ -1,0 +1,28 @@
+test_changed_guard_invalidates_control (scripts.tests.security_source_policy_test.ReviewedAuditStatusControlTest.test_changed_guard_invalidates_control) ... ok
+test_different_narrowing_in_same_file_is_blocked (scripts.tests.security_source_policy_test.ReviewedAuditStatusControlTest.test_different_narrowing_in_same_file_is_blocked) ... ok
+test_exact_bounded_status_filter_retains_finding (scripts.tests.security_source_policy_test.ReviewedAuditStatusControlTest.test_exact_bounded_status_filter_retains_finding) ... ok
+test_all_63_controls_are_exact_and_retained (scripts.tests.security_source_policy_test.ReviewedSourceControlsTest.test_all_63_controls_are_exact_and_retained) ... ok
+test_changed_sql_or_nonce_source_invalidates_control (scripts.tests.security_source_policy_test.ReviewedSourceControlsTest.test_changed_sql_or_nonce_source_invalidates_control) ... ok
+test_new_credential_in_same_generated_file_is_blocked (scripts.tests.security_source_policy_test.ReviewedSourceControlsTest.test_new_credential_in_same_generated_file_is_blocked) ... ok
+test_new_fixed_nonce_site_is_blocked (scripts.tests.security_source_policy_test.ReviewedSourceControlsTest.test_new_fixed_nonce_site_is_blocked) ... ok
+test_new_generated_file_is_blocked (scripts.tests.security_source_policy_test.ReviewedSourceControlsTest.test_new_generated_file_is_blocked) ... ok
+test_review_expiry_and_scope_fail_closed (scripts.tests.security_source_policy_test.ReviewedSourceControlsTest.test_review_expiry_and_scope_fail_closed) ... ok
+test_changed_source_rejected (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_changed_source_rejected) ... ok
+test_clean (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_clean) ... ok
+test_closed_source_policy (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_closed_source_policy) ... ok
+test_exact_exception_passes_and_retains (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_exact_exception_passes_and_retains) ... ok
+test_expired_scope_unknown_duplicate_unmatched_closed (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_expired_scope_unknown_duplicate_unmatched_closed) ... ok
+test_high_blocks_and_retains (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_high_blocks_and_retains) ... ok
+test_medium_owned_review (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_medium_owned_review) ... ok
+test_missing_malformed_reports (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_missing_malformed_reports) ... ok
+test_new_column_same_rule_line_blocks (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_new_column_same_rule_line_blocks) ... ok
+test_new_finding_blocks (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_new_finding_blocks) ... ok
+test_reachability_not_severity (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_reachability_not_severity) ... ok
+test_sarif_retained_on_failure (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_sarif_retained_on_failure) ... ok
+test_scanner_errors_block (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_scanner_errors_block) ... ok
+test_symlink_outside_and_unknown_rule (scripts.tests.security_source_policy_test.SecurityPolicyTest.test_symlink_outside_and_unknown_rule) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 0.134s
+
+OK

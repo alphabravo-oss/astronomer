@@ -1,0 +1,131 @@
+{
+  "finishedAt": "2026-10-09T22:25:12.005324+00:00",
+  "finishedSourceHash": {
+    "schema_version": 2,
+    "source_file_count": 5811,
+    "source_tree_sha256": "81003f12089849af8759e0b6a2f52f7cb83c3f6f646919bad32ab513c3c4b534"
+  },
+  "limits": [
+    "One immutable combined W01/W05/W06/W09 frontend source; no real authenticated server, shipping Safari or human-accessibility certification claimed.",
+    "Parallel frozen API/SDK gate is reported separately."
+  ],
+  "runtime": {
+    "chromiumExecutable": "/root/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome",
+    "node": "26.11.1",
+    "npm": "12.2.0",
+    "playwright": "1.64.0"
+  },
+  "schemaVersion": 1,
+  "sourceCommit": "8cc5c79c82bc8b2f54e92032418d93606e7e6ff1",
+  "sourceHash": {
+    "schema_version": 2,
+    "source_file_count": 5811,
+    "source_tree_sha256": "81003f12089849af8759e0b6a2f52f7cb83c3f6f646919bad32ab513c3c4b534"
+  },
+  "sourceStable": true,
+  "sourceTree": "e96c688f7051fd6b47938bc019eab1a04ffb149e",
+  "startedAt": "2026-10-09T22:13:30.941885+00:00",
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "npm",
+        "run",
+        "type-check"
+      ],
+      "durationSeconds": 4.309,
+      "exitCode": 0,
+      "logDigest": "sha256:74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67",
+      "name": "type-check",
+      "startedAt": "2026-10-09T22:13:31.366176+00:00",
+      "status": "pass"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "durationSeconds": 39.525,
+      "exitCode": 0,
+      "logDigest": "sha256:e49a7391e71418658500c86c4579aaa2eaf00c3d5ee2cee5216f76766c704adc",
+      "name": "lint",
+      "startedAt": "2026-10-09T22:13:35.675476+00:00",
+      "status": "pass"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "code-health"
+      ],
+      "durationSeconds": 13.688,
+      "exitCode": 0,
+      "logDigest": "sha256:a54da940f856529f213d146946805dce2318b91d74db7dc9eb14d51a3f40458b",
+      "name": "code-health",
+      "startedAt": "2026-10-09T22:14:15.201539+00:00",
+      "status": "pass"
+    },
+    {
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--maxWorkers=1"
+      ],
+      "durationSeconds": 604.778,
+      "exitCode": 0,
+      "logDigest": "sha256:4bce9e8ab142847b045bd5f814b71eec068a5da64c3e336dbcdd5384e76676b5",
+      "name": "full-vitest",
+      "startedAt": "2026-10-09T22:14:28.889981+00:00",
+      "status": "pass"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "durationSeconds": 13.413,
+      "exitCode": 0,
+      "logDigest": "sha256:2ba36088bbcd38148925695c00284577033ebe6cc42e22ffcf28ca541df4935f",
+      "name": "production-build-csp",
+      "startedAt": "2026-10-09T22:24:33.669348+00:00",
+      "status": "pass"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "bundle:check"
+      ],
+      "durationSeconds": 0.554,
+      "exitCode": 0,
+      "logDigest": "sha256:45686bce62ae1ed7435a35cfbba23872f103ad515c2a44ef8f63510c1244ab20",
+      "name": "bundle-budget",
+      "startedAt": "2026-10-09T22:24:47.083361+00:00",
+      "status": "pass"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "test:browser-components",
+        "--",
+        "--workers=1",
+        "--retries=0"
+      ],
+      "durationSeconds": 24.367,
+      "exitCode": 0,
+      "logDigest": "sha256:34c3165297976c7255eea22d97b85361daeefe08aafc9a688335a3099c1918bf",
+      "name": "browser-components",
+      "startedAt": "2026-10-09T22:24:47.637359+00:00",
+      "status": "pass"
+    }
+  ],
+  "strictNpmCI": {
+    "exitCode": 0,
+    "logDigest": "sha256:a9e90cd566fdf6020ed4d3d842546882d3344f7f3cab77b4b5cfa666cf8f9251",
+    "status": "pass"
+  }
+}

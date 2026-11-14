@@ -1,0 +1,50 @@
+
+> astronomer-frontend@2.1.1 test
+> vitest run
+
+
+ RUN  v5.0.5 /root/work/astronomer-identity/frontend
+
+ ❯ src/routes/dashboard/settings/operations/operations-pagination.test.tsx (4 tests | 4 skipped) 10205ms
+ ❯ src/routes/dashboard/audit/index.test.tsx (5 tests | 5 skipped) 10366ms
+Not implemented: Window's scrollTo() method
+Not implemented: Window's scrollTo() method
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/routes/dashboard/audit/index.test.tsx [ src/routes/dashboard/audit/index.test.tsx ]
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ src/routes/dashboard/audit/index.test.tsx:45:1
+     43|
+     44| const Page = Route.options.component!;
+     45| beforeAll(async () => {
+       | ^
+     46|   await (
+     47|     Page as typeof Page & { preload?: () => Promise<unknown> }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/routes/dashboard/settings/operations/operations-pagination.test.tsx [ src/routes/dashboard/settings/operations/operations-pagination.test.tsx ]
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ src/routes/dashboard/settings/operations/operations-pagination.test.tsx:27:1
+     25|
+     26| const Page = Route.options.component!;
+     27| beforeAll(async () => {
+       | ^
+     28|   await (
+     29|     Page as typeof Page & { preload?: () => Promise<unknown> }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 344 passed (346)
+      Tests  2399 passed | 9 skipped (2408)
+   Start at  23:17:54
+   Duration  219.70s (environment 38%, import 37%, tests 17%, setup 5%, transform 1%)
+
+Environment  jsdom was created 346 times · 314.03s total, 38% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

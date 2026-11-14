@@ -1,0 +1,30 @@
+$ go mod tidy
+go: downloading github.com/fluxcd/pkg/runtime v0.110.3
+go: downloading github.com/fluxcd/pkg/apis/kustomize v1.19.2
+go: downloading k8s.io/apimachinery v0.36.4
+go: downloading k8s.io/api v0.36.4
+go: downloading k8s.io/client-go v0.36.4
+go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
+go: downloading k8s.io/kubectl v0.36.4
+go: downloading k8s.io/cli-runtime v0.36.4
+go: downloading github.com/stoewer/go-strcase v1.3.0
+go: downloading k8s.io/apiextensions-apiserver v0.36.4
+go: downloading github.com/antlr4-go/antlr/v4 v4.13.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409
+go: downloading k8s.io/component-base v0.36.4
+$ go run . /root/work/astronomer-fixes/plans/evidence/2026-10-23/reliability/flux-health-fixtures.json
+PASS leader and standby beyond deadline: Current
+PASS leader lost: Failed
+PASS artifact endpoint unavailable: Failed
+PASS leader recovering: InProgress
+PASS unobserved generation: InProgress
+PASS missing observed generation: InProgress
+PASS old leader while new revision fails: Failed
+PASS extra old replica: Failed
+PASS missing standby replica: Failed
+PASS replica creation failure: Failed
+PASS scaled to zero: InProgress
+PASS deleting: Failed
+PASS ordinary controller unavailable: Failed
+PASS same name outside system: Failed
+PASS ordinary controller complete: Current

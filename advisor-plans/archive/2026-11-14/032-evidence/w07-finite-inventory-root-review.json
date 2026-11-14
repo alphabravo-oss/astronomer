@@ -1,0 +1,21 @@
+{
+  "sourceCommit": "02897f9c4ecf7d8f56a9652b3dff060e7b3d8c71",
+  "packetSHA256": "eb73d824e519a6462d0bc4c3f507d29d0c8ecdcdecf5e9a6420c426847b07681",
+  "extractorFullyRead": true,
+  "compressedOriginalsVerified": 4,
+  "GitModuleBindingsVerified": 215,
+  "directRouteBindings": 188,
+  "canonicalSQLBindings": 304,
+  "runtimeCandidateIDsRetained": 189,
+  "OpenAPICandidatesRetained": 158,
+  "additionalOwners": 6,
+  "classificationOnly": true,
+  "wholeW07Complete": false,
+  "runtimeAuthorizationAndConsumerQualification": false,
+  "integrationStatus": "integrated",
+  "integratedCommit": "ea42f59f4316870f9c885a1e3280c2e8652a2cf0",
+  "countDefinitions": {
+    "directRouteBindings": "Unique retained source/line/selector records across candidate and OpenAPI/additional owners.",
+    "canonicalSQLBindings": "Unique query name/canonical source/definition line tuples; repeated uses deduplicated."
+  }
+}

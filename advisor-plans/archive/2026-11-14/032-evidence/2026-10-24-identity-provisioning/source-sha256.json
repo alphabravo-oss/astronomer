@@ -1,0 +1,13 @@
+{
+  "CLAUDE.md": "232175c119b2604d70967d7b7cb1edf4992cf514279473b89a31cd2c1200cbfc",
+  "docs/runbooks/shared-identity-cutover.md": "1a85f4dde074f0ca04ee961c6231f7eb3a14f98387e2ad39a4ae0e60531c6ba4",
+  "go.mod": "dfea19ce116a16f9aaf30cf15235477db6b8093ad7cf17900e1522ec4bbb8385",
+  "go.sum": "f16ac420837e0ecc74e7af9d7bf3f06903dcded65192c84376def759b14cc243",
+  "internal/db/queries/identity_provisioning.sql": "432d05d4fcce6a1ed59c92c3cc3b335107983ec89b710409550390c6715f19d4",
+  "internal/db/sqlc/identity_provisioning.sql.go": "23d2bfa17b6bd35d7138ed5a2bd1b14c59eac6d88877b99557da6507220abbe8",
+  "internal/db/sqlc/querier.go": "8ea0bf66de165eefdf177b8ebf7ade2c599a401dd0aa13b8e848f14a94649759",
+  "internal/identity/provisioning/lock.go": "a0ab0718a5dbac2aaa35d3533b4e798880b4483b2b43cf5b304ee2c2bab89d44",
+  "internal/identity/provisioning/lock_integration_test.go": "d89fdb7f30bccbef79c98f6588091b1f778e86e6ca6288c93a4aae37e21f1dc3",
+  "internal/identity/provisioning/secret_store.go": "a68d1839313297780c865a8ba2a233869e33ac50dce1404780ca2358f47f1c5a",
+  "internal/identity/provisioning/secret_store_integration_test.go": "cd41fbdb8c56068a53831b55783b1d18185fbf636ba5cf4c8199ac92d262f347"
+}

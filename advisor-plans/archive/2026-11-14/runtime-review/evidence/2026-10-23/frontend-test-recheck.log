@@ -1,0 +1,13 @@
+
+> astronomer-frontend@2.1.1 test
+> vitest run src/routes/dashboard/settings/operations/operations-pagination.test.tsx --maxWorkers=1
+
+
+ RUN  v5.0.5 /root/work/astronomer-fixes/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  05:39:44
+   Duration  12.70s (tests 90%, environment 7%, import 2%, setup 1%)
+

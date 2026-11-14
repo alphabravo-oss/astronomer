@@ -1,0 +1,5 @@
+NAME           SERVERS   AGENTS   LOADBALANCER
+identity-dev   1/1       1/1      true
+site-demo      1/1       0/0      true
+ui-demo        1/1       1/1      false
+ui-demo-v211   1/1       1/1      true

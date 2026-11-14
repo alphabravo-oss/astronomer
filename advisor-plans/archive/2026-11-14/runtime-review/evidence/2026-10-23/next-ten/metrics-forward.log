@@ -1,0 +1,4 @@
+Forwarding from 127.0.0.1:19090 -> 9090
+Handling connection for 19090
+E1023 07:23:03.859502 2241506 portforward.go:391] "Unhandled Error" err="error copying from remote stream to local connection: readfrom tcp4 127.0.0.1:19090->127.0.0.1:36306: write tcp4 127.0.0.1:19090->127.0.0.1:36306: write: connection reset by peer"
+Handling connection for 19090

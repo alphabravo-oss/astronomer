@@ -1,0 +1,66 @@
+{
+  "sourceCommit": "365b618a098f6e94f78161f4885e3cdce10102ac",
+  "startedAt": "2026-10-10T03:14:18.048939+00:00",
+  "closedAt": "2026-10-10T03:14:40.290518+00:00",
+  "toolSHA256": "e24d16ea35db03f63d96be68102966dff343ad7010847ea1e5f936ffded29798",
+  "verifiedBuildModule": "github.com/zricethezav/gitleaks/v8 v8.30.1",
+  "toolVersionOutput": "version is set by build process",
+  "toolchain": "go1.27.2",
+  "argv": [
+    "/root/.cache/astronomer-032/toolchains/gitleaks-8.30.1/gitleaks",
+    "git",
+    "--config=.gitleaks.toml",
+    "--redact=100",
+    "--no-banner",
+    "--log-opts=--all",
+    "--report-format=json",
+    "--report-path=/root/astronomer-all/astronomer/advisor-plans/032-evidence/root-full-history-365b618a/redacted-findings.json",
+    "."
+  ],
+  "exitCode": 1,
+  "refsStable": true,
+  "findings": 3184,
+  "ruleCounts": {
+    "generic-api-key": 3148,
+    "sourcegraph-access-token": 36
+  },
+  "artifacts": {
+    "refs-after.txt": "0b6df28de8fc9f5b1c0ac24053e43da016ed9249a57a38d5a6a97193ab107dc1",
+    "refs-before.txt": "0b6df28de8fc9f5b1c0ac24053e43da016ed9249a57a38d5a6a97193ab107dc1",
+    "scan-console.log.gz": "7db6accc2805e6840e37e1bf481f796b0a1f830eaf96ed5e1624bd9b35c92317",
+    "redacted-findings.json.gz": "f324dc575c454e1fb3b2920e3b6c9bacb92e6dbd5ddd0d58627b9abc8d035b39"
+  },
+  "policyFixtures": {
+    "argv": [
+      "python3",
+      "scripts/tests/security_policy_contract_test.py"
+    ],
+    "exitCode": 0,
+    "startedAt": "2026-10-10T03:15:56.179214+00:00",
+    "closedAt": "2026-10-10T03:15:56.301255+00:00",
+    "logSHA256": "593089b461409d37fd72aac0cf61f7a443914b216ca5a1deef285deab922c559",
+    "selectedGitleaksEnabled": true
+  },
+  "losslessCompressedArtifacts": {
+    "scan-console.log.gz": {
+      "originalName": "scan-console.log",
+      "originalSize": 119,
+      "originalSHA256": "c3b243fa1f76c7f6b299b6146143dcbb865983762a3d293a4d7045cd3777f238",
+      "gzipSHA256": "7db6accc2805e6840e37e1bf481f796b0a1f830eaf96ed5e1624bd9b35c92317",
+      "gzipSize": 118
+    },
+    "redacted-findings.json.gz": {
+      "originalName": "redacted-findings.json",
+      "originalSize": 3385190,
+      "originalSHA256": "c8bda38901d02becf668d4231193bedbabad18d78af46a03a53bdaeb63d9be6d",
+      "gzipSHA256": "f324dc575c454e1fb3b2920e3b6c9bacb92e6dbd5ddd0d58627b9abc8d035b39",
+      "gzipSize": 94527
+    }
+  },
+  "redactionVerified": {
+    "records": 3184,
+    "allSecretFields": "REDACTED",
+    "allMatchFieldsContainRedactedMarker": true,
+    "originalValuesPrinted": false
+  }
+}

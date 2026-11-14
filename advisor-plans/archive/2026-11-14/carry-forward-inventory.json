@@ -1,0 +1,3040 @@
+{
+  "files": [
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "archived_as": "archive/2026-11-14/016-production-ga-closure-master-plan.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "017-ui-overhaul-review-2026-09-21.md",
+      "archived_as": "archive/2026-11-14/017-ui-overhaul-review-2026-09-21.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "018-navigation-model-and-labels.md",
+      "archived_as": "archive/2026-11-14/018-navigation-model-and-labels.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "019-global-shell-cluster-switcher-and-header-actions.md",
+      "archived_as": "archive/2026-11-14/019-global-shell-cluster-switcher-and-header-actions.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "020-cluster-explorer-nav-discovery-and-crd-groups.md",
+      "archived_as": "archive/2026-11-14/020-cluster-explorer-nav-discovery-and-crd-groups.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "021-design-system-primitives-and-enforcement.md",
+      "archived_as": "archive/2026-11-14/021-design-system-primitives-and-enforcement.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "022-page-migration-onto-primitives.md",
+      "archived_as": "archive/2026-11-14/022-page-migration-onto-primitives.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "023-truthful-states-forms-and-url-state.md",
+      "archived_as": "archive/2026-11-14/023-truthful-states-forms-and-url-state.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "024-rancher-parity-quick-wins.md",
+      "archived_as": "archive/2026-11-14/024-rancher-parity-quick-wins.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "025-guided-form-depth-and-table-parity.md",
+      "archived_as": "archive/2026-11-14/025-guided-form-depth-and-table-parity.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "archived_as": "archive/2026-11-14/026-platform-robustness-and-workflow-closure.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "027-execution-review.md",
+      "archived_as": "archive/2026-11-14/027-execution-review.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "027-operator-navigation-and-workflow-closure.md",
+      "archived_as": "archive/2026-11-14/027-operator-navigation-and-workflow-closure.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "027-ux-second-review.md",
+      "archived_as": "archive/2026-11-14/027-ux-second-review.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "archived_as": "archive/2026-11-14/028-all-offerings-api-qualification.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "028-execution-ledger.md",
+      "archived_as": "archive/2026-11-14/028-execution-ledger.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "028-offering-test-inventory.md",
+      "archived_as": "archive/2026-11-14/028-offering-test-inventory.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "archived_as": "archive/2026-11-14/029-two-cluster-offering-install-and-functional-validation.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "archived_as": "archive/2026-11-14/030-efficiency-and-operational-readiness.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "archived_as": "archive/2026-11-14/030-rancher-tool-configuration-ux.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "031-ui-refinement-and-design-system-depth.md",
+      "archived_as": "archive/2026-11-14/031-ui-refinement-and-design-system-depth.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "archived_as": "archive/2026-11-14/032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "033-platform-tools-applications-assurance.md",
+      "archived_as": "archive/2026-11-14/033-platform-tools-applications-assurance.md",
+      "disposition": "open requirements retained in CURRENT.md"
+    },
+    {
+      "source": "README.md",
+      "archived_as": "archive/2026-11-14/README.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "addon-validation-2026-09-23.md",
+      "archived_as": "archive/2026-11-14/addon-validation-2026-09-23.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "dev-k3s-upgrade-2026-09-23.md",
+      "archived_as": "archive/2026-11-14/dev-k3s-upgrade-2026-09-23.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "grafana-observability-validation-2026-09-23.md",
+      "archived_as": "archive/2026-11-14/grafana-observability-validation-2026-09-23.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "two-members-live-validation-2026-09-23.md",
+      "archived_as": "archive/2026-11-14/two-members-live-validation-2026-09-23.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "ui-overhaul-status-2026-09-22.md",
+      "archived_as": "archive/2026-11-14/ui-overhaul-status-2026-09-22.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "ui-overhaul-validation-2026-09-22.md",
+      "archived_as": "archive/2026-11-14/ui-overhaul-validation-2026-09-22.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    },
+    {
+      "source": "ux-navigation-review-2026-09-24.md",
+      "archived_as": "archive/2026-11-14/ux-navigation-review-2026-09-24.md",
+      "disposition": "historical review/status or completed implementation; residuals governed by CURRENT.md S1–S7"
+    }
+  ],
+  "requirements": [
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 614,
+      "section": "Final release done criteria",
+      "text": "The intended source is committed and reproducible from a clean checkout; the exact verified commit produced the deployed digest-pinned artifacts.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF001"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 616,
+      "section": "Final release done criteria",
+      "text": "Static, race, PostgreSQL, browser, Helm, generated-contract, and applicable stateful gates pass on that exact commit with zero hidden skips.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF002"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 621,
+      "section": "Final release done criteria",
+      "text": "Default-deny networking, DR authority, authenticated immutable backups, safe air-gap input handling, immutable image inputs, and supply-chain gates pass.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF003"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 626,
+      "section": "Final release done criteria",
+      "text": "Estate-scale UI truth, action search, cancellation, accessibility, Playwright, Node/toolchain, and ADR criteria pass.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF004"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 628,
+      "section": "Final release done criteria",
+      "text": "Estate-100 and every advertised higher scale rung have retained evidence; telemetry correlates API through agent.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF005"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 630,
+      "section": "Final release done criteria",
+      "text": "All eight Phase 6 external qualifications pass and protected release approval binds the exact artifacts.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF006"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 632,
+      "section": "Final release done criteria",
+      "text": "Documentation makes only evidence-backed production, scale, accessibility, Rancher-comparison, cloud, DR, and compliance claims.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF007"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 634,
+      "section": "Final release done criteria",
+      "text": "If physical interoperability is claimed, all 12 Phase 7 runs and cleanup gates pass on exact Astronomer/Constellation candidates.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF008"
+    },
+    {
+      "source": "016-production-ga-closure-master-plan.md",
+      "line": 636,
+      "section": "Final release done criteria",
+      "text": "`advisor-plans/README.md` records Plan 016 DONE and links the retained evidence index. Archived plans remain immutable historical records.",
+      "disposition": "carried-forward",
+      "current_id": "016-CF009"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 182,
+      "section": "Completion and maintenance",
+      "text": "Inventory matches the frozen deployed APIs, UI offers, catalog and static registries with no omitted names, variants or lifecycle flags.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF001"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 183,
+      "section": "Completion and maintenance",
+      "text": "Every required case has a named functional oracle, exact API sequence, owner and fresh PASS evidence; unsupported claims have verified explicit contracts.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF002"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 184,
+      "section": "Completion and maintenance",
+      "text": "All supported install/update/upgrade/rollback/adopt/remove/recovery paths pass without workaround, and each offering performs its promised job.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF003"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 185,
+      "section": "Completion and maintenance",
+      "text": "Real provider and tenant-isolation cases, persistent operation readback and cleanup pass; environment-blocked cases remain visibly unqualified until completed.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF004"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 186,
+      "section": "Completion and maintenance",
+      "text": "Prior known failure paths have been rerun, including pipeline PUT, interrupted upgrades, native backend routing and restore tracking.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF005"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 187,
+      "section": "Completion and maintenance",
+      "text": "UI/API disagreement and advertised-but-unsupported actions are resolved with Plan 027/026, not hidden from the inventory.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF006"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 188,
+      "section": "Completion and maintenance",
+      "text": "Machine coverage verification fails on any newly offered item without a test. CI retains per-build results, and release evidence references them through Plan 016.",
+      "disposition": "carried-forward",
+      "current_id": "028-CF007"
+    },
+    {
+      "source": "028-all-offerings-api-qualification.md",
+      "line": 189,
+      "section": "Completion and maintenance",
+      "text": "Plan and index are updated to DONE only after all above are satisfied. Until then publish the full denominator and PASS/FAIL/BLOCKED/NOT_RUN counts, not “all extensions work.”",
+      "disposition": "carried-forward",
+      "current_id": "028-CF008"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 722,
+      "section": "Done criteria",
+      "text": "The frozen runtime inventory contains every exposed application, Tool, provider, preset, transport, extension and Charlie capability with no unmatched entry.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF001"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 725,
+      "section": "Done criteria",
+      "text": "Two independent disposable member clusters pass API estate preflight.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF002"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 726,
+      "section": "Done criteria",
+      "text": "All 174 base rows and every runtime-expanded variant have a terminal result.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF003"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 727,
+      "section": "Done criteria",
+      "text": "Every required result is PASS; no FAIL, BLOCKED or NOT_RUN remains.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF004"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 728,
+      "section": "Done criteria",
+      "text": "NOT_SUPPORTED appears only where an explicit product contract says so and its truthful rejection was tested.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF005"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 730,
+      "section": "Done criteria",
+      "text": "Lifecycle, canary, authorization, recovery, durable readback and cleanup dimensions pass independently for each applicable entrypoint.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF006"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 732,
+      "section": "Done criteria",
+      "text": "Both K3d clusters are clean after each ownership-conflicting wave and gone after the campaign; management and unrelated resources remain healthy.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF007"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 734,
+      "section": "Done criteria",
+      "text": "Evidence contains immutable candidate/catalog/chart/image identities and no secrets.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF008"
+    },
+    {
+      "source": "029-two-cluster-offering-install-and-functional-validation.md",
+      "line": 736,
+      "section": "Done criteria",
+      "text": "`go test ./scripts/qualify-offerings/... -count=1`, offline false-green tests, browser qualification and `make verify-enterprise VERIFY_SCOPE=all` pass on the final source.",
+      "disposition": "carried-forward",
+      "current_id": "029-CF009"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 109,
+      "section": "E00 — Capture a reproducible starting point",
+      "text": "Run `git status --short`, `git rev-parse HEAD`, and `git diff --stat f87b189f..HEAD -- internal/agent internal/observability internal/handler internal/charlie frontend/src/lib deploy/chart scripts/loadtest`.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF001"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 110,
+      "section": "E00 — Capture a reproducible starting point",
+      "text": "Re-read the source anchors and relevant active-plan status. Record changes and remove tasks already completed; retain outstanding acceptance gaps.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF002"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 111,
+      "section": "E00 — Capture a reproducible starting point",
+      "text": "Read live pod/deployment state, image digests, release revision, readiness, connected cluster count, node utilization, volume usage, and protected config references. Never dump Secrets or unrestricted Helm values to a public log.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF003"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 112,
+      "section": "E00 — Capture a reproducible starting point",
+      "text": "Identify the actual source revision of each deployed component. Do not assume the frontend, agent, server and worker share one build merely because the chart version matches.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF004"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 113,
+      "section": "E00 — Capture a reproducible starting point",
+      "text": "Create sanitized evidence under `advisor-plans/030-efficiency-evidence/<run-id>/`; keep credential files outside tracked paths with restrictive permissions.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF005"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 114,
+      "section": "E00 — Capture a reproducible starting point",
+      "text": "Record target environment, expected ownership, approved mutations and recovery route for later live work. This plan's historical access does not guarantee access in a future sandbox.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF006"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 122,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Inventory existing metrics before adding names: HTTP duration/errors, DB pool wait/saturation, queue depth/oldest age, audit/task outbox outcomes, tunnel connectivity, event relay lag, heap/goroutines and resource-search outcomes.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF007"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 123,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Enable application ServiceMonitors in the intended environment; match Prometheus selectors and allowed network paths. Keep base chart usable without Prometheus CRDs.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF008"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 124,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Add missing bounded-cardinality metrics for inventory refreshes, Kubernetes LIST/GET/WATCH traffic, cache freshness/sync state, reconnects and observation work duration. Reuse `internal/observability/resource_search_metrics.go` registration/label conventions. No resource names, URLs, tokens or unbounded user IDs in labels.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF009"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 125,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Aggregate agent measurements through an existing supported telemetry path where possible. Never expose a new public unauthenticated metrics endpoint just to collect per-agent data.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF010"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 126,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Build a dashboard covering API latency, queues/outboxes, DB waits, agent state freshness, downstream API load and resource consumption. Display scrape absence as missing data, not zero demand.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF011"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 127,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Make alerts distinguish intentional Flux standby from loss of the active artifact-serving controller. Investigate k3s-specific missing scheduler/controller-manager targets; adjust rules to actual observable components rather than globally suppressing alerts.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF012"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 128,
+      "section": "E01 — Make application behavior measurable",
+      "text": "Capture 30 minutes of idle baseline plus representative interactive operations. Record scrape gaps and cold-start intervals separately.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF013"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 136,
+      "section": "E02 — Repair actual Flux resource identities",
+      "text": "Add regression fixtures matching the bundled Kustomization and HelmRelease CRDs: map entries with `id` and `v`, four identity fields, empty core group, and empty namespace for cluster-scoped resources.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF014"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 137,
+      "section": "E02 — Repair actual Flux resource identities",
+      "text": "First demonstrate the real-schema regression fails on the current decoder.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF015"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 138,
+      "section": "E02 — Repair actual Flux resource identities",
+      "text": "Decode fields into API version, kind, namespace and name. Validate types, malformed IDs, empty/invalid version, mixed valid/invalid entries and the existing maximum resource bound.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF016"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 139,
+      "section": "E02 — Repair actual Flux resource identities",
+      "text": "Preserve documented total-count semantics, sanitization and readiness behavior; do not infer individual resource health from a count.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF017"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 140,
+      "section": "E02 — Repair actual Flux resource identities",
+      "text": "Verify frontend/API inventory consumers receive correct identities. Remove the fabricated schema fixture rather than supporting it as an undocumented compatibility contract.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF018"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 148,
+      "section": "E03 — Repair integration artifact availability",
+      "text": "Trace Grafana proxy image selection from intended candidate artifact through generated Helm values to deployed pod. Determine whether stale desired config, missing distribution, or both caused the unavailable digest.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF019"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 149,
+      "section": "E03 — Repair integration artifact availability",
+      "text": "Use a digest-pinned image available to every target node. Local imports can remain a documented development mechanism, but must cover all scheduled nodes and survive the intended recreation test; production requires durable artifact distribution.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF020"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 150,
+      "section": "E03 — Repair integration artifact availability",
+      "text": "Trace Charlie pull-secret references, registry audience/scope, credential expiry/refresh, and activation reconciliation. A 401 proves authorization failure, not its precise cause. Repair the supported credential/configuration lifecycle without weakening registry authentication.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF021"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 151,
+      "section": "E03 — Repair integration artifact availability",
+      "text": "Add focused tests for image propagation and pull-secret references; keep credential material redacted in failures and audit output.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF022"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 152,
+      "section": "E03 — Repair integration artifact availability",
+      "text": "Exercise the supported Grafana proxy route with authenticated users and denied users. Exercise a real Charlie request and reconnect; pod readiness alone is insufficient.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF023"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 153,
+      "section": "E03 — Repair integration artifact availability",
+      "text": "Demonstrate safe pod recreation in the test environment can pull the intended images without relying on an accidental old node cache.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF024"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 161,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Reuse the existing harness; do not replace it with raw authenticated loops or direct DB fixture insertion. It already provisions synthetic agents, tracks audit outcomes and exports JSON/checksums.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF025"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 162,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Run engineering tiers of 5 and 50 synthetic clusters first, then the existing estate-100 profile when infrastructure permits. Higher tiers are optional capacity exploration until lower tiers pass.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF026"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 163,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Separately test real agents on at least two adopted members, with 1/10/100 delivery assignments and increasing actual Kubernetes resource counts. Synthetic tunnel responses cannot validate informer memory, LIST reduction or Flux behavior.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF027"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 164,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Fix hardware, component replicas, image digests, chart values, dataset, workload mix and rate limits for each before/after comparison. Record cold start separately; use 5-minute warmup and at least 30-minute measured windows for optimization comparisons, three repetitions where practical.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF028"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 165,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Include idle estate, active resource churn, inventory browsing, scoped search, delivery status, multiple panels, two browser tabs, and reconnection bursts.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF029"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 166,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Record throughput achieved as well as requested; skipped work, stale data and HTTP errors cannot count as efficiency improvements.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF030"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 167,
+      "section": "E04 — Establish the benchmark before optimizing",
+      "text": "Add a report reducer/test for proposed cache metrics and relative before/after criteria if the current report cannot express them. Record all mandatory drills as NOT_RUN until genuinely executed.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF031"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 184,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Map existing informer ownership, stores, typed fields, metadata-only sources, sync readiness and privilege restrictions. Reuse stores capable of answering the inventory question; identify exact missing fields before adding watchers.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF032"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 185,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Define a narrow injected read-only snapshot interface in a package that avoids an agent/delivery import cycle. Follow the existing `ControllerProbe` injection pattern. Include per-kind availability, sync/freshness information and version/generation where required.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF033"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 186,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Wire local embedded and remote agents to the same abstraction, scoped to their actual credentials. Do not broaden RBAC to make caching convenient.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF034"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 187,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Replace repeated whole-cluster workload/PVC lists with snapshot reads. Add scoped watchers only for missing data; strip unused fields to bound memory. Do not maintain a second full-object copy if a safe immutable projection suffices.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF035"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 188,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Coalesce concurrent refreshes. Give discovery and compatibility checks a bounded slower refresh policy, with explicit refresh on relevant CRD/controller changes.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF036"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 189,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Distinguish “absent”, “not authorized”, “not synced”, “disconnected” and “healthy”. A cache read must not manufacture a new observation timestamp for old data.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF037"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 190,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Handle watch expiration/410, relist, object deletion, absent-then-installed CRDs, privilege changes, startup cancellation and shutdown. Informer resync is not a guarantee of fresh server data; handle watch/relist health explicitly.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF038"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 191,
+      "section": "E05 — Share observation state instead of repeated inventory scans",
+      "text": "Use existing transport cancellation/backpressure patterns. Never block informer callbacks on a disconnected tunnel or let pending changes grow without bound.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF039"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 199,
+      "section": "E06 — Observe assignments from bounded cached state",
+      "text": "Reuse or add narrowly scoped Flux source/reconciler observations keyed by GVR, namespace and name. Choose namespace/project coverage according to actual permissions and measured watcher count.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF040"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 200,
+      "section": "E06 — Observe assignments from bounded cached state",
+      "text": "Replace two direct GETs per assignment per status tick where a synchronized snapshot can answer correctly. Retain bounded, explicit fallback for missing capabilities; do not launch one informer per assignment.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF041"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 201,
+      "section": "E06 — Observe assignments from bounded cached state",
+      "text": "Track dirty assignments on relevant changes, coalesce rapid events, and retain periodic freshness/status resync. Preserve acknowledged checkpoint generation and removal/tombstone semantics.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF042"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 202,
+      "section": "E06 — Observe assignments from bounded cached state",
+      "text": "Bound queues and response work; reconnect storms use jitter and concurrency limits. An overloaded or disconnected cluster cannot monopolize management-plane workers.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF043"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 203,
+      "section": "E06 — Observe assignments from bounded cached state",
+      "text": "Preserve failure states, status normalization, agent mixed-version compatibility and continuous Flux ownership. No dropped mutation/audit intent is acceptable.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF044"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 211,
+      "section": "E07 — Optimize only measured frontend hot spots",
+      "text": "Capture request counts, payload bytes, rendering time and memory for cluster list, resource list, delivery inventory and scoped search, using the same data as E04.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF045"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 212,
+      "section": "E07 — Optimize only measured frontend hot spots",
+      "text": "Audit existing `liveFallback`, stream reconnection invalidation and paced dispatch before editing. Fix demonstrated duplicate requests or missing invalidations; do not replace live transport wholesale.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF046"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 213,
+      "section": "E07 — Optimize only measured frontend hot spots",
+      "text": "Share canonical query keys across panels; retain tenant/cluster/namespace/filter dimensions. Ensure cancellation on scope change and no cache leakage after logout, permission revocation or cluster switching.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF047"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 214,
+      "section": "E07 — Optimize only measured frontend hot spots",
+      "text": "Verify inactive views and background tabs do not perform unnecessary polling while healthy streaming is available. If cross-tab coordination is justified by measured cost, specify auth/session isolation and leader failover before implementing it; otherwise keep it deferred.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF048"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 215,
+      "section": "E07 — Optimize only measured frontend hot spots",
+      "text": "Preserve server-side paging, totals and search semantics. Apply existing TanStack virtualization only to measured large-table render bottlenecks; retain keyboard accessibility, selection and scroll restoration.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF049"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 216,
+      "section": "E07 — Optimize only measured frontend hot spots",
+      "text": "Test stale/reconnecting indicators, disconnected stream fallback, rapid route changes, two panels sharing one query and denied users.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF050"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 222,
+      "section": "E08 — Tune DB, workers and tunnels only where profiles justify it",
+      "text": "Review DB pool wait, slow-query evidence, queue age, handler duration, tunnel fan-out, goroutine/FD growth and audit/task delivery before altering settings.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF051"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 223,
+      "section": "E08 — Tune DB, workers and tunnels only where profiles justify it",
+      "text": "For each hot spot, record exact files/symbols, measured cause, bounded change and test. Prefer batched reads, bounded fan-out, existing cache invalidation and suitable query plans over extra replicas by default.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF052"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 224,
+      "section": "E08 — Tune DB, workers and tunnels only where profiles justify it",
+      "text": "Evaluate worker concurrency against database capacity and downstream limits. Increasing concurrency must not amplify overload or starve latency-sensitive tasks.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF053"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 225,
+      "section": "E08 — Tune DB, workers and tunnels only where profiles justify it",
+      "text": "Preserve periodic-task leadership, idempotency, transactional outboxes and terminal failure semantics. Separate interactive and background budgets using existing mechanisms where available.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF054"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 226,
+      "section": "E08 — Tune DB, workers and tunnels only where profiles justify it",
+      "text": "Any SQL change goes through query sources/sqlc generation and migration safety gates. Do not add speculative indexes or a second database/cache.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF055"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 232,
+      "section": "E09 — Consolidate exporters and size from representative demand",
+      "text": "Map exporter release ownership, ServiceMonitors, dashboard labels, baseline dependencies and consumers. Pick one supported owner per intended exporter role.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF056"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 233,
+      "section": "E09 — Consolidate exporters and size from representative demand",
+      "text": "Update owner intent before removing redundant releases so Flux/product reconciliation does not recreate them. Confirm metric names/labels and queries remain valid; retain reinstall/rollback details.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF057"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 234,
+      "section": "E09 — Consolidate exporters and size from representative demand",
+      "text": "Measure CPU distributions, RSS/working-set peaks, throttling, startup, reconciliation bursts, connection pools and memory after soak. Separate management components from adopted-cluster agents and observability overhead.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF058"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 235,
+      "section": "E09 — Consolidate exporters and size from representative demand",
+      "text": "Propose dev/small and production profiles with explicit dataset/cluster/RPS envelope and headroom. Do not globally replace HA production defaults with single-node dev measurements.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF059"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 236,
+      "section": "E09 — Consolidate exporters and size from representative demand",
+      "text": "Reduce requests incrementally in the test deployment and rerun load. Choose limits with burst behavior in mind; CPU limits can cause throttling despite spare node capacity.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF060"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 237,
+      "section": "E09 — Consolidate exporters and size from representative demand",
+      "text": "Treat source-controller standby as intentional. Multiple replicas on one host do not establish host-loss resilience.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF061"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 245,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Recheck the existing `charlie-dev-rustfs` service and determine an endpoint reachable from backup/drill Pods; the Compose hostname `rustfs` is not assumed resolvable from k3s. Use a dedicated Astronomer test bucket. Verify required S3, versioning and Object Lock behavior against the actual deployed version before configuring backups. Preserve Charlie buckets and data.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF062"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 246,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Establish dedicated credential Secret references, retention, encryption/wrapping-key custody and source identity using the existing supported configuration. Record achieved backup age and restore duration; proposed dev targets remain RPO ≤24 hours and RTO ≤2 hours. Off-host storage and production RPO/RTO qualification are deferred.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF063"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 247,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Configure through the supported management/chart owner. Keep writer and retention/delete credentials separate; include encryption/signing material recovery as required by the existing design.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF064"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 248,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Run a backup and verify authenticated manifest, objects, encryption and completion evidence. Alert on missing/old backup success and failed restore drills.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF065"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 249,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Restore into an isolated database/environment with no production endpoints or external notification side effects. Verify schema, expected fixture records, credential decryptability, authentication and representative reads.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF066"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 250,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Record elapsed restore time and backup age. Verify the drill cannot overwrite the source database, and clean up only its own resources.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF067"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 251,
+      "section": "E10 — Prove development backups and isolated recovery",
+      "text": "Document the development restore procedure and its same-host limitation. Track independent storage and recovery when the management host is lost as deferred production work.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF068"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 257,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Build an internally consistent candidate and retain source/image/schema/config identities. Use the existing release/deployment workflow; inspect rendered changes before applying.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF069"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 258,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Deploy to a test estate, then a bounded canary. Preserve previous artifacts and configuration for rollback; account separately for any irreversible schema compatibility change.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF070"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 259,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Exercise agent disconnect/reconnect, watch expiry, event bursts, slow/unreachable member, server and worker restarts, DB/Redis interruption in isolated fixtures, denied RBAC, stale reads and token rotation/revocation.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF071"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 260,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Prove one failing member does not block unrelated cluster reads. Check explicit partial results, deadlines, event recovery and conserved audit/operation intent.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF072"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 261,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Run 30-minute comparison windows and a four-hour steady/churn soak. Run real host/etcd/storage failover only on the native multi-node estate and under its existing authorization; K3d on one host is not independent failure-domain proof.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF073"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 262,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Verify the user journeys: login, cluster list, resource browsing, workload status, Flux resource inventory, Grafana proxy, Charlie request, backup status and restore evidence.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF074"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 263,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Promote only within authorized scope. Roll back on new sustained 5xx, missing audit intent, growing queues, freshness breach, OOM, lost authorization isolation or failed critical integration.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF075"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 264,
+      "section": "E11 — Failure qualification and staged rollout",
+      "text": "Publish supported capacity, remaining unknowns, before/after measurements and exact evidence. Feed qualifying artifacts into Plan 016 rather than declaring GA here.",
+      "disposition": "carried-forward",
+      "current_id": "030-CF076"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 331,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E00 source/live/plan reconciliation complete",
+      "disposition": "carried-forward",
+      "current_id": "030-CF077"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 332,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E01 application telemetry and baseline complete",
+      "disposition": "carried-forward",
+      "current_id": "030-CF078"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 333,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E02 real Flux schema regression fixed",
+      "disposition": "carried-forward",
+      "current_id": "030-CF079"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 334,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E03 image lifecycle and functional integrations proven",
+      "disposition": "carried-forward",
+      "current_id": "030-CF080"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 335,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E04 reproducible before benchmark retained",
+      "disposition": "carried-forward",
+      "current_id": "030-CF081"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 336,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E05 inventory shared with existing observation infrastructure",
+      "disposition": "carried-forward",
+      "current_id": "030-CF082"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 337,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E06 assignment reads and status reporting bounded",
+      "disposition": "carried-forward",
+      "current_id": "030-CF083"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 338,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E07 measured frontend issues resolved or explicitly ruled out",
+      "disposition": "carried-forward",
+      "current_id": "030-CF084"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 339,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E08 DB/worker tuning justified or closed with no-change evidence",
+      "disposition": "carried-forward",
+      "current_id": "030-CF085"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 340,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E09 exporter ownership and sizing validated",
+      "disposition": "carried-forward",
+      "current_id": "030-CF086"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 341,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E10 dedicated RustFS development backup and isolated restore proven; off-host production qualification tracked separately",
+      "disposition": "carried-forward",
+      "current_id": "030-CF087"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 342,
+      "section": "8. Review checklist and completion ledger",
+      "text": "E11 comparative run, soak, canary and authorized rollout complete",
+      "disposition": "carried-forward",
+      "current_id": "030-CF088"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 343,
+      "section": "8. Review checklist and completion ledger",
+      "text": "Applicable source, race, frontend, Helm and Local CI gates pass",
+      "disposition": "carried-forward",
+      "current_id": "030-CF089"
+    },
+    {
+      "source": "030-efficiency-and-operational-readiness.md",
+      "line": 344,
+      "section": "8. Review checklist and completion ledger",
+      "text": "Plan 016/026/028/029 evidence and status reconciled without duplicate claims",
+      "disposition": "carried-forward",
+      "current_id": "030-CF090"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 114,
+      "section": "Increment A — safe authoring and review",
+      "text": "Populate cluster-backed choices such as StorageClass and existing Secret through read-only public APIs, with free text retained for GitOps-created resources.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF001"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 122,
+      "section": "Increment A — safe authoring and review",
+      "text": "Add dedicated validators for Kubernetes quantities, durations, cron, hostname, CIDR and secret references.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF002"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 129,
+      "section": "Increment B — upgrades",
+      "text": "Show additions/removals caused by the chart version separately from operator edits.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF003"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 130,
+      "section": "Increment B — upgrades",
+      "text": "Warn when an old value path is absent from the target chart while preserving the user's ability to review and remove it.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF004"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 132,
+      "section": "Increment B — upgrades",
+      "text": "Show a target-version default diff and removed-path warnings for catalog App upgrades.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF005"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 144,
+      "section": "Increment C — lifecycle-specific UX",
+      "text": "Add remaining privilege, CRD ownership, node/storage capacity, image reachability and external-fixture preflight checks.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF006"
+    },
+    {
+      "source": "030-rancher-tool-configuration-ux.md",
+      "line": 145,
+      "section": "Increment C — lifecycle-specific UX",
+      "text": "Link a completed install to its functional surface and last qualification/canary state.",
+      "disposition": "carried-forward",
+      "current_id": "030-UX-CF007"
+    },
+    {
+      "source": "031-ui-refinement-and-design-system-depth.md",
+      "line": 363,
+      "section": "Task checklist",
+      "text": "P10.3 Image presence across clusters (blocked: backend has no image filter; see after.md)",
+      "disposition": "carried-forward",
+      "current_id": "031-CF001"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 42,
+      "section": "Success definition",
+      "text": "New release candidates use the latest stable selected runtimes and tools, with upstream release discovery and qualification recorded.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF001"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 43,
+      "section": "Success definition",
+      "text": "CNPG remains the production PostgreSQL manager; supported external PostgreSQL remains an explicit operator choice.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF002"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 44,
+      "section": "Success definition",
+      "text": "Existing CNPG databases, PVCs, keys, credentials, and backup histories survive ordinary application upgrades.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF003"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 45,
+      "section": "Success definition",
+      "text": "A fresh, uncached disconnected installation can adopt a cluster, install built-ins, scan workloads, and complete selected catalog operations without public egress.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF004"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 46,
+      "section": "Success definition",
+      "text": "Authentication, tenant authorization, audit, durable operations, and assignment fencing retain their current security guarantees.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF005"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 47,
+      "section": "Success definition",
+      "text": "Delivery enum values and generated consumers agree with database constraints.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF006"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 48,
+      "section": "Success definition",
+      "text": "Every supported list makes progress or reports an explicit bounded compatibility error.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF007"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 49,
+      "section": "Success definition",
+      "text": "Security findings have enforced gates, review ownership, and scoped risk acceptance.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF008"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 50,
+      "section": "Success definition",
+      "text": "Supported-browser and database-version claims have retained real evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF009"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 51,
+      "section": "Success definition",
+      "text": "Domain extraction and orchestration consolidation preserve behavior and have characterization coverage.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF010"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 52,
+      "section": "Success definition",
+      "text": "Release qualification scope is honest and machine checked; existing release exceptions remain accurately recorded.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF011"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 53,
+      "section": "Success definition",
+      "text": "Every work package has a source-bound evidence record and a reviewed completion verdict.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF012"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 82,
+      "section": "2.1 Working directories and source control",
+      "text": "Create one isolated branch/worktree per bounded package or compatible PR slice.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF013"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 83,
+      "section": "2.1 Working directories and source control",
+      "text": "Record base commit, owning repository, source hash, dependencies, owner, and evidence location.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF014"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 84,
+      "section": "2.1 Working directories and source control",
+      "text": "Reconcile overlapping existing plans before implementation; do not duplicate completed changes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF015"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 85,
+      "section": "2.1 Working directories and source control",
+      "text": "Re-run applicable verification after rebases or dependency merges.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF016"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 86,
+      "section": "2.1 Working directories and source control",
+      "text": "Keep generated output changes paired with canonical source changes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF017"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 87,
+      "section": "2.1 Working directories and source control",
+      "text": "Merge dependent slices in dependency order.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF018"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 88,
+      "section": "2.1 Working directories and source control",
+      "text": "Remove worktrees only after preserving needed uncommitted work and verifying merged state.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF019"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 89,
+      "section": "2.1 Working directories and source control",
+      "text": "Avoid accumulating abandoned validation branches or silently replacing another executor's changes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF020"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 105,
+      "section": "2.2 Existing-plan reconciliation",
+      "text": "Map each new task to an existing residual, an independently completed outcome, or genuinely new work.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF021"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 106,
+      "section": "2.2 Existing-plan reconciliation",
+      "text": "Mark an already-satisfied task complete only with current code and applicable evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF022"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 107,
+      "section": "2.2 Existing-plan reconciliation",
+      "text": "Link historical evidence as historical; never attribute it to a changed candidate.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF023"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 108,
+      "section": "2.2 Existing-plan reconciliation",
+      "text": "Update the advisor index with current execution status without rewriting historical results.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF024"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 149,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Retain `postgres.mode: cloudNativePG` in the production profile.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF025"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 150,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Retain `deploy/chart/templates/postgres-cnpg.yaml` and scheduled-backup semantics.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF026"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 151,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Keep the CNPG operator ownership boundary explicit; do not install, upgrade, or uninstall an existing shared operator as an incidental application action.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF027"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 152,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Retain externally managed Barman Cloud plugin/ObjectStore credentials and configuration.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF028"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 153,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Preserve cluster name, storage class, PVC identity, WAL storage, instance count, synchronous-replication policy, service names, and application DSNs unless a reviewed migration explicitly changes them.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF029"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 154,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Preserve database users, Secret references, certificate trust, connection limits, pool sizing, monitoring, backups, and recovery configuration.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF030"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 155,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Keep CNPG operator upgrades distinct from PostgreSQL server-major upgrades and Astronomer schema migrations.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF031"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 156,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Keep logical management backups and encryption-key recovery; they are not replaced by an untested CNPG/PITR configuration.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF032"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 157,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Keep clean-restore and decryption rehearsals after database/image/migration changes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF033"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 158,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Refuse major PostgreSQL upgrades by changing `imageName` on an existing data directory without the supported CNPG procedure.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF034"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 159,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Treat a restored CNPG cluster as a new controlled recovery target; never enable recovery bootstrap against an initialized live cluster.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF035"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 160,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Rehearse primary failover and application reconnection with real CNPG when updating its operator, plugins, server major, or connection model.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF036"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 161,
+      "section": "3.1 CNPG preservation checklist",
+      "text": "Record qualified CNPG/PostgreSQL/plugin/extension combinations, including airgap images.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF037"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 392,
+      "section": "W01 — Follow latest stable across runtimes, dependencies, tools, charts, and images",
+      "text": "W01.5 Build all first-party Go tools/binaries, including migrator/key rotation/DR/shell helpers omitted by a simplistic server-only inventory. Test reachable vulnerabilities using the actual build toolchain. Build portion PASS on clean `54763ab3`: all 28 discovered command packages, 58 actual steps and 223 default capacity checks; exact source and VCS metadata independently verified. [Build record](../docs/assurance/technology-guide/w01/integrated-build-54763ab3/README.md). Fresh reachable-vulnerability checking remains OPEN, so this combined task stays unchecked.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF038"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 398,
+      "section": "W01 — Follow latest stable across runtimes, dependencies, tools, charts, and images",
+      "text": "W01.10 Expand automatic update discovery to Helm, manual CLIs, CNPG, Flux, Trivy, built-in apps, Charlie compatibility, dev stack, and supporting repositories. Use custom manager/resolver where Dependabot does not cover an ecosystem.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF039"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 401,
+      "section": "W01 — Follow latest stable across runtimes, dependencies, tools, charts, and images",
+      "text": "W01.13 For each lagging component, either qualify the current stable target or record the specific compatibility blocker. Do not silently preserve the old major as policy.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF040"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 402,
+      "section": "W01 — Follow latest stable across runtimes, dependencies, tools, charts, and images",
+      "text": "W01.14 Add freshness dashboard/report data: selected/upstream version, discovery age, exception age, owner, deadline, and evidence. Fail release preflight if the review is missing/stale; offline release preflight validates the signed resolution record instead of contacting upstream.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF041"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 428,
+      "section": "W02 — Enforce source security and merge policy, preserve scoped risk acceptance",
+      "text": "W02.1 Capture current gosec results using the selected toolchain. Triage HIGH/MED findings by code path and rule; separate true defects, inaccessible/test only code, and documented standard platform behavior.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF042"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 431,
+      "section": "W02 — Enforce source security and merge policy, preserve scoped risk acceptance",
+      "text": "W02.4 Keep full-history redacted Gitleaks, safe checkout credentials, action digest pins, and reviewable allowlists. Test reverted-secret detection with synthetic nonsecret fixture values.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF043"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 437,
+      "section": "W02 — Enforce source security and merge policy, preserve scoped risk acceptance",
+      "text": "W02.10 Validate ruleset/check identity against actual emitted workflow checks, avoiding merge queues or skipped jobs that make required checks impossible. Retain a machine-readable readback of applied settings.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF044"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 488,
+      "section": "The following SHA256SUMS is supplied by the same unverified archive.",
+      "text": "W03.4 Build a closed asset inventory from declared supported chart values/presets and actual renders. Include init containers, sidecars, hooks, operators, jobs, enabled optional profiles, and generated downstream workloads.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF045"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 490,
+      "section": "The following SHA256SUMS is supplied by the same unverified archive.",
+      "text": "W03.6 Extend mirror planning to chart archives/repos, workload image values, catalog source URL, Trivy DB assets, CNPG operator/server/plugin images, Valkey, Dex, Fluent Bit, Charlie assets, DR/shell tools, and selected supported integrations.",
+      "disposition": "superseded-by-local-always-identity"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 495,
+      "section": "The following SHA256SUMS is supplied by the same unverified archive.",
+      "text": "W03.11 Include chart values-profile and image inventory digests in the signed catalog BOM. Require complete export inventory; preserve operator overrides through an explicit unqualified/needs-requalification state.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF046"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 496,
+      "section": "The following SHA256SUMS is supplied by the same unverified archive.",
+      "text": "W03.12 Reuse hardened release kit extraction and offline Sigstore verification patterns. Do not invent a second weaker verifier or fetch trust keys during verification.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF047"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 498,
+      "section": "The following SHA256SUMS is supplied by the same unverified archive.",
+      "text": "W03.14 Keep S3 configuration endpoint overrides and discovery explicit; distinguish internal data endpoint from externally reachable presigning endpoint where browser links are used. Qualify RustFS operations, not just an HTTP 200 health check.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF048"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 532,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.1 Define DB assets: main Trivy DB, Java DB when required, media version/schema, upstream revision/digest, downloaded/updated times, expected next update, authenticity metadata, and allowed maximum age.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF049"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 533,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.2 Configure internal DB repository locations through canonical typed configuration and signed profiles; preserve public GHCR only for explicitly connected mode.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF050"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 534,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.3 Implement connected mirror refresh and disconnected export/import using latest published stable DB formats compatible with the selected scanner. Use verification/attestation controls appropriate to upstream DB artifacts; do not invent nonexistent upstream signatures.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF051"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 535,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.4 Record which DB the scan actually used. Prefer upstream report/metadata or a measured scan job integration; report unknown when unavailable rather than derive a fictitious freshness age from scan completion time.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF052"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 536,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.5 Keep automatic updates enabled against configured internal mirrors. A read-only immutable offline bundle supplies an initial snapshot plus an operator update procedure.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF053"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 537,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.6 Define initial freshness defaults: report TTL remains 6h unless measured reason changes it; DB refresh follows upstream publishing; choose and document a maximum DB age after studying feed cadence. Unknown/expired DB must not produce a clean qualified security posture.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF054"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 538,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.7 Distinguish no findings, stale DB, scan pending, scan failed, database unavailable, Java DB not needed, and upstream mirror unreachable in API/UI.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF055"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 539,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.8 Verify an updated DB trigger causes selected workloads to rescan; prevent indefinite use of cached clean reports.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF056"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 540,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.9 Create unique owned test management/member clusters with fresh runtime/image/DB caches. Load only the signed qualified local asset set; network controls deny public egress and public DNS calls while allowing declared local control services.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF057"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 541,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.10 Verify the egress deny setup with negative control attempts from relevant namespaces/hosts. CNI policies alone do not prove hosts/container-runtime pulls are blocked; instrument those paths too.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF058"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 542,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.11 Install Astronomer using local registry, retain CNPG production profile in at least one qualification case, and adopt a fresh outbound agent cluster through supported Astronomer API.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF059"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 543,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.12 Exercise built-ins, Flux source acquisition, chart installation, workload scan/ingest, application catalog, local identity, local observability, management backup/clean restore, and Charlie offline behavior within its qualified scope.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF060"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 544,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.13 Test missing chart, missing image, stale DB, wrong DB schema, bad signature, local registry outage, DB mirror outage, management disconnect, and reconnect. Required operations fail/degrade explicitly; previously released local Flux continues reconciling.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF061"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 545,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.14 Declare optional external cloud/SSO/AI/provider features unavailable or separately qualified offline equivalents. Disabling a feature does not qualify that feature as offline.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF062"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 546,
+      "section": "W04 — Deliver fresh vulnerability databases offline and prove no public egress",
+      "text": "W04.15 Publish only redacted closed-schema evidence: source commit/release digest, all asset digests, profiles, exact versions, network deny proof, observed outbound attempts, DB identity/age, test outcomes, cleanup ownership, and timestamps.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF063"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 634,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.1 Inventory all list operations and classify cursor/offset/in-memory/dynamic K8s continuation. Record authorized filters, sort keys, limits/count semantics, and existing clients.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF064"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 637,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.4 Implement stable keyset ordering with unique tie-breaker; bind cursor to tenant/project/cluster/authorization scope, filters, ordering, and any required snapshot identity.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF065"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 638,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.5 Scope/filter before pagination and counts. Exact total is optional; never fabricate it from page length or global count.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF066"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 639,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.6 Add indexes after reviewing actual queries/plans; use expand-safe DDL and migration checks. Prove bounded query cost with representative data.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF067"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 640,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.7 Convert catalog/controlplane and remaining critical collections; generated browser/SDK/CLI/Charlie consumers follow opaque continuation.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF068"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 641,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.8 Retain K8s upstream continuation semantics without pretending arbitrary resources use SQL keyset pagination.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF069"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 642,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.9 Handle dataset mutation: deleted anchor, inserts at boundary, equal timestamps, null sort fields, filter change, authorization revocation, stale cursor, and empty final page.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF070"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 643,
+      "section": "W07 — Complete pagination with progress, scope binding, and compatibility",
+      "text": "W07.10 Check tables/search/exports/bulk selection don't assume that total or arbitrary offset navigation is always available.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF071"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 720,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.2 Update Grafana, Loki, Tempo, Prometheus, and collector versions through W01. Replace Promtail with supported Alloy or an existing Fluent Bit pipeline, selected by configuration ownership and deployment fit.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF072"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 721,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.3 Capture current log labels, tenant-safe fields, trace attributes, and dashboard queries before migrating. Verify collector changes against Loki/Tempo migration notes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF073"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 722,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.4 Specify context propagation across API request, durable operation, queued task, database call, agent tunnel, Kubernetes operation, and Flux reconciliation observation. Use stable operation correlation when asynchronous work cannot be represented as one synchronous span.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF074"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 725,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.7 Define cardinality budgets: user IDs, raw URLs, resource names, SQL parameter values, and operation IDs must not become unlimited metric labels.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF075"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 726,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.8 Redact bearer tokens, cookies, database credentials, private keys, secret manifests, and sensitive request data before logging/export. Add fixtures asserting their absence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF076"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 727,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.9 Publish health distinctions: process readiness, dependency readiness, queue ownership, stale observed state, downstream reconciliation, exporter failure, and scan database freshness.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF077"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 728,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.10 Connect actionable alerts to runbooks: CNPG unavailable, replication/backup failure, worker ownership loss, delivery generation stalled, refresh failures, scan DB stale, and catalog trust failure.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF078"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 729,
+      "section": "W10 — Complete observability and retire the obsolete development collectors",
+      "text": "W10.11 Measure overhead with representative task throughput and API traffic. Establish an agreed baseline and acceptable delta rather than inventing a universal percentage.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF079"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 749,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.1 Inventory Helm CLI invocations, approximately 28 SDK imports at the baseline, release storage assumptions, chart APIs, hook handling, error mapping, and Flux helm-controller dependencies.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF080"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 750,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.2 Write an ADR covering each consumer separately. Select latest stable standalone Helm; migrate embedded SDK only after its supported APIs and behavior are qualified; let upstream Flux own its tested dependency graph.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF081"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 751,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.3 Add characterization tests for install, upgrade, uninstall, dry-run/rendering, values precedence, release history, timeouts, cancellation, hooks, and interrupted operations.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF082"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 752,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.4 Port one adapter at a time. Preserve existing public operation status and error envelopes; avoid a CLI subprocess replacement that bypasses authorization or durable operation recording.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF083"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 753,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.5 Render the chart across standalone PostgreSQL, CNPG, external PostgreSQL, standalone Valkey, Sentinel, external Valkey, ingress/Gateway, network-policy, and disconnected configurations.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF084"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 754,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.6 Preserve CNPG CR identity and ownership, instance count, PostgreSQL major selection, Barman plugin/ObjectStore configuration, secret references, monitoring, WAL/replication settings, and ScheduledBackup behavior.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF085"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 755,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.7 Review CRD lifecycle and hooks explicitly. Application Helm rollback must not delete a CNPG cluster, PVC, ObjectStore, or a shared operator installation.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF086"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 756,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.8 Test Helm/Flux coexistence using actual supported Flux releases. An upstream Helm incompatibility becomes a scoped component exception with evidence, not a forced downstream dependency override.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF087"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 757,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.9 Regenerate chart/schema/docs/contracts after intentional changes. Check signatures and exact chart digest in a real install.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF088"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 758,
+      "section": "W11 — Migrate Helm tooling without bypassing Flux or changing database ownership",
+      "text": "W11.10 Prove interruption recovery, upgrade resume, release history, and compatible rollback with preserved application data.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF089"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 778,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.5 Use real databases for transactions, advisory locks, idempotency, JSON constraints, key rotation, outbox ordering, row counts, tenant scope, query plans, and migration compatibility. Keep mocks where they test adapter behavior efficiently.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF090"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 780,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.7 Qualify actual CNPG: three production-mode instances, failover under writes, application reconnect, replicated state, operator/Barman plugin compatibility, physical backup, restore to a fresh cluster, and PITR when claimed.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF091"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 781,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.8 Verify recovery of encryption master keys, key IDs, agent/Charlie credentials, tenant identity, audit chains, and delivery generations. A PostgreSQL restore without the ability to decrypt stored credentials is incomplete.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF092"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 783,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.10 Add Firefox and WebKit projects for critical authenticated workflows and responsive layouts; install matching browser binaries in CI. Keep Chromium route/visual breadth where appropriate.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF093"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 784,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.11 Exercise login, refresh rotation, logout/revocation, mutations, validation, recovery, keyboard focus, dialogs, tables, uploads/downloads, streaming and terminal cancellation in the cross-browser lane.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF094"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 786,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.13 Expand Kubernetes qualification to current stable 1.37 and maintain the declared older range only where actually tested. Include 1.36 as a transition lane and verify kubectl/client-go/Flux/CNPG version-skew support from upstream.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF095"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 787,
+      "section": "W12 — Turn support claims into an executable qualification matrix",
+      "text": "W12.14 Reuse two-cluster and offerings inventories from Plans 028–029 instead of inventing another incomplete list. Verify optional Charlie/provider features only when their services are available.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF096"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 836,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.1 Classify scripts as small wrapper, fixture generator, developer workflow, release state machine, or runtime operation. Prioritize scripts owning destructive cleanup, secrets, or upgrade rollback.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF097"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 837,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.2 Document inputs, outputs, command compatibility, exit codes, preflight, timeouts, process ownership, evidence files, cleanup and resume behavior before rewriting.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF098"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 838,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.3 Add failure-injection characterization: dependency unavailable, child crash, timeout, signal, partial install, lost lock, cancelled run, interrupted upgrade, and failed rollback.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF099"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 839,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.4 Implement typed plans and bounded subprocess execution with explicit argv/env handling, cancellation, captured exit status, redaction, and resource ownership.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF100"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 840,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.5 Use durable checkpoints for multi-stage operations that need resume. Separate validation, preview, execution, observation, rollback assessment, and cleanup.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF101"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 841,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.6 Keep secrets in protected temporary files or scoped secret references; never interpolate them into logs, shell command substitution, or retained evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF102"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 842,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.7 Preserve shell entrypoints as short compatibility wrappers while old and new runners are compared on disposable environments.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF103"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 843,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.8 Retain existing checks for PDBs, state recovery, readiness, immutable images, schema compatibility, backup prerequisites, and seven-image manifest validation.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF104"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 844,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.9 Preserve machine-readable evidence contracts consumed by CI and release qualification; version schemas when intentionally changed.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF105"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 845,
+      "section": "W14 — Replace fragile operational shell state machines with typed orchestration",
+      "text": "W14.10 Remove duplicate implementation only after parity tests pass. Keep simpler fixture scripts if conversion would add complexity without safety benefit.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF106"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 861,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.1 Record catalog build inputs, schema validators, generated outputs, signing/publication ownership, tests, Python scripts, and transitive dependencies.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF107"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 862,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.2 Select current stable Python using W01; validate wheels and platform support before changing CI. A release published today may need a recorded short-lived compatibility exception for unavailable dependencies.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF108"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 863,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.3 Introduce a project manifest and reproducible full dependency lock, preferably `pyproject.toml` plus `uv.lock` after documenting the choice. Direct requirements pins alone do not capture all resolved dependencies.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF109"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 864,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.4 Define separate runtime/build/test dependency groups; use locked installs and verify regeneration is deterministic.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF110"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 865,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.5 Add Ruff and appropriate type checks, progressing from known interfaces to strict owned modules. Do not hide all errors behind permanent blanket ignores.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF111"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 866,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.6 Preserve existing meaningful unittest coverage. Use pytest where it adds parametrization/fixtures; test runner branding is not an acceptance criterion.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF112"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 867,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.7 Audit dependencies, generate an SBOM, scan generated catalog artifacts, and retain findings/waivers according to the shared policy. Pin GitHub Actions to reviewed commit SHAs with automated update discovery.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF113"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 868,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.8 Verify generated catalog signatures, source metadata, archive membership, image dependencies, and schema versions before Astronomer imports them.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF114"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 869,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.9 Inventory supporting examples and testbed/IaC configurations for Go/Node/Python/Helm/Kubernetes/Trivy/CNPG/Valkey/RustFS references; route maintained consumers to generated version inputs.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF115"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 870,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.10 Mark inactive prototypes/reference repositories explicitly. Do not report a dormant UI as a production dependency, or silently omit a repository that builds a shipped artifact.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF116"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 871,
+      "section": "W15 — Modernize the catalog Python toolchain and supporting repository boundaries",
+      "text": "W15.11 Coordinate cross-repository changes with recorded source SHAs and compatible catalog schema versions; test producer/consumer pairs before either side publishes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF117"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 916,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.1 Freeze candidate source SHAs across application/catalog/contracts; record chosen versions and scoped exceptions.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF118"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 917,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.2 Run appropriate focused checks during implementation, then the complete required PR and candidate gates once the integrated candidate is stable.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF119"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 918,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.3 Build all first-party artifacts with the selected toolchain. Verify SBOMs, vulnerability results, signatures/provenance, declared source SHA, and exact image digests.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF120"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 919,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.4 Validate the manifest's complete application-image set. The baseline has seven roles: server, worker, frontend, agent, migrate, shell, and DR. Derive required roles from the contract; never hard-code the previous six-image assumption.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF121"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 920,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.5 Prepare a disposable fresh-install and upgrade rehearsal. Inspect the target context, namespace, current release, CNPG resources, shared operators, PVC ownership, schema, and backup recoverability using sanitized evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF122"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 921,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.6 Restore a backup to prove database and key recovery before any production-mode major migration. Do not treat an upload confirmation as a restore test.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF123"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 922,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.7 Deploy the exact signed candidate into local k3s using the supported install/upgrade path. Preserve database CR identity, PVCs, secrets, backup histories, and explicit operator ownership.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF124"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 923,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.8 Verify browser login/refresh/logout, tenant authorization, durable operation completion, worker recovery, cluster adoption/agent connectivity, Flux generation fencing, built-ins, selected catalog operations, scans/freshness, audit, and telemetry.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF125"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 924,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.9 Execute the candidate's fresh disconnected qualification with empty caches and blocked public egress. Keep external provider/Charlie requirements explicit.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF126"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 925,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.10 Compare pre/post deployment IDs, schema, resource ownership, readiness, selected workload outcomes, and customer data invariants without retaining secret values.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF127"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 926,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.11 Rehearse interrupted upgrade and recovery. The baseline schema is 71 with a declared reversible floor of 66; reread the current contract before execution. Helm rollback must not pretend to reverse an incompatible database migration.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF128"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 927,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.12 Aggregate machine-readable qualification evidence, exact upstream-CVE waivers, license findings, remaining limitations, and migration notes into the candidate review packet.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF129"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 928,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.13 Resolve the future tag's actual policy before publication. The approved v1.2.0/v1.2.1 deferrals and absence of a separate named approver apply to those tags; do not manufacture artifacts or silently extend tag-specific exceptions.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF130"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 929,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.14 Select a future version from the integrated public contract changes. Keep v1 compatibility for ordinary modernization; reserve breaking refactor publication for the separately scoped v2 program.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF131"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 930,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.15 Publish only after the candidate and applicable approval conditions are satisfied. Preserve v1.2.0/v1.2.1 artifact immutability; fixing a released artifact requires a new version, not overwriting its digest.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF132"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 931,
+      "section": "W17 — Qualify and release one coherent immutable candidate at each milestone",
+      "text": "W17.16 Recheck installed digests and health after publication, preserve the evidence packet, and update completion status only for the scope actually validated.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF133"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 957,
+      "section": "v1 delivery boundary",
+      "text": "Include fixes to authentication recovery, malformed durable data, pagination, state parity, catalog trust, freshness reporting, dependency updates, and enforced first-party security gates when their v1 compatibility is proved.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF134"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 958,
+      "section": "v1 delivery boundary",
+      "text": "Use expand/migrate/contract rather than deleting old columns, API fields, endpoints, or ciphertext readers prematurely.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF135"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 959,
+      "section": "v1 delivery boundary",
+      "text": "Treat raising minimum Kubernetes/browser versions as a customer-facing compatibility decision even if application APIs are unchanged.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF136"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 960,
+      "section": "v1 delivery boundary",
+      "text": "Keep PostgreSQL major migration optional and separately rehearsed for existing installations while a fresh-install default is qualified.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF137"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 961,
+      "section": "v1 delivery boundary",
+      "text": "Do not block a v1 milestone on optional v2 architecture extraction or unclaimed FIPS capability.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF138"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 962,
+      "section": "v1 delivery boundary",
+      "text": "Include accurate migration notes and supported exceptions in each milestone packet.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF139"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1083,
+      "section": "Proposed evidence record",
+      "text": "Validate source/artifact binding, timestamp ordering, expected/actual case counts, result values, required environment fields, and evidence digests.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF140"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1084,
+      "section": "Proposed evidence record",
+      "text": "Distinguish `pass`, `fail`, `not-run`, `deferred`, and `not-applicable`. “Deferred” needs authority/scope; “not applicable” needs a reason.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF141"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1085,
+      "section": "Proposed evidence record",
+      "text": "Sign or attest qualifying evidence when the release contract requires it; merely storing this JSON does not make it signed.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF142"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1086,
+      "section": "Proposed evidence record",
+      "text": "Retain sanitized public summaries separately from restricted raw logs, cluster identifiers, and credentials.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF143"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1087,
+      "section": "Proposed evidence record",
+      "text": "Record reviewer identity and approval separately from machine outcome. Automation cannot invent a human sign-off.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF144"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1088,
+      "section": "Proposed evidence record",
+      "text": "Store manifests and SBOM references by digest so a different rebuild cannot reuse the previous result.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF145"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1096,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Inventory current Cluster CR UID/name/namespace, operator version and ownership, instance count, PostgreSQL image/digest, extensions, StorageClass/PVCs, replicas, connection routing, ObjectStore/ScheduledBackup resources, key references, and backup retention.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF146"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1097,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Identify shared resources. Astronomer must not uninstall a shared CNPG operator or Barman plugin during application cleanup.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF147"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1098,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Confirm current standby/backup readiness and restore actual application state, including decryptable secrets, to an isolated cluster before changing the production path.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF148"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1099,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Select the upgrade method supported by the chosen stable CNPG release. Use that release's documentation; the moving/development documentation is a research lead, not an executable guarantee.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF149"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1100,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Separate same-major patching from a major-format upgrade. Do not let a generic image-update bot perform a PostgreSQL major migration.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF150"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1101,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Rehearse extension compatibility, storage requirements, downtime, application pool reconnect, queued operations, and replica recovery on a copy of representative data.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF151"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1102,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Prefer an explicitly planned new-cluster/cutover path where it gives clearer recovery. An operator-supported in-place major path needs its own downtime and backup approval; replica PVC recreation may be part of that method, so ordinary-upgrade “preserve every PVC” checks cannot be applied blindly.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF152"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1103,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Design recovery for post-cutover writes. The old cluster is not a complete rollback source once new writes are acknowledged; define quiescence/replay/restore or accept a measured loss boundary explicitly.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF153"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1104,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Preserve separate backup/WAL recovery histories across PostgreSQL majors and create a new post-upgrade recovery baseline. Verify selected Barman behavior rather than assuming pre-upgrade archives can recover across the format boundary.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF154"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1105,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Keep old backups and keys according to retention; verify a chosen restore timestamp lies within the correct major's recovery history.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF155"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1106,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Compare row counts and representative tenant objects, operation/audit continuity, ciphertext readability, constraints, extensions, indexes/query plans, and worker health after cutover.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF156"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1107,
+      "section": "11.1 CNPG and PostgreSQL",
+      "text": "Record measured downtime, RPO/RTO, recovery steps and limitations; authorize production migration only after a concrete reviewed rehearsal packet.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF157"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1113,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Read the candidate's actual schema/rollback floor rather than hard-coding the baseline's 71/66.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF158"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1114,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Add schema/reader changes first; migrate bounded batches; switch writers only after old/new reader coexistence is proved.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF159"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1115,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Never run down migrations simply because a Helm release was rolled back. Assess database/application compatibility and recover using the documented safe path.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF160"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1116,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Back up encrypted data and necessary keys through the supported protected process; retain only references and digests in public evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF161"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1117,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Restore historical ciphertext with old keys before retiring any reader/algorithm/key.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF162"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1118,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Reconcile work ownership and outbox state after interruption; avoid replaying a user operation as a new mutation without idempotency protection.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF163"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1119,
+      "section": "11.2 Application schema and encryption keys",
+      "text": "Verify audit linkage and agent/Charlie credential usability after restoration.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF164"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1123,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Preserve Valkey standalone/Sentinel/external modes and the existing queue/cache semantics. Test Sentinel discovery, authentication/TLS, failover, and worker reconnect where claimed.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF165"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1124,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Verify supported Valkey upgrades and persisted data compatibility; an ephemeral cache test cannot prove durable queue recovery.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF166"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1125,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Keep RustFS as the supported in-cluster S3-compatible implementation when configured; keep external S3-compatible endpoints as explicit options. Do not reintroduce a mandatory MinIO dependency.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF167"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1126,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Verify bucket/object metadata, access control, TLS/CA trust, multipart uploads, retention and recovery semantics used by Barman, catalog kits, scans, and audit/export.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF168"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1127,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Avoid sharing credentials across tenants or unrelated backup/catalog/scan roles without an explicit threat-model decision.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF169"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1128,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Check the actual installed RustFS digest and storage layout before changing its version; preserve PVC/data ownership and exercise a recovery test.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF170"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1129,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Verify every mirrored chart/image/DB asset from its signed inventory and declared trust policy. Rewriting a repository URL does not itself make the rewritten bytes trusted.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF171"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1130,
+      "section": "11.3 Valkey, RustFS/S3, and runtime assets",
+      "text": "Preserve disconnected local Flux reconciliation and last accepted intent even when the management service or upstream registry is unreachable.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF172"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1134,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Reconcile the operator/agent/Flux/client-go/kubectl/CNPG compatibility matrix before raising cluster minimums.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF173"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1135,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Use a separate disposable current-stable cluster first; preserve the existing local k3s as a known comparison until the candidate passes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF174"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1136,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Treat a Kubernetes minor/major platform upgrade as a platform operation, with its own backup and control-plane recovery; it is not an application Helm update.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF175"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1137,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Maintain namespace/resource ownership labels and explicit shared-operator boundaries.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF176"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1138,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Ensure an old agent cannot report stale success or overwrite a new generation after upgrade.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF177"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1139,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Validate Flux signed-image trust according to its upstream policy; do not replace upstream Flux images with custom forks merely to hide accepted upstream CVEs.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF178"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1140,
+      "section": "11.4 Kubernetes, Helm, and Flux",
+      "text": "Rehearse cancelled Helm operations and failover during a rollout; compare desired/observed state after recovery.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF179"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1162,
+      "section": "Required closeout checklist",
+      "text": "W00 reconciled source/claim baseline and documented architecture invariants.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF180"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1163,
+      "section": "Required closeout checklist",
+      "text": "W01 selected current stable inventory and exercised discovery/alignment automation.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF181"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1164,
+      "section": "Required closeout checklist",
+      "text": "W02 enforced first-party security gates and transparent scoped exceptions.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF182"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1165,
+      "section": "Required closeout checklist",
+      "text": "W03 verified source-bound catalog/runtime artifacts used by provisioning.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF183"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1166,
+      "section": "Required closeout checklist",
+      "text": "W04 fresh disconnected scans with truthful DB age and imported metadata.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF184"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1167,
+      "section": "Required closeout checklist",
+      "text": "W05 bounded browser refresh, settled queues, cancellation, and form error behavior.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF185"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1168,
+      "section": "Required closeout checklist",
+      "text": "W06 delivery/API/database enums and generated consumers agree.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF186"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1169,
+      "section": "Required closeout checklist",
+      "text": "W07 pagination progresses and stays within authorized scope.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF187"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1170,
+      "section": "Required closeout checklist",
+      "text": "W08 selected fixed SQL is generated with preserved transaction behavior.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF188"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1171,
+      "section": "Required closeout checklist",
+      "text": "W09 durable JSON/request validation and malformed-reader behavior are explicit.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF189"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1172,
+      "section": "Required closeout checklist",
+      "text": "W10 supported observability stack with correlated, redacted signals.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF190"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1173,
+      "section": "Required closeout checklist",
+      "text": "W11 qualified Helm consumer migrations preserving Flux/CNPG ownership.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF191"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1174,
+      "section": "Required closeout checklist",
+      "text": "W12 support matrix has actual current evidence and honest limitations.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF192"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1175,
+      "section": "Required closeout checklist",
+      "text": "W13 v2 preparation has enforced domain boundaries without accidental v1 breaks.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF193"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1176,
+      "section": "Required closeout checklist",
+      "text": "W14 selected operational runners preserve safety and evidence under failure.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF194"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1177,
+      "section": "Required closeout checklist",
+      "text": "W15 catalog tools and supporting version consumers are reproducible and tested.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF195"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1179,
+      "section": "Required closeout checklist",
+      "text": "W17 exact milestone candidate is built, installed, exercised, and recoverable within approved release scope.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF196"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1180,
+      "section": "Required closeout checklist",
+      "text": "All unresolved upstream CVEs/licenses/qualification limitations are disclosed according to the actual applicable policy.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF197"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1181,
+      "section": "Required closeout checklist",
+      "text": "Advisor index and evidence ledger reflect observed status and exact scope.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF198"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1542,
+      "section": "R06: align system rollout and inventory with intentional warm standby",
+      "text": "Fresh supported-cluster run must retain system Kustomization Ready=True beyond the deployment progress deadline, healthy source fetch, application lifecycle, and a negative leader-loss check with recovery. Keep the original demo cluster until R16 passes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF199"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1559,
+      "section": "R08: project authoritative Delivery status into Applications",
+      "text": "`go test ./internal/handler ./internal/delivery/... -count=1` and applicable real-DB tests pass. R16 browser verifies install→installed and uninstall→removed using the enriched Apps endpoint only.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF200"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1575,
+      "section": "R10: restore bundle budgets and enforce them in CI",
+      "text": "`npm run build && npm run bundle:check` exits 0 with retained fresh byte counts; browser login/configuration/error-path behavior still passes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF201"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1596,
+      "section": "R13: restore the frontend dependency audit gate",
+      "text": "Select a supported patched dependency or documented source-bound disposition under current policy. Preserve lockfile determinism and editor rendering/sanitization behavior; no global package update.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF202"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1597,
+      "section": "R13: restore the frontend dependency audit gate",
+      "text": "Run high-severity audit, sanitizer negative tests, editor tests, type/lint/build/budgets. A waived gate is not a vulnerability fix; record remaining risk explicitly.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF203"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1601,
+      "section": "R14: make validation results reproducible",
+      "text": "Account for all 32 skips from the current Go gate: unavailable PromQL/chart/signing/private proxy/live OCI fixtures and retired synchronous Dex cases. Qualify required fixtures on the candidate; remove or replace obsolete tests only after their current durable-operation coverage is demonstrated. See the exact skip inventory in implementation evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF204"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1602,
+      "section": "R14: make validation results reproducible",
+      "text": "Diagnose the two operations-pagination full-suite failures using controlled timing/isolation; retain failing runs, root cause and regression. An isolated pass is insufficient closure. Run the full frontend suite once after the fix.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF205"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1610,
+      "section": "R15: handle the optional Charlie enrollment state",
+      "text": "If enabling, obtain fresh enrollment through the supported private workflow and prove readiness plus an authorized action. If retaining disabled, use supported suspend/uninstall semantics with identity retention and no unrelated workload deletion.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF206"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1611,
+      "section": "R15: handle the optional Charlie enrollment state",
+      "text": "Verify bridge endpoints and enrollment readiness match the declared state; never log or retain credential-bearing enrollment bodies in evidence. Provider access remains an explicit dependency.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF207"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1615,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "Freeze exact source, images/chart, catalog and supported Kubernetes identities. Run required source gates on that candidate: `make check`, `make security`, changed frontend gates, Helm/distribution and generated-contract checks; retain original outputs and unresolved audit results.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF208"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1616,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "Deploy fixes only under a new immutable candidate identity through the supported workflow; preserve rollback material. Do not overwrite released v2.1.1 artifacts or re-label old browser evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF209"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1617,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "On the owned supported replacement, require system rollout Ready beyond ten minutes, registration/reconnect, inventory, UI install/configuration/health/uninstall, final durable operation completion, truthful Apps status and desktop/mobile accessibility. Use actual login and supported APIs; no DB status writes.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF210"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1618,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "Rehearse optional-trust backup→isolated restore including decryptability and Goose version checks, with success/failure evidence and cleanup. Keep management data untouched.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF211"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1619,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "Reconcile/port the historical 028/029 inventory, false-green verifier and supported-estate preflight to current APIs (the old runner is absent from current source), run its positive/negative fixtures, then regenerate the denominator and run the actual preflight; preserve explicit NOT_RUN/BLOCKED provider and matrix cases. Existing site-demo is not blanket authorization to destroy its workloads.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF212"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1620,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "Decide old-demo migration/retirement only after replacement qualification and an inventory/data migration plan. Preserve the original cluster now. Removing it or its data is not part of this source implementation slice.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF213"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 1621,
+      "section": "R16: qualify the actual fixed candidate and retain honest release boundaries",
+      "text": "Update this ledger and Plan 016/028/029/033 scope-specific claims; do not mark all programs DONE based on one local application.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF214"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2117,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.4 Published shared API lifecycle.** v0.1.0 provides `Ensure`, whose `Put` key is the upstream project name and whose create-only result is returned on persistence failure; it does not provide application rotation/deletion APIs. Extend and publish the shared layer's explicit scoped lookup/recovery/revocation contract, with real engine tests and immutable release evidence. Keep engine SDK imports inside the shared library, not Astronomer handlers. Preserve project grants during rotation; record recovery when a create-only secret was lost.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF215"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2124,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.5 Crash-safe registration worker.** Use 6.2 and 6.3 around the shared client; verify stored credentials against returned upstream IDs. Retry `Put` with the original returned Result on persistence failure. Prove timeout after successful write, worker restart, issuer failure, lost database lock and missing secret cases. A process crash before persistence must stop for recovery.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF216"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2129,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.6 Authorized API and configuration.** Add bounded typed provisioning configuration and private administration credentials, explicit project/cluster authorization, transactional mutation audit, operation status and RBAC-safe retries. No provisioning dependency in local login or startup; customer OIDC without shared management capabilities must remain supported as an RP only.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF217"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2134,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.7 Catalog and delivery integration.** Declare supported products and callback contracts, inject issuer/audience/callback plus a scoped Secret reference through the existing delivery path, materialize only to the approved target namespace, and fail closed on incomplete credentials. Keep secret values out of install requests, Helm values, operation responses and audit payloads.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF218"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2139,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.8 Rotation and retirement orchestration.** Stage a new immutable generation, verify consumer rollout before revoking the previous upstream credential, then perform guarded owned Secret cleanup. Track failures durably; uninstall must not delete another installation's app/project or roles.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF219"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2143,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.9 Real product acceptance.** Prove a second supported product's SSO, distinct audience and least-privilege roles; denial for wrong issuer/project; recovery during storage/issuer outages; credential rotation and uninstall. Use deployed candidate artifacts and real browser/API evidence.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF220"
+    },
+    {
+      "source": "032-technology-guide-alignment-and-latest-stable-master-plan.md",
+      "line": 2147,
+      "section": "Catalog provisioning foundations (2026-10-24)",
+      "text": "**6.10 Release integration.** Qualify private transport/CA, least-privilege provisioning credentials, backup/key recovery, air-gap dependencies, full source/security gates and offering-matrix replacements. Do not mark package 6 complete from adapter tests alone.",
+      "disposition": "carried-forward",
+      "current_id": "032-CF221"
+    },
+    {
+      "source": "033-platform-tools-applications-assurance.md",
+      "line": 275,
+      "section": "External release tasks — still required",
+      "text": "Choose and own the monitoring/logging qualification estate and exact supported configuration/environment matrix; run all live lifecycle, functional, upgrade/data/recovery, isolation, workload security and air-gap checks above.",
+      "disposition": "carried-forward",
+      "current_id": "033-CF001"
+    },
+    {
+      "source": "033-platform-tools-applications-assurance.md",
+      "line": 278,
+      "section": "External release tasks — still required",
+      "text": "Retain and review actual reports; create genuine hashed qualification receipts; only then promote those exact profiles. **No entries are Assured.**",
+      "disposition": "carried-forward",
+      "current_id": "033-CF002"
+    },
+    {
+      "source": "033-platform-tools-applications-assurance.md",
+      "line": 280,
+      "section": "External release tasks — still required",
+      "text": "Review/merge the source changes, including the catalog branch's existing unpublished dependencies. Run protected hosted release gates, publish a signed catalog, and verify ingestion plus installation on staging.",
+      "disposition": "carried-forward",
+      "current_id": "033-CF003"
+    },
+    {
+      "source": "033-platform-tools-applications-assurance.md",
+      "line": 283,
+      "section": "External release tasks — still required",
+      "text": "Activate daily upstream discovery through the merged default-branch workflow; assign a review owner. Local execution does not activate a schedule.",
+      "disposition": "carried-forward",
+      "current_id": "033-CF004"
+    },
+    {
+      "source": "033-platform-tools-applications-assurance.md",
+      "line": 285,
+      "section": "External release tasks — still required",
+      "text": "Publish the corresponding operator/support documentation to `astronomer-docs` and consolidate test-estate ownership in `astronomer-testbed` as separate repository operations.",
+      "disposition": "carried-forward",
+      "current_id": "033-CF005"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "P1 / 12 — RBAC users/roles/bindings, binding role/project choices, visible-binding names, monitoring storage selection, project Members and SSO mapping roles now use bounded pagination or exact-ID lookup. Project counts use canonical metadata; SSO choices match the mapping scope and reset on scope changes. Audit names use exact visible-ID lookups; Audit cluster/project filters page remotely with known-ID entry, and CIS history uses canonical 25-row pages. Audit other legacy selectors rather than claiming the entire repository is uncapped. Continuation verification is recorded below.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF001"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "POLICY / 19 — Clone/download now covers built-in table families and custom-resource instances using exact group/version/plural/scope paths. Nodes, events, PVs and CRD definitions deliberately cannot be cloned; PVC cloning creates a claim, not a data copy.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF002"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "FOLLOW-UP / 20 — Common direct ownership chains and both Pod-to-Service and Service-to-Pod navigation are bounded and paged; discovery-denial browser coverage is present. An exhaustive Kubernetes relationship graph remains outside this bounded implementation.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF003"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "DECISION / 22 — Links emitted by delivery preserve project context. A bare entity ID without a project prompts project selection. Automatic project-agnostic resolution needs a documented server-side authorization-safe lookup, not scanning every project.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF004"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "DECISION / 25 — Declared registration profile is explicitly not measured authority. A live effective-privilege probe and mutation-refusal policy require a bounded protocol, caller/probe authorization, freshness rules, upgrade compatibility and operator recovery semantics before enforcement. No new live privilege claim is made.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF005"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "P1 / 26, 28 — Native grant create/delete denial and recovery, bulk partial/unconfirmed/cancelled outcomes, and denied relationship continuation have desktop/mobile workflow coverage. Virtualized grouping now has a separate three-viewport component suite plus a real CIS filtering regression. Extend the remaining loading/403/404/offline/stale cross-product; assistive-technology qualification remains separate. Canonical shared-table callers distinguish count certainty, preserve continuation for short pages and retain Previous on empty later pages. CVE detail preserves pagination/count certainty, context resets and denied-page recovery.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF006"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "EXTERNAL / 29 — Real agent identity and Charlie compatibility against an explicitly selected environment/credentials; do not use mocked browser success as evidence.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF007"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "EXTERNAL / 30 — All eight Plan 016 protected/live/human qualifications remain separate from this local implementation.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF008"
+    },
+    {
+      "source": "026-platform-robustness-and-workflow-closure.md",
+      "line": null,
+      "section": "Remaining scope",
+      "text": "DESIGN ONLY — Plan 025 questions.yaml/chart ingest remains an ADR/spike, not a shipped runtime capability.",
+      "disposition": "carried-forward",
+      "current_id": "026-CF009"
+    }
+  ]
+}

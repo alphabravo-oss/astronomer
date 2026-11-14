@@ -1,0 +1,19 @@
+{
+  "deploy/chart/files/release-compatibility.json": "98ab31303410718b3cc9c2340f770ddebdea4351ab889f41f1b8950d7ea0a5c3",
+  "deploy/chart/values.schema.json": "100ac7d470f6b6423755d6c5ed8233ba8122f9f6491bb2f33301a152e657bbfd",
+  "deploy/chart/values.yaml": "427871099195885d1a689c16df877cd7aa0af7a0f561ba6f5f85f21b6c140423",
+  "deploy/testdata/live-values-astronomer-dev.yaml": "631917aabda57154461b5a9c090d82fa41634255c238ca25253b88a9922ddd6e",
+  "docs/runbooks/shared-identity-cutover.md": "d9a3ea218599e17621fb6804ad1ce500dc81807f7044a22ad49a3abfa2091902",
+  "internal/db/identity_retirement_integration_test.go": "ef0386c233152ff193f54614b2a76714083420bb446b2790557c7b6e7a692a76",
+  "internal/db/migrations/00088_identity_provisioning_operations.sql": "bca4da6f70ac2e29aed75b5329d044f50684a6952efa05d76dcdece7c591c108",
+  "internal/db/queries/identity_provisioning.sql": "468a1b2fa6f8b8e972a4367b53b36db81cedf24bc9e414d445a66564f8f72586",
+  "internal/db/sqlc/identity_provisioning.sql.go": "c3a113ee0a054c31838623570f4cd472fd616c0c159698a883bb8145e6c76940",
+  "internal/db/sqlc/models.go": "add604fd18064c648c0ae0df8a193e5a2504adda63af57c2082e3937c380dcd1",
+  "internal/db/sqlc/querier.go": "ced8d1e27d2e28d6658ef0f6a0cccfc0db351c550d8a432b9a27a14e727608f9",
+  "internal/identity/provisioning/journal.go": "a396757c073d4f7a2b40fdb8310933d70cf04e0949b37860dfbb3c5cc28f123a",
+  "internal/identity/provisioning/journal_integration_test.go": "f0ea9f75ad35a09adc7397092502272f4f441410878b9de9241230824e659166",
+  "internal/identity/provisioning/lock.go": "a0ab0718a5dbac2aaa35d3533b4e798880b4483b2b43cf5b304ee2c2bab89d44",
+  "internal/identity/provisioning/lock_integration_test.go": "d89fdb7f30bccbef79c98f6588091b1f778e86e6ca6288c93a4aae37e21f1dc3",
+  "internal/identity/provisioning/secret_store.go": "a68d1839313297780c865a8ba2a233869e33ac50dce1404780ca2358f47f1c5a",
+  "internal/identity/provisioning/secret_store_integration_test.go": "cd41fbdb8c56068a53831b55783b1d18185fbf636ba5cf4c8199ac92d262f347"
+}

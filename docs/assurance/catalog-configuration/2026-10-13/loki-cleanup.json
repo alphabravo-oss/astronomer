@@ -1,0 +1,26 @@
+{
+  "uninstall": "completed",
+  "project_namespace_removal": {
+    "data": {
+      "id": "1e705e58-3723-4985-96e5-c54c702aca86",
+      "name": "default",
+      "display_name": "Default",
+      "description": "Default project for application namespaces not assigned elsewhere.",
+      "cluster_id": "900db10f-b2cd-41e4-9603-0fa4d3fc8657",
+      "namespaces": [
+        "default"
+      ],
+      "resource_quota": {},
+      "limit_range": {},
+      "network_policy_mode": "none",
+      "pod_security_profile": "baseline",
+      "resource_quota_cpu_limit": "",
+      "resource_quota_memory_limit": "",
+      "resource_quota_pod_count": 0,
+      "created_by_id": null,
+      "created_at": "2026-09-18T05:47:16Z",
+      "updated_at": "2026-10-13T00:55:16Z"
+    }
+  },
+  "namespace_delete_status": 200
+}

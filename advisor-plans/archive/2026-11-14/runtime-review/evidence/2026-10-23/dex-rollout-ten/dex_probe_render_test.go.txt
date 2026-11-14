@@ -1,0 +1,29 @@
+package deploy
+
+import (
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestDexProbePathsFollowIssuer(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"", "/", "/dex", "/auth/dex/"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			chart := filepath.Join(repoRoot(t), "deploy", "chart")
+			args := []string{"template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.issuerURL=https://dex.example.com" + path, "--show-only", "templates/dex-deployment.yaml"}
+			out, err := exec.CommandContext(t.Context(), "helm", args...).CombinedOutput()
+			if err != nil {
+				t.Fatalf("render: %v\n%s", err, out)
+			}
+			for _, suffix := range []string{"/healthz", "/.well-known/openid-configuration"} {
+				want := `path: "` + strings.TrimSuffix(path, "/") + suffix + `"`
+				if !strings.Contains(string(out), want) {
+					t.Fatalf("missing probe %s", want)
+				}
+			}
+		})
+	}
+}

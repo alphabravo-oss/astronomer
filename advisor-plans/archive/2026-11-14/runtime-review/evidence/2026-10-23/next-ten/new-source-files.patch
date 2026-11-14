@@ -1,0 +1,1981 @@
+diff --git a/deploy/management_backup_catalog_roundtrip_test.go b/deploy/management_backup_catalog_roundtrip_test.go
+new file mode 100644
+index 0000000000..990d7eb432
+--- /dev/null
++++ b/deploy/management_backup_catalog_roundtrip_test.go
+@@ -0,0 +1,142 @@
++package deploy
++
++import (
++	"bytes"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestManagementBackupCatalogTrustActualCLIRoundTrip(t *testing.T) {
++	t.Parallel()
++	binary := filepath.Join(t.TempDir(), "dr-crypto")
++	build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, "./cmd/dr-crypto")
++	build.Dir = repoRoot(t)
++	if output, err := build.CombinedOutput(); err != nil {
++		t.Fatalf("build actual crypto CLI: %v\n%s", err, output)
++	}
++	for _, tc := range []struct {
++		name                 string
++		ca, signature, empty bool
++	}{
++		{name: "flat"}, {name: "ca", ca: true}, {name: "signature", signature: true},
++		{name: "both", ca: true, signature: true}, {name: "empty trust fails closed", ca: true, empty: true},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			root := t.TempDir()
++			staging := filepath.Join(root, "staging")
++			if err := os.Mkdir(staging, 0700); err != nil {
++				t.Fatal(err)
++			}
++			projectedBackupSecret(t, filepath.Join(root, "source"), map[string]string{"SECRET_KEY": "synthetic signing key", "ASTRONOMER_ENCRYPTION_KEY": "synthetic encryption key"})
++			sets := []string{"managementBackup.s3.bucket=test-backups", "managementBackup.s3.credentialsSecretRef.name=test-credentials", "managementBackup.encryption.sourceIdentity=test-installation", "managementBackup.encryption.wrappingSecretRef.name=test-wrap"}
++			trust := map[string]string{"ca.pem": "synthetic public trust", ".extra.pem": "synthetic extra trust"}
++			if tc.empty {
++				trust = map[string]string{}
++			}
++			for _, item := range []struct {
++				enabled            bool
++				directory, setting string
++			}{
++				{tc.ca, "catalog-ca", "catalog.ca.existingSecret=test-ca"},
++				{tc.signature, "catalog-signature-trust", "catalog.signature.trustKeys.existingSecret=test-signature"},
++			} {
++				if item.enabled {
++					sets = append(sets, item.setting)
++					projectedBackupSecret(t, filepath.Join(root, item.directory), trust)
++				}
++			}
++			cron := findRenderedDoc(t, parseRenderedDocs(t, helmTemplate(t, sets...)), "CronJob", "astronomer-management-backup")
++			container := findContainer(t, podSpecFor(cron), "containers", "pgdump-s3")
++			script := container["args"].([]any)[0].(string)
++			start, end := strings.Index(script, "# Top-level,"), strings.Index(script, "# Manifest upload")
++			if start < 0 || end <= start {
++				t.Fatal("backup staging/encryption boundary missing")
++			}
++			script = script[start:end]
++			script = strings.NewReplacer(
++				"/var/run/astronomer-keys-source", filepath.Join(root, "source"),
++				"/var/run/astronomer-keys", staging,
++				"/var/run/catalog-ca", filepath.Join(root, "catalog-ca"),
++				"/var/run/catalog-signature-trust", filepath.Join(root, "catalog-signature-trust"),
++			).Replace(script)
++			passphrase := filepath.Join(root, "passphrase")
++			if err := os.WriteFile(passphrase, bytes.Repeat([]byte("p"), 32), 0600); err != nil {
++				t.Fatal(err)
++			}
++			context := `{"release":"test","source":"fixture","stamp":"now"}`
++			envelope := filepath.Join(root, "keys.aead")
++			command := exec.CommandContext(t.Context(), "sh", "-eu", "-c", script)
++			command.Env = append(os.Environ(), "PATH="+filepath.Dir(binary)+":"+os.Getenv("PATH"), "KEY_BUNDLE="+filepath.Join(root, "keys.tar"), "KEY_ENVELOPE="+envelope, "PASSPHRASE_FILE="+passphrase, "CONTEXT="+context)
++			output, err := command.CombinedOutput()
++			if tc.empty {
++				if err == nil {
++					t.Fatal("empty configured trust was silently omitted")
++				}
++				if _, err := os.Stat(envelope); !os.IsNotExist(err) {
++					t.Fatal("failed bundle produced a publishable envelope")
++				}
++				return
++			}
++			if err != nil {
++				t.Fatalf("rendered backup staging: %v\n%s", err, output)
++			}
++			plain := filepath.Join(root, "decrypted.tar")
++			runBackupCryptoCLI(t, binary, "decrypt", "--input", envelope, "--output", plain, "--passphrase-file", passphrase, "--expect-purpose", "key-bundle", "--expect-context", context)
++			restored := filepath.Join(root, "restored")
++			runBackupCryptoCLI(t, binary, "key-bundle-extract", "--input", plain, "--output", restored)
++			for _, name := range []string{"SECRET_KEY", "ASTRONOMER_ENCRYPTION_KEY"} {
++				if _, err := os.Stat(filepath.Join(restored, name)); err != nil {
++					t.Fatal(err)
++				}
++			}
++			for _, item := range []struct {
++				enabled   bool
++				directory string
++			}{{tc.ca, "catalog-ca"}, {tc.signature, "catalog-signature-trust"}} {
++				if !item.enabled {
++					continue
++				}
++				entries, err := os.ReadDir(filepath.Join(restored, item.directory))
++				if err != nil || len(entries) != len(trust) {
++					t.Fatalf("wrong restored trust inventory: %v", err)
++				}
++				for name, want := range trust {
++					got, err := os.ReadFile(filepath.Join(restored, item.directory, name))
++					if err != nil || string(got) != want {
++						t.Fatalf("trust file %s changed: %v", name, err)
++					}
++				}
++			}
++		})
++	}
++}
++
++func projectedBackupSecret(t *testing.T, directory string, files map[string]string) {
++	t.Helper()
++	version := filepath.Join(directory, "..version")
++	if err := os.MkdirAll(version, 0700); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Symlink("..version", filepath.Join(directory, "..data")); err != nil {
++		t.Fatal(err)
++	}
++	for name, content := range files {
++		if err := os.WriteFile(filepath.Join(version, name), []byte(content), 0600); err != nil {
++			t.Fatal(err)
++		}
++		if err := os.Symlink(filepath.Join("..data", name), filepath.Join(directory, name)); err != nil {
++			t.Fatal(err)
++		}
++	}
++}
++
++func runBackupCryptoCLI(t *testing.T, binary string, args ...string) {
++	t.Helper()
++	if output, err := exec.CommandContext(t.Context(), binary, args...).CombinedOutput(); err != nil {
++		t.Fatalf("crypto CLI failed: %v\n%s", err, output)
++	}
++}
+diff --git a/frontend/scripts/check-editor-sanitizer.test.mjs b/frontend/scripts/check-editor-sanitizer.test.mjs
+new file mode 100644
+index 0000000000..6545ba0dcd
+--- /dev/null
++++ b/frontend/scripts/check-editor-sanitizer.test.mjs
+@@ -0,0 +1,59 @@
++import assert from "node:assert/strict";
++import { test } from "node:test";
++import { JSDOM } from "jsdom";
++
++// Exercise the actual Monaco sanitizer module, including its bundled DOMPurify.
++// The npm override does not replace that vendored source. These negative cases
++// are bounded rendering regressions, not a waiver for advisory affected modes.
++const dom = new JSDOM("<!doctype html><html><body></body></html>");
++for (const name of [
++  "window",
++  "document",
++  "customElements",
++  "MutationObserver",
++  "Node",
++  "HTMLElement",
++  "HTMLAnchorElement",
++  "HTMLImageElement",
++  "HTMLInputElement",
++  "DocumentFragment",
++  "DOMParser",
++  "Element",
++]) {
++  if (dom.window[name]) globalThis[name] = dom.window[name];
++}
++const { sanitizeHtml } =
++  await import("../node_modules/monaco-editor/esm/vs/base/browser/domSanitize.js");
++
++test("Monaco removes executable tags, handlers and dangerous link protocols", () => {
++  for (const input of [
++    '<img src="x" onerror="alert(1)"><script>alert(1)</script>',
++    '<a href="javascript:alert(1)">unsafe link</a>',
++    '<svg><a xlink:href="javascript:alert(1)">unsafe SVG</a></svg>',
++    '<math><mtext><img src="x" onerror="alert(1)"></mtext></math>',
++  ]) {
++    const output = document.createElement("div");
++    output.innerHTML = String(sanitizeHtml(input));
++    assert.equal(output.querySelector("script,svg,math,iframe,object"), null);
++    for (const element of output.querySelectorAll("*")) {
++      for (const attribute of element.attributes) {
++        assert.ok(!attribute.name.startsWith("on"));
++        assert.ok(!attribute.value.toLowerCase().includes("javascript:"));
++      }
++    }
++  }
++});
++
++test("Monaco preserves permitted markup and HTTPS links", () => {
++  const output = document.createElement("div");
++  output.innerHTML = String(
++    sanitizeHtml(
++      '<strong>Safe</strong> <a href="https://example.com">link</a>',
++    ),
++  );
++  assert.equal(output.querySelector("strong")?.textContent, "Safe");
++  assert.equal(
++    output.querySelector("a")?.getAttribute("href"),
++    "https://example.com",
++  );
++});
+diff --git a/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/-page.tsx b/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/-page.tsx
+new file mode 100644
+index 0000000000..ca732b6c47
+--- /dev/null
++++ b/frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/-page.tsx
+@@ -0,0 +1,242 @@
++import { Route } from "./index";
++import { useNavigate } from "@tanstack/react-router";
++import { useTabParam } from "@/lib/use-tab-param";
++import { useState } from "react";
++import { useNodeDetail } from "@/lib/hooks/clusters";
++import { StatusBadge } from "@/components/ui/status-badge";
++import { ConfirmDialog } from "@/components/ui/confirm-dialog";
++import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
++import { QueryStates } from "@/components/ui/query-states";
++import {
++  ageMetaItem,
++  KindBadge,
++  MastheadDetails,
++} from "@/components/resources/resource-masthead-details";
++import { ResourceMasthead, PageShell } from "@/components/ui/page";
++import { TabStrip } from "@/components/ui/tabs";
++import { k8sResourcePath } from "@/lib/k8s-paths";
++import { usePermissionDecision } from "@/lib/permission-hooks";
++import { Server } from "lucide-react";
++import { NodeHeaderActions } from "./-node-header-actions";
++import { NodeTabContent, type NodeTabId } from "./-node-tab-content";
++import { NodeMetadataModals } from "./-node-metadata-modals";
++import { useNodeActions } from "./-node-actions";
++
++// ── Tabs ──
++
++const TABS = [
++  { id: "overview", label: "Overview" },
++  { id: "pods", label: "Pods" },
++  { id: "conditions", label: "Conditions" },
++  { id: "info", label: "Info" },
++  { id: "taints", label: "Taints" },
++  { id: "images", label: "Images" },
++  { id: "events", label: "Events" },
++] as const satisfies { id: NodeTabId; label: string }[];
++
++// ── Main Page ──
++
++export function NodeDetailPage() {
++  const params = Route.useParams();
++  return (
++    <NodeDetailPageBody clusterId={params.id} nodeName={params.nodeName} />
++  );
++}
++
++// Split from NodeDetailPage so tests can render the real page body without
++// needing an active router match for Route.useParams() (the route's own
++// params hook requires a live router context; the body doesn't).
++export function NodeDetailPageBody({
++  clusterId,
++  nodeName,
++}: {
++  clusterId: string;
++  nodeName: string;
++}) {
++  const navigate = useNavigate();
++  const [activeTab, setActiveTab] = useTabParam<NodeTabId>(
++    TABS.map((t) => t.id),
++    "overview",
++  );
++
++  const nodeQuery = useNodeDetail(clusterId, nodeName);
++  const { data: node, isLoading, refetch } = nodeQuery;
++  const [showYaml, setShowYaml] = useState(false);
++  const nodeScope = { type: "cluster" as const, id: clusterId };
++  const nodeUpdateDecision = usePermissionDecision(
++    "nodes",
++    "update",
++    nodeScope,
++  );
++  const nodeManageDecision = usePermissionDecision(
++    "nodes",
++    "manage",
++    nodeScope,
++  );
++  const nodeUpdateBlockedReason = nodeUpdateDecision.allowed
++    ? undefined
++    : nodeUpdateDecision.disabledReason;
++
++  const actions = useNodeActions({
++    clusterId,
++    nodeName,
++    refetch,
++    nodeUpdateDecision,
++    nodeManageDecision,
++  });
++
++  if (isLoading || nodeQuery.isError) {
++    return (
++      <QueryStates
++        query={nodeQuery}
++        permission="nodes:read"
++        notFound={
++          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
++            <Server className="h-8 w-8 mb-3" />
++            <p>Node not found</p>
++          </div>
++        }
++      >
++        {() => null}
++      </QueryStates>
++    );
++  }
++
++  if (!node) {
++    return (
++      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
++        <Server className="h-8 w-8 mb-3" />
++        <p>Node not found</p>
++      </div>
++    );
++  }
++
++  return (
++    <PageShell>
++      <p className="sr-only" role="status" aria-live="polite">
++        {actions.nodeOperation.isPending
++          ? `Node operation ${actions.nodeOperation.operationState.phase}`
++          : ""}
++      </p>
++      {/* Header */}
++      <ResourceMasthead
++        backTo={`/dashboard/clusters/${clusterId}/nodes`}
++        backLabel="Back to nodes"
++        eyebrow={<KindBadge kind="Node" />}
++        title={node.name}
++        mono
++        details={
++          <MastheadDetails
++            isPod={false}
++            obj={{
++              metadata: {
++                labels: node.labels,
++                annotations: node.annotations,
++              },
++              status: {
++                conditions: node.conditions.map((c) => ({ ...c })),
++              },
++            }}
++          />
++        }
++        status={
++          <>
++            <StatusBadge status={node.status} />
++            {node.unschedulable && (
++              <StatusBadge
++                status="warning"
++                label="Unschedulable"
++                shape="square"
++              />
++            )}
++          </>
++        }
++        meta={[
++          { label: "Roles", value: node.roles.join(", ") },
++          ...[ageMetaItem(node.createdAt)].filter((item) => !!item),
++          { label: "Version", value: node.nodeInfo.kubeletVersion },
++        ]}
++        actions={
++          <NodeHeaderActions
++            clusterId={clusterId}
++            nodeName={nodeName}
++            unschedulable={node.unschedulable}
++            onViewYaml={() => setShowYaml(true)}
++            onCordon={actions.handleCordon}
++            onUncordon={actions.handleUncordon}
++            onDrainClick={() => actions.setShowDrain(true)}
++            onDeleted={() =>
++              void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
++            }
++            cordonPending={actions.cordonPending}
++            uncordonPending={actions.uncordonPending}
++            drainPending={actions.drainPending}
++            nodeUpdateDecision={nodeUpdateDecision}
++            nodeManageDecision={nodeManageDecision}
++          />
++        }
++      />
++
++      {/* Tabs */}
++      <TabStrip
++        tabs={TABS.map((tab) => {
++          const count =
++            tab.id === "pods"
++              ? node.pods.length
++              : tab.id === "taints"
++                ? node.taints.length
++                : tab.id === "events"
++                  ? node.events.length
++                  : 0;
++          return {
++            key: tab.id,
++            label: tab.label,
++            count: count > 0 ? count : undefined,
++          };
++        })}
++        value={activeTab}
++        onChange={setActiveTab}
++        aria-label="Node detail"
++      />
++
++      {/* Tab Content */}
++      <NodeTabContent
++        activeTab={activeTab}
++        node={node}
++        actions={actions}
++        canUpdate={nodeUpdateDecision.allowed}
++        blockedReason={nodeUpdateBlockedReason}
++      />
++
++      {/* YAML Dialog */}
++      <YamlViewDialog
++        open={showYaml}
++        onClose={() => setShowYaml(false)}
++        clusterId={clusterId}
++        k8sPath={k8sResourcePath("nodes", nodeName)}
++        title={`Node: ${nodeName}`}
++        allowEdit={nodeUpdateDecision.allowed}
++        forceConflictPermission={nodeManageDecision}
++      />
++
++      {/* Drain Confirm Dialog */}
++      <ConfirmDialog
++        open={actions.showDrain}
++        onClose={() => actions.setShowDrain(false)}
++        onConfirm={actions.handleDrain}
++        title="Drain Node"
++        description="This will cordon the node and evict all non-DaemonSet pods. Workloads will be rescheduled to other nodes."
++        confirmValue={nodeName}
++        confirmText="Drain"
++        variant="destructive"
++        loading={actions.drainPending}
++      />
++
++      <NodeMetadataModals
++        actions={actions}
++        canUpdate={nodeUpdateDecision.allowed}
++        blockedReason={nodeUpdateBlockedReason}
++      />
++    </PageShell>
++  );
++}
+diff --git a/frontend/tests/browser-components/reliability.spec.ts b/frontend/tests/browser-components/reliability.spec.ts
+new file mode 100644
+index 0000000000..0975ff86b6
+--- /dev/null
++++ b/frontend/tests/browser-components/reliability.spec.ts
+@@ -0,0 +1,60 @@
++import { expect, test } from "@playwright/test";
++import { load } from "js-yaml";
++
++test("widgets recover from an empty scope and share one refresh", async ({
++  page,
++}) => {
++  await page.clock.install();
++  await page.goto("/?reliability");
++  await expect(page.getByLabel("Requests", { exact: true })).toHaveText("1");
++  await page.getByRole("button", { name: "Scope A" }).click();
++  await expect(page.getByText("Scope a widget 1")).toBeVisible();
++  await expect(page.getByLabel("Requests", { exact: true })).toHaveText("2");
++  await page.clock.fastForward(5001);
++  await expect(page.getByLabel("Requests", { exact: true })).toHaveText("3");
++  await page.getByRole("button", { name: "Scope B" }).click();
++  await expect(page.getByText("Scope b widget 1")).toBeVisible();
++  await expect(page.getByText("Scope a widget 1")).toHaveCount(0);
++  await expect(page.getByLabel("Requests", { exact: true })).toHaveText("4");
++});
++
++test("literal annotation survives Form to YAML to Form and submission", async ({
++  page,
++}) => {
++  await page.goto("/?reliability");
++  await page.getByText("Chart configuration — 1").click();
++  await page
++    .getByRole("textbox", { name: "Literal annotation", exact: true })
++    .fill("edited");
++  await page.getByRole("button", { name: "Edit YAML" }).click();
++  const yaml = page.getByRole("textbox", { name: "Values YAML" });
++  const value = await yaml.inputValue();
++  expect(load(value)).toEqual({
++    annotations: {
++      "example.com/key": "edited",
++      example: { "com/key": "nested" },
++    },
++    custom: { untouched: true },
++    hosts: ["one", "two"],
++  });
++  await yaml.fill(value.replace("edited", "yaml-edit"));
++  await page.getByRole("button", { name: "Use form" }).click();
++  await page.getByText("Chart configuration — 1").click();
++  await expect(
++    page.getByRole("textbox", { name: "Literal annotation", exact: true }),
++  ).toHaveValue("yaml-edit");
++  await expect(
++    page.getByRole("textbox", { name: "Nested annotation", exact: true }),
++  ).toHaveValue("nested");
++  await page.getByRole("button", { name: "Submit values" }).click();
++  expect(
++    load((await page.getByLabel("Submitted values").textContent()) ?? ""),
++  ).toEqual({
++    annotations: {
++      "example.com/key": "yaml-edit",
++      example: { "com/key": "nested" },
++    },
++    custom: { untouched: true },
++    hosts: ["one", "two"],
++  });
++});
+diff --git a/frontend/tests/browser-components/reliability.tsx b/frontend/tests/browser-components/reliability.tsx
+new file mode 100644
+index 0000000000..8025b4c603
+--- /dev/null
++++ b/frontend/tests/browser-components/reliability.tsx
+@@ -0,0 +1,128 @@
++import { useState } from "react";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { WidgetGrid } from "@/components/dashboards/widget-grid";
++import { ToolCatalogFields } from "@/components/clusters/tool-catalog-fields";
++import {
++  dumpHelmValuesYAML,
++  parseHelmValuesYAML,
++  type HelmValuesObject,
++} from "@/lib/helm-values-schema";
++import { mergeCatalogValues } from "@/lib/catalog-configuration";
++import type { ToolPreviewResponse } from "@/types";
++
++const base = {
++  annotations: { "example.com/key": "old", example: { "com/key": "nested" } },
++  custom: { untouched: true },
++  hosts: ["one", "two"],
++};
++const charts: ToolPreviewResponse["charts"] = [
++  {
++    chartName: "fixture",
++    chartVersion: "1",
++    releaseName: "fixture",
++    namespace: "apps",
++    valuesYaml: dumpHelmValuesYAML(base),
++    catalogVersion: {
++      version: "1",
++      available: true,
++      recommended: true,
++      revoked: false,
++      deprecated: false,
++      supportTier: "upstream",
++      configuration: {
++        namespace: "apps",
++        presets: [],
++        defaultPreset: "",
++        schema: {
++          type: "object",
++          properties: {
++            annotations: {
++              type: "object",
++              properties: {
++                "example.com/key": {
++                  type: "string",
++                  title: "Literal annotation",
++                },
++                example: {
++                  type: "object",
++                  properties: {
++                    "com/key": { type: "string", title: "Nested annotation" },
++                  },
++                },
++              },
++            },
++          },
++        },
++      },
++    },
++  },
++];
++const client = new QueryClient({
++  defaultOptions: { queries: { retry: false } },
++});
++export function ReliabilityFixture() {
++  const [scope, setScope] = useState("empty");
++  const [requests, setRequests] = useState(0);
++  const [overrides, setOverrides] = useState<HelmValuesObject>({});
++  const [yaml, setYaml] = useState<string | null>(null);
++  const [submitted, setSubmitted] = useState("");
++  const values = mergeCatalogValues(base, overrides);
++  return (
++    <QueryClientProvider client={client}>
++      <main>
++        <button onClick={() => setScope("a")}>Scope A</button>
++        <button onClick={() => setScope("b")}>Scope B</button>
++        <output aria-label="Requests">{requests}</output>
++        <WidgetGrid
++          scope={["browser", scope]}
++          fetcher={async () => {
++            setRequests((count) => count + 1);
++            return scope === "empty"
++              ? []
++              : [1, 2].map((id) => ({
++                  id: `${scope}-${id}`,
++                  name: `Scope ${scope} widget ${id}`,
++                  widgetType: "prom_stat",
++                  specResolved: {},
++                  grid: { x: 0, y: 0, w: 4, h: 2 },
++                  refreshSeconds: 5,
++                }));
++          }}
++        />
++        {yaml === null ? (
++          <>
++            <ToolCatalogFields
++              charts={charts}
++              clusterId="fixture"
++              overrides={overrides}
++              onChange={setOverrides}
++            />
++            <button onClick={() => setYaml(dumpHelmValuesYAML(values))}>
++              Edit YAML
++            </button>
++          </>
++        ) : (
++          <>
++            <textarea
++              aria-label="Values YAML"
++              value={yaml}
++              onChange={(e) => setYaml(e.target.value)}
++            />
++            <button
++              onClick={() => {
++                setOverrides(parseHelmValuesYAML(yaml) ?? {});
++                setYaml(null);
++              }}
++            >
++              Use form
++            </button>
++          </>
++        )}
++        <button onClick={() => setSubmitted(dumpHelmValuesYAML(values))}>
++          Submit values
++        </button>
++        <output aria-label="Submitted values">{submitted}</output>
++      </main>
++    </QueryClientProvider>
++  );
++}
+diff --git a/internal/agent/delivery/system_health.go b/internal/agent/delivery/system_health.go
+new file mode 100644
+index 0000000000..20c00f13f2
+--- /dev/null
++++ b/internal/agent/delivery/system_health.go
+@@ -0,0 +1,52 @@
++package delivery
++
++import (
++	appsv1 "k8s.io/api/apps/v1"
++	corev1 "k8s.io/api/core/v1"
++)
++
++func sourceControllerWarmStandbyReady(item *appsv1.Deployment) bool {
++	if item == nil || item.Name != "source-controller" || item.Namespace != DeliverySystemNamespace || item.DeletionTimestamp != nil {
++		return false
++	}
++	desired := int32(1)
++	if item.Spec.Replicas != nil {
++		desired = *item.Spec.Replicas
++	}
++	if desired < 1 || item.Generation < 1 || item.Status.ObservedGeneration != item.Generation ||
++		item.Status.UpdatedReplicas != desired || item.Status.Replicas != desired ||
++		item.Status.AvailableReplicas < 1 || item.Status.ReadyReplicas < 1 {
++		return false
++	}
++	for _, condition := range item.Status.Conditions {
++		if condition.Type == appsv1.DeploymentReplicaFailure && condition.Status == corev1.ConditionTrue {
++			return false
++		}
++	}
++	return true
++}
++
++// Flux v2.9.6 evaluates these before its built-in Deployment status reader.
++// The exception is limited to the artifact-serving leader and its intentional
++// warm standby. All replicas must belong to the observed generation, so an old
++// available leader cannot make a failed upgrade look complete. Other system
++// Deployments still require every desired replica to be ready and available.
++// Keep these predicates aligned with sourceControllerWarmStandbyReady; tests
++// evaluate the emitted CEL and the Go readiness check against the same states.
++func systemDeploymentHealthChecks() []any {
++	source := "(metadata.name == 'source-controller' && metadata.namespace == '" + DeliverySystemNamespace + "')"
++	observed := "has(metadata.generation) && metadata.generation > 0 && has(status.observedGeneration) && status.observedGeneration == metadata.generation"
++	rolledOut := "!has(metadata.deletionTimestamp) && (" + observed + ") && has(spec.replicas) && spec.replicas > 0 && " +
++		"has(status.updatedReplicas) && status.updatedReplicas == spec.replicas && has(status.replicas) && status.replicas == spec.replicas"
++	replicaFailure := "(has(status.conditions) && status.conditions.exists(c, c.type == 'ReplicaFailure' && c.status == 'True'))"
++	available := "has(status.availableReplicas) && has(status.readyReplicas) && (" + source +
++		" ? status.availableReplicas > 0 && status.readyReplicas > 0 : status.availableReplicas >= spec.replicas && status.readyReplicas >= spec.replicas)"
++	current := "(" + rolledOut + ") && (" + available + ") && !" + replicaFailure
++	deadline := "(has(status.conditions) && status.conditions.exists(c, c.type == 'Progressing' && c.status == 'False' && has(c.reason) && c.reason == 'ProgressDeadlineExceeded'))"
++	return []any{map[string]any{
++		"apiVersion": "apps/v1", "kind": "Deployment",
++		"inProgress": "!(" + observed + ")",
++		"failed":     replicaFailure + " || (" + deadline + " && !(" + source + " && (" + current + ")))",
++		"current":    current,
++	}}
++}
+diff --git a/internal/agent/delivery/system_health_test.go b/internal/agent/delivery/system_health_test.go
+new file mode 100644
+index 0000000000..4f865e629a
+--- /dev/null
++++ b/internal/agent/delivery/system_health_test.go
+@@ -0,0 +1,150 @@
++package delivery
++
++import (
++	"encoding/json"
++	"testing"
++
++	"github.com/google/cel-go/cel"
++	appsv1 "k8s.io/api/apps/v1"
++	corev1 "k8s.io/api/core/v1"
++	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
++	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
++	"k8s.io/apimachinery/pkg/runtime"
++)
++
++func TestSystemDeploymentHealth(t *testing.T) {
++	t.Parallel()
++	checks := systemDeploymentHealthChecks()
++	expressions := checks[0].(map[string]any)
++	programs := compileDeploymentHealth(t, expressions)
++	fixtures := []map[string]any{}
++	for _, tc := range []struct {
++		name   string
++		mutate func(*appsv1.Deployment)
++		state  string
++		health string
++	}{
++		{"leader and standby beyond deadline", func(*appsv1.Deployment) {}, "current", "healthy"},
++		{"leader lost", func(d *appsv1.Deployment) { d.Status.AvailableReplicas = 0; d.Status.ReadyReplicas = 0 }, "failed", "unavailable"},
++		{"artifact endpoint unavailable", func(d *appsv1.Deployment) { d.Status.ReadyReplicas = 0 }, "failed", "unavailable"},
++		{"leader recovering", func(d *appsv1.Deployment) {
++			d.Status.AvailableReplicas = 0
++			d.Status.ReadyReplicas = 0
++			d.Status.Conditions = nil
++		}, "inProgress", "unavailable"},
++		{"unobserved generation", func(d *appsv1.Deployment) { d.Generation++ }, "inProgress", "degraded"},
++		{"missing observed generation", func(d *appsv1.Deployment) { d.Status.ObservedGeneration = 0 }, "inProgress", "degraded"},
++		{"old leader while new revision fails", func(d *appsv1.Deployment) { d.Status.UpdatedReplicas = 1 }, "failed", "degraded"},
++		{"extra old replica", func(d *appsv1.Deployment) { d.Status.Replicas = 3 }, "failed", "degraded"},
++		{"missing standby replica", func(d *appsv1.Deployment) { d.Status.Replicas = 1 }, "failed", "degraded"},
++		{"replica creation failure", func(d *appsv1.Deployment) {
++			d.Status.Conditions = append(d.Status.Conditions, appsv1.DeploymentCondition{Type: appsv1.DeploymentReplicaFailure, Status: corev1.ConditionTrue})
++		}, "failed", "degraded"},
++		{"scaled to zero", func(d *appsv1.Deployment) {
++			*d.Spec.Replicas = 0
++			d.Status = appsv1.DeploymentStatus{ObservedGeneration: d.Generation}
++		}, "inProgress", "unavailable"},
++		{"deleting", func(d *appsv1.Deployment) { now := metav1.Now(); d.DeletionTimestamp = &now }, "failed", "degraded"},
++		{"ordinary controller unavailable", func(d *appsv1.Deployment) { d.Name = "helm-controller" }, "failed", "degraded"},
++		{"same name outside system", func(d *appsv1.Deployment) { d.Namespace = "other" }, "failed", "degraded"},
++		{"ordinary controller complete", func(d *appsv1.Deployment) {
++			d.Name = "helm-controller"
++			d.Status.AvailableReplicas = 2
++			d.Status.ReadyReplicas = 2
++			d.Status.Conditions = nil
++		}, "current", "healthy"},
++	} {
++		item := readyController(t, "source-controller", false)
++		item.TypeMeta = metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"}
++		replicas := int32(2)
++		item.Spec.Replicas = &replicas
++		item.Status.Replicas = 2
++		item.Status.UpdatedReplicas = 2
++		item.Status.Conditions = []appsv1.DeploymentCondition{
++			{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionFalse},
++			{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse, Reason: "ProgressDeadlineExceeded"},
++		}
++		tc.mutate(item)
++		object, err := runtime.DefaultUnstructuredConverter.ToUnstructured(item)
++		if err != nil {
++			t.Fatal(err)
++		}
++		fixtures = append(fixtures, map[string]any{"name": tc.name, "object": object, "expected": tc.state})
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			if got := evaluateDeploymentHealth(t, programs, object); got != tc.state {
++				t.Fatalf("Flux health = %s, want %s", got, tc.state)
++			}
++			identity := componentIdentity{category: "delivery", owner: "astronomer", method: "flux"}
++			component := deploymentComponent(item, identity)
++			if component.Health != tc.health {
++				t.Fatalf("inventory health = %s, want %s", component.Health, tc.health)
++			}
++			if component.DesiredReplicas != *item.Spec.Replicas || component.ReadyReplicas != item.Status.ReadyReplicas {
++				t.Fatal("inventory changed actual replica counts")
++			}
++			if item.Name == "source-controller" && item.Namespace == DeliverySystemNamespace {
++				if got := deploymentReady(item, item.Name); got != (tc.state == "current") {
++					t.Fatalf("probe readiness = %v, want %v", got, tc.state == "current")
++				}
++			}
++		})
++	}
++	// Verbose output also supplies sanitized fixtures to the pinned Flux runtime
++	// compatibility check, without exposing cluster data or modifying source.
++	evidence, err := json.Marshal(map[string]any{"checks": checks, "fixtures": fixtures})
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Logf("FLUX_HEALTH_FIXTURES=%s", evidence)
++}
++
++func compileDeploymentHealth(t *testing.T, expressions map[string]any) map[string]cel.Program {
++	t.Helper()
++	env, err := cel.NewEnv(cel.Variable("metadata", cel.DynType), cel.Variable("spec", cel.DynType), cel.Variable("status", cel.DynType))
++	if err != nil {
++		t.Fatal(err)
++	}
++	programs := map[string]cel.Program{}
++	for _, name := range []string{"inProgress", "failed", "current"} {
++		ast, issues := env.Compile(expressions[name].(string))
++		if issues.Err() != nil {
++			t.Fatalf("invalid %s: %v", name, issues.Err())
++		}
++		program, err := env.Program(ast)
++		if err != nil {
++			t.Fatal(err)
++		}
++		programs[name] = program
++	}
++	return programs
++}
++
++func evaluateDeploymentHealth(t *testing.T, programs map[string]cel.Program, object map[string]any) string {
++	t.Helper()
++	for _, name := range []string{"inProgress", "failed", "current"} {
++		result, _, err := programs[name].Eval(object)
++		if err != nil {
++			t.Fatalf("evaluate %s: %v", name, err)
++		}
++		if result.Value() == true {
++			return name
++		}
++	}
++	return "inProgress"
++}
++
++func TestSystemObjectsRetainWaitAndDeploymentHealthChecks(t *testing.T) {
++	t.Parallel()
++	objects := systemObjects(systemReleaseFixture())
++	kustomization := objects[len(objects)-1]
++	wait, _, err := unstructured.NestedBool(kustomization.Object, "spec", "wait")
++	if err != nil || !wait {
++		t.Fatal("system rollout must wait for resource health")
++	}
++	checks, found, err := unstructured.NestedSlice(kustomization.Object, "spec", "healthCheckExprs")
++	if err != nil || !found || len(checks) != 1 {
++		t.Fatal("missing Deployment health expressions")
++	}
++	compileDeploymentHealth(t, checks[0].(map[string]any))
++}
+diff --git a/internal/auth/streamauth_boundary_test.go b/internal/auth/streamauth_boundary_test.go
+new file mode 100644
+index 0000000000..3dfa5b28b8
+--- /dev/null
++++ b/internal/auth/streamauth_boundary_test.go
+@@ -0,0 +1,64 @@
++package auth
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++)
++
++func TestStreamRequiresAccessJWT(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"access", "refresh", PurposeTOTPChallenge, PurposeTOTPEnrollOnly} {
++		for _, stream := range []string{StreamKindExec, StreamKindShell, StreamKindLogs, StreamKindEvents} {
++			t.Run(kind+"/"+stream, func(t *testing.T) {
++				t.Parallel()
++				manager := MustNewJWTManager("test-stream-boundary", 60)
++				userID := uuid.New()
++				var token string
++				var err error
++				switch kind {
++				case "access":
++					token, err = manager.GenerateAccessToken(userID)
++				case "refresh":
++					token, err = manager.GenerateRefreshToken(userID)
++				default:
++					token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
++				}
++				if err != nil {
++					t.Fatal(err)
++				}
++				request := httptest.NewRequest(http.MethodGet, "/stream", nil)
++				request.Header.Set("Authorization", "Bearer "+token)
++				got, ok := AuthorizeStreamRequestWithTickets(request, nil, manager, nil, stream, uuid.New())
++				if kind == "access" {
++					if !ok || got != userID {
++						t.Fatal("valid access JWT rejected")
++					}
++				} else if ok || got != uuid.Nil {
++					t.Fatal("non-access JWT accepted as a stream credential")
++				}
++			})
++		}
++	}
++}
++
++func TestStreamValidationPreservesRequestCancellation(t *testing.T) {
++	t.Parallel()
++	manager := MustNewJWTManager("test-stream-context", 60)
++	token, err := manager.GenerateAccessToken(uuid.New())
++	if err != nil {
++		t.Fatal(err)
++	}
++	manager.SetRevocationChecker(newFakeRevocationChecker())
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	request := httptest.NewRequestWithContext(ctx, http.MethodGet, "/stream", nil)
++	request.Header.Set("Authorization", "Bearer "+token)
++	if _, ok := AuthorizeStreamRequest(request, nil, manager); ok {
++		t.Fatal("canceled revocation lookup authenticated the stream")
++	}
++}
+diff --git a/internal/db/queries/catalog_app_projection.sql b/internal/db/queries/catalog_app_projection.sql
+new file mode 100644
+index 0000000000..e3e19b4c7c
+--- /dev/null
++++ b/internal/db/queries/catalog_app_projection.sql
+@@ -0,0 +1,44 @@
++-- The Apps read model projects durable Delivery state before pagination. It
++-- never mutates/deletes compatibility rows while serving a read.
++-- name: ListProjectedClusterApps :many
++SELECT sqlc.embed(ic),
++  (CASE
++    WHEN dt.id IS NULL THEN ic.status
++    WHEN dt.deletion_state = 'deleting' THEN 'uninstalling'
++    WHEN d.phase IN ('failed', 'timed_out', 'rollback_failed') THEN
++      CASE WHEN ic.status IN ('upgrading','pending_upgrade') THEN 'failed_upgrade'
++           WHEN ic.status IN ('rolling_back','pending_rollback') THEN 'failed_rollback'
++           ELSE 'failed_install' END
++    WHEN d.phase = 'degraded' THEN 'degraded'
++    WHEN dt.suspended OR d.phase = 'suspended' THEN 'suspended'
++    WHEN d.phase = 'ready' AND d.desired_generation = dt.generation
++      AND d.observed_generation = d.desired_generation
++      AND d.observed_spec_digest = d.desired_spec_digest THEN 'installed'
++    WHEN d.phase IS NULL OR d.phase IN ('pending','blocked','applying','ready') THEN
++      CASE WHEN ic.status IN ('upgrading','pending_upgrade') THEN 'upgrading'
++           WHEN ic.status IN ('rolling_back','pending_rollback') THEN 'rolling_back'
++           ELSE 'installing' END
++    ELSE 'unknown'
++  END)::text AS projected_status,
++  hcv.version AS chart_version, hcv.app_version AS chart_app_version,
++  hc.id AS chart_id, hc.name AS chart_name, hc.display_name AS chart_display_name,
++  hc.description AS chart_description, hc.icon_url AS chart_icon_url,
++  hc.category AS chart_category, hr.name AS repo_name, hr.repo_type AS repo_type
++FROM installed_charts ic
++LEFT JOIN delivery_targets dt ON dt.id = ic.request_id
++LEFT JOIN cluster_deployments d ON d.target_id = dt.id AND d.cluster_id = ic.cluster_id
++LEFT JOIN helm_chart_versions hcv ON ic.chart_version_id = hcv.id
++LEFT JOIN helm_charts hc ON hcv.chart_id = hc.id
++LEFT JOIN helm_repositories hr ON hc.repository_id = hr.id
++WHERE ic.cluster_id = sqlc.arg(cluster_id)
++  AND COALESCE(dt.deletion_state, 'active') <> 'deleted'
++  AND ic.status <> 'uninstalled'
++ORDER BY ic.created_at DESC, ic.id DESC
++LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
++
++-- name: CountProjectedClusterApps :one
++SELECT count(*) FROM installed_charts ic
++LEFT JOIN delivery_targets dt ON dt.id = ic.request_id
++WHERE ic.cluster_id = $1
++  AND COALESCE(dt.deletion_state, 'active') <> 'deleted'
++  AND ic.status <> 'uninstalled';
+diff --git a/internal/db/sqlc/catalog_app_projection.sql.go b/internal/db/sqlc/catalog_app_projection.sql.go
+new file mode 100644
+index 0000000000..b78027a9a6
+--- /dev/null
++++ b/internal/db/sqlc/catalog_app_projection.sql.go
+@@ -0,0 +1,141 @@
++// Code generated by sqlc. DO NOT EDIT.
++// versions:
++//   sqlc v1.31.1
++// source: catalog_app_projection.sql
++
++package sqlc
++
++import (
++	"context"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgtype"
++)
++
++const countProjectedClusterApps = `-- name: CountProjectedClusterApps :one
++SELECT count(*) FROM installed_charts ic
++LEFT JOIN delivery_targets dt ON dt.id = ic.request_id
++WHERE ic.cluster_id = $1
++  AND COALESCE(dt.deletion_state, 'active') <> 'deleted'
++  AND ic.status <> 'uninstalled'
++`
++
++func (q *Queries) CountProjectedClusterApps(ctx context.Context, clusterID uuid.UUID) (int64, error) {
++	row := q.db.QueryRow(ctx, countProjectedClusterApps, clusterID)
++	var count int64
++	err := row.Scan(&count)
++	return count, err
++}
++
++const listProjectedClusterApps = `-- name: ListProjectedClusterApps :many
++SELECT ic.id, ic.cluster_id, ic.chart_version_id, ic.release_name, ic.namespace, ic.values_override, ic.status, ic.revision, ic.notes, ic.installed_by_id, ic.request_id, ic.tool_slug, ic.preset_used, ic.created_at, ic.updated_at, ic.drift_detected, ic.drift_detail, ic.drift_checked_at, ic.drift_locked_until, ic.drift_claim_token, ic.project_id,
++  (CASE
++    WHEN dt.id IS NULL THEN ic.status
++    WHEN dt.deletion_state = 'deleting' THEN 'uninstalling'
++    WHEN d.phase IN ('failed', 'timed_out', 'rollback_failed') THEN
++      CASE WHEN ic.status IN ('upgrading','pending_upgrade') THEN 'failed_upgrade'
++           WHEN ic.status IN ('rolling_back','pending_rollback') THEN 'failed_rollback'
++           ELSE 'failed_install' END
++    WHEN d.phase = 'degraded' THEN 'degraded'
++    WHEN dt.suspended OR d.phase = 'suspended' THEN 'suspended'
++    WHEN d.phase = 'ready' AND d.desired_generation = dt.generation
++      AND d.observed_generation = d.desired_generation
++      AND d.observed_spec_digest = d.desired_spec_digest THEN 'installed'
++    WHEN d.phase IS NULL OR d.phase IN ('pending','blocked','applying','ready') THEN
++      CASE WHEN ic.status IN ('upgrading','pending_upgrade') THEN 'upgrading'
++           WHEN ic.status IN ('rolling_back','pending_rollback') THEN 'rolling_back'
++           ELSE 'installing' END
++    ELSE 'unknown'
++  END)::text AS projected_status,
++  hcv.version AS chart_version, hcv.app_version AS chart_app_version,
++  hc.id AS chart_id, hc.name AS chart_name, hc.display_name AS chart_display_name,
++  hc.description AS chart_description, hc.icon_url AS chart_icon_url,
++  hc.category AS chart_category, hr.name AS repo_name, hr.repo_type AS repo_type
++FROM installed_charts ic
++LEFT JOIN delivery_targets dt ON dt.id = ic.request_id
++LEFT JOIN cluster_deployments d ON d.target_id = dt.id AND d.cluster_id = ic.cluster_id
++LEFT JOIN helm_chart_versions hcv ON ic.chart_version_id = hcv.id
++LEFT JOIN helm_charts hc ON hcv.chart_id = hc.id
++LEFT JOIN helm_repositories hr ON hc.repository_id = hr.id
++WHERE ic.cluster_id = $1
++  AND COALESCE(dt.deletion_state, 'active') <> 'deleted'
++  AND ic.status <> 'uninstalled'
++ORDER BY ic.created_at DESC, ic.id DESC
++LIMIT $3 OFFSET $2
++`
++
++type ListProjectedClusterAppsParams struct {
++	ClusterID   uuid.UUID `json:"cluster_id"`
++	QueryOffset int32     `json:"query_offset"`
++	QueryLimit  int32     `json:"query_limit"`
++}
++
++type ListProjectedClusterAppsRow struct {
++	InstalledChart   InstalledChart `json:"installed_chart"`
++	ProjectedStatus  string         `json:"projected_status"`
++	ChartVersion     pgtype.Text    `json:"chart_version"`
++	ChartAppVersion  pgtype.Text    `json:"chart_app_version"`
++	ChartID          pgtype.UUID    `json:"chart_id"`
++	ChartName        pgtype.Text    `json:"chart_name"`
++	ChartDisplayName pgtype.Text    `json:"chart_display_name"`
++	ChartDescription pgtype.Text    `json:"chart_description"`
++	ChartIconUrl     pgtype.Text    `json:"chart_icon_url"`
++	ChartCategory    pgtype.Text    `json:"chart_category"`
++	RepoName         pgtype.Text    `json:"repo_name"`
++	RepoType         pgtype.Text    `json:"repo_type"`
++}
++
++// The Apps read model projects durable Delivery state before pagination. It
++// never mutates/deletes compatibility rows while serving a read.
++func (q *Queries) ListProjectedClusterApps(ctx context.Context, arg ListProjectedClusterAppsParams) ([]ListProjectedClusterAppsRow, error) {
++	rows, err := q.db.Query(ctx, listProjectedClusterApps, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	items := []ListProjectedClusterAppsRow{}
++	for rows.Next() {
++		var i ListProjectedClusterAppsRow
++		if err := rows.Scan(
++			&i.InstalledChart.ID,
++			&i.InstalledChart.ClusterID,
++			&i.InstalledChart.ChartVersionID,
++			&i.InstalledChart.ReleaseName,
++			&i.InstalledChart.Namespace,
++			&i.InstalledChart.ValuesOverride,
++			&i.InstalledChart.Status,
++			&i.InstalledChart.Revision,
++			&i.InstalledChart.Notes,
++			&i.InstalledChart.InstalledByID,
++			&i.InstalledChart.RequestID,
++			&i.InstalledChart.ToolSlug,
++			&i.InstalledChart.PresetUsed,
++			&i.InstalledChart.CreatedAt,
++			&i.InstalledChart.UpdatedAt,
++			&i.InstalledChart.DriftDetected,
++			&i.InstalledChart.DriftDetail,
++			&i.InstalledChart.DriftCheckedAt,
++			&i.InstalledChart.DriftLockedUntil,
++			&i.InstalledChart.DriftClaimToken,
++			&i.InstalledChart.ProjectID,
++			&i.ProjectedStatus,
++			&i.ChartVersion,
++			&i.ChartAppVersion,
++			&i.ChartID,
++			&i.ChartName,
++			&i.ChartDisplayName,
++			&i.ChartDescription,
++			&i.ChartIconUrl,
++			&i.ChartCategory,
++			&i.RepoName,
++			&i.RepoType,
++		); err != nil {
++			return nil, err
++		}
++		items = append(items, i)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return items, nil
++}
+diff --git a/internal/drcrypto/keybundle_catalog_test.go b/internal/drcrypto/keybundle_catalog_test.go
+new file mode 100644
+index 0000000000..0c1852538a
+--- /dev/null
++++ b/internal/drcrypto/keybundle_catalog_test.go
+@@ -0,0 +1,226 @@
++package drcrypto
++
++import (
++	"archive/tar"
++	"bytes"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestKeyBundleCatalogTrustRoundTrip(t *testing.T) {
++	t.Parallel()
++	for _, directories := range [][]string{{"catalog-ca"}, {"catalog-signature-trust"}, {"catalog-ca", "catalog-signature-trust"}} {
++		t.Run(fmt.Sprint(directories), func(t *testing.T) {
++			t.Parallel()
++			f := newFixture(t)
++			source := keySource(t, f)
++			for _, dir := range directories {
++				if err := os.Mkdir(filepath.Join(source, dir), 0700); err != nil {
++					t.Fatal(err)
++				}
++				if err := os.WriteFile(filepath.Join(source, dir, ".trust.pem"), []byte("synthetic trust"), 0600); err != nil {
++					t.Fatal(err)
++				}
++			}
++			archive := filepath.Join(f.root, "keys.tar")
++			if err := CreateKeyBundle(source, archive); err != nil {
++				t.Fatal(err)
++			}
++			destination := filepath.Join(f.root, "restored")
++			if err := ExtractKeyBundle(archive, destination); err != nil {
++				t.Fatal(err)
++			}
++			assertRestoredCatalogTrust(t, destination, directories)
++		})
++	}
++}
++
++func assertRestoredCatalogTrust(t *testing.T, destination string, directories []string) {
++	t.Helper()
++	for _, dir := range directories {
++		path := filepath.Join(destination, dir, ".trust.pem")
++		content, err := os.ReadFile(path)
++		if err != nil || string(content) != "synthetic trust" {
++			t.Fatalf("trust file was not restored: %v", err)
++		}
++		for _, entry := range []struct {
++			path string
++			mode os.FileMode
++		}{{destination, 0700}, {filepath.Dir(path), 0700}, {path, 0600}} {
++			info, err := os.Stat(entry.path)
++			if err != nil || info.Mode().Perm() != entry.mode {
++				t.Fatalf("wrong private permissions for %s: %v", entry.path, err)
++			}
++		}
++	}
++}
++
++func TestKeyBundleCatalogTrustLongKeyIsDeterministic(t *testing.T) {
++	t.Parallel()
++	f := newFixture(t)
++	source := keySource(t, f)
++	directory := filepath.Join(source, "catalog-signature-trust")
++	if err := os.Mkdir(directory, 0700); err != nil {
++		t.Fatal(err)
++	}
++	name := strings.Repeat("k", 249) + ".pem"
++	if err := os.WriteFile(filepath.Join(directory, name), []byte("synthetic trust"), 0600); err != nil {
++		t.Fatal(err)
++	}
++	first, second := filepath.Join(f.root, "first.tar"), filepath.Join(f.root, "second.tar")
++	for _, path := range []string{first, second} {
++		if err := CreateKeyBundle(source, path); err != nil {
++			t.Fatal(err)
++		}
++	}
++	a, err := os.ReadFile(first)
++	if err != nil {
++		t.Fatal(err)
++	}
++	b, err := os.ReadFile(second)
++	if err != nil || !bytes.Equal(a, b) {
++		t.Fatalf("long-key archive is not deterministic: %v", err)
++	}
++	destination := filepath.Join(f.root, "restored")
++	if err := ExtractKeyBundle(first, destination); err != nil {
++		t.Fatal(err)
++	}
++	content, err := os.ReadFile(filepath.Join(destination, "catalog-signature-trust", name))
++	if err != nil || string(content) != "synthetic trust" {
++		t.Fatalf("long Secret key did not round trip: %v", err)
++	}
++}
++
++func TestKeyBundleCatalogTrustRejectsUnsafeArchives(t *testing.T) {
++	t.Parallel()
++	for _, tc := range []struct {
++		name    string
++		members []tar.Header
++	}{
++		{"traversal", []tar.Header{{Name: "catalog-ca/../escape", Typeflag: tar.TypeReg, Size: 1}}},
++		{"absolute", []tar.Header{{Name: "/catalog-ca/ca.pem", Typeflag: tar.TypeReg, Size: 1}}},
++		{"unknown directory", []tar.Header{{Name: "other/ca.pem", Typeflag: tar.TypeReg, Size: 1}}},
++		{"nested directory", []tar.Header{{Name: "catalog-ca/nested/ca.pem", Typeflag: tar.TypeReg, Size: 1}}},
++		{"symlink", []tar.Header{{Name: "catalog-ca/ca.pem", Typeflag: tar.TypeSymlink, Linkname: "/tmp/escape"}}},
++		{"hardlink", []tar.Header{{Name: "catalog-ca/ca.pem", Typeflag: tar.TypeLink, Linkname: "SECRET_KEY"}}},
++		{"duplicate", []tar.Header{{Name: "catalog-ca/ca.pem", Typeflag: tar.TypeReg, Size: 1}, {Name: "catalog-ca/ca.pem", Typeflag: tar.TypeReg, Size: 1}}},
++		{"file before directory", []tar.Header{{Name: "catalog-ca", Typeflag: tar.TypeReg, Size: 1}, {Name: "catalog-ca/ca.pem", Typeflag: tar.TypeReg, Size: 1}}},
++		{"directory before file", []tar.Header{{Name: "catalog-ca/ca.pem", Typeflag: tar.TypeReg, Size: 1}, {Name: "catalog-ca", Typeflag: tar.TypeReg, Size: 1}}},
++		{"oversized", []tar.Header{{Name: "catalog-ca/ca.pem", Typeflag: tar.TypeReg, Size: (1 << 20) + 1}}},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			f := newFixture(t)
++			members := append([]tar.Header{{Name: "SECRET_KEY", Typeflag: tar.TypeReg, Size: 1}, {Name: "ASTRONOMER_ENCRYPTION_KEY", Typeflag: tar.TypeReg, Size: 1}}, tc.members...)
++			archive := f.write(t, "bad.tar", testKeyArchive(t, members))
++			destination := filepath.Join(f.root, "restore")
++			if err := ExtractKeyBundle(archive, destination); err == nil {
++				t.Fatal("unsafe archive accepted")
++			}
++			if _, err := os.Stat(destination); !os.IsNotExist(err) {
++				t.Fatal("rejected archive created destination")
++			}
++		})
++	}
++}
++
++func TestKeyBundleCatalogTrustRejectsUnsafeSources(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"empty", "symlink", "nested", "unknown", "empty file"} {
++		t.Run(kind, func(t *testing.T) {
++			t.Parallel()
++			f := newFixture(t)
++			source := keySource(t, f)
++			dir := filepath.Join(source, "catalog-ca")
++			if kind == "unknown" {
++				dir = filepath.Join(source, "unknown")
++			}
++			if err := os.Mkdir(dir, 0700); err != nil {
++				t.Fatal(err)
++			}
++			var err error
++			switch kind {
++			case "symlink":
++				err = os.Symlink(filepath.Join(source, "SECRET_KEY"), filepath.Join(dir, "ca.pem"))
++			case "nested":
++				err = os.Mkdir(filepath.Join(dir, "nested"), 0700)
++			case "empty file":
++				err = os.WriteFile(filepath.Join(dir, "ca.pem"), nil, 0600)
++			}
++			if err != nil {
++				t.Fatal(err)
++			}
++			output := filepath.Join(f.root, "keys.tar")
++			if err := CreateKeyBundle(source, output); err == nil {
++				t.Fatal("unsafe source accepted")
++			}
++			if _, err := os.Stat(output); !os.IsNotExist(err) {
++				t.Fatal("rejected source published archive")
++			}
++		})
++	}
++}
++
++func TestKeyBundleCatalogTrustLimits(t *testing.T) {
++	t.Parallel()
++	for _, tc := range []struct {
++		name        string
++		count, size int
++	}{
++		{"file count", maxKeyBundleFiles, 1},
++		{"total bytes", 17, maxKeyFileBytes},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			f := newFixture(t)
++			source := keySource(t, f)
++			dir := filepath.Join(source, "catalog-ca")
++			if err := os.Mkdir(dir, 0700); err != nil {
++				t.Fatal(err)
++			}
++			members := []tar.Header{{Name: "SECRET_KEY", Typeflag: tar.TypeReg, Size: 3}, {Name: "ASTRONOMER_ENCRYPTION_KEY", Typeflag: tar.TypeReg, Size: 3}}
++			content := bytes.Repeat([]byte("x"), tc.size)
++			for i := 0; i < tc.count; i++ {
++				name := fmt.Sprintf("catalog-ca/key-%04d.pem", i)
++				if err := os.WriteFile(filepath.Join(source, name), content, 0600); err != nil {
++					t.Fatal(err)
++				}
++				members = append(members, tar.Header{Name: name, Typeflag: tar.TypeReg, Size: int64(tc.size)})
++			}
++			if err := CreateKeyBundle(source, filepath.Join(f.root, "created.tar")); err == nil {
++				t.Fatal("creator accepted excessive bundle")
++			}
++			archive := f.write(t, "excessive.tar", testKeyArchive(t, members))
++			destination := filepath.Join(f.root, "restored")
++			if err := ExtractKeyBundle(archive, destination); err == nil {
++				t.Fatal("extractor accepted excessive bundle")
++			}
++			if _, err := os.Stat(destination); !os.IsNotExist(err) {
++				t.Fatal("rejected archive created destination")
++			}
++		})
++	}
++}
++
++func testKeyArchive(t *testing.T, members []tar.Header) []byte {
++	t.Helper()
++	var buffer bytes.Buffer
++	writer := tar.NewWriter(&buffer)
++	for _, member := range members {
++		if err := writer.WriteHeader(&member); err != nil {
++			t.Fatal(err)
++		}
++		if member.Size > 0 {
++			if _, err := writer.Write(make([]byte, member.Size)); err != nil {
++				t.Fatal(err)
++			}
++		}
++	}
++	if err := writer.Close(); err != nil {
++		t.Fatal(err)
++	}
++	return buffer.Bytes()
++}
+diff --git a/internal/drcrypto/restore_integration_test.go b/internal/drcrypto/restore_integration_test.go
+new file mode 100644
+index 0000000000..9eab42bef1
+--- /dev/null
++++ b/internal/drcrypto/restore_integration_test.go
+@@ -0,0 +1,213 @@
++//go:build integration
++
++package drcrypto
++
++import (
++	"bytes"
++	"context"
++	"database/sql"
++	"io"
++	"log/slog"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"filippo.io/age"
++	_ "github.com/jackc/pgx/v5/stdlib"
++	"github.com/testcontainers/testcontainers-go/modules/postgres"
++
++	"github.com/alphabravocompany/astronomer-go/internal/db/migrations"
++	columncrypto "github.com/alphabravocompany/astronomer-go/pkg/crypto"
++)
++
++// This is a disposable PostgreSQL rehearsal of the runbook gates, not a
++// claim that an operator-controlled writer restart is automatically fenced.
++func TestDisposableDatabaseRestoreAndRequiredKeyGates(t *testing.T) {
++	t.Parallel()
++	ctx := t.Context()
++	c, err := postgres.Run(ctx, "postgres:17.11-alpine", postgres.WithDatabase("source"), postgres.WithUsername("restore_test"), postgres.WithPassword("disposable-test-only"), postgres.BasicWaitStrategies())
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() {
++		if err := c.Terminate(context.Background()); err != nil {
++			t.Error(err)
++		}
++	})
++	dsn, err := c.ConnectionString(ctx, "sslmode=disable")
++	if err != nil {
++		t.Fatal(err)
++	}
++	db, err := sql.Open("pgx", dsn)
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { _ = db.Close() })
++	if _, err := migrations.Up(ctx, db, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
++		t.Fatal(err)
++	}
++	identity := createRestoreProof(t, ctx, db)
++	run := restoreContainerCommand(t, c)
++	if run("pg_dump", "-U", "restore_test", "-d", "source", "-Fc", "--no-owner", "--no-acl", "-f", "/tmp/restore-test.dump") != 0 {
++		t.Fatal("dump failed")
++	}
++	reader, err := c.CopyFileFromContainer(ctx, "/tmp/restore-test.dump")
++	if err != nil {
++		t.Fatal(err)
++	}
++	dump, err := io.ReadAll(reader)
++	_ = reader.Close()
++	if err != nil {
++		t.Fatal(err)
++	}
++	f := newFixture(t)
++	recovered := authenticateRestoreDump(t, f, dump)
++	if err := c.CopyToContainer(ctx, recovered, "/tmp/authenticated.dump", 0600); err != nil {
++		t.Fatal(err)
++	}
++	if run("createdb", "-U", "restore_test", "restored") != 0 {
++		t.Fatal("create failed")
++	}
++	if run("pg_restore", "-U", "restore_test", "-d", "restored", "--single-transaction", "--exit-on-error", "--no-owner", "--no-acl", "/tmp/authenticated.dump") != 0 {
++		t.Fatal("valid restore failed")
++	}
++	restoredDB, err := sql.Open("pgx", strings.Replace(dsn, "/source?", "/restored?", 1))
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { _ = restoredDB.Close() })
++	var version int64
++	if err := restoredDB.QueryRowContext(ctx, `WITH latest AS (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) SELECT COALESCE(MAX(version_id),0) FROM latest WHERE is_applied`).Scan(&version); err != nil {
++		t.Fatal(err)
++	}
++	if version != migrations.Latest() {
++		t.Fatalf("restored schema %d != %d", version, migrations.Latest())
++	}
++	restoreKeyProof(t, ctx, f, identity, restoredDB)
++	// Compare the restored Goose observation with an intentionally wrong
++	// manifest version using the same query; this must not authorize resume.
++	var matches bool
++	if err := restoredDB.QueryRowContext(ctx, `WITH latest AS (SELECT DISTINCT ON(version_id) version_id,is_applied FROM public.goose_db_version ORDER BY version_id,id DESC) SELECT COALESCE(MAX(version_id),0) = $1 FROM latest WHERE is_applied`, version+1).Scan(&matches); err != nil || matches {
++		t.Fatalf("schema mismatch gate: matches=%v err=%v", matches, err)
++	}
++	// A second restore into the populated target must fail and roll back, not
++	// be treated as success because some objects/data already exist.
++	if run("pg_restore", "-U", "restore_test", "-d", "restored", "--single-transaction", "--exit-on-error", "--no-owner", "--no-acl", "/tmp/authenticated.dump") == 0 {
++		t.Fatal("restore SQL error ignored")
++	}
++	t.Logf("PASS: PostgreSQL 17.11, Goose %d, authenticated dump/keys, optional trust, encrypted column; missing-key/schema-mismatch/restore-error rejected. No management database or writer touched.", version)
++}
++
++func createRestoreProof(t *testing.T, ctx context.Context, db *sql.DB) *age.X25519Identity {
++	t.Helper()
++	identity, err := age.GenerateX25519Identity()
++	if err != nil {
++		t.Fatal(err)
++	}
++	enc, err := columncrypto.NewEncryptor(identity.String())
++	if err != nil {
++		t.Fatal(err)
++	}
++	sealed, err := enc.Encrypt([]byte("synthetic restored credential"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := db.ExecContext(ctx, `CREATE TABLE public.restore_proof(key_id text, algorithm text, ciphertext bytea, nonce bytea)`); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := db.ExecContext(ctx, `INSERT INTO public.restore_proof VALUES($1,$2,$3,$4)`, sealed.KeyID, sealed.Algorithm, sealed.Ciphertext, sealed.Nonce); err != nil {
++		t.Fatal(err)
++	}
++	return identity
++}
++
++func authenticateRestoreDump(t *testing.T, f fixture, dump []byte) []byte {
++	t.Helper()
++	plain := f.write(t, "dump", dump)
++	sealedPath := filepath.Join(f.root, "dump.aead")
++	restored := filepath.Join(f.root, "restored.dump")
++	if err := EncryptFile(plain, sealedPath, f.passphrase, "database-dump", f.context); err != nil {
++		t.Fatal(err)
++	}
++	if err := DecryptFile(sealedPath, restored, filepath.Join(f.root, "missing-key"), "database-dump", f.context); err == nil {
++		t.Fatal("missing key accepted")
++	}
++	if _, err := os.Stat(restored); !os.IsNotExist(err) {
++		t.Fatal("missing key exposed dump")
++	}
++	if err := DecryptFile(sealedPath, restored, f.passphrase, "database-dump", f.context); err != nil {
++		t.Fatal(err)
++	}
++	recovered, err := os.ReadFile(restored)
++	if err != nil || !bytes.Equal(recovered, dump) {
++		t.Fatal("dump did not authenticate/roundtrip")
++	}
++	return recovered
++}
++
++func restoreKeyProof(t *testing.T, ctx context.Context, f fixture, identity *age.X25519Identity, restoredDB *sql.DB) {
++	t.Helper()
++	// Bundle recovery includes both optional trust directories and the actual
++	// key used by the application's column-encryption implementation.
++	source := filepath.Join(f.root, "keys")
++	if err := os.MkdirAll(filepath.Join(source, "catalog-ca"), 0700); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.MkdirAll(filepath.Join(source, "catalog-signature-trust"), 0700); err != nil {
++		t.Fatal(err)
++	}
++	for name, value := range map[string]string{"SECRET_KEY": "synthetic-signing-key", "ASTRONOMER_ENCRYPTION_KEY": identity.String(), "catalog-ca/ca.pem": "synthetic-ca", "catalog-signature-trust/key.pub": "synthetic-trust"} {
++		if err := os.WriteFile(filepath.Join(source, name), []byte(value), 0600); err != nil {
++			t.Fatal(err)
++		}
++	}
++	bundle := filepath.Join(f.root, "keys.tar")
++	bundleCipher := filepath.Join(f.root, "keys.aead")
++	bundlePlain := filepath.Join(f.root, "keys-restored.tar")
++	keys := filepath.Join(f.root, "recovered-keys")
++	for _, err := range []error{CreateKeyBundle(source, bundle), EncryptFile(bundle, bundleCipher, f.passphrase, "key-bundle", f.context), DecryptFile(bundleCipher, bundlePlain, f.passphrase, "key-bundle", f.context), ExtractKeyBundle(bundlePlain, keys)} {
++		if err != nil {
++			t.Fatal(err)
++		}
++	}
++	key, err := os.ReadFile(filepath.Join(keys, "ASTRONOMER_ENCRYPTION_KEY"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	recoveredEnc, err := columncrypto.NewEncryptor(string(key))
++	if err != nil {
++		t.Fatal(err)
++	}
++	var proof columncrypto.Sealed
++	if err := restoredDB.QueryRowContext(ctx, `SELECT key_id,algorithm,ciphertext,nonce FROM public.restore_proof`).Scan(&proof.KeyID, &proof.Algorithm, &proof.Ciphertext, &proof.Nonce); err != nil {
++		t.Fatal(err)
++	}
++	value, err := recoveredEnc.Decrypt(proof)
++	if err != nil || string(value) != "synthetic restored credential" {
++		t.Fatal("restored encrypted column not readable")
++	}
++	for _, name := range []string{"catalog-ca/ca.pem", "catalog-signature-trust/key.pub"} {
++		if _, err := os.ReadFile(filepath.Join(keys, name)); err != nil {
++			t.Fatal(err)
++		}
++	}
++
++}
++
++func restoreContainerCommand(t *testing.T, c *postgres.PostgresContainer) func(...string) int {
++	t.Helper()
++	ctx := t.Context()
++	return func(args ...string) int {
++		t.Helper()
++		code, out, err := c.Exec(ctx, args)
++		if err != nil {
++			t.Fatal(err)
++		}
++		diagnostic, _ := io.ReadAll(out)
++		if code != 0 {
++			t.Logf("command %s failed as observed (exit %d): %s", args[0], code, diagnostic)
++		}
++		return code
++	}
++}
+diff --git a/internal/handler/catalog_app_projection_integration_test.go b/internal/handler/catalog_app_projection_integration_test.go
+new file mode 100644
+index 0000000000..ca8fbfb12c
+--- /dev/null
++++ b/internal/handler/catalog_app_projection_integration_test.go
+@@ -0,0 +1,88 @@
++//go:build integration
++
++package handler
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/go-chi/chi/v5"
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
++)
++
++func TestClusterAppsProjectsDeliveryBeforePagination(t *testing.T) {
++	t.Parallel()
++	ctx, tx := paginationPostgresTx(t)
++	cluster, project, source, bundle, version := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
++	paginationExec(t, ctx, tx, `INSERT INTO clusters(id,name,display_name) VALUES($1,$2,$2)`, cluster, cluster.String())
++	paginationExec(t, ctx, tx, `INSERT INTO projects(id,name,display_name,cluster_id) VALUES($1,$2,$2,$3)`, project, project.String(), cluster)
++	paginationExec(t, ctx, tx, `INSERT INTO delivery_sources(id,project_id,name,source_type,url) VALUES($1,$2,'source','helm_http','https://example.invalid')`, source, project)
++	paginationExec(t, ctx, tx, `INSERT INTO component_bundles(id,project_id,name) VALUES($1,$2,'bundle')`, bundle, project)
++	paginationExec(t, ctx, tx, `INSERT INTO component_bundle_versions(id,bundle_id,source_id,version,renderer,requested_revision,spec_digest) VALUES($1,$2,$3,'1','helm','1','sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`, version, bundle, source)
++	for _, tc := range []struct {
++		name, phase, deletion, stored, want string
++		observed                            int
++	}{
++		{"ready", "ready", "active", "installing", "installed", 1},
++		{"deleting", "ready", "deleting", "installed", "uninstalling", 1},
++		{"failed", "failed", "active", "installing", "failed_install", 1},
++		{"stale", "ready", "active", "upgrading", "upgrading", 0},
++		{"unknown", "removed", "active", "installed", "unknown", 1},
++		{"removed", "removed", "deleted", "uninstalling", "", 1},
++	} {
++		target := uuid.New()
++		paginationExec(t, ctx, tx, `INSERT INTO delivery_targets(id,project_id,name,bundle_version_id,deletion_state) VALUES($1,$2,$3,$4,$5)`, target, project, tc.name, version, tc.deletion)
++		paginationExec(t, ctx, tx, `INSERT INTO cluster_deployments(target_id,cluster_id,phase,desired_generation,observed_generation,desired_spec_digest,observed_spec_digest) VALUES($1,$2,$3,1,$4,'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`, target, cluster, tc.phase, tc.observed)
++		paginationExec(t, ctx, tx, `INSERT INTO installed_charts(cluster_id,project_id,release_name,namespace,status,request_id) VALUES($1,$2,$3,'apps',$4,$5)`, cluster, project, tc.name, tc.stored, target)
++	}
++	h := NewCatalogHandler(sqlc.New(tx))
++	router := chi.NewRouter()
++	router.Get("/clusters/{cluster_id}/apps/", h.ListClusterApps)
++	seen := map[string]string{}
++	for _, offset := range []string{"0", "2", "4", "6"} {
++		request := httptest.NewRequest(http.MethodGet, "/clusters/"+cluster.String()+"/apps/?limit=2&offset="+offset, nil).WithContext(ctx)
++		recorder := httptest.NewRecorder()
++		router.ServeHTTP(recorder, request)
++		if recorder.Code != http.StatusOK {
++			t.Fatalf("%d %s", recorder.Code, recorder.Body.String())
++		}
++		var response struct {
++			Data []struct {
++				ReleaseName string `json:"release_name"`
++				Status      string `json:"status"`
++			} `json:"data"`
++			Pagination struct {
++				Total int `json:"total"`
++			} `json:"pagination"`
++		}
++		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
++			t.Fatal(err)
++		}
++		if response.Pagination.Total != 5 {
++			t.Fatalf("total=%d", response.Pagination.Total)
++		}
++		for _, row := range response.Data {
++			if _, exists := seen[row.ReleaseName]; exists {
++				t.Fatal("duplicate page row")
++			}
++			seen[row.ReleaseName] = row.Status
++		}
++	}
++	want := map[string]string{"ready": "installed", "deleting": "uninstalling", "failed": "failed_install", "stale": "upgrading", "unknown": "unknown"}
++	for name, status := range want {
++		if seen[name] != status {
++			t.Fatalf("%s=%s, want %s", name, seen[name], status)
++		}
++	}
++	if len(seen) != len(want) {
++		t.Fatalf("rows=%v", seen)
++	}
++	var count int
++	if err := tx.QueryRow(ctx, `SELECT count(*) FROM installed_charts WHERE cluster_id=$1`, cluster).Scan(&count); err != nil || count != 6 {
++		t.Fatalf("GET mutated compatibility rows: count=%d err=%v", count, err)
++	}
++}
+diff --git a/internal/handler/catalog_app_projection_test.go b/internal/handler/catalog_app_projection_test.go
+new file mode 100644
+index 0000000000..d450df77d7
+--- /dev/null
++++ b/internal/handler/catalog_app_projection_test.go
+@@ -0,0 +1,46 @@
++package handler
++
++import (
++	"context"
++	"errors"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/go-chi/chi/v5"
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
++)
++
++type unavailableAppsProjection struct {
++	*minimalCatalogQuerier
++	failList bool
++}
++
++func (q unavailableAppsProjection) ListProjectedClusterApps(context.Context, sqlc.ListProjectedClusterAppsParams) ([]sqlc.ListProjectedClusterAppsRow, error) {
++	if q.failList {
++		return nil, errors.New("private backend diagnostic")
++	}
++	return []sqlc.ListProjectedClusterAppsRow{{ProjectedStatus: "installed"}}, nil
++}
++func (unavailableAppsProjection) CountProjectedClusterApps(context.Context, uuid.UUID) (int64, error) {
++	return 0, errors.New("private backend diagnostic")
++}
++func TestClusterAppsFailsClosedOnProjectionReadError(t *testing.T) {
++	t.Parallel()
++	for _, failList := range []bool{true, false} {
++		t.Run(map[bool]string{true: "list", false: "count"}[failList], func(t *testing.T) {
++			t.Parallel()
++			h := NewCatalogHandler(unavailableAppsProjection{failList: failList})
++			r := chi.NewRouter()
++			r.Get("/clusters/{cluster_id}/apps/", h.ListClusterApps)
++			w := httptest.NewRecorder()
++			r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/clusters/"+uuid.NewString()+"/apps/", nil))
++			if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "private backend") || strings.Contains(w.Body.String(), "installed") {
++				t.Fatalf("unexpected error response: %d %s", w.Code, w.Body.String())
++			}
++		})
++	}
++}
+diff --git a/internal/server/delivery_idempotency_scope_test.go b/internal/server/delivery_idempotency_scope_test.go
+new file mode 100644
+index 0000000000..b6ae146cb8
+--- /dev/null
++++ b/internal/server/delivery_idempotency_scope_test.go
+@@ -0,0 +1,88 @@
++package server
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/go-chi/chi/v5"
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/rbac"
++	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
++	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
++)
++
++func TestDeliveryIdempotencyBindsResolvedProjectAndConcreteTarget(t *testing.T) {
++	t.Parallel()
++	projectA, projectB, deniedProject := uuid.New(), uuid.New(), uuid.New()
++	resourceA, resourceB := uuid.New(), uuid.New()
++	bindings := append(deliveryProjectBinding(projectA, rbac.ResourceDeliveryTargets, rbac.VerbUpdate),
++		deliveryProjectBinding(projectB, rbac.ResourceDeliveryTargets, rbac.VerbUpdate)...)
++	ctx, cancel := context.WithCancel(context.Background())
++	t.Cleanup(cancel)
++	router := chi.NewRouter()
++	router.Use(func(next http.Handler) http.Handler {
++		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			next.ServeHTTP(w, r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{ID: "scope-test-user"})))
++		})
++	})
++	router.Use(deliveryProjectScope)
++	router.Use(requirePermission(rbac.NewEngine(), deliveryRouteRBACQuerier{bindings: bindings}, rbac.ResourceDeliveryTargets, rbac.VerbUpdate))
++	calls := map[string]int{}
++	router.With(appmiddleware.Idempotency(ctx)).Post("/targets/{id}/orphan/", func(w http.ResponseWriter, r *http.Request) {
++		id, err := reqctx.RouteUUID(r, "id")
++		if err != nil {
++			w.WriteHeader(http.StatusBadRequest)
++			return
++		}
++		project, err := reqctx.ProjectID(r)
++		if err != nil {
++			t.Fatal(err)
++		}
++		calls[project.String()+"/"+id.String()]++
++		w.WriteHeader(http.StatusAccepted)
++	})
++	for _, project := range []uuid.UUID{projectA, projectB} {
++		for _, resource := range []uuid.UUID{resourceA, resourceB} {
++			for attempt := range 2 {
++				request := httptest.NewRequest(http.MethodPost, "/targets/"+resource.String()+"/orphan/", strings.NewReader(`{}`))
++				request.Header.Set("X-Project-ID", project.String())
++				request.Header.Set("Idempotency-Key", "same-key")
++				response := httptest.NewRecorder()
++				router.ServeHTTP(response, request)
++				if response.Code != http.StatusAccepted || (response.Header().Get("Idempotent-Replayed") == "true") != (attempt == 1) {
++					t.Fatalf("project=%s resource=%s attempt=%d status=%d replay=%q", project, resource, attempt, response.Code, response.Header().Get("Idempotent-Replayed"))
++				}
++			}
++			if calls[project.String()+"/"+resource.String()] != 1 {
++				t.Fatal("distinct authorized target did not execute exactly once")
++			}
++		}
++	}
++	for _, tc := range []struct {
++		name, path, header string
++		status             int
++	}{
++		{"scope mismatch", "/targets/" + resourceA.String() + "/orphan/?project_id=" + projectB.String(), projectA.String(), http.StatusBadRequest},
++		{"invalid project", "/targets/" + resourceA.String() + "/orphan/", "invalid", http.StatusBadRequest},
++		{"unauthorized project", "/targets/" + resourceA.String() + "/orphan/", deniedProject.String(), http.StatusForbidden},
++		{"invalid target", "/targets/not-a-uuid/orphan/", projectA.String(), http.StatusBadRequest},
++	} {
++		request := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(`{}`))
++		request.Header.Set("X-Project-ID", tc.header)
++		request.Header.Set("Idempotency-Key", "same-key")
++		response := httptest.NewRecorder()
++		router.ServeHTTP(response, request)
++		if response.Code != tc.status || response.Header().Get("Idempotent-Replayed") != "" {
++			t.Fatalf("%s: status=%d replay=%q", tc.name, response.Code, response.Header().Get("Idempotent-Replayed"))
++		}
++	}
++	for target, count := range calls {
++		if count != 1 {
++			t.Fatalf("target %s mutated %d times", target, count)
++		}
++	}
++}
+diff --git a/internal/server/middleware/auth_boundary_test.go b/internal/server/middleware/auth_boundary_test.go
+new file mode 100644
+index 0000000000..1f6fff6afb
+--- /dev/null
++++ b/internal/server/middleware/auth_boundary_test.go
+@@ -0,0 +1,142 @@
++package middleware
++
++import (
++	"log/slog"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++
++	"github.com/alphabravocompany/astronomer-go/internal/auth"
++	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
++)
++
++func TestAuthRequiresAccessJWT(t *testing.T) {
++	t.Parallel()
++	for _, kind := range []string{"access", "refresh", auth.PurposeTOTPChallenge, auth.PurposeTOTPEnrollOnly} {
++		for _, transport := range []string{"bearer", "cookie"} {
++			t.Run(kind+"/"+transport, func(t *testing.T) {
++				t.Parallel()
++				manager := newTestJWTManager()
++				userID := uuid.New()
++				var token string
++				var err error
++				switch kind {
++				case "access":
++					token, err = manager.GenerateAccessToken(userID)
++				case "refresh":
++					token, err = manager.GenerateRefreshToken(userID)
++				default:
++					token, err = manager.GeneratePurposeToken(userID, kind, time.Minute)
++				}
++				if err != nil {
++					t.Fatal(err)
++				}
++				request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil)
++				if transport == "cookie" {
++					request.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
++				} else {
++					request.Header.Set("Authorization", "Bearer "+token)
++				}
++				called := false
++				handler := Auth(manager)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++					called = true
++					w.WriteHeader(http.StatusNoContent)
++				}))
++				response := httptest.NewRecorder()
++				handler.ServeHTTP(response, request)
++				want := http.StatusUnauthorized
++				if kind == "access" {
++					want = http.StatusNoContent
++				}
++				if response.Code != want || called != (kind == "access") {
++					t.Fatalf("status=%d handler_called=%v, want status=%d", response.Code, called, want)
++				}
++			})
++		}
++	}
++}
++
++// Exercise the same client identity and CIDR contract through REST, direct
++// streaming, and the real HTTP reverse proxy to a trusted/untrusted sibling.
++func TestAPITokenCIDRBoundaryParity(t *testing.T) {
++	t.Parallel()
++	cases := []struct {
++		name, cidrs, remote, forwarded, trusted string
++		allowed                                 bool
++	}{
++		{name: "matching IPv4", cidrs: "192.0.2.0/24", remote: "192.0.2.7:1234", allowed: true},
++		{name: "denied IPv4", cidrs: "192.0.2.0/24", remote: "198.51.100.7:1234"},
++		{name: "matching IPv6", cidrs: "2001:db8::/32", remote: "[2001:db8::7]:1234", allowed: true},
++		{name: "denied IPv6", cidrs: "2001:db8::/32", remote: "[2001:db9::7]:1234"},
++		{name: "mapped IPv4", cidrs: "192.0.2.0/24", remote: "[::ffff:192.0.2.7]:1234", allowed: true},
++		{name: "malformed CIDR", cidrs: "192.0.2.0/24,broken", remote: "192.0.2.7:1234"},
++		{name: "empty networks", cidrs: ", ,", remote: "192.0.2.7:1234"},
++		{name: "unrestricted", cidrs: " ", remote: "192.0.2.7:1234", allowed: true},
++		{name: "invalid client", cidrs: "192.0.2.0/24", remote: "invalid"},
++		{name: "spoofed header", cidrs: "192.0.2.0/24", remote: "198.51.100.7:1234", forwarded: "192.0.2.7"},
++		{name: "trusted proxy", cidrs: "192.0.2.0/24", remote: "10.0.0.1:1234", forwarded: "192.0.2.7", trusted: "10.0.0.0/8", allowed: true},
++		{name: "trusted chain", cidrs: "192.0.2.0/24", remote: "10.0.0.1:1234", forwarded: "192.0.2.7, 10.0.0.2", trusted: "10.0.0.0/8", allowed: true},
++		{name: "spoofed chain prefix", cidrs: "192.0.2.0/24", remote: "10.0.0.1:1234", forwarded: "192.0.2.7, 198.51.100.7", trusted: "10.0.0.0/8"},
++	}
++	for _, tc := range cases {
++		for _, mode := range []string{"REST", "stream", "trusted sibling", "untrusted sibling"} {
++			t.Run(tc.name+"/"+mode, func(t *testing.T) {
++				t.Parallel()
++				manager := newTestJWTManager()
++				q := newFakeWithCIDRs(t, tc.cidrs)
++				var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++					_, ok := auth.AuthorizeStreamRequestWithTickets(r, q, manager, nil, auth.StreamKindExec, uuid.Nil)
++					if !ok {
++						w.WriteHeader(http.StatusUnauthorized)
++						return
++					}
++					w.WriteHeader(http.StatusNoContent)
++				})
++				if mode == "REST" {
++					handler = AuthWithQueries(manager, q)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++						w.WriteHeader(http.StatusNoContent)
++					}))
++				}
++				if strings.HasSuffix(mode, "sibling") {
++					trust := ""
++					if mode == "trusted sibling" {
++						trust = "127.0.0.0/8,::1/128"
++					}
++					upstream := httptest.NewServer(TrustedRealIP(trust)(handler))
++					t.Cleanup(upstream.Close)
++					clusterID := uuid.NewString()
++					hub := tunnel.NewHub(slog.Default())
++					hub.SetLocator(tunnel.NewFakeLocatorForTest("self:9000", map[string]string{
++						clusterID: strings.TrimPrefix(upstream.URL, "http://"),
++					}))
++					handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++						if !tunnel.ForwardWSToOwnerPod(hub, slog.Default(), w, r, clusterID) {
++							t.Error("request did not reach sibling")
++						}
++					})
++				}
++				request := httptest.NewRequest(http.MethodGet, "/api/v1/ws/exec/", nil)
++				request.Header.Set("Authorization", "Bearer astro_test_token")
++				request.Header.Set("X-Forwarded-For", tc.forwarded)
++				request.RemoteAddr = tc.remote
++				response := httptest.NewRecorder()
++				TrustedRealIP(tc.trusted)(handler).ServeHTTP(response, request)
++				allowed := tc.allowed
++				if mode == "untrusted sibling" && strings.TrimSpace(tc.cidrs) != "" {
++					allowed = false
++				}
++				want := http.StatusUnauthorized
++				if allowed {
++					want = http.StatusNoContent
++				}
++				if response.Code != want {
++					t.Fatalf("status=%d, want %d", response.Code, want)
++				}
++			})
++		}
++	}
++}

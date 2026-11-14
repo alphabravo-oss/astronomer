@@ -1,0 +1,11 @@
+catalog and revocation policy conform to their v1 schemas
+artifact lock covers every catalog application
+generated catalog output is current (35 files)
+catalog.json is structurally valid
+......................................./root/astronomer-all/astronomer-catalog/scripts/artifact_http.py:64: DeprecationWarning: This process (pid=2226819) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  child = os.fork()
+..........
+----------------------------------------------------------------------
+Ran 49 tests in 7.686s
+
+OK

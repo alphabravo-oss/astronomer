@@ -1,0 +1,13 @@
+{
+  "reference": "ghcr.io/alphabravo-oss/astronomer-application-catalog@sha256:5099796624be9c477c59816f70f9baba560fa5ae12408a1dc1703ff7937ca432",
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "digest": "sha256:5099796624be9c477c59816f70f9baba560fa5ae12408a1dc1703ff7937ca432",
+  "size": 639,
+  "annotations": {
+    "org.opencontainers.image.created": "2026-10-13T00:28:08Z"
+  },
+  "artifactType": "application/vnd.astronomer.application-catalog.v1+json",
+  "referenceAsTags": [
+    "ghcr.io/alphabravo-oss/astronomer-application-catalog:v0.2.0"
+  ]
+}

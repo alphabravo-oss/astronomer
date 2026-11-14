@@ -1,0 +1,110 @@
+
+> astronomer-frontend@2.1.1 test:browser-components
+> playwright test --config=playwright.components.config.ts reliability.spec.ts --project=desktop --project=mobile
+
+[WebServer] (node:2157197) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2157234) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[WebServer] (node:2157391) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:2157409) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:2157483) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop] › tests/browser-components/reliability.spec.ts:4:1 › widgets recover from an empty scope and share one refresh (873ms)
+  ✘  2 [desktop] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission (775ms)
+(node:2157798) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [mobile] › tests/browser-components/reliability.spec.ts:4:1 › widgets recover from an empty scope and share one refresh (584ms)
+  ✘  4 [mobile] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission (785ms)
+
+
+  1) [desktop] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission 
+
+    YAMLException: bad indentation of a mapping entry (1:29)
+
+     1 | annotations: example.com/key: yaml-edit example: com/key: nested custom: untouched: true hosts: - one - two
+    ---------------------------------^
+
+      48 |   ).toHaveValue("nested");
+      49 |   await page.getByRole("button", { name: "Submit values" }).click();
+    > 50 |   expect(load(await page.getByLabel("Submitted values").innerText())).toEqual({
+         |          ^
+      51 |     annotations: {
+      52 |       "example.com/key": "yaml-edit",
+      53 |       example: { "com/key": "nested" },
+        at YAMLException.throwAt (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/common/exception.ts:89:11)
+        at throwError (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:250:17)
+        at readBlockMapping (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1157:7)
+        at parseNode (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1275:12)
+        at readDocument (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1424:8)
+        at parseEvents (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1484:5)
+        at loadDocuments (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/load.ts:35:18)
+        at load (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/load.ts:106:21)
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/reliability.spec.ts:50:10
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [mobile] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission 
+
+    YAMLException: bad indentation of a mapping entry (1:29)
+
+     1 | annotations: example.com/key: yaml-edit example: com/key: nested custom: untouched: true hosts: - one - two
+    ---------------------------------^
+
+      48 |   ).toHaveValue("nested");
+      49 |   await page.getByRole("button", { name: "Submit values" }).click();
+    > 50 |   expect(load(await page.getByLabel("Submitted values").innerText())).toEqual({
+         |          ^
+      51 |     annotations: {
+      52 |       "example.com/key": "yaml-edit",
+      53 |       example: { "com/key": "nested" },
+        at YAMLException.throwAt (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/common/exception.ts:89:11)
+        at throwError (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:250:17)
+        at readBlockMapping (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1157:7)
+        at parseNode (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1275:12)
+        at readDocument (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1424:8)
+        at parseEvents (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/parser/parser.ts:1484:5)
+        at loadDocuments (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/load.ts:35:18)
+        at load (/root/work/astronomer-fixes/frontend/node_modules/js-yaml/src/load.ts:106:21)
+        at /root/work/astronomer-fixes/frontend/tests/browser-components/reliability.spec.ts:50:10
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-mobile/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-mobile/trace.zip
+    Usage:
+
+        npx playwright show-trace .cache/browser-component-results/reliability-literal-annota-778be-YAML-to-Form-and-submission-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [desktop] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission 
+    [mobile] › tests/browser-components/reliability.spec.ts:21:1 › literal annotation survives Form to YAML to Form and submission 
+  2 passed (6.7s)

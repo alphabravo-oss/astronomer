@@ -1,0 +1,322 @@
+./scripts/verify-enterprise.sh backend
+
+==> Tool prerequisites and exact versions
+
+==> Formatting and patch whitespace
+Go formatting and patch whitespace are clean
+
+==> Shell syntax and ShellCheck
+shell syntax and ShellCheck passed for 65 scripts
+
+==> Migration safety
+check-migrations: OK (66 migration files scanned)
+check-migrations-test: all policy fixtures passed
+data-governance: 96 destructive tables classified; durable JSON writer governance present
+
+==> sqlc generated-code drift
+sqlc-extensions: generated 28 isolated extensions
+sqlc-extensions: 28 isolated extensions are current
+sqlc generated output is current
+
+==> Go build
+
+==> Go vet
+
+==> Reachable Go vulnerability scan
+make[1]: Entering directory '/root/astronomer-all/astronomer'
+go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+=== Symbol Results ===
+
+No vulnerabilities found.
+
+Your code is affected by 0 vulnerabilities.
+This scan also found 0 vulnerabilities in packages you import and 1
+vulnerability in modules you require, but your code doesn't appear to call these
+vulnerabilities.
+Use '-show verbose' for more details.
+make[1]: Leaving directory '/root/astronomer-all/astronomer'
+
+==> Go lint (pinned golangci-lint against .golangci.yml)
+0 issues.
+
+==> Pinned Charlie Product Bridge generated contract
+pinned/authority-policy.json: OK
+pinned/bridge-service.json: OK
+pinned/bridge.openapi.yaml: OK
+pinned/conformance/product-adapter-conformance-v1.json: OK
+pinned/credential-route-matrix.json: OK
+pinned/live-qualification-scenarios-v1.json: OK
+pinned/schemas/alert-delivery-v1.schema.json: OK
+pinned/schemas/capability-v1.schema.json: OK
+pinned/schemas/connector-capability-v1.schema.json: OK
+pinned/schemas/finding-v1.schema.json: OK
+pinned/schemas/kubernetes-visibility-v1.schema.json: OK
+pinned/schemas/live-isolation-observation-v1.schema.json: OK
+pinned/schemas/onboarding-v1.schema.json: OK
+pinned/schemas/product-adapter-conformance-v1.schema.json: OK
+pinned/schemas/product-adapter-result-v1.schema.json: OK
+WARNING: You are using an OpenAPI 3.1.x specification, which is not yet supported by oapi-codegen (https://github.com/oapi-codegen/oapi-codegen/issues/373) and so some functionality may not be available. Until oapi-codegen supports OpenAPI 3.1, it is recommended to downgrade your spec to 3.0.x
+Charlie pinned contract and generated client are current
+
+==> Full Go test suite
+?   	github.com/alphabravocompany/astronomer-go/cmd/agent	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/cmd/astro	0.338s
+?   	github.com/alphabravocompany/astronomer-go/cmd/charlie-candidate-deploy-hook	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/cmd/charlie-qualification-hook	0.027s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/dexconfigcheck	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/keyrotate	0.074s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/migrator	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/server	0.060s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/worker	0.063s
+ok  	github.com/alphabravocompany/astronomer-go/deploy	24.217s
+ok  	github.com/alphabravocompany/astronomer-go/deploy/agent	0.409s
+ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles	0.598s
+?   	github.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/validate	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/deploy/dashboards	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/deploy/flux	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent	14.332s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent/delivery	0.314s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agentcompat	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agentlifecycle	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/anomaly	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers	0.017s
+?   	github.com/alphabravocompany/astronomer-go/internal/astrocli	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/audit	0.958s
+ok  	github.com/alphabravocompany/astronomer-go/internal/auth	1.403s
+ok  	github.com/alphabravocompany/astronomer-go/internal/baseline	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate	4.322s
+ok  	github.com/alphabravocompany/astronomer-go/internal/callerid	0.037s
+ok  	github.com/alphabravocompany/astronomer-go/internal/catalog	0.032s
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie	3.202s
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie/contract	1.184s
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/cmd/specprep	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/fakebridge	0.009s
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/schema	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/wire	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/charliequalification	1.159s
+ok  	github.com/alphabravocompany/astronomer-go/internal/cloudcreds	0.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/compliance	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/config	0.823s
+ok  	github.com/alphabravocompany/astronomer-go/internal/controlplane	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/crd	0.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/credential	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/dashboards	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db	0.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/freshinstall	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/migrations	0.114s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/queries	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	0.005s
+?   	github.com/alphabravocompany/astronomer-go/internal/deferredreplay	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/builtin	0.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp	0.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/compatibility	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/configuration	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/deployment	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/metrics	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/model	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/placement	0.194s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/provider	0.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/qualification	0.156s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/resolver	0.251s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	4.951s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/state	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/status	0.017s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/dexconfig	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/docs	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/downstreamboundary	0.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/email	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/envconfig	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/events	0.834s
+ok  	github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/gitops	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/grafanaproxy	0.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	20.235s
+?   	github.com/alphabravocompany/astronomer-go/internal/handler/apierror	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics	0.016s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/delivery	0.050s
+ok  	github.com/alphabravocompany/astronomer-go/internal/helmruntime	0.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/httpclient	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/kubectl	0.213s
+ok  	github.com/alphabravocompany/astronomer-go/internal/kubeutil	0.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/lokiauth	0.008s
+ok  	github.com/alphabravocompany/astronomer-go/internal/maintenance	0.007s
+ok  	github.com/alphabravocompany/astronomer-go/internal/mesh	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/metrics	0.495s
+ok  	github.com/alphabravocompany/astronomer-go/internal/monitoring	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/netpol	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/notify	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/observability	1.120s
+ok  	github.com/alphabravocompany/astronomer-go/internal/operationstate	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/pagination	0.195s
+ok  	github.com/alphabravocompany/astronomer-go/internal/platformsettings	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/principal	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/projectquota	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/projects	0.038s
+ok  	github.com/alphabravocompany/astronomer-go/internal/quota	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/rbac	0.071s
+ok  	github.com/alphabravocompany/astronomer-go/internal/redaction	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/redisconn	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/registration	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/releasecontract	3.674s
+ok  	github.com/alphabravocompany/astronomer-go/internal/reqctx	0.004s
+ok  	github.com/alphabravocompany/astronomer-go/internal/scanner	0.011s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	6.778s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.277s
+ok  	github.com/alphabravocompany/astronomer-go/internal/sessionpolicy	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/siem	0.081s
+ok  	github.com/alphabravocompany/astronomer-go/internal/strutil	0.002s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel	0.862s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/userpreferences	0.003s
+ok  	github.com/alphabravocompany/astronomer-go/internal/vault	0.005s
+ok  	github.com/alphabravocompany/astronomer-go/internal/webhook	3.547s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker	0.262s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/leader	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	1.903s
+?   	github.com/alphabravocompany/astronomer-go/pkg/astroclient	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/pkg/protocol	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/proxyhdr	0.004s
+?   	github.com/alphabravocompany/astronomer-go/pkg/version	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/scripts/delivery-qualification	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/scripts/fixtures/flux/server	0.126s
+ok  	github.com/alphabravocompany/astronomer-go/scripts/loadtest	0.073s
+
+==> Full Go race suite
+?   	github.com/alphabravocompany/astronomer-go/cmd/agent	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/cmd/astro	1.654s
+?   	github.com/alphabravocompany/astronomer-go/cmd/charlie-candidate-deploy-hook	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/cmd/charlie-qualification-hook	1.085s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/dexconfigcheck	1.022s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/keyrotate	2.037s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/migrator	1.020s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/server	1.142s
+ok  	github.com/alphabravocompany/astronomer-go/cmd/worker	1.148s
+ok  	github.com/alphabravocompany/astronomer-go/deploy	33.267s
+ok  	github.com/alphabravocompany/astronomer-go/deploy/agent	4.737s
+ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles	1.583s
+?   	github.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/validate	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/deploy/dashboards	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/deploy/flux	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent	14.196s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent/delivery	2.544s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agentcompat	1.026s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agentlifecycle	1.011s
+ok  	github.com/alphabravocompany/astronomer-go/internal/anomaly	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist	1.011s
+ok  	github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers	1.044s
+?   	github.com/alphabravocompany/astronomer-go/internal/astrocli	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/audit	4.593s
+ok  	github.com/alphabravocompany/astronomer-go/internal/auth	5.419s
+ok  	github.com/alphabravocompany/astronomer-go/internal/baseline	1.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate	5.513s
+ok  	github.com/alphabravocompany/astronomer-go/internal/callerid	1.116s
+ok  	github.com/alphabravocompany/astronomer-go/internal/catalog	1.115s
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie	15.345s
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie/contract	2.815s
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/cmd/specprep	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/fakebridge	1.025s
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/schema	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/internal/charlie/contract/internal/wire	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/charliequalification	3.627s
+ok  	github.com/alphabravocompany/astronomer-go/internal/cloudcreds	1.055s
+ok  	github.com/alphabravocompany/astronomer-go/internal/compliance	1.016s
+ok  	github.com/alphabravocompany/astronomer-go/internal/config	5.467s
+ok  	github.com/alphabravocompany/astronomer-go/internal/controlplane	1.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/crd	1.095s
+ok  	github.com/alphabravocompany/astronomer-go/internal/credential	1.019s
+ok  	github.com/alphabravocompany/astronomer-go/internal/dashboards	1.021s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db	1.061s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/freshinstall	1.019s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/migrations	2.304s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/queries	1.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	1.018s
+?   	github.com/alphabravocompany/astronomer-go/internal/deferredreplay	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop	1.023s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/builtin	1.041s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp	1.027s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/compatibility	1.029s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/configuration	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/deployment	1.022s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/metrics	1.020s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/model	1.022s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/placement	2.766s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/provider	1.054s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/qualification	2.329s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/resolver	1.283s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	45.783s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/state	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/status	1.047s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease	1.020s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	1.033s
+ok  	github.com/alphabravocompany/astronomer-go/internal/dexconfig	1.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/docs	1.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/downstreamboundary	1.044s
+ok  	github.com/alphabravocompany/astronomer-go/internal/email	1.040s
+ok  	github.com/alphabravocompany/astronomer-go/internal/envconfig	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/events	1.905s
+ok  	github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy	1.024s
+ok  	github.com/alphabravocompany/astronomer-go/internal/gitops	1.024s
+ok  	github.com/alphabravocompany/astronomer-go/internal/grafanaproxy	1.058s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	198.090s
+?   	github.com/alphabravocompany/astronomer-go/internal/handler/apierror	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics	1.081s
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler/delivery	1.266s
+ok  	github.com/alphabravocompany/astronomer-go/internal/helmruntime	1.074s
+ok  	github.com/alphabravocompany/astronomer-go/internal/httpclient	1.019s
+ok  	github.com/alphabravocompany/astronomer-go/internal/kubectl	1.236s
+ok  	github.com/alphabravocompany/astronomer-go/internal/kubeutil	1.041s
+ok  	github.com/alphabravocompany/astronomer-go/internal/lokiauth	1.026s
+ok  	github.com/alphabravocompany/astronomer-go/internal/maintenance	1.018s
+ok  	github.com/alphabravocompany/astronomer-go/internal/mesh	1.015s
+ok  	github.com/alphabravocompany/astronomer-go/internal/metrics	1.533s
+ok  	github.com/alphabravocompany/astronomer-go/internal/monitoring	1.023s
+ok  	github.com/alphabravocompany/astronomer-go/internal/netpol	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/notify	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/observability	9.292s
+ok  	github.com/alphabravocompany/astronomer-go/internal/operationstate	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/pagination	2.100s
+ok  	github.com/alphabravocompany/astronomer-go/internal/platformsettings	1.012s
+ok  	github.com/alphabravocompany/astronomer-go/internal/principal	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/projectquota	1.010s
+ok  	github.com/alphabravocompany/astronomer-go/internal/projects	1.138s
+ok  	github.com/alphabravocompany/astronomer-go/internal/quota	1.021s
+ok  	github.com/alphabravocompany/astronomer-go/internal/rbac	1.293s
+ok  	github.com/alphabravocompany/astronomer-go/internal/redaction	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/redisconn	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/registration	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/releasecontract	45.730s
+ok  	github.com/alphabravocompany/astronomer-go/internal/reqctx	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/scanner	1.036s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	37.357s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server/middleware	1.543s
+ok  	github.com/alphabravocompany/astronomer-go/internal/sessionpolicy	1.013s
+ok  	github.com/alphabravocompany/astronomer-go/internal/siem	1.176s
+ok  	github.com/alphabravocompany/astronomer-go/internal/strutil	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel	3.509s
+ok  	github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth	1.024s
+ok  	github.com/alphabravocompany/astronomer-go/internal/userpreferences	1.014s
+ok  	github.com/alphabravocompany/astronomer-go/internal/vault	1.028s
+ok  	github.com/alphabravocompany/astronomer-go/internal/webhook	4.603s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker	1.272s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/leader	1.017s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	5.001s
+?   	github.com/alphabravocompany/astronomer-go/pkg/astroclient	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/pkg/protocol	1.028s
+ok  	github.com/alphabravocompany/astronomer-go/pkg/proxyhdr	1.013s
+?   	github.com/alphabravocompany/astronomer-go/pkg/version	[no test files]
+?   	github.com/alphabravocompany/astronomer-go/scripts/delivery-qualification	[no test files]
+ok  	github.com/alphabravocompany/astronomer-go/scripts/fixtures/flux/server	1.142s
+ok  	github.com/alphabravocompany/astronomer-go/scripts/loadtest	1.188s
+
+==> Documentation links, lifecycle classification, and terminology
+documentation contract failed (1 finding(s)):
+- docs/rancher-astronomer-comparison.md: semantic contract failed: Rancher comparison contract failed: comparison API evidence is stale
+expected: operations=849 mounted_routes=823/823 request_bindings=160 provisional_request_shapes=0 actionable_202=107 async_202_exceptions=5
+actual:   operations=845 mounted_routes=819/819 request_bindings=160 provisional_request_shapes=0 actionable_202=107 async_202_exceptions=5
+make: *** [Makefile:170: verify-enterprise] Error 1

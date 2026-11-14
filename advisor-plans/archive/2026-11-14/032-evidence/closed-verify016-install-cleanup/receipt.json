@@ -1,0 +1,14 @@
+{
+  "observedAt": "2026-10-10T00:59:42.528397+00:00",
+  "scope": "Ignored dependency install from a clean closed historical review only. All active executor leases released, no process or worktree symlink consumers. Source, locks and evidence retained.",
+  "target": "/root/astronomer-all/astronomer-verify-016/frontend/node_modules",
+  "sourceCommit": "32f464e5150c25dffd10ddd802b4349872b2a376",
+  "sourceStatusBeforeAfter": "clean",
+  "lockSha256": "01198e1c2aa3209ca30d4ed65798ea1db90416fa731c72af718a0f39b0922d60",
+  "records": 46872,
+  "regularBytes": 481626018,
+  "inventorySha256": "1c33c7acdb1e10400f94aa7abc305f6d331df9d83f7b703be8581b82780f45d8",
+  "compressedInventorySha256": "9f1ed27f2cc5717280793a30b09315b17f4086de6c31c3c4d65068f11530caee",
+  "processReferences": [],
+  "targetAbsent": true
+}
