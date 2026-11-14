@@ -79,6 +79,18 @@ Publication verified: implementation `12fcad7f9d` and planning consolidation
 checkouts are clean on their published main branches. See the [publication receipt](evidence/2026-11-14-consolidation/publication.json).
 The next implementation work is S1; S2–S7 remain open.
 
+Portability follow-up (2026-11-14): a separate GitHub clone with empty Go/npm
+caches builds all four Go binaries and the frontend, initializes schema 88,
+starts server/worker, and proves local login plus generated editor assets using
+disposable PostgreSQL/Redis. The dev launcher now runs the required asset lifecycle.
+See [resume instructions](../docs/resuming-development.md) and the
+[verification receipt](evidence/2026-11-14-portability/README.md).
+The previously local-only infrastructure history is published in the existing
+private `astronomer-testbed` repository under `full-test-iac/` on `master`;
+the old harness is retained. The unrelated legacy Charlie experiment is
+preserved on its private `archive/local-wip-20261020` branch, not promoted to
+product main. These source-preservation steps do not close live qualification.
+
 ### S1 — Finish optional Identity and catalog provisioning (P0)
 
 - [x] Shared RP/PKCE/state and strict token verification; explicit issuer/subject
@@ -117,6 +129,10 @@ The next implementation work is S1; S2–S7 remain open.
   versions and advisories; October version snapshots are historical.
 - [ ] Prove backup/restore and local administrator access first; inventory old
   links and explicitly approve new subject mappings. Do not infer by email.
+- [ ] Before retiring or losing the current node, prove an off-node recovery set:
+  authenticated database backup, required encryption/wrapping/signing keys,
+  deployment/artifact identities, relevant PVC backups and fixture Terraform
+  state. A fresh source clone or a local reconciliation snapshot is insufficient.
 - [ ] Drain/stop old server/worker processes and retired broker queues before
   schema 87; apply schema 88 and the coherent candidate. Preserve a coordinated
   database/release rollback unit. No old binary may run against dropped tables.
@@ -636,7 +652,7 @@ and maps it to its unique current identifier.
 - [ ] **033-CF002** — Retain and review actual reports; create genuine hashed qualification receipts; only then promote those exact profiles. **No entries are Assured.**
 - [ ] **033-CF003** — Application source publication is tracked in S0; catalog branch source is already merged into catalog main at `856f3356e811f63dd3514cb3ac950cbe36189891`. Still run applicable hosted release gates, publish a signed catalog, and verify ingestion plus installation on staging.
 - [ ] **033-CF004** — Activate daily upstream discovery through the merged default-branch workflow; assign a review owner. Local execution does not activate a schedule.
-- [ ] **033-CF005** — Publish the corresponding operator/support documentation to `astronomer-docs` and consolidate test-estate ownership in `astronomer-testbed` as separate repository operations.
+- [ ] **033-CF005** — Publish the corresponding operator/support documentation to `astronomer-docs` and complete test-estate ownership/qualification in `astronomer-testbed`. The full IaC source/history is now preserved under that repository's `full-test-iac/` directory; live qualification and reconciliation of the retained older harness remain open.
 
 ### From 026-platform-robustness-and-workflow-closure
 

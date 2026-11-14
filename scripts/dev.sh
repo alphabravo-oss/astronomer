@@ -27,14 +27,14 @@ USAGE
 
 require_dev_tools() {
   local missing=0
-  for tool in docker go node npx; do
+  for tool in docker go node npm; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       missing=1
       case "$tool" in
         docker) echo "missing docker: https://docs.docker.com/engine/install/" >&2 ;;
         go)     echo "missing go: https://go.dev/dl/ (version in go.mod)" >&2 ;;
         air)    echo "missing air: go install github.com/air-verse/air@latest" >&2 ;;
-        node|npx) echo "missing $tool: https://nodejs.org/ (version in .node-version)" >&2 ;;
+        node|npm) echo "missing $tool: https://nodejs.org/ (version in .node-version)" >&2 ;;
       esac
     fi
   done
@@ -66,8 +66,8 @@ start_bg() { # name command...
 }
 
 wait_for() { # name url
-  local i
-  for i in $(seq 1 300); do curl -fsS -o /dev/null "$2" 2>/dev/null && { echo "$1 ready"; return 0; }; sleep 1; done
+  local attempt
+  for ((attempt = 0; attempt < 300; attempt++)); do curl -fsS -o /dev/null "$2" 2>/dev/null && { echo "$1 ready"; return 0; }; sleep 1; done
   echo "$1 did not become ready at $2 (see tmp/logs)" >&2; return 1
 }
 
@@ -107,7 +107,7 @@ cmd_up() {
   fi
   [ "${DEV_START_AGENT:-0}" = "1" ] && start_bg agent air -c .air.agent.toml
   (cd frontend && [ -d node_modules ] || npm ci --no-audit --no-fund)
-  start_bg web bash -c "cd frontend && BACKEND_URL=http://127.0.0.1${SERVER_ADDR} exec npx vite --host 0.0.0.0 --port ${DEV_WEB_PORT} --strictPort"
+  start_bg web bash -c "cd frontend && BACKEND_URL=http://127.0.0.1${SERVER_ADDR} exec npm run dev -- --host 0.0.0.0 --port ${DEV_WEB_PORT} --strictPort"
   wait_for server "http://127.0.0.1${SERVER_ADDR}/readyz"
   wait_for web "http://127.0.0.1:${DEV_WEB_PORT}/"
   cmd_status

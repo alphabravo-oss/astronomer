@@ -1,0 +1,13 @@
+{
+  "source": "dded685dc385be61f603b371c483499f037113b1",
+  "result": "PASS",
+  "fresh_schema": 88,
+  "server_ready": true,
+  "worker_metrics": true,
+  "local_login_and_authenticated_read": true,
+  "fresh_predev_assets_served": true,
+  "no_existing_database_or_cache_used": true,
+  "browser_ui_suite": "NOT_RUN; HTTP startup and asset checks only",
+  "owned_processes_stopped": true,
+  "owned_containers_removed": 2
+}

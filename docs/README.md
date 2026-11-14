@@ -1,11 +1,14 @@
 # Astronomer documentation map
 
 Current operator, API, architecture and runbook guidance for the supported
-release line. Historical plans and evidence were removed from the repository
-in the 2026-10 realignment; they live in git history before `6a88d2e`.
+release line. [CURRENT.md](../advisor-plans/CURRENT.md) is the sole working plan.
+Historical plans and evidence are preserved under
+[`advisor-plans/archive/`](../advisor-plans/archive/); their old instructions
+and completion claims are historical.
 
 ## Start here
 
+- [Resume development on a new machine](resuming-development.md)
 - [Architecture decision records](decisions/index.md)
 - [Threat model](threat-model.md)
 - [Control-plane state and ownership](control-plane-state-contract.md)

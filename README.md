@@ -177,6 +177,11 @@ Astronomer is the enterprise operating plane after those clusters exist.
 
 ## Getting Started
 
+To continue on another machine, follow [Resume development](docs/resuming-development.md)
+for repository references, pinned prerequisites, fresh-clone verification and
+the separate requirements for recovering existing live data. The sole active
+backlog is [CURRENT.md](advisor-plans/CURRENT.md).
+
 For local development (Go, Node 24, Docker with the compose plugin and
 [Air](https://github.com/air-verse/air) on `PATH`):
 
@@ -208,7 +213,11 @@ proxies `/api` to the Go server, so the browser never sees CORS. Grafana at
 See [`CLAUDE.md`](CLAUDE.md) for the engineering principles and
 [`docs/decisions/`](docs/decisions/index.md) for architecture decisions.
 
-For a Kubernetes install, use an exact published chart version. The chart ships
+For a Kubernetes install, use an exact published chart version. Current `main`
+includes unreleased Identity/schema changes; building it locally does not make
+the previously released images compatible with its chart or database. Follow
+CURRENT S2 and the [cutover runbook](docs/runbooks/shared-identity-cutover.md)
+before deploying this source. The chart ships
 no key material in any profile, so generate the JWT signing key and the age
 encryption key once and keep them — losing the encryption key makes every
 encrypted column undecryptable (rotate with `astro admin rotate-keys`, see
@@ -231,7 +240,7 @@ helm upgrade --install ngf \
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.2.1 \
+  --version "${ASTRONOMER_CHART_VERSION:?select an exact published chart version}" \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \

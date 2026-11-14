@@ -1,0 +1,8 @@
+./tests/static.sh
+[32m[1mSuccess![0m The configuration is valid.
+[0m
+[32m[1mSuccess![0m The configuration is valid.
+[0m
+
+playbook: /root/work/astronomer-testbed-portability/full-test-iac/ansible/playbooks/configure.yml
+static validation passed

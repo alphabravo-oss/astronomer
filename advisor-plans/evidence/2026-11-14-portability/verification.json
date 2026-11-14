@@ -1,0 +1,70 @@
+{
+  "date": "2026-11-14",
+  "application_baseline": "dded685dc385be61f603b371c483499f037113b1",
+  "platform": "Linux x86_64",
+  "source_clone": "Separate clone from public GitHub; no shared Git worktree, no copied modules or node_modules.",
+  "build_inputs": {
+    "go": "1.27.4",
+    "node": "24.22.0",
+    "npm": "11.19.1",
+    "go_proxy": "https://proxy.golang.org",
+    "go_checksum_db": "sum.golang.org",
+    "go_private_exceptions": false,
+    "go_workspace": "off",
+    "go_module_and_build_caches": "initially empty private task directories",
+    "npm_cache": "initially empty private task directory",
+    "npm_user_and_global_config": "empty",
+    "npm_lockfile_used": true,
+    "outside_checkout_symlinks": 0,
+    "local_go_replacements": 0
+  },
+  "checks": {
+    "go_mod_download": "PASS",
+    "production_go_binaries": [
+      "server",
+      "worker",
+      "agent",
+      "astro"
+    ],
+    "production_go_build": "PASS",
+    "npm_ci": "PASS (686 packages)",
+    "frontend_typecheck_build_csp_budgets_openapi": "PASS",
+    "fresh_postgres_redis_bootstrap_schema_88": "PASS",
+    "server_worker_readiness": "PASS",
+    "local_password_login_and_authenticated_read": "PASS",
+    "predev_editor_terminal_assets": "PASS (assets initially absent)",
+    "dev_launcher_bash_syntax_and_shellcheck": "PASS",
+    "testbed_shell_python_terraform_ansible": "PASS",
+    "testbed_history_secret_scan": "PASS",
+    "charlie_new_archive_commit_secret_scan": "PASS",
+    "owned_process_container_cleanup": "PASS"
+  },
+  "published_supporting_sources": {
+    "catalog_main": "856f3356e811f63dd3514cb3ac950cbe36189891",
+    "identity_tag": "v0.1.0",
+    "identity_tag_commit": "3156bfc100abe6b323f0f124a1693e76ebfab666",
+    "examples_main": "0a19944a5a21bb193d3366d088b9bf0036de6d3b",
+    "private_testbed_master": "17705e88f2bc6b6b1fb6c375884b81b08022e216",
+    "testbed_subdirectory": "full-test-iac",
+    "preserved_iac_tip": "046992c8e96d199e9a71375deed359611aebb50b",
+    "private_charlie_archive_branch": "archive/local-wip-20261020",
+    "private_charlie_archive_commit": "01f18a6a03fd20b840db067406a1d3c8c4c2460b"
+  },
+  "fixes": [
+    "Dev launcher invokes npm run dev, so predev generates missing editor assets.",
+    "Dev launcher checks npm and uses an equivalent counted readiness loop accepted by shellcheck.",
+    "Local-only full-test infrastructure and its original history are preserved under the existing private testbed repository; existing harness retained.",
+    "Legacy Charlie WIP preserved on a private archive branch, not merged into its newer product main.",
+    "Portable runbook and current plan document source setup and separate off-node state/key recovery."
+  ],
+  "limits": [
+    "A separate clean checkout on this existing host, not a newly provisioned OS.",
+    "HTTP runtime/asset checks only; no browser UI suite was run in this audit.",
+    "Disposable PostgreSQL/Redis only; the full telemetry Compose stack and live Kubernetes were not deployed.",
+    "No live database/PVC/secret backup was moved or certified as recoverable off-node.",
+    "No signed release or cloud qualification was performed.",
+    "Legacy Charlie archive is unreviewed preservation, not qualified current implementation."
+  ],
+  "go_and_frontend_sources_unchanged_since_tested_baseline": true,
+  "dev_launcher_validation": "Bash syntax and ShellCheck; same npm dev/predev lifecycle as the isolated HTTP smoke. Full scripts/dev.sh up was not run against the occupied host-wide Compose network."
+}
