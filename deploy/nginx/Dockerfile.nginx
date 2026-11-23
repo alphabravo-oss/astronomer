@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.6
-FROM docker.io/library/nginx:1.31.7-alpine3.24-slim@sha256:ebd058041a732a2b2dc0b606e34572dd8e0034de6a4aa4d50d8c13a240ac6005 AS nginx-base
+FROM docker.io/library/nginx:1.31.9-alpine3.24-slim@sha256:5bfced78d24d644270bedb0a9968697042e38d5c03fb6354603df025279c1cbe AS nginx-base
 
 # Keep the reverse-proxy image on the same patched, digest-pinned package set
 # as the frontend image. The update is isolated before the final stage.
